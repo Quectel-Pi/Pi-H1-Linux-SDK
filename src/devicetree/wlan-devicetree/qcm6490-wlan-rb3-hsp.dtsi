@@ -1,0 +1,112 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+&tlmm {
+	cnss_pins {
+		cnss_wlan_en_active: cnss_wlan_en_active {
+			mux {
+				pins = "gpio84";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio84";
+				drive-strength = <16>;
+				output-high;
+				bias-pull-up;
+			};
+		};
+
+		cnss_wlan_en_sleep: cnss_wlan_en_sleep {
+			mux {
+				pins = "gpio84";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio84";
+				drive-strength = <2>;
+				output-low;
+				bias-pull-down;
+			};
+		};
+	};
+};
+
+/{
+	reserved-memory {
+		cnss_wlan_mem: cnss_wlan_region {
+			compatible = "shared-dma-pool";
+			alloc-ranges = <0x0 0x00000000 0x0 0xffffffff>;
+			reusable;
+			alignment = <0x0 0x400000>;
+			size = <0x0 0x2000000>;
+		};
+	};
+};
+
+&soc {
+	wlan: qcom,cnss-qca6490@b0000000 {
+		compatible = "qcom,cnss-qca6490";
+		reg = <0xb0000000 0x10000>;
+		reg-names = "smmu_iova_ipa";
+		qcom,same-dt-multi-dev;
+
+		supported-ids = <0x1103>;
+		wlan-en-gpio = <&tlmm 84 0>;
+		qcom,bt-en-gpio = <&tlmm 85 0>;
+		qcom,sw-ctrl-gpio = <&tlmm 86 0>;
+		pinctrl-names = "wlan_en_active", "wlan_en_sleep";
+		pinctrl-0 = <&cnss_wlan_en_active>;
+		pinctrl-1 = <&cnss_wlan_en_sleep>;
+		qcom,wlan;
+		qcom,wlan-rc-num = <0>;
+		qcom,wlan-ramdump-dynamic = <0x780000>;
+		/* qcom,wlan-cbc-enabled; */
+		cnss-enable-self-recovery;
+		use-pm-domain;
+
+		vdd-wlan-aon-supply = <&vreg_s7b_0p972>;
+		qcom,vdd-wlan-aon-config = <950000 952000 0 0 1>;
+		vdd-wlan-dig-supply = <&vreg_s7b_0p972>;
+		qcom,vdd-wlan-dig-config = <950000 952000 0 0 1>;
+		vdd-wlan-io-supply = <&vreg_l19b_1p8>;
+		qcom,vdd-wlan-io-config = <1800000 1800000 0 0 1>;
+		vdd-wlan-rfa1-supply = <&vreg_s1b_1p872>;
+		qcom,vdd-wlan-rfa1-config = <1880000 2040000 0 0 1>;
+		vdd-wlan-rfa2-supply = <&vreg_s8b_1p272>;
+		qcom,vdd-wlan-rfa2-config = <1350000 1354000 0 0 1>;
+		wlan-ant-switch-supply = <&vreg_l11c_2p8>;
+		qcom,wlan-ant-switch-config = <2800000 2800000 0 0 0>;
+
+		qcom,qmp = <&aoss_qmp>;
+
+	};
+
+};
+
+&pcie0 {
+	pcie0_rp: pcie0_rp {
+		#address-cells = <5>;
+		#size-cells = <0>;
+
+		cnss_pci: cnss_pci {
+			reg = <0 0 0 0 0>;
+			qcom,iommu-group = <&cnss_pci_iommu_group>;
+			memory-region = <&cnss_wlan_mem>;
+
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			cnss_pci_iommu_group: cnss_pci_iommu_group {
+				qcom,iommu-dma-addr-pool = <0xa0000000 0x10000000>;
+				qcom,iommu-dma = "fastmap";
+				qcom,iommu-pagetable = "coherent";
+				qcom,iommu-faults =
+					"stall-disable", "HUPCF",
+					"no-CFRE", "non-fatal";
+			};
+		};
+	};
+};

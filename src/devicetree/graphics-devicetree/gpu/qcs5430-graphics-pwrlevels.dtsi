@@ -1,0 +1,27 @@
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+// SPDX-License-Identifier: BSD-3-Clause
+
+&msm_gpu {
+	qcom,initial-pwrlevel = <0>;
+
+	/* Power levels */
+	qcom,gpu-pwrlevels {
+		compatible="qcom,gpu-pwrlevels";
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		qcom,gpu-pwrlevel@0 {
+			reg = <0>;
+			qcom,gpu-freq = <315000000>;
+			qcom,level = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
+
+			qcom,bus-freq = <3>;
+			qcom,bus-min = <2>;
+			qcom,bus-max = <7>;
+
+			qcom,acd-level = <0x882F5FFD>;
+		};
+	};
+};

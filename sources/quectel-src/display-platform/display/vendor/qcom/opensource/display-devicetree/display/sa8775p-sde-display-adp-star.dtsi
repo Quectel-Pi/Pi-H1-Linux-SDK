@@ -1,0 +1,314 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+#include "sa8775p-sde-display.dtsi"
+
+&mdss_dsi_phy0 {
+	vdda-0p9-supply = <&vreg_l4a>;
+};
+
+&mdss_dsi_phy1 {
+	vdda-0p9-supply = <&vreg_l4a>;
+};
+
+&mdss_dsi0 {
+	vdda-1p2-supply = <&vreg_l1c>;
+	refgen-supply = <&refgen>;
+};
+
+&mdss_dsi1 {
+	vdda-1p2-supply = <&vreg_l1c>;
+	refgen-supply = <&refgen>;
+};
+
+&tlmm {
+	qupv3_se18_i2c_pins: qupv3_se18_i2c_pins {
+		qupv3_se18_i2c_active: qupv3_se18_i2c_active {
+			mux {
+				pins = "gpio95", "gpio96";
+				function = "qup2_se4";
+			};
+
+			config {
+				pins = "gpio95", "gpio96";
+				drive-strength = <2>;
+				bias-pull-up;
+			};
+		};
+
+		qupv3_se18_i2c_sleep: qupv3_se18_i2c_sleep {
+			mux {
+				pins = "gpio95", "gpio96";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio95", "gpio96";
+				drive-strength = <2>;
+				bias-disable;
+			};
+		};
+	};
+
+	ioexp_intr_active: ioexp_intr_active {
+		mux {
+			pins = "gpio98";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio98";
+			drive-strength = <2>;
+			input-enable;
+			bias-disable;
+		};
+	};
+
+	ioexp_reset_active: ioexp_reset_active {
+		mux {
+			pins = "gpio97";
+			function = "gpio";
+		};
+		config {
+			pins = "gpio97";
+			drive-strength = <2>;
+			bias-disable;
+			output-high;
+		};
+	};
+
+	edp0_hpd_pin: hpd_pin@101 {
+		mux {
+			pins = "gpio101";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio101";
+			bias-disable;
+			input-enable;
+			drive-strength = <2>;
+		};
+	};
+
+	edp0_hpd_ctrl: hpd_ctrl@101 {
+		mux {
+			pins = "gpio101";
+			function = "edp0_hot";
+		};
+
+		config {
+			pins = "gpio101";
+			bias-disable;
+			input-enable;
+			drive-strength = <2>;
+		};
+	};
+
+	edp1_hpd_pin: hpd_pin@102 {
+		mux {
+			pins = "gpio102";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio102";
+			bias-disable;
+			input-enable;
+			drive-strength = <2>;
+		};
+	};
+
+	edp1_hpd_ctrl: hpd_ctrl@102 {
+		mux {
+			pins = "gpio102";
+			function = "edp1_hot";
+		};
+
+		config {
+			pins = "gpio102";
+			bias-disable;
+			input-enable;
+			drive-strength = <2>;
+		};
+	};
+};
+
+&sde_edp0 {
+	vdda-1p2-supply = <&vreg_l1c>;
+	vdda-0p9-supply = <&vreg_l4a>;
+
+	qcom,dp-aux-switch = <&sde_edp0>;
+	qcom,dp-hpd-gpio = <&tlmm 101 0>;
+	qcom,mst-fixed-topology-ports = <1 2>;
+	qcom,dp-low-power-hw-hpd;
+	pinctrl-names = "mdss_dp_hpd_active", "mdss_dp_hpd_tlmm", "mdss_dp_hpd_ctrl",
+			"mdss_dp_active", "mdss_dp_sleep";
+	pinctrl-0 = <&edp0_hpd_pin>;
+	pinctrl-1 = <&edp0_hpd_pin>;
+	pinctrl-2 = <&edp0_hpd_ctrl>;
+	pinctrl-3 = <&edp0_hpd_ctrl>;
+	pinctrl-4 = <&edp0_hpd_pin>;
+};
+
+&sde_edp1 {
+	vdda-1p2-supply = <&vreg_l1c>;
+	vdda-0p9-supply = <&vreg_l4a>;
+
+	qcom,dp-aux-switch = <&sde_edp1>;
+	qcom,dp-hpd-gpio = <&tlmm 102 0>;
+	qcom,mst-fixed-topology-ports = <1 2>;
+	qcom,dp-low-power-hw-hpd;
+	pinctrl-names = "mdss_dp_hpd_active", "mdss_dp_hpd_tlmm", "mdss_dp_hpd_ctrl",
+			"mdss_dp_active", "mdss_dp_sleep";
+	pinctrl-0 = <&edp1_hpd_pin>;
+	pinctrl-1 = <&edp1_hpd_pin>;
+	pinctrl-2 = <&edp1_hpd_ctrl>;
+	pinctrl-3 = <&edp1_hpd_ctrl>;
+	pinctrl-4 = <&edp1_hpd_pin>;
+};
+
+&i2c18 {
+	status = "ok";
+
+	pinctrl-0 = <&qupv3_se18_i2c_active
+		&ioexp_intr_active
+		&ioexp_reset_active>;
+
+	ioexp: gpio@74 {
+		compatible = "ti,tca9539";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x74>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <98 IRQ_TYPE_EDGE_BOTH>;
+		gpio-controller;
+		#gpio-cells = <2>;
+		interrupt-controller;
+		#interrupt-cells = <2>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <
+			&dsi0_hpd_cfg_pins
+			&dsi0_cdet_cfg_pins
+			&dsi1_hpd_cfg_pins
+			&dsi1_cdet_cfg_pins
+			>;
+
+		dsi0_hpd_cfg_pins: gpio2-cfg {
+			pins = "gpio2";
+			input-enable;
+			bias-disable;
+		};
+
+		dsi0_cdet_cfg_pins: gpio3-cfg {
+			pins = "gpio3";
+			bias-pull-down;
+		};
+
+		dsi1_hpd_cfg_pins: gpio10-cfg {
+			pins = "gpio10";
+			input-enable;
+			bias-disable;
+		};
+
+		dsi1_cdet_cfg_pins: gpio11-cfg {
+			pins = "gpio11";
+			bias-pull-down;
+		};
+	};
+
+	i2c-mux@70 {
+		compatible = "nxp,pca9543";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x70>;
+
+		i2c@0 {
+			reg = <0>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			anx_7625_1: anx7625@58 {
+				compatible = "analogix,anx7625";
+				reg = <0x58>;
+				interrupt-parent = <&ioexp>;
+				interrupts = <2 IRQ_TYPE_EDGE_FALLING>;
+				enable-gpios = <&ioexp 1 0>;
+				reset-gpios = <&ioexp 0 0>;
+			};
+		};
+
+		i2c@1 {
+			reg = <1>;
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			anx_7625_2: anx7625@58 {
+				compatible = "analogix,anx7625";
+				reg = <0x58>;
+				interrupt-parent = <&ioexp>;
+				interrupts = <10 IRQ_TYPE_EDGE_FALLING>;
+				enable-gpios = <&ioexp 9 0>;
+				reset-gpios = <&ioexp 8 0>;
+			};
+		};
+	};
+};
+
+&anx_7625_1 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			anx_7625_1_in: endpoint {
+				remote-endpoint = <&dsi_anx_7625_1_out>;
+			};
+		};
+	};
+};
+
+&anx_7625_2 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			anx_7625_2_in: endpoint {
+				remote-endpoint = <&dsi_anx_7625_2_out>;
+			};
+		};
+	};
+};
+
+&dsi_dp1 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			dsi_anx_7625_1_out: endpoint {
+				remote-endpoint = <&anx_7625_1_in>;
+			};
+		};
+	};
+};
+
+&dsi_dp2 {
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			dsi_anx_7625_2_out: endpoint {
+				remote-endpoint = <&anx_7625_2_in>;
+			};
+		};
+	};
+};

@@ -1,0 +1,275 @@
+diff -Nur bt_workspace-org/system/bt/bta/av/bta_av_aact.c bt_workspace/system/bt/bta/av/bta_av_aact.c
+--- bt_workspace-org/system/bt/bta/av/bta_av_aact.c	2022-12-07 18:35:20.638143569 +0800
++++ bt_workspace/system/bt/bta/av/bta_av_aact.c	2022-12-07 18:36:26.761787778 +0800
+@@ -2152,7 +2152,8 @@
+ 
+     bta_av_adjust_seps_idx(p_scb, avdt_handle);
+     APPL_TRACE_DEBUG("bta_av_setconfig_rej: sep_idx: %d",p_scb->sep_idx);
+-    AVDT_ConfigRsp(p_scb->avdt_handle, p_scb->avdt_label, AVDT_ERR_UNSUP_CFG, 0);
++    APPL_TRACE_DEBUG("%s : %#x %#x", __func__, p_data->ci_setconfig.err_code, p_data->ci_setconfig.category);
++    AVDT_ConfigRsp(p_scb->avdt_handle, p_scb->avdt_label, p_data->ci_setconfig.err_code, p_data->ci_setconfig.category);
+ 
+     bdcpy(reject.bd_addr, p_data->str_msg.bd_addr);
+     reject.hndl = p_scb->hndl;
+diff -Nur bt_workspace-org/system/bt/bta/av/bta_av_main.c bt_workspace/system/bt/bta/av/bta_av_main.c
+--- bt_workspace-org/system/bt/bta/av/bta_av_main.c	2022-12-07 18:35:20.642143547 +0800
++++ bt_workspace/system/bt/bta/av/bta_av_main.c	2022-12-07 18:36:44.181694034 +0800
+@@ -812,8 +812,10 @@
+                     }
+                 } else if (codec_type == AAC) {
+                     //Don't add AAC in Non split mode
++#ifndef ENABLE_AAC_FOR_PTS
+                     index++;
+                     continue;
++#endif
+                 }
+ 
+                 /* Fix for below klockwork Issues
+diff -Nur bt_workspace-org/system/bt/bta/include/bta_av_co.h bt_workspace/system/bt/bta/include/bta_av_co.h
+--- bt_workspace-org/system/bt/bta/include/bta_av_co.h	2022-12-07 18:35:20.642143547 +0800
++++ bt_workspace/system/bt/bta/include/bta_av_co.h	2022-12-07 18:37:21.133495159 +0800
+@@ -26,6 +26,11 @@
+ 
+ #include "l2c_api.h"
+ #include "bta_av_api.h"
++#include "a2d_sbc.h"
++#include "bt_utils.h"
++#include "a2d_aac.h"
++#include "a2d_aptx.h"
++#include "a2d_aptx_hd.h"
+ 
+ /*****************************************************************************
+ **  Constants and data types
+@@ -76,6 +81,17 @@
+     BTIF_SV_AV_AA_SNK_SEP_INDEX  /* Last index */
+ };
+ 
++typedef struct
++{
++    UINT8 codec_type;                   /* peer SEP codec type */
++    union {
++        tA2D_SBC_CIE sbc_caps;
++        tA2D_AAC_CIE aac_caps;
++        tA2D_APTX_CIE aptx_caps;
++        tA2D_APTX_HD_CIE aptx_hd_caps;
++    } codec_cap;
++} tBTA_AV_CO_CODEC_CAP_LIST;
++
+ 
+ /* data type for the Audio Codec Information*/
+ typedef struct
+@@ -429,4 +445,7 @@
+ *******************************************************************************/
+ extern BOOLEAN bta_av_co_audio_is_codec_supported(int codec);
+ 
++extern unsigned bta_av_co_get_user_sbc_ch_mode(void);
++extern unsigned bta_av_co_get_user_sbc_blk_len(void);
++
+ #endif /* BTA_AV_CO_H */
+diff -Nur bt_workspace-org/system/bt/btif/co/bta_av_co.c bt_workspace/system/bt/btif/co/bta_av_co.c
+--- bt_workspace-org/system/bt/btif/co/bta_av_co.c	2022-12-07 18:35:20.646143526 +0800
++++ bt_workspace/system/bt/btif/co/bta_av_co.c	2022-12-07 18:38:01.229279338 +0800
+@@ -232,6 +232,10 @@
+ };
+ #endif
+ 
++tBTA_AV_CO_CODEC_CAP_LIST *p_bta_av_codec_pri_list = NULL;
++tBTA_AV_CO_CODEC_CAP_LIST bta_av_supp_codec_cap[BTIF_SV_AV_AA_SRC_SEP_INDEX];
++UINT8 bta_av_num_codec_configs;
++extern pthread_mutex_t src_codec_q_lock;
+ /*****************************************************************************
+ **  Local data
+ *****************************************************************************/
+@@ -306,6 +310,7 @@
+ static BOOLEAN bta_av_co_audio_sink_has_scmst(const tBTA_AV_CO_SINK *p_sink);
+ static BOOLEAN bta_av_co_audio_peer_supports_codec(tBTA_AV_CO_PEER *p_peer, UINT8 *p_snk_index, UINT8 *p_codec_type);
+ static BOOLEAN bta_av_co_audio_media_supports_config(UINT8 codec_type, const UINT8 *p_codec_cfg);
++static uint8_t bta_av_co_audio_media_supports_config_status(UINT8 codec_type, const UINT8 *p_codec_cfg);
+ static BOOLEAN bta_av_co_audio_sink_supports_config(UINT8 codec_type, const UINT8 *p_codec_cfg);
+ static BOOLEAN bta_av_co_audio_peer_src_supports_codec(tBTA_AV_CO_PEER *p_peer, UINT8 *p_src_index);
+ #ifdef BTA_AV_SPLIT_A2DP_ENABLED
+@@ -939,7 +944,7 @@
+     UINT8 status = A2D_SUCCESS;
+     UINT8 category = A2D_SUCCESS;
+     BOOLEAN recfg_needed = FALSE;
+-    BOOLEAN codec_cfg_supported = FALSE;
++    uint8_t codec_cfg_status = A2D_SUCCESS;
+     UNUSED(seid);
+     UNUSED(addr);
+ 
+@@ -995,16 +1000,16 @@
+     {
+         if(AVDT_TSEP_SNK == t_local_sep)
+         {
+-            codec_cfg_supported = bta_av_co_audio_sink_supports_config(codec_type, p_codec_info);
++            codec_cfg_status = bta_av_co_audio_sink_supports_config(codec_type, p_codec_info);
+             APPL_TRACE_DEBUG(" Peer is  A2DP SRC ");
+         }
+         if(AVDT_TSEP_SRC == t_local_sep)
+         {
+-            codec_cfg_supported = bta_av_co_audio_media_supports_config(codec_type, p_codec_info);
++            codec_cfg_status = bta_av_co_audio_media_supports_config_status(codec_type, p_codec_info);
+             APPL_TRACE_DEBUG(" Peer is A2DP SINK ");
+         }
+         /* Check if codec configuration is supported */
+-        if (codec_cfg_supported)
++        if (!codec_cfg_status)
+         {
+ 
+             /* Protect access to bta_av_co_cb.codec_cfg */
+@@ -1121,7 +1126,7 @@
+         else
+         {
+             category = AVDT_ASC_CODEC;
+-            status = A2D_WRONG_CODEC;
++            status = codec_cfg_status;
+         }
+     }
+ 
+@@ -2082,6 +2087,60 @@
+     return TRUE;
+ }
+ 
++
++static uint8_t bta_av_co_audio_media_supports_config_status(UINT8 codec_type, const UINT8 *p_codec_cfg)
++{
++	uint8_t ret = A2D_BAD_CODEC_TYPE;
++	UINT16 codecId;
++	UINT32 vendorId;
++	UINT8* aptx_capabilities;
++
++	FUNC_TRACE();
++	APPL_TRACE_DEBUG("%s codec_type = %x", __func__, codec_type);
++	switch (codec_type)
++	{
++	case BTA_AV_CODEC_SBC:
++		ret = bta_av_sbc_cfg_in_cap((UINT8 *)p_codec_cfg,
++					    (tA2D_SBC_CIE *)&bta_av_supp_codec_cap[BTIF_SV_AV_AA_SBC_INDEX]
++					    .codec_cap.sbc_caps);
++		break;
++#if defined(AAC_ENCODER_INCLUDED) && (AAC_ENCODER_INCLUDED == TRUE)
++	case BTA_AV_CODEC_M24:
++		ret = bta_av_aac_cfg_in_cap((UINT8 *)p_codec_cfg,
++					    (tA2D_AAC_CIE *)&bta_av_supp_codec_cap[BTIF_SV_AV_AA_AAC_INDEX]
++					    .codec_cap.aac_caps);
++		break;
++#endif
++	case A2D_NON_A2DP_MEDIA_CT:
++		aptx_capabilities = &(((tBTA_AV_CO_SINK*)p_codec_cfg)->codec_caps[0]);
++		codecId = ((tA2D_APTX_CIE*)(aptx_capabilities))->codecId;
++		vendorId = ((tA2D_APTX_CIE*)(aptx_capabilities))->vendorId;
++		APPL_TRACE_DEBUG("%s codecId = %d ", __func__, codecId);
++		APPL_TRACE_DEBUG("%s vendorId = %x ", __func__, vendorId);
++
++		if (codecId ==  A2D_APTX_HD_CODEC_ID_BLUETOOTH && vendorId == A2D_APTX_HD_VENDOR_ID) {
++			APPL_TRACE_DEBUG("%s tA2D_APTX_CIE aptX HD", __func__);
++			ret = a2d_av_aptx_hd_cfg_in_cap((UINT8 *)p_codec_cfg,
++							(tA2D_APTX_HD_CIE *)&bta_av_supp_codec_cap[BTIF_SV_AV_AA_APTX_HD_INDEX]
++							.codec_cap.aptx_hd_caps);
++			break;
++		} else if (codecId ==  A2D_APTX_CODEC_ID_BLUETOOTH && vendorId == A2D_APTX_VENDOR_ID) {
++			APPL_TRACE_DEBUG("%s tA2D_APTX_CIE aptX", __func__);
++			ret = a2d_av_aptx_cfg_in_cap((UINT8 *)p_codec_cfg,
++						     (tA2D_APTX_CIE *)&bta_av_supp_codec_cap[BTIF_SV_AV_AA_APTX_INDEX]
++						     .codec_cap.aptx_caps);
++			break;
++		}
++	default:
++		ret = A2D_NS_CODEC_TYPE;
++		APPL_TRACE_ERROR("%s: unsupported codec type %d", __func__, codec_type);
++		break;
++	}
++
++	APPL_TRACE_ERROR("%s: %#x", __func__, ret);
++	return ret;
++}
++
+ /*******************************************************************************
+  **
+  ** Function         bta_av_co_audio_codec_supported
+diff -Nur bt_workspace-org/system/bt/stack/a2dp/a2d_aac.c bt_workspace/system/bt/stack/a2dp/a2d_aac.c
+--- bt_workspace-org/system/bt/stack/a2dp/a2d_aac.c	2022-12-07 18:35:20.634143590 +0800
++++ bt_workspace/system/bt/stack/a2dp/a2d_aac.c	2022-12-07 18:38:27.077140190 +0800
+@@ -161,8 +161,8 @@
+ ******************************************************************************/
+ static UINT8 A2D_UINT32_BitsSet(UINT32 num)
+ {
+-    UINT8   count;
+-    BOOLEAN res;
++    UINT32   count;
++    UINT8 res;
+     if(num == 0)
+         res = A2D_SET_ZERO_BIT;
+     else
+diff -Nur bt_workspace-org/system/bt/stack/a2dp/a2d_api.c bt_workspace/system/bt/stack/a2dp/a2d_api.c
+--- bt_workspace-org/system/bt/stack/a2dp/a2d_api.c	2022-12-07 18:35:20.634143590 +0800
++++ bt_workspace/system/bt/stack/a2dp/a2d_api.c	2022-12-07 18:38:35.561094515 +0800
+@@ -365,7 +365,7 @@
+ UINT8 A2D_BitsSet(UINT8 num)
+ {
+     UINT8   count;
+-    BOOLEAN res;
++    UINT8 res;
+     if(num == 0)
+         res = A2D_SET_ZERO_BIT;
+     else
+diff -Nur bt_workspace-org/system/bt/stack/avdt/avdt_msg.c bt_workspace/system/bt/stack/avdt/avdt_msg.c
+--- bt_workspace-org/system/bt/stack/avdt/avdt_msg.c	2022-12-07 18:35:20.634143590 +0800
++++ bt_workspace/system/bt/stack/avdt/avdt_msg.c	2022-12-07 18:38:47.509030195 +0800
+@@ -747,9 +747,13 @@
+                 {
+                     tmp = AVDT_CODEC_SIZE - 1;
+                 }
+-                p_cfg->num_codec++;
+-                p_cfg->codec_info[0] = elem_len;
+-                memcpy(&p_cfg->codec_info[1], p, tmp);
++                if (p_cfg->num_codec == 0) {
++                    p_cfg->num_codec++;
++                    p_cfg->codec_info[0] = elem_len;
++                    memcpy(&p_cfg->codec_info[1], p, tmp);
++                } else {
++			        AVDT_TRACE_WARNING("%s: ignore elem(%#x) with len(%#x)", __func__, elem, elem_len);
++		        }
+                 p += elem_len;
+                 break;
+ 
+diff -Nur bt_workspace-org/system/bt/stack/avdt/avdt_scb_act.c bt_workspace/system/bt/stack/avdt/avdt_scb_act.c
+--- bt_workspace-org/system/bt/stack/avdt/avdt_scb_act.c	2022-12-07 18:35:20.634143590 +0800
++++ bt_workspace/system/bt/stack/avdt/avdt_scb_act.c	2022-12-07 18:39:00.764958826 +0800
+@@ -916,6 +916,7 @@
+ void avdt_scb_hdl_setconfig_cmd(tAVDT_SCB *p_scb, tAVDT_SCB_EVT *p_data)
+ {
+     tAVDT_CFG *p_cfg;
++    uint8_t codec_type;
+     AVDT_TRACE_WARNING("avdt_scb_hdl_setconfig_cmd: SCB in use: %d, Conn in progress: %d",
+         p_scb->in_use, avdt_cb.conn_in_progress);
+ 
+@@ -940,7 +941,14 @@
+         }
+         else
+         {
+-            p_data->msg.hdr.err_code = AVDT_ERR_UNSUP_CFG;
++            codec_type = p_cfg->codec_info[AVDT_CODEC_TYPE_INDEX];
++            AVDT_TRACE_WARNING("%s: codec_type %#x %#x", __func__, p_scb->cs.cfg.codec_info[AVDT_CODEC_TYPE_INDEX], codec_type);
++            if ((codec_type == 0x00) || (codec_type == 0x01) || (codec_type == 0x02)
++                    || (codec_type == 0x04) || (codec_type == 0xff))
++	            p_data->msg.hdr.err_code = AVDT_ERR_UNSUP_MCT;
++            else
++	            p_data->msg.hdr.err_code = AVDT_ERR_INVALID_MCT;
++            AVDT_TRACE_WARNING("%s: err_code %#x", __func__, p_data->msg.hdr.err_code);
+             p_data->msg.hdr.err_param = 0;
+             avdt_msg_send_rej(avdt_ccb_by_idx(p_data->msg.hdr.ccb_idx),
+                               p_data->msg.hdr.sig_id, &p_data->msg);
+diff -Nur bt_workspace-org/system/bt/stack/include/avdt_api.h bt_workspace/system/bt/stack/include/avdt_api.h
+--- bt_workspace-org/system/bt/stack/include/avdt_api.h	2022-12-07 18:35:20.638143569 +0800
++++ bt_workspace/system/bt/stack/include/avdt_api.h	2022-12-07 18:39:20.220854075 +0800
+@@ -40,7 +40,8 @@
+ #ifndef AVDT_VERSION
+ #define AVDT_VERSION                0x0102
+ #endif
+-#define AVDT_VERSION_SYNC           0x0103
++#define AVDT_VERSION_SYNC           0x0104
++
+ 
+ /* API function return value result codes. */
+ #define AVDT_SUCCESS                0       /* Function successful */

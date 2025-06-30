@@ -1,0 +1,140 @@
+# Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+## <summary>property_vault</summary>
+########################################
+## <summary>
+##       Add rules for property-vault interaction
+## </summary>
+## <desc>
+##    <p>
+##    Allow the specified domain to communicate with property-vault for connectto of properties.
+##    </p>
+## </desc>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_connect_to_property_vault',`
+    gen_require(`
+        type qcom_property_vault_t, qcom_property_vault_sock_t ;
+    ')
+    allow $1 qcom_property_vault_sock_t:dir { search_dir_perms write add_name};
+    allow $1 qcom_property_vault_sock_t:sock_file { write create setattr unlink };
+    allow $1 qcom_property_vault_t:unix_stream_socket connectto;
+')
+
+########################################
+## <summary>
+##       Add rules to get status of property_vault service
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_property_vault_service_get_status',`
+    gen_require(`
+        type qcom_property_vault_exec_t ;
+        class service status;
+       ')
+    allow $1 qcom_property_vault_exec_t:service { status };
+')
+
+########################################
+## <summary>
+##       Add rules to get status of property_vault service
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_property_vault_service_admin',`
+    gen_require(`
+        type qcom_property_vault_exec_t ;
+        class service {start stop status };
+       ')
+    allow $1 qcom_property_vault_exec_t:service { status start stop };
+')
+
+########################################
+## <summary>
+##       Add rules to allow property-vault service to store a socket in /tmp
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_allow_property_vault_sock_manage',`
+    gen_require(`
+            type qcom_property_vault_sock_t;
+    ')
+    manage_sock_files_pattern($1, qcom_property_vault_sock_t, qcom_property_vault_sock_t)
+    files_tmp_filetrans($1, qcom_property_vault_sock_t, sock_file)
+    allow $1 qcom_property_vault_sock_t:file manage_file_perms;
+    allow $1 qcom_property_vault_sock_t:sock_file { write create setattr unlink };
+')
+
+########################################
+## <summary>
+##       Add rules for property-vault to fetch persist properties from /etc/build.prop
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_connect_property_vault_to_etc',`
+    gen_require(`
+        type qcom_property_vault_etc_t ;
+    ')
+
+    allow $1 qcom_property_vault_etc_t:file { read open write setattr getattr };
+')
+
+########################################
+## <summary>
+##       Add rules for mounting build.prop in /etc
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_mount_property_vault_to_etc',`
+    gen_require(`
+        type qcom_property_vault_etc_t ;
+    ')
+
+    allow $1 qcom_property_vault_etc_t:file { link };
+    allow $1 etc_t:dir { create rename reparent add_name };
+    allow $1 etc_t:file { write };
+')
+
+########################################
+## <summary>
+##       Add rules for getprop and setprop to get/set values from command line
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_connect_cmdline_to_property_vault',`
+    gen_require(`
+        type qcom_property_vault_etc_t, qcom_property_vault_sock_t;
+    ')
+
+    allow $1 qcom_property_vault_etc_t:file { getattr write };
+    allow $1 qcom_property_vault_sock_t:sock_file { getattr write };
+')

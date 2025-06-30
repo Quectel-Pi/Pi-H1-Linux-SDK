@@ -1,0 +1,15 @@
+SUMMARY = "r8168 driver"
+LICENSE = "CLOSED"
+
+inherit module
+
+SRC_URI = "file://r8168.tgz"
+S = "${WORKDIR}/r8168"
+
+MAKE_TARGETS = "modules"
+EXTRA_OEMAKE += "KERNELDIR=${STAGING_KERNEL_DIR}"
+
+RPROVIDES_${PN} += "kernel-module-r8168"
+KERNEL_MODULE_AUTOLOAD += "r8168"
+
+RM_WORK_EXCLUDE += "${PN}"

@@ -1,0 +1,167 @@
+From 782a76d098a8cded06a56491f5bc40af222c0d8a Mon Sep 17 00:00:00 2001
+From: Zijun Hu <zijuhu@qti.qualcomm.com>
+Date: Mon, 27 Jul 2020 16:14:10 +0800
+Subject: [PATCH] fluoride: fix gattstest_init crash
+
+fix gattstest_init crash.
+---
+ qcom-opensource/bt/bt-app/gap/src/Gap.cpp          | 10 +++++++++-
+ qcom-opensource/bt/bt-app/main/src/Main.cpp        | 22 +++++++++++-----------
+ .../bt/bt-app/spp_server/src/spp_server.cpp        |  1 +
+ system/bt/hci/src/hci_layer.c                      |  2 +-
+ system/bt/stack/btm/btm_ble_privacy.c              |  4 +++-
+ system/bt/stack/gatt/gatt_main.c                   |  4 +++-
+ system/bt/stack/gatt/gatt_utils.c                  |  2 +-
+ 7 files changed, 29 insertions(+), 16 deletions(-)
+
+diff --git a/qcom-opensource/bt/bt-app/gap/src/Gap.cpp b/qcom-opensource/bt/bt-app/gap/src/Gap.cpp
+index 15e21f7db2ab..b5a6f5cc05b0 100755
+--- a/qcom-opensource/bt/bt-app/gap/src/Gap.cpp
++++ b/qcom-opensource/bt/bt-app/gap/src/Gap.cpp
+@@ -583,11 +583,18 @@ void Gap::ProcessEvent(BtEvent* event) {
+                 PostMessage(THREAD_ID_MAIN, bt_event);
+                 break;
+             }
++
++            // check if there are profiles enabled
++            if(!supported_profiles_count) {
++                HandleEnable();
++                break;
++            }
++
++
+ #ifdef ANDROID
+             ALOGV (LOGTAG "Start QC BT Daemon");
+             system("qcbtdaemon &");
+ #endif
+-	    HandleEnable();
+ 
+ #ifdef USE_BT_OBEX
+             /* Initialize OBEX if enabled in config */
+@@ -652,6 +659,7 @@ void Gap::ProcessEvent(BtEvent* event) {
+             ALOGD(LOGTAG " All profiles started");
+             //stoping profile_startup_timer
+             alarm_cancel(profile_startup_timer);
++            HandleEnable();
+ 
+             break;
+         case PROFILE_EVENT_STOP_DONE:
+diff --git a/qcom-opensource/bt/bt-app/main/src/Main.cpp b/qcom-opensource/bt/bt-app/main/src/Main.cpp
+index a498572d4e8a..2e9e0a6f578c 100755
+--- a/qcom-opensource/bt/bt-app/main/src/Main.cpp
++++ b/qcom-opensource/bt/bt-app/main/src/Main.cpp
+@@ -2968,17 +2968,6 @@ void BluetoothApp :: InitHandler (void) {
+         }
+     }
+ 
+-ALOGV (LOGTAG "GAP Enable");
+-    // Enable Bluetooth
+-    if (is_bt_enable_default_) {
+-
+-        BtEvent *event = new BtEvent;
+-        event->event_id = GAP_API_ENABLE;
+-        ALOGV (LOGTAG "  Posting enable to GAP thread");
+-        PostMessage (THREAD_ID_GAP, event);
+-
+-    }
+-
+     threadInfo[THREAD_ID_SDP_CLIENT].thread_id = thread_new (
+         threadInfo[THREAD_ID_SDP_CLIENT].thread_name);
+ 
+@@ -3034,6 +3023,17 @@ ALOGV (LOGTAG "GAP Enable");
+     }
+ #endif
+ 
++     ALOGV (LOGTAG "GAP Enable");
++    // Enable Bluetooth
++    if (is_bt_enable_default_) {
++
++        BtEvent *event = new BtEvent;
++        event->event_id = GAP_API_ENABLE;
++        ALOGV (LOGTAG "  Posting enable to GAP thread");
++        PostMessage (THREAD_ID_GAP, event);
++
++    }
++
+     // Enable Command line input
+     if (is_user_input_enabled_) {
+         cmd_reactor_ = reactor_register (thread_get_reactor
+diff --git a/qcom-opensource/bt/bt-app/spp_server/src/spp_server.cpp b/qcom-opensource/bt/bt-app/spp_server/src/spp_server.cpp
+index 9f04a3573d04..71fdcc66ecf7 100644
+--- a/qcom-opensource/bt/bt-app/spp_server/src/spp_server.cpp
++++ b/qcom-opensource/bt/bt-app/spp_server/src/spp_server.cpp
+@@ -107,6 +107,7 @@ void BtSppServerMsgHandler(void *msg) {
+             {
+                 BtEvent *pEvent = new BtEvent;
+ 
++		pEvent->profile_start_event.status = true;
+                 pEvent->profile_start_event.event_id = PROFILE_EVENT_START_DONE;
+                 pEvent->profile_start_event.profile_id = PROFILE_ID_SPP_SERVER;
+                 PostMessage(THREAD_ID_GAP, pEvent);
+diff --git a/system/bt/hci/src/hci_layer.c b/system/bt/hci/src/hci_layer.c
+index d76396859156..d98aab5c1891 100644
+--- a/system/bt/hci/src/hci_layer.c
++++ b/system/bt/hci/src/hci_layer.c
+@@ -134,7 +134,7 @@ typedef enum {
+ //TODO: revert this after implementing property set functionality in wcnss filter
+ #ifndef ANDROID
+ #ifdef BT_SOC_TYPE_ROME
+-#define DEFAULT_STARTUP_TIMEOUT_MS 100
++#define DEFAULT_STARTUP_TIMEOUT_MS 8000
+ #else
+ #define DEFAULT_STARTUP_TIMEOUT_MS 8000
+ #endif
+diff --git a/system/bt/stack/btm/btm_ble_privacy.c b/system/bt/stack/btm/btm_ble_privacy.c
+index c7b14aef4967..2772f280ef7f 100644
+--- a/system/bt/stack/btm/btm_ble_privacy.c
++++ b/system/bt/stack/btm/btm_ble_privacy.c
+@@ -837,8 +837,9 @@ BOOLEAN btm_ble_resolving_list_load_dev(tBTM_SEC_DEV_REC *p_dev_rec)
+     BOOLEAN rt = FALSE;
+     UINT8 rl_mask = btm_cb.ble_ctr_cb.rl_state;
+     tACL_CONN *p_acl = btm_bda_to_acl(p_dev_rec->bd_addr,BT_TRANSPORT_LE);
++#if 0
+     if(p_acl == NULL)
+-    {		
++    {
+         BTM_TRACE_DEBUG("%s Device is using BR/EDR Transport ", __func__);
+ 	p_acl = btm_bda_to_acl(p_dev_rec->bd_addr,BT_TRANSPORT_BR_EDR); 
+     }
+@@ -849,6 +850,7 @@ BOOLEAN btm_ble_resolving_list_load_dev(tBTM_SEC_DEV_REC *p_dev_rec)
+        return FALSE;
+     }
+ 
++#endif
+     BTM_TRACE_DEBUG("%s btm_cb.ble_ctr_cb.privacy_mode = %d", __func__,
+                                 btm_cb.ble_ctr_cb.privacy_mode);
+     /* if controller does not support RPA offloading or privacy 1.2, skip */
+diff --git a/system/bt/stack/gatt/gatt_main.c b/system/bt/stack/gatt/gatt_main.c
+index 6bb28e991bcc..b728a05a5cb5 100644
+--- a/system/bt/stack/gatt/gatt_main.c
++++ b/system/bt/stack/gatt/gatt_main.c
+@@ -1028,7 +1028,9 @@ void gatt_data_process (tGATT_TCB *p_tcb, BT_HDR *p_buf)
+         }
+         else
+         {
+-            GATT_TRACE_ERROR ("ATT - Rcvd L2CAP data, unknown cmd: 0x%x", op_code);
++		/* Note: PTS: GATT/SR/UNS/BI-01-C mandates error on unsupported ATT request.*/
++		gatt_send_error_rsp(p_tcb, GATT_REQ_NOT_SUPPORTED, op_code, 0, FALSE);
++		GATT_TRACE_ERROR ("ATT - Rcvd L2CAP data, unknown cmd: 0x%x, msg_len: %d", op_code, msg_len);
+         }
+     }
+     else
+diff --git a/system/bt/stack/gatt/gatt_utils.c b/system/bt/stack/gatt/gatt_utils.c
+index a8991102c8a3..ff698db82f17 100644
+--- a/system/bt/stack/gatt/gatt_utils.c
++++ b/system/bt/stack/gatt/gatt_utils.c
+@@ -389,7 +389,7 @@ tGATT_HDL_LIST_ELEM *gatt_find_hdl_buffer_by_app_id (tBT_UUID *p_app_uuid128,
+ void gatt_free_hdl_buffer(tGATT_HDL_LIST_ELEM *p)
+ {
+ 
+-    if (p)
++    if (p && p->in_use == TRUE)
+     {
+         while (!fixed_queue_is_empty(p->svc_db.svc_buffer))
+             osi_free(fixed_queue_try_dequeue(p->svc_db.svc_buffer));
+-- 
+2.7.4
+

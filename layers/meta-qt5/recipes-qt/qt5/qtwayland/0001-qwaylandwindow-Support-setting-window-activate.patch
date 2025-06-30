@@ -1,0 +1,32 @@
+From cbf2eaab71af5d867349e4cce9503d20b4a95e05 Mon Sep 17 00:00:00 2001
+From: "arthur.yao" <arthur.yao@quectel.com>
+Date: Thu, 12 Jun 2025 21:52:44 +0800
+Subject: [PATCH] qwaylandwindow-Support-setting-window-activate
+
+---
+ src/client/qwaylandwindow.cpp | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/client/qwaylandwindow.cpp b/src/client/qwaylandwindow.cpp
+index bc031ed5..07bf4db5 100644
+--- a/src/client/qwaylandwindow.cpp
++++ b/src/client/qwaylandwindow.cpp
+@@ -1024,7 +1024,14 @@ void QWaylandWindow::restoreMouseCursor(QWaylandInputDevice *device)
+ 
+ void QWaylandWindow::requestActivateWindow()
+ {
+-    qCWarning(lcQpaWayland) << "Wayland does not support QWindow::requestActivate()";
++    //qCWarning(lcQpaWayland) << "Wayland does not support QWindow::requestActivate()";
++    if (!mShellSurface) {
++        qCWarning(lcQpaWayland) << "Wayland does not support QWindow::requestActivate()";
++        return;
++    }
++
++    // HACK: Set window activate through app id
++    mShellSurface->setAppId(QLatin1String("requests=activate"));
+ }
+ 
+ bool QWaylandWindow::isExposed() const
+-- 
+2.34.1
+

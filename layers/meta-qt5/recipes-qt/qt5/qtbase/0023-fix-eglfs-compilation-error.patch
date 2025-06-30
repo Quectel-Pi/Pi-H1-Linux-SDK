@@ -1,0 +1,39 @@
+From bc17ca6c2df3cea815e4e6bd8e68ab5b6a1296a2 Mon Sep 17 00:00:00 2001
+From: "spittler.tang" <spittler.tang@quectel.com>
+Date: Tue, 19 Mar 2024 09:55:54 +0800
+Subject: [PATCH] fix-eglfs-compilation-error
+
+---
+ src/plugins/platforms/eglfs/api/qeglfsdeviceintegration.cpp     | 2 +-
+ .../deviceintegration/eglfs_emu/qeglfsemulatorintegration.cpp   | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/plugins/platforms/eglfs/api/qeglfsdeviceintegration.cpp b/src/plugins/platforms/eglfs/api/qeglfsdeviceintegration.cpp
+index b985386a4e..6e12702280 100644
+--- a/src/plugins/platforms/eglfs/api/qeglfsdeviceintegration.cpp
++++ b/src/plugins/platforms/eglfs/api/qeglfsdeviceintegration.cpp
+@@ -187,7 +187,7 @@ EGLNativeDisplayType QEglFSDeviceIntegration::platformDisplay() const
+ {
+     bool displayOk;
+     const int defaultDisplay = qEnvironmentVariableIntValue("QT_QPA_EGLFS_DEFAULT_DISPLAY", &displayOk);
+-    return displayOk ? EGLNativeDisplayType(quintptr(defaultDisplay)) : EGL_DEFAULT_DISPLAY;
++    return displayOk ? (EGLNativeDisplayType)(quintptr(defaultDisplay)) : EGL_DEFAULT_DISPLAY;
+ }
+ 
+ EGLDisplay QEglFSDeviceIntegration::createDisplay(EGLNativeDisplayType nativeDisplay)
+diff --git a/src/plugins/platforms/eglfs/deviceintegration/eglfs_emu/qeglfsemulatorintegration.cpp b/src/plugins/platforms/eglfs/deviceintegration/eglfs_emu/qeglfsemulatorintegration.cpp
+index cb7844aff0..2b52d0a23d 100644
+--- a/src/plugins/platforms/eglfs/deviceintegration/eglfs_emu/qeglfsemulatorintegration.cpp
++++ b/src/plugins/platforms/eglfs/deviceintegration/eglfs_emu/qeglfsemulatorintegration.cpp
+@@ -130,7 +130,7 @@ EGLNativeWindowType QEglFSEmulatorIntegration::createNativeWindow(QPlatformWindo
+         setDisplay(screen->id());
+     }
+     static QBasicAtomicInt uniqueWindowId = Q_BASIC_ATOMIC_INITIALIZER(0);
+-    return EGLNativeWindowType(qintptr(1 + uniqueWindowId.fetchAndAddRelaxed(1)));
++    return (EGLNativeWindowType)(qintptr(1 + uniqueWindowId.fetchAndAddRelaxed(1)));
+ }
+ 
+ QT_END_NAMESPACE
+-- 
+2.17.1
+

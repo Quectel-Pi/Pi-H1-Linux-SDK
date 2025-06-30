@@ -1,0 +1,30 @@
+cc_binary {
+    name: "Btdiag",
+    defaults : ["fluoride_defaults"],
+    srcs: [
+	  "Btdiag.c",
+	  "connection.cpp",
+	  "hciattach_rome.c",
+	  "privateMembers.c",
+	  "uart.c",
+    ],
+    include_dirs: [
+      "system/bt/types",
+      "system/bt/include",
+      "system/bt/stack/include",
+      "system/bt/btcore/include",
+    ],
+    tags: ["debug", "optional"],
+    shared_libs: [
+      "libcutils",
+      "libutils",
+      "libhardware",
+	  "libhardware_legacy",
+    ],
+    static_libs: [
+      "libbtcore",
+      "libosi",
+    ],
+    cflags: ["-DBLUEDROID_STACK", "-DPLATFORM_ANDROID"]
+}
+

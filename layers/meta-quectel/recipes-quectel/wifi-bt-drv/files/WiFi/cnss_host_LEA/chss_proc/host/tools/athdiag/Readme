@@ -1,0 +1,4 @@
+#How to build athdiag
+cd athdiag/
+make
+#binary is athdiag/athdiag

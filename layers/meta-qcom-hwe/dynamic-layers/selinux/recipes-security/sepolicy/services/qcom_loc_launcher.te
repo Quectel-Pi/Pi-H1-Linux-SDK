@@ -1,0 +1,237 @@
+#Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+#SPDX-License-Identifier: BSD-3-Clause-Clear
+
+policy_module(qcom_loc_launcher, 1.0)
+
+#########################
+## loc-launcher
+type qcom_loc_launcher_t;
+type qcom_loc_launcher_exec_t;
+
+init_daemon_domain(qcom_loc_launcher_t, qcom_loc_launcher_exec_t)
+corecmd_search_bin(qcom_loc_launcher_t)
+
+allow qcom_loc_launcher_t self:capability { setuid setgid net_admin };
+
+# loc-launcher sends signal to child process
+allow qcom_loc_launcher_t { self qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t }:process signal;
+
+miscfiles_read_localization(qcom_loc_launcher_t)
+
+# read generic SSL/TLS certificates.
+miscfiles_read_generic_certs(qcom_loc_launcher_t)
+
+allow qcom_loc_launcher_t qcom_blpsvc_t:unix_dgram_socket sendto;
+allow qcom_loc_launcher_t self:netlink_generic_socket create_socket_perms;
+
+allow qcom_loc_launcher_t qcom_xtwifi_client_t:unix_dgram_socket sendto;
+
+#########################
+#### location conf files
+type qcom_loc_etc_t;
+files_type(qcom_loc_etc_t)
+
+#########################
+#### location socket files
+type qcom_loc_sock_t;
+dev_node(qcom_loc_sock_t)
+
+#########################
+#### location data files
+type qcom_loc_data_t;
+files_type(qcom_loc_data_t)
+
+#########################
+#### xtwifi-inet-agent
+type qcom_xtwifi_agent_t;
+type qcom_xtwifi_agent_exec_t;
+
+init_daemon_domain(qcom_xtwifi_agent_t, qcom_xtwifi_agent_exec_t)
+# xtwifi-inet-agent is launched by loc_launcher instead of init
+domtrans_pattern(qcom_loc_launcher_t, qcom_xtwifi_agent_exec_t, qcom_xtwifi_agent_t)
+
+allow qcom_xtwifi_agent_t {qcom_lowi_server_t qcom_xtwifi_client_t}:unix_dgram_socket sendto;
+
+# read certificates in /usr/share/ca-certificates/mozilla
+files_read_usr_files(qcom_xtwifi_agent_t, usr_t, usr_t)
+# read generic SSL/TLS certificates.
+miscfiles_read_generic_certs(qcom_xtwifi_agent_t)
+
+#########################
+#### xtwifi-client
+type qcom_xtwifi_client_t;
+type qcom_xtwifi_client_exec_t;
+
+init_daemon_domain(qcom_xtwifi_client_t, qcom_xtwifi_client_exec_t)
+# xtwifi-client is launched by loc_launcher instead of init
+domtrans_pattern(qcom_loc_launcher_t, qcom_xtwifi_client_exec_t, qcom_xtwifi_client_t)
+
+allow qcom_xtwifi_client_t self:process getsched;
+
+allow qcom_xtwifi_client_t {qcom_lowi_server_t qcom_xtwifi_agent_t qcom_blpsvc_t}:unix_dgram_socket sendto;
+
+# qwes interaction
+qcom_connect_socket_qwes(qcom_xtwifi_client_t)
+
+# read certificates in /usr/share/ca-certificates/mozilla
+files_read_usr_files(qcom_xtwifi_client_t, usr_t, usr_t)
+# read generic SSL/TLS certificates.
+miscfiles_read_generic_certs(qcom_xtwifi_client_t)
+
+# send to sockets created by test apps (eg:nlp-api-test) started from shell
+initrc_dgram_send(qcom_xtwifi_client_t)
+
+#########################
+#### xtra-daemon
+type qcom_xtra_daemon_t;
+type qcom_xtra_daemon_exec_t;
+
+init_daemon_domain(qcom_xtra_daemon_t, qcom_xtra_daemon_exec_t)
+# xtra-daemon is launched by loc_launcher instead of init
+domtrans_pattern(qcom_loc_launcher_t, qcom_xtra_daemon_exec_t, qcom_xtra_daemon_t)
+
+# read certificates in /usr/share/ca-certificates/mozilla for https xtra download
+files_read_usr_files(qcom_xtra_daemon_t, usr_t, usr_t)
+# read generic SSL/TLS certificates.
+miscfiles_read_generic_certs(qcom_xtra_daemon_t)
+
+#########################
+#### edgnss-daemon
+type qcom_edgnss_daemon_t;
+type qcom_edgnss_daemon_exec_t;
+
+init_daemon_domain(qcom_edgnss_daemon_t, qcom_edgnss_daemon_exec_t)
+# edgnss-daemon is launched by loc_launcher instead of init
+domtrans_pattern(qcom_loc_launcher_t, qcom_edgnss_daemon_exec_t, qcom_edgnss_daemon_t)
+
+# Some ntrip servers use port 5000, few other ntrip server use port 8002
+corenet_tcp_connect_xen_port(qcom_edgnss_daemon_t)
+corenet_tcp_connect_commplex_main_port(qcom_edgnss_daemon_t)
+
+#########################
+#### lowi-server
+type qcom_lowi_server_t;
+type qcom_lowi_server_exec_t;
+
+init_daemon_domain(qcom_lowi_server_t, qcom_lowi_server_exec_t)
+# lowi-server is launched by loc_launcher instead of init
+domtrans_pattern(qcom_loc_launcher_t, qcom_lowi_server_exec_t, qcom_lowi_server_t)
+
+allow qcom_lowi_server_t self:netlink_generic_socket create_socket_perms;
+kernel_read_network_state(qcom_lowi_server_t)
+
+allow qcom_lowi_server_t self:process getcap;
+
+# load kernel-mod netdev-wlan0
+kernel_request_load_module(qcom_lowi_server_t)
+
+allow qcom_lowi_server_t self:capability net_admin;
+
+allow qcom_lowi_server_t {qcom_xtwifi_client_t qcom_xtwifi_agent_t}:unix_dgram_socket sendto;
+
+# read zoneinfo
+miscfiles_read_localization(qcom_lowi_server_t)
+
+#########################
+#### blpsvc
+type qcom_blpsvc_t;
+type qcom_blpsvc_exec_t;
+
+init_daemon_domain(qcom_blpsvc_t, qcom_blpsvc_exec_t)
+# blpsvc is launched by loc_launcher instead of init
+domtrans_pattern(qcom_loc_launcher_t, qcom_blpsvc_exec_t, qcom_blpsvc_t)
+
+# read certificates in /usr/share/ca-certificates/mozilla
+files_read_usr_files(qcom_blpsvc_t, usr_t, usr_t)
+# read generic SSL/TLS certificates.
+miscfiles_read_generic_certs(qcom_blpsvc_t)
+
+allow qcom_blpsvc_t self:process { setcap getcap };
+
+allow qcom_blpsvc_t {qcom_lowi_server_t qcom_xtwifi_client_t}:unix_dgram_socket sendto;
+
+# Blp svc created sockets inside /var/lib/location/blp folder which is having qcom_loc_data_t
+# context
+allow qcom_blpsvc_t qcom_loc_data_t:sock_file { create  unlink getattr };
+
+allow qcom_blpsvc_t qcom_loc_data_t:file map;
+
+userdom_search_user_home_dirs(qcom_blpsvc_t)
+
+# send to sockets created by test apps (eg:nlp-api-test) started from shell
+initrc_dgram_send(qcom_blpsvc_t)
+
+miscfiles_read_localization(qcom_blpsvc_t)
+
+#########################
+#### common rules for loc-launcher daemons and child process
+
+# Send syslog messages.
+logging_send_syslog_msg({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })
+# RW permission to syslogd runime sockets
+logging_rw_runtime_sockets({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })
+
+# read location /etc files
+qcom_loc_read_loc_etc_files({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })
+
+files_read_etc_files({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })
+files_read_etc_runtime_files({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })
+
+dev_read_sysfs({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })
+dev_read_urand({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })
+
+# access to coredump directory - /var/coredump
+qcom_coredump_read_write({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })
+
+rw_fifo_files_pattern({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t }, self, self)
+
+## Read virtual memory overcommit sysctl - /proc/sys/vm/overcommit_memory
+kernel_read_vm_overcommit_sysctl(qcom_loc_launcher_t)
+kernel_read_vm_overcommit_sysctl(qcom_xtwifi_agent_t)
+kernel_read_vm_overcommit_sysctl(qcom_xtwifi_client_t)
+kernel_read_vm_overcommit_sysctl(qcom_xtra_daemon_t)
+kernel_read_vm_overcommit_sysctl(qcom_edgnss_daemon_t)
+kernel_read_vm_overcommit_sysctl(qcom_lowi_server_t)
+kernel_read_vm_overcommit_sysctl(qcom_blpsvc_t)
+
+# tmp directory access
+fs_search_tmpfs( { qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t } )
+files_read_generic_tmp_symlinks({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })
+
+qcom_loc_manage_loc_data_files( { qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t } )
+qcom_loc_manage_loc_sock_files({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })
+
+qcom_loc_interact_with_loclauncher({ qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })
+
+## communicate with self and lochald
+allow { qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t } self:unix_dgram_socket sendto;
+qcom_loc_haldaemon_unix_dgram_sendto( { qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t } )
+
+allow { qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t } self:netlink_route_socket r_netlink_socket_perms;
+
+allow { qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_lowi_server_t } self:unix_dgram_socket create_socket_perms;
+allow { qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_lowi_server_t qcom_xtra_daemon_t qcom_blpsvc_t } self:udp_socket create_socket_perms;
+allow { qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t } self:unix_dgram_socket { read write };
+
+# Read from random number generator - /dev/random
+dev_read_rand(qcom_xtra_daemon_t)
+dev_read_rand(qcom_xtwifi_client_t)
+
+# TCP connection required for few
+qcom_loc_tcp_socket_connect({ qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_xtwifi_agent_t qcom_blpsvc_t })
+
+# read resolv.conf file
+systemd_read_resolved_runtime(qcom_xtra_daemon_t)
+systemd_read_resolved_runtime(qcom_edgnss_daemon_t)
+systemd_read_resolved_runtime(qcom_xtwifi_agent_t)
+systemd_read_resolved_runtime(qcom_blpsvc_t)
+
+# read /etc/hosts
+sysnet_read_config(qcom_xtra_daemon_t)
+sysnet_read_config(qcom_edgnss_daemon_t)
+sysnet_read_config(qcom_xtwifi_agent_t)
+sysnet_read_config(qcom_blpsvc_t)
+
+allow { qcom_loc_launcher_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t } self:qipcrtr_socket create_socket_perms;
+
+qcom_connect_to_property_vault({ qcom_loc_launcher_t qcom_xtwifi_agent_t qcom_xtwifi_client_t qcom_xtra_daemon_t qcom_edgnss_daemon_t qcom_lowi_server_t qcom_blpsvc_t })

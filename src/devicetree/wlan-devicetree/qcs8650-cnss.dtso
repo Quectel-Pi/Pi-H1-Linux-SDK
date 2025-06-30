@@ -1,0 +1,17 @@
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interconnect/qcom,sm8650-rpmh.h>
+#include "qcs8650-cnss.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. AIM500 AIOT";
+	compatible = "qcom,sm8650p-aim500-aiot", "qcom,sm8650p-aim500", "qcom,sm8650p";
+	qcom,msm-id = <577 0x10000>, <577 0x20000>;
+	qcom,board-id = <0x1f 1>;
+};

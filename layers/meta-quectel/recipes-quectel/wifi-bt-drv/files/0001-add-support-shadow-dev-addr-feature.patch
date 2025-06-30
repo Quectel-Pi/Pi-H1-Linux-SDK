@@ -1,0 +1,62 @@
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_main.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_main.c
+index d52b645..fc68e7e 100755
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_main.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_main.c
+@@ -10755,7 +10755,7 @@ VOS_STATUS hdd_read_cfg_file(v_VOID_t *pCtx, char *pFileName,
+ 
+    return VOS_STATUS_SUCCESS;
+ }
+-
++#if 0
+ /**
+  * __hdd_set_mac_address() - HDD set mac address
+  * @dev: pointer to net_device structure
+@@ -10772,7 +10772,8 @@ static int __hdd_set_mac_address(struct net_device *dev, void *addr)
+ 	hdd_context_t *hdd_ctx;
+ 	struct sockaddr *psta_mac_addr = addr;
+ 	int ret;
+-
++	printk("---------DEBUG------enter %s:%d\n",__func__,__LINE__);
++	printk("---------DEBUG------addr=%#p %s:%d\n",addr,__func__,__LINE__);
+ 	ENTER();
+ 
+ 	hdd_ctx = WLAN_HDD_GET_CTX(pAdapter);
+@@ -10782,8 +10783,12 @@ static int __hdd_set_mac_address(struct net_device *dev, void *addr)
+ 
+ 	memcpy(&pAdapter->macAddressCurrent, psta_mac_addr->sa_data, ETH_ALEN);
+ 	memcpy(dev->dev_addr, psta_mac_addr->sa_data, ETH_ALEN);
++    #if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0))
++    memcpy(dev->dev_addr_shadow, psta_mac_addr->sa_data, ETH_ALEN);
++    #endif
+ 
+ 	EXIT();
++    printk("---------DEBUG------exit %s:%d\n",__func__,__LINE__);
+ 	return 0;
+ }
+ 
+@@ -10809,6 +10814,7 @@ static int hdd_set_mac_address(struct net_device *dev, void *addr)
+ 	return ret;
+ }
+ 
++#endif
+ tANI_U8* wlan_hdd_get_intf_addr(hdd_context_t* pHddCtx)
+ {
+    int i;
+@@ -11005,7 +11011,6 @@ static struct net_device_ops wlan_drv_ops = {
+ #else
+       .ndo_do_ioctl = hdd_ioctl,
+ #endif
+-      .ndo_set_mac_address = hdd_set_mac_address,
+       .ndo_select_queue    = hdd_select_queue,
+ #ifdef WLAN_FEATURE_PACKET_FILTERING
+ #if (LINUX_VERSION_CODE > KERNEL_VERSION(3,1,0)) || defined(WITH_BACKPORTS)
+@@ -11253,6 +11258,9 @@ static hdd_adapter_t* hdd_alloc_station_adapter(hdd_context_t *pHddCtx,
+ #endif
+ 
+       vos_mem_copy(pWlanDev->dev_addr, (void *)macAddr, sizeof(tSirMacAddr));
++      #if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0))
++            vos_mem_copy(pWlanDev->dev_addr_shadow, (void *)macAddr, sizeof(tSirMacAddr));
++      #endif
+       vos_mem_copy( pAdapter->macAddressCurrent.bytes, macAddr, sizeof(tSirMacAddr));
+       pWlanDev->watchdog_timeo = HDD_TX_TIMEOUT;
+       /*

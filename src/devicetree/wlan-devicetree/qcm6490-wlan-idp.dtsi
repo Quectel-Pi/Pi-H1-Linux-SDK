@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+&soc {
+icnss2: qcom,wcn6750 {
+		compatible = "qcom,wcn6750";
+		reg = <0x0 0x17a10040 0x0 0x0>,
+		    <0x0 0xb0000000 0x0 0x10000>;
+		reg-names = "msi_addr", "smmu_iova_ipa";
+		qcom,rproc-handle = <&remoteproc_wpss>;
+		iommus = <&apps_smmu 0x1c00 0x1>;
+		interrupts = <GIC_SPI 768 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 769 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 770 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 771 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 772 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 773 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 774 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 775 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 776 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 777 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 778 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 779 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 780 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 781 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 782 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 783 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 784 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 785 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 786 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 787 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 788 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 789 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 790 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 791 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 792 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 793 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 794 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 795 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 796 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 797 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 798 IRQ_TYPE_EDGE_RISING>,
+			   <GIC_SPI 799 IRQ_TYPE_EDGE_RISING>;
+
+		memory-region = <&wlan_iommu_resv_region>;
+		qcom,iommu-faults = "stall-disable", "HUPCF", "non-fatal";
+		qcom,iommu-geometry = <0xa0000000 0x10010000>;
+		dma-coherent;
+		qcom,fw-prefix;
+		qcom,wlan;
+		qcom,capin=<0x20>;
+		tsens = "quiet-thermal";
+		qcom,wlan-msa-fixed-region = <&wlan_fw_mem>;
+		vdd-cx-mx-supply = <&vreg_s7b_0p972>;
+		qcom,vdd-cx-mx-config = <824000 1120000 0 0 1>;
+		vdd-1.8-xo-supply = <&vreg_s1b_1p872>;
+		qcom,vdd-1.8-xo-config = <1872000 2040000 0 0 0>;
+		vdd-1.3-rfa-supply = <&vreg_s8b_1p272>;
+		qcom,vdd-1.3-rfa-config = <1256000 1500000 0 0 0>;
+		qcom,smem-states = <&wlan_smp2p_out 0>;
+		qcom,smem-state-names = "wlan-smp2p-out";
+		status = "disabled";
+
+		icnss_cdev_apss: qcom,icnss_cdev1 {
+				#cooling-cells = <2>;
+		 };
+
+		icnss_cdev_wpss: qcom,icnss_cdev2 {
+				#cooling-cells = <2>;
+		 };
+
+		qcom,smp2p_map_wlan_1_in {
+			interrupts-extended = <&wlan_smp2p_in 0 0>,
+				<&wlan_smp2p_in 1 0>;
+			interrupt-names = "qcom,smp2p-force-fatal-error",
+				"qcom,smp2p-early-crash-ind";
+		};
+
+		wlan_iommu_resv_region: wlan_iommu_resv_region {
+			iommu-addresses = <&icnss2 0x0 0x00000000 0x0 0xa0000000>,
+					  <&icnss2 0x0 0xb0000000 0xff 0xffffffff>;
+		};
+	};
+};

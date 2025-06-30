@@ -1,0 +1,14 @@
+ACTION!="add", GOTO="quectel_cm_end"
+SUBSYSTEM!="net", GOTO="quectel_cm_end"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="2c7c", GOTO="quectel_cm_usb_quectel"
+GOTO="quectel_cm_end"
+
+LABEL="quectel_cm_usb_quectel"
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="2c7c", ENV{ID_USB_VENDOR}="$attr{idVendor}", ENV{ID_USB_PRODUCT}="$attr{idProduct}"
+DRIVERS=="rndis_host|cdc_ether", ENV{ID_USB_PRODUCT}=="0*", ENV{ID_USB_PRODUCT}!="09*", GOTO="quectel_cm_end"
+DRIVERS=="qmi_wwan_q|GobiNet", ENV{ID_QMAP_MODE}="$attr{qmap_mode}"
+DRIVERS=="qmi_wwan_q|GobiNet", ENV{ID_QMAP_MODE}=="0|1", ENV{SYSTEMD_WANTS}+="quectel-cm@%k.service"
+DRIVERS=="cdc_ether|cdc_ncm|cdc_mbim|rndis_host|qmi_wwan", ENV{SYSTEMD_WANTS}+="quectel-cm@%k.service"
+GOTO="quectel_cm_end"
+
+LABEL="quectel_cm_end"

@@ -1,0 +1,184 @@
+#Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+#SPDX-License-Identifier: BSD-3-Clause-Clear
+policy_module(common_test, 1.0.0)
+
+gen_require(`
+        type container_engine_t;
+        type dockerc_t;
+        type dockerd_t;
+    ')
+
+permissive container_engine_t;
+
+permissive dockerc_t;
+permissive dockerd_t;
+
+#TODO: following are added to unblock the tech team
+#      and expected to clean this going fwd.
+
+gen_require(`
+        type systemd_analyze_t;
+        type default_t;
+        type initrc_t;
+        type unconfined_t;
+        type qcom_sscrpcd_t;
+        type systemd_unit_t;
+        type  qcom_usb_t;
+        type getty_t;
+        type  etc_t;
+        type systemd_pstore_var_lib_t;
+        type chronyd_var_lib_t;
+        type system_dbusd_var_lib_t;
+        type systemd_backlight_var_lib_t;
+        type systemd_modules_load_t;
+        type kmsg_device_t;
+        type qcom_diag_t;
+        type qcom_diag_exec_t;
+        type kmod_t;
+        type kernel_t;
+        type init_t;
+        type mount_t;
+        type var_lib_t;
+        type ntp_drift_t;
+	type  udev_t;
+        type unconfined_execmem_t;
+        type tmpfs_t;
+')
+
+# Systemd_analyze will read each services
+# system_units and status much of privilege
+# Needed for the  systemd-plot.svg
+kernel_search_proc(systemd_analyze_t)
+kernel_read_sysctl(systemd_analyze_t)
+files_getattr_var_lib_dirs(systemd_analyze_t)
+init_search_runtime(systemd_analyze_t)
+files_manage_urandom_seed(systemd_analyze_t)
+permissive systemd_analyze_t;
+
+#=========================
+#for kernel test folder
+#  used or kernel tests which will have scripts
+#  with /proc read , insmode and too many priveliged operations
+type qcom_kernel_tests_t;
+type qcom_kernel_tests_exec_t;
+type qcom_modules_object_t;
+
+corecmd_search_bin(qcom_kernel_tests_t)
+corecmd_check_exec_shell(qcom_kernel_tests_t)
+application_domain(qcom_kernel_tests_t,qcom_kernel_tests_exec_t)
+init_daemon_domain(qcom_kernel_tests_t,  qcom_kernel_tests_exec_t)
+domtrans_pattern(unconfined_t, qcom_kernel_tests_exec_t, qcom_kernel_tests_t)
+domtrans_pattern(initrc_t, qcom_kernel_tests_exec_t, qcom_kernel_tests_t)
+permissive  qcom_kernel_tests_t;
+
+#======================
+# for halnativetest
+#
+type qcom_nativehaltest_t;
+type qcom_nativehaltest_exec_t;
+init_system_domain(qcom_nativehaltest_t, qcom_nativehaltest_exec_t)
+role system_r types qcom_nativehaltest_t;
+
+application_domain(qcom_nativehaltest_t, qcom_nativehaltest_exec_t)
+init_daemon_domain(qcom_nativehaltest_t, qcom_nativehaltest_exec_t)
+domtrans_pattern(unconfined_t, qcom_nativehaltest_exec_t, qcom_nativehaltest_t)
+domtrans_pattern(initrc_t, qcom_nativehaltest_exec_t, qcom_nativehaltest_t)
+can_exec(initrc_t, qcom_nativehaltest_t)
+permissive  qcom_nativehaltest_t;
+
+
+mls_file_write_all_levels( unconfined_execmem_t)
+mls_file_read_all_levels(unconfined_execmem_t)
+
+manage_dirs_pattern(unconfined_execmem_t, tmpfs_t, tmpfs_t)
+
+#ssgtzd_unite test
+qcom_allow_ssgtzd_sock_write(initrc_t)
+
+type qcom_sensors_test_t;
+files_type(qcom_sensors_test_t)
+
+qcom_allow_ops_qcom_sensors_test(qcom_sscrpcd_t)
+
+systemd_status_user_runtime_units(unconfined_t)
+systemd_stop_user_runtime_units(unconfined_t)
+systemd_start_user_runtime_units(unconfined_t)
+
+
+#TODO : both serial and adb shell need  control.
+allow unconfined_t systemd_unit_t:service { start stop status };
+allow initrc_t systemd_unit_t:service { start stop status };
+#only root shell should be able to manage
+# adding only for test scripts expected to remove this as
+# part of production process
+init_manage_all_units(initrc_t)
+
+#added to control start/stop/status on property-vault
+qcom_property_vault_service_admin(initrc_t)
+qcom_property_vault_service_admin(unconfined_t)
+#diag test
+domtrans_pattern(unconfined_t, qcom_diag_exec_t, qcom_diag_t)
+domtrans_pattern(initrc_t, qcom_diag_exec_t, qcom_diag_t)
+mls_file_write_all_levels(kmsg_device_t)
+
+
+#### For kernel module loading
+# TO-DO : need to move to respective files and need cleanup
+allow systemd_modules_load_t kernel_t:key manage_key_perms;
+allow kmod_t kernel_t:key  manage_key_perms;
+allow init_t kernel_t:key manage_key_perms;
+
+kernel_read_modprobe_sysctls(kmod_t)
+kernel_read_modprobe_sysctls(systemd_modules_load_t)
+kernel_read_modprobe_sysctls(kernel_t)
+kernel_read_modprobe_sysctls(udev_t)
+
+mls_key_write_all_levels(kmod_t)
+mls_key_write_all_levels(kernel_t)
+mls_key_write_all_levels(systemd_modules_load_t)
+mls_key_write_all_levels(udev_t)
+kernel_load_module(udev_t)
+relabelfrom_dirs_pattern(mount_t ,var_lib_t , {systemd_pstore_var_lib_t chronyd_var_lib_t  system_dbusd_var_lib_t systemd_backlight_var_lib_t ntp_drift_t  systemd_backlight_var_lib_t})
+
+## needed for serial shell
+dev_rw_kmsg(unconfined_t)
+allow getty_t self:capability2  {checkpoint_restore };
+allow  kernel_t self:capability2 { checkpoint_restore audit_read bpf perfmon};
+allow  kernel_t tty_device_t:chr_file {watch_reads };
+
+
+### OSTree temp changes  once we move var refernce we might not need this
+gen_require(`
+            type  systemd_generator_t;
+            type  systemd_modules_load_t;
+            type  systemd_logind_t;
+            type  qcom_usb_t;
+            type  usr_t;
+            type  var_run_t;
+            type  init_runtime_t;
+            type  systemd_networkd_t;
+            type  udev_t;
+            type  syslogd_t;
+            type  user_home_dir_t;
+            type  systemd_tmpfiles_t;
+')
+
+allow {systemd_generator_t  systemd_modules_load_t systemd_logind_t qcom_usb_t}   usr_t:lnk_file  {read getattr};
+allow systemd_generator_t    var_run_t:dir  {create search read write add_name};
+#this is where OStree set ostreebooteded flag .
+allow systemd_generator_t    var_run_t:file {create read write open};
+allow systemd_generator_t    init_runtime_t:file  {read  getattr link  write };
+allow systemd_modules_load_t var_t:lnk_file {getattr read };
+allow systemd_generator_t   var_t:lnk_file {getattr read };
+allow  kmod_t    var_t:lnk_file {read getattr };;
+allow udev_t  var_t:lnk_file {getattr read };
+allow qcom_usb_t var_t:lnk_file {getattr read };
+allow systemd_networkd_t var_t:lnk_file {getattr read };
+allow syslogd_t  var_t:lnk_file {getattr read };
+allow systemd_tmpfiles_t  user_home_dir_t:dir {create search read add_name};
+
+##LCA test app rules
+qcom_loc_read_loc_sock_files(unconfined_t)
+
+qcom_loc_locclient_generic_rules(unconfined_t)
+

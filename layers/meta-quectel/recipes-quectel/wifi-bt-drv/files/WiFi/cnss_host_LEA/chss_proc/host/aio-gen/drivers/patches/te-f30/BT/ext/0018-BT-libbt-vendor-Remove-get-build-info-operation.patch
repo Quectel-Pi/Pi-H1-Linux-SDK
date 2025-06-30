@@ -1,0 +1,32 @@
+From 73d6e22870125ba5529dfeb3f2b74315d9bd357c Mon Sep 17 00:00:00 2001
+From: Zijun Hu <quic_zijuhu@quicinc.com>
+Date: Thu, 17 Feb 2022 15:42:01 +0800
+Subject: [PATCH] BT: libbt-vendor: Remove get build info operation
+
+Remove get build info operation.
+---
+ hardware/qcom/bt/libbt-vendor/src/hw_rome.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/hardware/qcom/bt/libbt-vendor/src/hw_rome.c b/hardware/qcom/bt/libbt-vendor/src/hw_rome.c
+index 5bc33eae37f8..5e827df75a56 100644
+--- a/hardware/qcom/bt/libbt-vendor/src/hw_rome.c
++++ b/hardware/qcom/bt/libbt-vendor/src/hw_rome.c
+@@ -2021,12 +2021,14 @@ download:
+             }
+             ALOGI("%s: Download TLV file successfully ", __FUNCTION__);
+ 
++#if 0
+             /* Get SU FM label information */
+             if((err = rome_get_build_info_req(fd)) <0){
+                 ALOGI("%s: Fail to get Rome FW SU Build info (0x%x)", __FUNCTION__, err);
+                 //Ignore the failure of ROME FW SU label information
+                 err = 0;
+             }
++#endif
+ 
+             /* Disable internal LDO to use external LDO instead*/
+             err = disable_internal_ldo(fd);
+-- 
+2.7.4
+

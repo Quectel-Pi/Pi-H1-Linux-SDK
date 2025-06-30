@@ -1,0 +1,65 @@
+diff --git a/drivers/net/wireless/wlan/fc20/CORE/HDD/inc/wlan_hdd_spectral.h b/drivers/net/wireless/wlan/fc20/CORE/HDD/inc/wlan_hdd_spectral.h
+index b1469da..b514e4d 100644
+--- a/drivers/net/wireless/wlan/fc20/CORE/HDD/inc/wlan_hdd_spectral.h
++++ b/drivers/net/wireless/wlan/fc20/CORE/HDD/inc/wlan_hdd_spectral.h
+@@ -18,7 +18,7 @@
+ #define WLAN_HDD_SPECTRAL_H
+ 
+ #include <wmi_unified.h>
+-
++#include "wlan_hdd_assoc.h"
+ /* enum spectral_mode:
+  *
+  * @SPECTRAL_DISABLED: spectral mode is disabled
+diff --git a/drivers/net/wireless/wlan/fc20/CORE/HDD/src/wlan_hdd_cfg80211.c b/drivers/net/wireless/wlan/fc20/CORE/HDD/src/wlan_hdd_cfg80211.c
+index 9574d84..1a8db26 100644
+--- a/drivers/net/wireless/wlan/fc20/CORE/HDD/src/wlan_hdd_cfg80211.c
++++ b/drivers/net/wireless/wlan/fc20/CORE/HDD/src/wlan_hdd_cfg80211.c
+@@ -26942,21 +26942,21 @@ static void hdd_fill_bw_mcs(struct rate_info *sinfo,
+ 		bool vht)
+ {
+ 	if (vht) {
+-		rinfo->nss = nss;
+-		rinfo->mcs = mcsidx;
+-		rinfo->flags |= RATE_INFO_FLAGS_VHT_MCS;
++		sinfo->nss = nss;
++		sinfo->mcs = mcsidx;
++		sinfo->flags |= RATE_INFO_FLAGS_VHT_MCS;
+ 		if (rate_flags & eHAL_TX_RATE_VHT80)
+-			rinfo->flags |= RATE_INFO_FLAGS_80_MHZ_WIDTH;
++			sinfo->flags |= RATE_INFO_FLAGS_80_MHZ_WIDTH;
+ 		else if (rate_flags & eHAL_TX_RATE_VHT40)
+-			rinfo->flags |= RATE_INFO_FLAGS_40_MHZ_WIDTH;
++			sinfo->flags |= RATE_INFO_FLAGS_40_MHZ_WIDTH;
+ 		else if (rate_flags & eHAL_TX_RATE_VHT20)
+-			rinfo->flags |= RATE_INFO_FLAGS_VHT_MCS;
++			sinfo->flags |= RATE_INFO_FLAGS_VHT_MCS;
+ 	} else {
+-		rinfo->mcs = (nss-1) << 3;
+-		rinfo->mcs |= mcsidx;
+-		rinfo->flags |= RATE_INFO_FLAGS_MCS;
++		sinfo->mcs = (nss-1) << 3;
++		sinfo->mcs |= mcsidx;
++		sinfo->flags |= RATE_INFO_FLAGS_MCS;
+ 		if (rate_flags & eHAL_TX_RATE_HT40)
+-			rinfo->flags |= RATE_INFO_FLAGS_40_MHZ_WIDTH;
++			sinfo->flags |= RATE_INFO_FLAGS_40_MHZ_WIDTH;
+ 	}
+ }
+ #endif
+diff --git a/drivers/net/wireless/wlan/fc20/CORE/VOSS/src/vos_sched.c b/drivers/net/wireless/wlan/fc20/CORE/VOSS/src/vos_sched.c
+index dc89f52..540808a 100644
+--- a/drivers/net/wireless/wlan/fc20/CORE/VOSS/src/vos_sched.c
++++ b/drivers/net/wireless/wlan/fc20/CORE/VOSS/src/vos_sched.c
+@@ -503,9 +503,11 @@ vos_sched_open
+ )
+ {
+   VOS_STATUS  vStatus = VOS_STATUS_SUCCESS;
++#ifdef QCA_CONFIG_SMP
+ #ifdef CONFIG_PERF_NON_QC_PLATFORM
+   struct sched_param param = {.sched_priority = 99};
+ #endif
++#endif
+ /*-------------------------------------------------------------------------*/
+   VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO_HIGH,
+              "%s: Opening the VOSS Scheduler",__func__);

@@ -1,0 +1,1 @@
+obj-$(CONFIG_QUECPI_WIRELESS)		+= quec_rfkill.o

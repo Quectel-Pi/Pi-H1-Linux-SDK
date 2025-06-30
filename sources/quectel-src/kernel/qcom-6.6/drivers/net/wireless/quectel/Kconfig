@@ -1,0 +1,16 @@
+config QUECPI_WIRELESS
+	tristate "Quectel QuecPI WEXT config"
+	depends on CFG80211
+	select WIRELESS_EXT
+	select WEXT_SPY
+	select WEXT_PRIV
+	select BT
+	select BT_LE
+	select BT_BREDR
+	select BT_HCIUART
+	select BT_HCIUART_H4
+	select BT_RFCOMM
+	select BT_RFCOMM_TTY
+	select USB_G_SERIAL
+	help
+		this config will enable Wext marco for fc2x device complie

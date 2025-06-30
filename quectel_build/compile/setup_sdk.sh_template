@@ -1,0 +1,23 @@
+#!/bin/bash
+
+CURR_DIR=$(pwd)
+dpkg -l | grep libssl-dev   >/dev/null 2>&1 || { echo -e "error: libssl-dev not install!\nfix it by run: sudo apt install -y libssl-dev"; exit 1; }
+dpkg -l | grep 'ii  make '  >/dev/null 2>&1 || { echo -e "error: make       not install!\nfix it by run: sudo apt install -y make";       exit 1; }
+dpkg -l | grep 'ii  gcc  '  >/dev/null 2>&1 || { echo -e "error: gcc        not install!\nfix it by run: sudo apt install -y gcc";        exit 1; }
+set -ev
+
+
+yes | ./qcom-wayland-x86_64-qcom-multimedia-image-armv8-2a-qcm6490-idp-toolchain-1.0.sh -d $CURR_DIR 
+sed -i 's/"aarch64-qcom-linux-gcc (GCC) 11.4.0"/aarch64-qcom-linux-gcc (GCC) 11.4.0/' $CURR_DIR/sysroots/armv8-2a-qcom-linux/usr/src/kernel/include/config/auto.conf
+cp -r patch/*  $CURR_DIR/sysroots/armv8-2a-qcom-linux/lib/modules/6.6.38/build/
+
+
+. $CURR_DIR/environment-setup-armv8-2a-qcom-linux
+make -C $CURR_DIR/sysroots/armv8-2a-qcom-linux/usr/src/kernel syncconfig scripts
+
+
+set +v
+echo "##############################################################################################################"
+echo "Each time you wish to use the SDK in a new shell session, you need to source the environment setup script e.g."  
+echo ". $CURR_DIR/environment-setup-armv8-2a-qcom-linux"
+echo "Deploy SDK Success."

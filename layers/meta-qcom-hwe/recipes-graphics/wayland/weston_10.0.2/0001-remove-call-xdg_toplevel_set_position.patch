@@ -1,0 +1,27 @@
+From fc9e989fac4c992799c4f2beb8738dd72ddbea4b Mon Sep 17 00:00:00 2001
+From: "crown.yu" <crown.yu@quectel.com>
+Date: Mon, 24 Feb 2025 21:57:11 +0800
+Subject: [PATCH] remove call xdg_toplevel_set_position
+
+---
+ clients/weston-qdcm-solid-color-tool.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/clients/weston-qdcm-solid-color-tool.c b/clients/weston-qdcm-solid-color-tool.c
+index 6f3ed7a..072c067 100644
+--- a/clients/weston-qdcm-solid-color-tool.c
++++ b/clients/weston-qdcm-solid-color-tool.c
+@@ -676,8 +676,8 @@ static void choose_output(struct display *display, const char *output_name) {
+     display->window->egl_height = output->logical.height;
+     xdg_toplevel_set_fullscreen(display->window->xdg_toplevel,
+                                 display->window->fs_output);
+-    xdg_toplevel_set_position(display->window->xdg_toplevel, output->logical.x,
+-                              0);
++    //xdg_toplevel_set_position(display->window->xdg_toplevel, output->logical.x,
++    //                          0);
+ 
+     wl_display_roundtrip(display->info.display);
+   }
+-- 
+2.34.1
+

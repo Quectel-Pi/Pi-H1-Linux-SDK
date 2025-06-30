@@ -1,0 +1,356 @@
+From a821b411665bdfb8d8b29eb1ce1834dc23718cb7 Mon Sep 17 00:00:00 2001
+From: Zijun Hu <zijuhu@qti.qualcomm.com>
+Date: Fri, 25 Oct 2019 14:27:19 +0800
+Subject: [PATCH] Implement FR59778
+
+Add API and test command set_afh_chl_map to set
+AFH channel map.
+
+Change-Id: I6449d06cf502f171e530fe3420551bc591e9967c
+---
+ hardware/libhardware/include/hardware/bluetooth.h |  14 +++
+ qcom-opensource/bt/bt-app/gap/src/Gap.cpp         |  10 ++
+ qcom-opensource/bt/bt-app/main/include/Main.hpp   |   2 +
+ qcom-opensource/bt/bt-app/main/src/Main.cpp       | 106 ++++++++++++++++++++++
+ system/bt/btif/include/btif_api.h                 |   4 +
+ system/bt/btif/src/bluetooth.c                    |  11 +++
+ system/bt/btif/src/btif_core.c                    |  29 ++++++
+ system/bt/stack/btu/btu_hcif.c                    |   8 ++
+ 8 files changed, 184 insertions(+)
+
+diff --git a/hardware/libhardware/include/hardware/bluetooth.h b/hardware/libhardware/include/hardware/bluetooth.h
+index c6568f9..538ff51 100644
+--- a/hardware/libhardware/include/hardware/bluetooth.h
++++ b/hardware/libhardware/include/hardware/bluetooth.h
+@@ -53,6 +53,8 @@ __BEGIN_DECLS
+ #define BT_PROFILE_AV_RC_ID "avrcp"
+ #define BT_PROFILE_AV_RC_CTRL_ID "avrcp_ctrl"
+ 
++#define ENABLE_AFH_API        1
++
+ /** Bluetooth Address */
+ typedef struct {
+     uint8_t address[6];
+@@ -279,6 +281,10 @@ typedef struct
+    uint8_t le_sc_r[16]; /* LE Secure Connections Random Value */
+ } bt_out_of_band_data_t;
+ 
++typedef struct
++{
++   uint8_t m[10];
++} bt_afh_channel_map_t;
+ 
+ 
+ /** Bluetooth Device Type */
+@@ -400,6 +406,8 @@ typedef void (*le_test_mode_callback)(bt_status_t status, uint16_t num_packets);
+ typedef void (*energy_info_callback)(bt_activity_energy_info *energy_info,
+                                      bt_uid_traffic_t *uid_data);
+ 
++typedef void (*set_afh_channel_map_callback)(uint8_t status);
++
+ /** TODO: Add callbacks for Link Up/Down and other generic
+   *  notifications/callbacks */
+ 
+@@ -421,6 +429,9 @@ typedef struct {
+     le_test_mode_callback le_test_mode_cb;
+     energy_info_callback energy_info_cb;
+     hci_event_recv_callback hci_event_recv_cb;
++#ifdef ENABLE_AFH_API
++    set_afh_channel_map_callback set_afh_channel_map_cb;
++#endif
+ } bt_callbacks_t;
+ 
+ typedef void (*alarm_cb)(void *data);
+@@ -604,6 +615,9 @@ typedef struct {
+     void (*interop_database_add)(uint16_t feature, const bt_bdaddr_t *addr, size_t len);
+     /** BT stack Test interface */
+     const void* (*get_testapp_interface)(int test_app_profile);
++#ifdef ENABLE_AFH_API
++    int (*set_afh_channel_map)(bt_afh_channel_map_t *arguments);
++#endif
+ } bt_interface_t;
+ 
+ /** TODO: Need to add APIs for Service Discovery, Service authorization and
+diff --git a/qcom-opensource/bt/bt-app/gap/src/Gap.cpp b/qcom-opensource/bt/bt-app/gap/src/Gap.cpp
+index fc88844..a91506a 100755
+--- a/qcom-opensource/bt/bt-app/gap/src/Gap.cpp
++++ b/qcom-opensource/bt/bt-app/gap/src/Gap.cpp
+@@ -248,6 +248,13 @@ static void EnergyInfoRecvCb(bt_activity_energy_info *p_energy_info) {
+     ALOGV (LOGTAG " EnergyInfoRecvCb: ");
+ }
+ 
++static void SetAfhChannelMapCb(uint8_t status)
++{
++	if (status)
++		fprintf(stdout, "%s : error, status = %#x\n", __func__, status);
++	else
++		fprintf(stdout, "%s : okay\n", __func__);
++}
+ //TODO: update the callbacks, made NULL to compile
+ static bt_callbacks_t sBluetoothCallbacks = {
+     sizeof(sBluetoothCallbacks),
+@@ -265,6 +272,9 @@ static bt_callbacks_t sBluetoothCallbacks = {
+     LeTestModeRecvCb,
+     NULL,
+     NULL,
++#ifdef ENABLE_AFH_API
++    SetAfhChannelMapCb,
++#endif
+ };
+ 
+ static void SsrCleanupCb(bool status) {
+diff --git a/qcom-opensource/bt/bt-app/main/include/Main.hpp b/qcom-opensource/bt/bt-app/main/include/Main.hpp
+index dd1e3ae..12d966f 100644
+--- a/qcom-opensource/bt/bt-app/main/include/Main.hpp
++++ b/qcom-opensource/bt/bt-app/main/include/Main.hpp
+@@ -241,6 +241,7 @@ typedef enum {
+     VIRTUAL_UNPLUG,
+     HID_BONDED_LIST,
+     BACK_TO_MAIN,
++    SET_AFH_CHL_MAP,
+     END,
+ } CommandList;
+ 
+@@ -352,6 +353,7 @@ UserMenuList PanMenu[] = {
+  */
+ UserMenuList TestMenu[] = {
+     {TEST_ON_OFF,           "on_off",    ONE_PARAM,     "<on_off> <number>   eg: on_off 100"},
++    {SET_AFH_CHL_MAP,       "set_afh_chl_map", ONE_PARAM,     "<set_afh_chl_map> <afh_chl_map>"},
+     {BACK_TO_MAIN,          "main_menu", ZERO_PARAM,    "main_menu"},
+ };
+ 
+diff --git a/qcom-opensource/bt/bt-app/main/src/Main.cpp b/qcom-opensource/bt/bt-app/main/src/Main.cpp
+index 6de475b..f38a505 100755
+--- a/qcom-opensource/bt/bt-app/main/src/Main.cpp
++++ b/qcom-opensource/bt/bt-app/main/src/Main.cpp
+@@ -1086,6 +1086,70 @@ void HandleOnOffTest (void *context) {
+     test_thread_id = NULL;
+ }
+ 
++static int send_hci_cmd_parse_args(char *args, unsigned char **cmd)
++{
++    int i;
++    int nr_cmd;
++    uint8_t *cmd_buff;
++    char *p;
++    unsigned long c;
++
++    nr_cmd = strlen(args) + 1;
++    if ((nr_cmd % 3))
++        return -1;
++    nr_cmd /= 3;
++    cmd_buff = (uint8_t *)osi_malloc(nr_cmd);
++    if (NULL == cmd_buff)
++        return -2;
++
++    p = args;
++    for (i = 0; i <  nr_cmd; i++) {
++        if ('\0' == *args)
++            break;
++        c = strtol(args, &p, 16);
++        if (p == args)
++            break;
++        if ((*p != ',') && (*p != '\0'))
++            break;
++        cmd_buff[i] = (uint8_t)c;
++        if (*p == '\0') {
++            i++;
++            break;
++        }
++        p ++;
++        args = p;
++    }
++
++    if ((i == nr_cmd) && ('\0' == *p)) {
++        *cmd = cmd_buff;
++        return nr_cmd;
++    }
++
++    osi_free(cmd_buff);
++    return -3;
++}
++#ifdef ENABLE_AFH_API
++static void handle_set_afh_chl_map(void *cmd_ptr) {
++	int res;
++	bt_afh_channel_map_t cm;
++	uint8_t *p= cm.m;
++
++	memset(&cm, 0x00, sizeof(cm));
++	memcpy(cm.m, cmd_ptr, sizeof(cm.m));
++	res = g_bt_app->bt_interface->set_afh_channel_map(&cm);
++
++#if 0
++	fprintf(stdout, "set_afh_chl_map : %02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x,%02x : %d\n",
++			p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], res);
++#endif
++
++	osi_free(cmd_ptr);
++	reactor_stop(thread_get_reactor(test_thread_id));
++	test_thread_id = NULL;
++	return;
++}
++#endif
++
+ static void HandleTestCommand(int cmd_id, char user_cmd[][COMMAND_ARG_SIZE]) {
+ 
+     long num = 0;
+@@ -1110,6 +1174,48 @@ static void HandleTestCommand(int cmd_id, char user_cmd[][COMMAND_ARG_SIZE]) {
+             }
+             break;
+ 
++#ifdef ENABLE_AFH_API
++	case SET_AFH_CHL_MAP:
++	    {
++		    int cmd_size;
++		    uint8_t *cmd_ptr;
++
++		    if (!g_gap -> IsEnabled()) {
++			    fprintf( stdout, "BT adapter isn't enabed\n");
++			    break;
++		    }
++
++		    if (test_thread_id) {
++			    fprintf( stdout, "Test is ongoing, please wait until it finishes\n");
++			    break;
++		    }
++
++		    if (NULL == g_bt_app->bt_interface->set_afh_channel_map) {
++			    fprintf( stdout, "SET_AFH_CHL_MAP: unsupported\n");
++			    break;
++		    }
++
++		    cmd_size = send_hci_cmd_parse_args(user_cmd[ONE_PARAM], &cmd_ptr);
++		    if (cmd_size <= 0) {
++			    fprintf( stdout, "SET_AFH_CHL_MAP: parameter format error!\n");
++			    break;
++		    }
++
++		    if (cmd_size != 10) {
++			    osi_free(cmd_ptr);
++			    fprintf( stdout, "SET_AFH_CHL_MAP: parameter length error!\n");
++			    break;
++		    }
++
++		    test_thread_id = thread_new ("test_thread");
++		    if (test_thread_id)
++			    thread_post(test_thread_id, handle_set_afh_chl_map, (void *)cmd_ptr);
++		    else
++			    osi_free(cmd_ptr);
++
++		    break;
++	    }
++#endif
+         case BACK_TO_MAIN:
+             menu_type = MAIN_MENU;
+             DisplayMenu(menu_type);
+diff --git a/system/bt/btif/include/btif_api.h b/system/bt/btif/include/btif_api.h
+index 415a763..28aa368 100644
+--- a/system/bt/btif/include/btif_api.h
++++ b/system/bt/btif/include/btif_api.h
+@@ -443,4 +443,8 @@ void btif_debug_bond_event_dump(int fd);
+ *******************************************************************************/
+ bt_status_t btif_dm_unified_wakeup_sleep_ind(BOOLEAN isSleep);
+ #endif
++
++bt_status_t btif_set_afh_channel_map(bt_afh_channel_map_t *arguments);
++void btif_report_set_afh_channel_map_res(uint8_t status);
++
+ #endif /* BTIF_API_H */
+diff --git a/system/bt/btif/src/bluetooth.c b/system/bt/btif/src/bluetooth.c
+index bd1be9c..5ade748 100644
+--- a/system/bt/btif/src/bluetooth.c
++++ b/system/bt/btif/src/bluetooth.c
+@@ -598,6 +598,14 @@ static int config_clear(void) {
+     return btif_config_clear() ? BT_STATUS_SUCCESS : BT_STATUS_FAIL;
+ }
+ 
++static int set_afh_channel_map(bt_afh_channel_map_t *arguments)
++{
++	/* sanity check */
++	if (interface_ready() == FALSE)
++		return BT_STATUS_NOT_READY;
++	return btif_set_afh_channel_map(arguments);
++}
++
+ static const bt_interface_t bluetoothInterface = {
+     sizeof(bluetoothInterface),
+     init,
+@@ -651,6 +659,9 @@ static const bt_interface_t bluetoothInterface = {
+ #else
+     NULL,
+ #endif
++#ifdef ENABLE_AFH_API
++    set_afh_channel_map,
++#endif
+ };
+ 
+ const bt_interface_t* bluetooth__get_bluetooth_interface ()
+diff --git a/system/bt/btif/src/btif_core.c b/system/bt/btif/src/btif_core.c
+index 0ad4102..c25eb8f 100644
+--- a/system/bt/btif/src/btif_core.c
++++ b/system/bt/btif/src/btif_core.c
+@@ -781,6 +781,35 @@ bt_status_t btif_hci_cmd_send(uint16_t opcode, uint8_t *buf, uint8_t len)
+ }
+ #endif
+ 
++static int api_set_afh_channel_map;
++bt_status_t btif_set_afh_channel_map(bt_afh_channel_map_t *arguments)
++{
++	tBTM_STATUS res;
++
++	if (NULL == arguments)
++		return BT_STATUS_PARM_INVALID;
++
++	res = BTM_Hci_Raw_Command(HCI_SET_AFH_CHANNELS, HCI_AFH_CHANNEL_MAP_LEN, arguments->m, NULL);
++
++	if (BTM_NO_RESOURCES == res)
++		return BT_STATUS_NOMEM;
++
++	BTIF_TRACE_EVENT("%s: okay", __func__);
++	api_set_afh_channel_map = 1;
++	return BT_STATUS_SUCCESS;
++}
++
++void btif_report_set_afh_channel_map_res(uint8_t status)
++{
++	BTIF_TRACE_EVENT("%s(0x%x), api_set_afh_channel_map = %d", __func__, status, api_set_afh_channel_map);
++#ifdef ENABLE_AFH_API
++	if (api_set_afh_channel_map) {
++		HAL_CBACK(bt_hal_cbacks, set_afh_channel_map_cb, status);
++		api_set_afh_channel_map = 0;
++	}
++#endif
++}
++
+ /*******************************************************************************
+ **
+ ** Function         btif_dut_mode_cback
+diff --git a/system/bt/stack/btu/btu_hcif.c b/system/bt/stack/btu/btu_hcif.c
+index da51cdf..39bb656 100644
+--- a/system/bt/stack/btu/btu_hcif.c
++++ b/system/bt/stack/btu/btu_hcif.c
+@@ -820,6 +820,10 @@ static void btu_hcif_esco_connection_chg_evt (UINT8 *p)
+ #endif
+ }
+ 
++#ifndef BTIF_API_H
++extern void btif_report_set_afh_channel_map_res(uint8_t status);
++#endif
++
+ /*******************************************************************************
+ **
+ ** Function         btu_hcif_hdl_command_complete
+@@ -874,6 +878,10 @@ static void btu_hcif_hdl_command_complete (UINT16 opcode, UINT8 *p, UINT16 evt_l
+             btm_read_inq_tx_power_complete(p);
+             break;
+ 
++        case HCI_SET_AFH_CHANNELS:
++	    btif_report_set_afh_channel_map_res(*p);
++            break;
++
+ #if (BLE_INCLUDED == TRUE)
+ /* BLE Commands sComplete*/
+         case HCI_BLE_ADD_WHITE_LIST:
+-- 
+2.7.4
+

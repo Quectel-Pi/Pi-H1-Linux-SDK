@@ -1,0 +1,158 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+#include "dsi-panel-ext-bridge-rb3gen2.dtsi"
+#include "dsi-panel-ext-bridge-1080p.dtsi"
+#include "qcm6490-sde-display.dtsi"
+
+&redriver {
+	vcc-supply = <&vreg_l7c_3p0>;
+};
+
+&mdss_dp0 {
+	usb-phy = <&usb_1_qmpphy>;
+	usb-controller = <&usb_1>;
+	qcom,dp-aux-switch = <&redriver>;
+	vdda-1p2-supply = <&vreg_l6b_1p2>;
+	vdda-0p9-supply = <&vreg_l1b_0p912>;
+};
+
+&pm7250b_gpios {
+	lt9611_rst_pin: lt9611-rst-state {
+		pins = "gpio2";
+		function = "normal";
+
+		output-high;
+		input-disable;
+		power-source = <0>;
+	};
+};
+
+&tlmm {
+	lt9611_irq_pin: lt9611-irq {
+		pins = "gpio24";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+};
+
+&i2c0 {
+	status = "ok";
+	qcom,clk-freq-out = <100000>;
+
+	lt9611: lt,lt9611@2b {
+		compatible = "lt,lt9611uxc";
+		reg = <0x2b>;
+
+		interrupts-extended = <&tlmm 24 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&pm7250b_gpios 2 0>;
+		lt,preferred-mode = "1920x1080";
+
+		vcc-supply = <&vreg_l11c_2p8>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&lt9611_irq_pin &lt9611_rst_pin>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				lt9611_a: endpoint {
+					remote-endpoint = <&ext_dsi_out>;
+				};
+			};
+		};
+	};
+};
+
+&sde_dsi {
+	/delete-property/ lab-supply;
+	/delete-property/ ibb-supply;
+
+	vddio-supply = <&vreg_l8c_1p62>;
+	qcom,dsi-default-panel = <&dsi_ext_bridge_rb3gen2>;
+	boot-panel-param = "disabled";
+
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		port@0 {
+			reg = <0>;
+			ext_dsi_out: endpoint {
+				remote-endpoint = <&lt9611_a>;
+			};
+		};
+	};
+};
+
+&mdss_dsi_phy0 {
+	/delete-property/ qcom,dsi-pll-ssc-en;
+	/delete-property/ qcom,dsi-pll-ssc-mode;
+
+	vdda-0p9-supply = <&vreg_l10c_0p88>;
+};
+
+&mdss_dsi0 {
+	reg = <0 0xae94000 0 0x400>,
+		<0 0xaf08000 0 0x4>,
+		<0 0x0ae36000 0 0x300>,
+		<0 0xc00c6000 0 0x01000>;
+	reg-names = "dsi_ctrl", "disp_cc_base", "mdp_intf_base", "disp_conf";
+};
+
+&mdss_edp0 {
+	qcom,display-type = "primary";
+	qcom,dp-low-power-hw-hpd;
+	vdda-1p2-supply = <&vreg_l6b_1p2>;
+	vdda-0p9-supply = <&vreg_l10c_0p88>;
+	pinctrl-names = "mdss_dp_active", "mdss_dp_sleep", "mdss_dp_hpd_active";
+	pinctrl-0 = <&edp_hpd_ctrl>;
+	pinctrl-1 = <&edp_hpd_default>;
+	pinctrl-2 = <&edp_hpd_default>;
+	qcom,dp-hpd-gpio = <&tlmm 60 0>;
+	qcom,dp-gpio-aux-switch;
+	qcom,edp-vcc-en-gpio = <&tlmm 80 0>;
+	qcom,no-backlight-support;
+	qcom,dp-ext-hpd;
+
+};
+
+&tlmm {
+	edp_hpd_default: hpd_default@60 {
+		mux {
+			pins = "gpio60";
+			function = "gpio";
+		};
+
+		config {
+			pins = "gpio60";
+			bias-disable;
+			input-enable;
+			drive-strength = <2>;
+		};
+	};
+	edp_hpd_ctrl: hpd_ctrl@60 {
+		mux {
+			pins = "gpio60";
+			function = "edp_hot";
+		};
+
+		config {
+			pins = "gpio60";
+			bias-disable;
+			input-enable;
+			drive-strength = <2>;
+		};
+	};
+};
+
+&mdss_mdp0 {
+	connectors = <&smmu_sde_unsec &sde_dsi &mdss_dp0>;
+};

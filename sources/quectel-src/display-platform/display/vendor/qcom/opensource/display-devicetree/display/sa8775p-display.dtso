@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "sa8775p-sde.dtsi"
+#include "sa8775p-sde-display-adp-star.dtsi"
+/ {
+	model = "Qualcomm SA8775P Ride";
+	compatible = "qcom,sa8775p-ride", "qcom,sa8775p";
+};

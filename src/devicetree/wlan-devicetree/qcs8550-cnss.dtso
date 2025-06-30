@@ -1,0 +1,17 @@
+/*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * SPDX-License-Identifier: BSD-3-Clause
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interconnect/qcom,sm8550-rpmh.h>
+#include "qcs8550-cnss.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. QCS8550 AIM300";
+        compatible = "qcom,qcs8550-aim300", "qcom,qcs8550";
+	qcom,msm-id = <519 0x10000>, <519 0x20000>, <603 0x20000>;
+	qcom,board-id = <0 0>;
+};

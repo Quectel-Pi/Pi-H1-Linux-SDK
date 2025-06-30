@@ -1,0 +1,247 @@
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&soc {
+	qps615_0p9_vreg: qps615-0p9-vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "qps615_0p9_vreg";
+		gpio = <&tlmm 62 0>;
+		regulator-min-microvolt = <1000000>;
+		regulator-max-microvolt = <1000000>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <4300>;
+	};
+
+	qps615_1p8_vreg: qps615-1p8-vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "qps615_1p8_vreg";
+		gpio = <&tlmm 43 0>;
+		vin-supply = <&qps615_0p9_vreg>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <10000>;
+	};
+
+	rtl8221b_vreg: rtl8221b_vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "rtl8221b_vreg";
+		gpio = <&tlmm 13 GPIO_ACTIVE_HIGH>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <10000>;
+		status = "okay";
+	};
+
+	rtl8211f_vreg: rtl8211f_vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "rtl8211f_vreg";
+		gpio = <&tlmm 56 GPIO_ACTIVE_HIGH>;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <10000>;
+		status = "okay";
+	};
+
+	asm1182e_3v3reg: asm1182e_3v3reg {
+		compatible = "regulator-fixed";
+		regulator-name = "asm1182e_3v3reg";
+		gpio = <&tlmm 37 GPIO_ACTIVE_HIGH>;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <10000>;
+		status = "okay";
+	};
+
+       asm1182e_1v2reg: asm1182e_1v2reg {
+		compatible = "regulator-fixed";
+		regulator-name = "asm1182e_1v2reg";
+		gpio = <&tlmm 57 GPIO_ACTIVE_HIGH>;
+		vin-supply = <&asm1182e_3v3reg>;
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+		enable-active-high;
+		status = "okay";
+	};
+
+	yt6801esh1_reg: yt6801esh1_reg {
+		compatible = "regulator-fixed";
+		regulator-name = "yt6801esh1_reg";
+		gpio = <&tlmm 6 GPIO_ACTIVE_HIGH>;
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <10000>;
+		status = "okay";
+	};
+
+	yt6801esh2_reg: yt6801esh2_reg {
+		compatible = "regulator-fixed";
+		regulator-name = "yt6801esh2_reg";
+		gpio = <&tlmm 107 GPIO_ACTIVE_HIGH>;
+		vin-supply = <&yt6801esh1_reg>;
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
+		enable-active-high;
+		status = "okay";
+	};
+};
+
+&tlmm {
+	qps615_intn_wol {
+		rtl8221b_intn_wol: rtl8221b_intn_wol {
+			pins = "gpio7";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+		};
+
+		rtl8211f_intn_wol: rtl8211f_intn_wol {
+			pins = "gpio45";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-up;
+		};
+	};
+};
+
+&i2c0 {
+	clock-frequency = <100000>;
+	qps615_switch: pcie-switch@77 {
+		compatible = "qcom,switch-i2c";
+		reg = <0x77>;
+		status = "okay";
+
+		vddpe0-supply = <&asm1182e_1v2reg>;
+		vddpe1-supply = <&yt6801esh2_reg>;
+
+		gpio-config-reg = <0x801208>;
+		ep-reset-reg = <0x801210>;
+		ep-reset-gpio-mask = <0xc>;
+		ep-reset-ms = <20>;
+		dump-regs = <0x801330 0x801350 0x801370>;
+		reg_update = <0x82c030 0x1 0x828000 0x3 0x82bd00 0x8 0x82c030 0x2 0x828000 0x3 0x82bd00 0x8 0x82c030 0x8 0x828000 0x1 0x82bd00 0x8>;
+	};
+};
+
+&pcie1 {
+	i2c-supply = <&qps615_switch>;
+	vdda-supply = <&qps615_1p8_vreg>;
+
+	iommu-map = <0x0 &apps_smmu 0x1c80 0x1>,
+		    <0x100 &apps_smmu 0x1c81 0x1>,
+		    <0x208 &apps_smmu 0x1c84 0x1>,
+		    <0x210 &apps_smmu 0x1c85 0x1>,
+		    <0x218 &apps_smmu 0x1c86 0x1>,
+		    <0x300 &apps_smmu 0x1c87 0x1>,
+		    <0x400 &apps_smmu 0x1c88 0x1>,
+		    <0x500 &apps_smmu 0x1c89 0x1>,
+		    <0x501 &apps_smmu 0x1c90 0x1>,
+		    <0x518 &apps_smmu 0x1c91 0x1>, // 05:03.0
+		    <0x538 &apps_smmu 0x1c92 0x1>, // 05:07.0
+		    <0x600 &apps_smmu 0x1c93 0x1>, // 06:00.0
+		    <0x700 &apps_smmu 0x1c94 0x1>, // 07:00.0
+		    <0x800 &apps_smmu 0x1c95 0x1>, // 08:00.0
+		    <0x801 &apps_smmu 0x1c96 0x1>; // 08:00.1
+
+	pcie1_rp {
+		device_type = "pci";
+		reg = <0x00 0x00 0x00 0x00 0x00>;
+		#address-cells = <5>;
+		#size-cells = <0>;
+
+		/* BDF 1.0.0 */
+		pcie1_bus1_dev0_fn0 {
+			reg = <0 0 0 0 0>;
+			/* BDF 2.2.0 */
+			pcie1_bus2_dev2_fn0 {
+				reg = <0x1000 0x0 0x0 0x0 0x0>;
+				/* BDF 4.0.0 */
+				pcie1_bus4_dev0_fn0 {
+					reg = <0x0 0x0 0x0 0x0 0x0>;
+					/* BDF 5.3.0 */
+					pcie1_bus5_dev3_fn0 {
+						reg = <0x1800 0x0 0x0 0x0 0x0>;
+						/* BDF 6.0.0 */
+						yt6801ch0: pcie1_bus6_dev0_fn0 {
+							reg = <0 0 0 0 0>;
+						};
+					};
+					/* BDF 5.7.0 */
+					pcie1_bus5_dev7_fn0 {
+						reg = <0x3800 0x0 0x0 0x0 0x0>;
+						/* BDF 7.0.0 */
+						yt6801ch1: pcie1_bus7_dev0_fn0 {
+							reg = <0 0 0 0 0>;
+						};
+					};
+				};
+			};
+			/* BDF 2.3.0 */
+			qps615_pcie_eth: pcie1_bus2_dev3_fn0 {
+				reg = <0x1800 0x0 0x0 0x0 0x0>;
+			};
+		};
+	};
+};
+
+&yt6801ch0 {
+	qcom,iommu-group = <&yt6801ch0_pci_iommu_group>;
+	yt6801ch0_pci_iommu_group: yt6801ch0_pci_iommu_group {
+		qcom,iommu-dma = "atomic";
+	};
+};
+
+&yt6801ch1 {
+	qcom,iommu-group = <&yt6801ch1_pci_iommu_group>;
+	yt6801ch1_pci_iommu_group: yt6801ch1_pci_iommu_group {
+		qcom,iommu-dma = "atomic";
+	};
+};
+
+&qps615_pcie_eth {
+	/* BDF 8.0.0 */
+	pcie1_qps_eth0: pcie1_bus8_dev0_fn0 {
+		reg = <0x0 0x0 0x0 0x0 0x0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&rtl8221b_intn_wol>;
+		qcom,phy-rst-gpio = <0>;
+		qcom,phy-rst-delay-us = <50000>;
+		qcom,phy-port-interface = <3>;
+		qcom,phy-addrs = /bits/ 8 <6>;
+		interrupts-extended = <&tlmm 7 IRQ_TYPE_EDGE_FALLING>;
+		interrupt-names = "wol_irq";
+		phy-supply = <&rtl8221b_vreg>;
+
+		qcom,iommu-group = <&eth0_pci_iommu_group>;
+		eth0_pci_iommu_group: eth0_pci_iommu_group {
+			qcom,iommu-dma = "atomic";
+		};
+	};
+
+	/* BDF 8.0.1 */
+	pcie1_qps_eth1: pcie1_bus8_dev0_fn1 {
+		reg = <0x100 0x0 0x0 0x0 0x0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&rtl8211f_intn_wol>;
+		qcom,phy-rst-gpio = <1>;
+		qcom,phy-rst-delay-us = <50000>;
+		qcom,phy-port-interface = <3>;
+		qcom,phy-addrs = /bits/ 8 <1>;
+		interrupts-extended = <&tlmm 45 IRQ_TYPE_EDGE_FALLING>;
+		interrupt-names = "wol_irq";
+		phy-supply = <&rtl8211f_vreg>;
+
+		qcom,iommu-group = <&eth1_pci_iommu_group>;
+		eth1_pci_iommu_group: eth1_pci_iommu_group {
+			qcom,iommu-dma = "atomic";
+		};
+	};
+};
+
+&pcie1_phy {
+	qcom,refclk-always-on;
+};

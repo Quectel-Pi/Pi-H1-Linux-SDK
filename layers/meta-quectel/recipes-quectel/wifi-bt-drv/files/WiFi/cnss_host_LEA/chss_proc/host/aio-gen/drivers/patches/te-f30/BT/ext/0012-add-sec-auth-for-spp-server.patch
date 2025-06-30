@@ -1,0 +1,12 @@
+diff -Nur bt_workspace-org/qcom-opensource/bt/bt-app/spp_server/src/spp_server.cpp bt_workspace-new/qcom-opensource/bt/bt-app/spp_server/src/spp_server.cpp
+--- bt_workspace-org/qcom-opensource/bt/bt-app/spp_server/src/spp_server.cpp	2020-12-23 16:27:46.606893581 +0800
++++ bt_workspace-new/qcom-opensource/bt/bt-app/spp_server/src/spp_server.cpp	2021-02-08 13:57:09.123439325 +0800
+@@ -735,7 +735,7 @@
+     // Invoke listen with socket type as RFCOMM, NULL UUID - This will map to SPP UUID
+     btsock_interface = (btsock_interface_t *)bluetooth_interface->get_profile_interface(BT_PROFILE_SOCKETS_ID);
+ 
+-    int error = btsock_interface->listen(BTSOCK_RFCOMM,"SPP_SERVER",NULL,SPP_SERVER_CHANNEL,&listen_socfd,0,SPP_SERVER_APP_UID);
++    int error = btsock_interface->listen(BTSOCK_RFCOMM,"SPP_SERVER",NULL,SPP_SERVER_CHANNEL,&listen_socfd,BTSOCK_FLAG_ENCRYPT | BTSOCK_FLAG_AUTH,SPP_SERVER_APP_UID);
+ 
+     if( error != BT_STATUS_SUCCESS )
+     {

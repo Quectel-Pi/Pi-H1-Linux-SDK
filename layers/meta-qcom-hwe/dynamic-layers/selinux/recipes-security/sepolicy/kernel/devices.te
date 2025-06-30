@@ -1,0 +1,91 @@
+# Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+type qcom_coresight_t, sysfs_types;
+files_type(qcom_coresight_t)
+dev_associate_sysfs(qcom_coresight_t)
+
+type qcom_audio_device_t;
+dev_node(qcom_audio_device_t)
+
+type qcom_audioml_heap_device_t;
+dev_node(qcom_audioml_heap_device_t)
+
+type qcom_qseecom_heap_dev_t;
+dev_node(qcom_qseecom_heap_dev_t)
+
+type qcom_smcinvoke_dev_t;
+dev_node(qcom_smcinvoke_dev_t)
+
+type qcom_ufs_bsg_dev_t;
+dev_node(qcom_ufs_bsg_dev_t)
+
+type qcom_adsp_secure_device_t;
+dev_node(qcom_adsp_secure_device_t)
+
+type qcom_cdsp_secure_device_t;
+dev_node(qcom_cdsp_secure_device_t)
+
+type qcom_adsp_device_t;
+dev_node(qcom_adsp_device_t)
+
+type qcom_cdsp_device_t;
+dev_node(qcom_cdsp_device_t)
+
+type qcom_rpmsg_device_t;
+dev_node(qcom_rpmsg_device_t)
+
+type qcom_system_heap_dev_t;
+dev_node(qcom_system_heap_dev_t)
+
+type qcom_secure_pixel_heap_dev_t;
+dev_node(qcom_secure_pixel_heap_dev_t)
+
+type qcom_secure_non_pixel_heap_dev_t;
+dev_node(qcom_secure_non_pixel_heap_dev_t)
+
+type qcom_membuf_dev_t;
+dev_node(qcom_membuf_dev_t)
+
+type qcom_mem_buf_vm_dev_t;
+dev_node(qcom_mem_buf_vm_dev_t)
+
+type qcom_coresight_device_t;
+dev_node(qcom_coresight_device_t)
+
+type qcom_cam_server_dev_t;
+dev_node(qcom_cam_server_dev_t)
+
+type qcom_gpu_device_t;
+dev_node(qcom_gpu_device_t)
+
+type qcom_weston_socket_dev_t;
+dev_node(qcom_weston_socket_dev_t)
+
+type qcom_gunyah_device_t;
+dev_node(qcom_gunyah_device_t)
+
+type qcom_console_dev_t;
+dev_node(qcom_console_dev_t)
+
+# Specific to qcm6490
+genfscon sysfs /devices/platform/soc@0/6b05000.etf/tmc_etf0/enable_sink    gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/6048000.etr/tmc_etr0/enable_sink    gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/6048000.etr/tmc_etr0/buffer_size    gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/6048000.etr/tmc_etr0/block_size    gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/6048000.etr/tmc_etr0/out_mode    gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/6002000.stm/stm0/enable_source    gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/soc@0:source/modem_diag/enable_source    gen_context(system_u:object_r:qcom_coresight_t,s0)
+
+# Specific to qsc9100
+genfscon sysfs /devices/platform/soc@0/4b05000.tmc/tmc_etf0/enable_sink          gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/4048000.tmc/tmc_etr0/enable_sink          gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/4048000.tmc/tmc_etr0/buffer_size          gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/4048000.tmc/tmc_etr0/block_size           gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/4048000.tmc/tmc_etr0/out_mode             gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/404f000.tmc/tmc_etr1/enable_sink          gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/404f000.tmc/tmc_etr1/buffer_size          gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/404f000.tmc/tmc_etr1/block_size           gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/404f000.tmc/tmc_etr1/out_mode             gen_context(system_u:object_r:qcom_coresight_t,s0)
+genfscon sysfs /devices/platform/soc@0/4002000.stm/stm0/enable_source            gen_context(system_u:object_r:qcom_coresight_t,s0)
+

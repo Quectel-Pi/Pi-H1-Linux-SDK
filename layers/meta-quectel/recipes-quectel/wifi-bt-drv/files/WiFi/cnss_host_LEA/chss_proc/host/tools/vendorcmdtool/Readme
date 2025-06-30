@@ -1,0 +1,4 @@
+#how to build vendorcmdtool
+cp Makefile.x86 Makefile
+make
+#binary is vendorcmdtool

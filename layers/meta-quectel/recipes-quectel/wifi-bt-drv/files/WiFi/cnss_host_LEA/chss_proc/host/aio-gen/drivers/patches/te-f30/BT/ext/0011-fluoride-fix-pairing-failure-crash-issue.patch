@@ -1,0 +1,18 @@
+diff -Nur bt_workspace-org/system/bt/stack/btm/btm_sec.c bt_workspace-new/system/bt/stack/btm/btm_sec.c
+--- bt_workspace-org/system/bt/stack/btm/btm_sec.c	2020-12-23 16:27:46.598893581 +0800
++++ bt_workspace-new/system/bt/stack/btm/btm_sec.c	2021-01-08 12:32:51.074441976 +0800
+@@ -4837,6 +4837,14 @@
+             }
+             (*btm_cb.api.p_auth_complete_callback) (p_dev_rec->bd_addr,     p_dev_rec->dev_class,
+                                                     p_dev_rec->sec_bd_name, result);
++            /*as p_auth_complete_callback may remove p_de_rec from list, so we
++            * need find it again */
++            p_dev_rec = btm_find_dev_by_handle (handle);
++            if(p_dev_rec == NULL)
++            {
++                BTM_TRACE_ERROR("%s p_dev_rec have been removed, return", __func__);
++                return;
++            }
+         }
+     }
+ 

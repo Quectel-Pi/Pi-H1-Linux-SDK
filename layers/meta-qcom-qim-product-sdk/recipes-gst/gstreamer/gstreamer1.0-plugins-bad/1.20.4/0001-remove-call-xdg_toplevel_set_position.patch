@@ -1,0 +1,56 @@
+From 789606820832110f6ef3f87cf2d666b306ccd373 Mon Sep 17 00:00:00 2001
+From: "arthur.yao" <arthur.yao@quectel.com>
+Date: Thu, 27 Feb 2025 22:24:58 +0800
+Subject: [PATCH] remove call xdg_toplevel_set_position
+
+---
+ ext/wayland/wlwindow.c | 20 ++++++++++----------
+ 1 file changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/ext/wayland/wlwindow.c b/ext/wayland/wlwindow.c
+index 69cfa21..1afb035 100644
+--- a/ext/wayland/wlwindow.c
++++ b/ext/wayland/wlwindow.c
+@@ -275,8 +275,8 @@ gst_wl_window_ensure_position (GstWlWindow * window, guint x, guint y)
+   if (!window)
+     return;
+ 
+-  if (window->display->xdg_wm_base)
+-    xdg_toplevel_set_position (window->xdg_toplevel, x, y);
++  //if (window->display->xdg_wm_base)
++  //  xdg_toplevel_set_position (window->xdg_toplevel, x, y);
+ }
+ 
+ void
+@@ -366,20 +366,20 @@ gst_wl_window_new_toplevel (GstWlDisplay * display, const GstVideoInfo * info,
+       gst_wl_window_set_render_rectangle (window, 0, 0, rectangle->w,
+           rectangle->h);
+ 
+-      if (display->xdg_wm_base) {
+-        xdg_toplevel_set_position (window->xdg_toplevel, rectangle->x,
+-            rectangle->y);
+-      }
++      //if (display->xdg_wm_base) {
++      //  xdg_toplevel_set_position (window->xdg_toplevel, rectangle->x,
++      //      rectangle->y);
++      //}
+     } else {
+       /* set the initial size to be the same as the reported video size */
+       gint width = gst_util_uint64_scale_int_round (
+           info->width, info->par_n, info->par_d);
+       gst_wl_window_set_render_rectangle (window, 0, 0, width, info->height);
+ 
+-      if (display->xdg_wm_base) {
+-        xdg_toplevel_set_position (window->xdg_toplevel, rectangle->x,
+-            rectangle->y);
+-      }
++      //if (display->xdg_wm_base) {
++      //  xdg_toplevel_set_position (window->xdg_toplevel, rectangle->x,
++      //      rectangle->y);
++      //}
+     }
+   }
+ 
+-- 
+2.34.1
+

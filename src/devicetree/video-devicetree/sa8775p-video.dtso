@@ -1,0 +1,15 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/power/qcom-rpmpd.h>
+#include <dt-bindings/interconnect/qcom,icc.h>
+#include <dt-bindings/clock/qcom,sa8775p-gcc.h>
+#include <dt-bindings/interconnect/qcom,sa8775p-rpmh.h>
+#include <dt-bindings/clock/qcom,sa8775p-dispcc.h>
+#include <dt-bindings/clock/qcom,sa8775p-videocc.h>
+#include "sa8775p-video.dtsi"

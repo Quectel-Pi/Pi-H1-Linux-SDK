@@ -1,0 +1,4 @@
+Bluetooth Controller Product ID    : 0x00000008
+Bluetooth Controller Patch Version : 0x0111
+Bluetooth Controller Build Version : 0x0302
+Bluetooth Controller SOC Version   : 0x00000023

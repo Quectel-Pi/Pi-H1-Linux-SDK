@@ -1,0 +1,28 @@
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+// SPDX-License-Identifier: BSD-3-Clause
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,gcc-sc7280.h>
+#include <dt-bindings/clock/qcom,gpucc-sc7280.h>
+#include <dt-bindings/interconnect/qcom,sc7280.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/power/qcom-rpmpd.h>
+#include <dt-bindings/reset/qcom,sdm845-pdc.h>
+#include <dt-bindings/soc/qcom,rpmh-rsc.h>
+#include <dt-bindings/thermal/thermal.h>
+
+#include "qcs5430-graphics.dtsi"
+#include "qcs5430-fp2p5-graphics-pwrlevels.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. qcs5430 rb3gen2 platform";
+	compatible = "qcom,qcs5430-fp2p5-addons-rb3gen2",
+			"qcom,qcs5430-fp2p5-addons-rb3gen2-vision-mezz",
+			"qcom,qcs5430-fp3-addons-rb3gen2",
+			"qcom,qcs5430-fp3-addons-rb3gen2-vision-mezz",
+			"qcom,qcs5430";
+};

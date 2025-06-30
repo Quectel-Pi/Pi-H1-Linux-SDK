@@ -1,0 +1,94 @@
+#! /usr/bin/env python
+
+from argparse import ArgumentParser
+from subprocess import Popen
+from os.path import exists, dirname
+import sys
+from qemucommand import QemuCommand
+
+DEFAULT_DIR = 'tmp/deploy/images'
+
+
+def main():
+    parser = ArgumentParser(description='Run meta-updater image in qemu')
+    parser.add_argument('imagename', default='core-image-minimal', nargs='?',
+                        help="Either the name of the bitbake image target, or a path to the image to run")
+    parser.add_argument('--uboot-enable', default='yes',
+                        help='(yes/no). Determines whether or not to use U-Boot loader for running image, '
+                             'if yes then u-boot binary file will be passed as -bios option into QEMU cmd line.')
+    parser.add_argument('mac', default=None, nargs='?')
+    parser.add_argument('--dir', default=DEFAULT_DIR,
+                        help='Path to build directory containing the image and u-boot-qemux86-64.rom')
+    parser.add_argument('--efi',
+                        help='Boot using UEFI rather than U-Boot. This requires the image to be built with ' +
+                             'OSTREE_BOOTLOADER = "grub" and OVMF.fd firmware to be installed (try "apt install ovmf")',
+                        action='store_true')
+    parser.add_argument('--bootloader', default=None, help="Path to bootloader, e.g. a u-boot ROM")
+    parser.add_argument('--machine', default=None, help="Target MACHINE")
+    kvm_group = parser.add_argument_group()
+    kvm_group.add_argument('--force-kvm', help='Force use of KVM (default is to autodetect)',
+                           dest='kvm', action='store_true', default=None)
+    kvm_group.add_argument('--no-kvm', help='Disable KVM in QEMU',
+                           dest='kvm', action='store_false')
+    parser.add_argument('--mem', default=None, help="Amount of memory the machine boots with")
+    parser.add_argument('--no-gui', help='Disable GUI', action='store_true')
+    parser.add_argument('--gdb', help='Export gdbserver port 2159 from the image', action='store_true')
+    parser.add_argument('--pcap', default=None, help='Dump all network traffic')
+    parser.add_argument('-o', '--overlay', type=str, metavar='file.cow',
+                        help='Use an overlay storage image file. Will be created if it does not exist. ' +
+                             'This option lets you have a persistent image without modifying the underlying image ' +
+                             'file, permitting multiple different persistent machines.')
+    parser.add_argument('--secondary-network', action='store_true', dest='secondary_network',
+                        help='Give the image a second network card connected to a virtual network. ' +
+                             'This can be used to test Uptane Primary/Secondary communication.')
+    parser.add_argument('-n', '--dry-run', help='Print qemu command line rather then run it', action='store_true')
+    parser.add_argument('--host-forward',
+                        help='Redirect incoming TCP or UDP connections to the host port. '
+                             'Example forwarding guest port 10050 to the host port 10555:'
+                             '--host-forward="tcp:0.0.0.0:10556-:10050". '
+                             'For more details please refer to QEMU man page, option <hostfwd>. '
+                             'https://manpages.debian.org/testing/qemu-system-x86/qemu-system-x86_64.1.en.html')
+    args = parser.parse_args()
+
+    if args.overlay and not exists(args.overlay) and dirname(args.overlay) and not dirname(args.overlay) == '.':
+        print('Error: please provide a file name in the current working directory. ' +
+                'Overlays do not work properly with other directories.')
+        sys.exit(1)
+    if args.overlay and exists(args.overlay) and args.imagename != parser.get_default('imagename'):
+        # qemu-img amend -o <filename> might work, but it has not yet been done
+        # successfully.
+        print('Warning: cannot change backing image of overlay after it has been created.')
+
+    try:
+        qemu_command = QemuCommand(args)
+    except ValueError as e:
+        print(e.message)
+        sys.exit(1)
+
+    cmdline = qemu_command.command_line()
+    if args.overlay and not exists(args.overlay):
+        print("Overlay file %s does not yet exist, creating." % args.overlay)
+        img_cmdline = qemu_command.img_command_line()
+        if args.dry_run:
+            print(" ".join(img_cmdline))
+        else:
+            Popen(img_cmdline).wait()
+
+    print("Launching %s with mac address %s" % (args.imagename, qemu_command.mac_address))
+    print("To connect via SSH:")
+    print(" ssh -o StrictHostKeyChecking=no root@localhost -p %d" % qemu_command.ssh_port)
+    print("To connect to the serial console:")
+    print(" nc localhost %d" % qemu_command.serial_port)
+
+    if args.dry_run:
+        print(" ".join(cmdline))
+    else:
+        s = Popen(cmdline)
+        try:
+            s.wait()
+        except KeyboardInterrupt:
+            pass
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,8 @@
+[Unit]
+Description=quectel connection manager tool
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/quectel-CM -i %I
+
+[Install]

@@ -1,0 +1,43 @@
+diff -Nur bt_workspace-org/qcom-opensource/bt/bt-app/a2dp_src/src/A2dp_Src.cpp bt_workspace-new/qcom-opensource/bt/bt-app/a2dp_src/src/A2dp_Src.cpp
+--- bt_workspace-org/qcom-opensource/bt/bt-app/a2dp_src/src/A2dp_Src.cpp	2020-06-29 16:56:24.446819928 +0800
++++ bt_workspace-new/qcom-opensource/bt/bt-app/a2dp_src/src/A2dp_Src.cpp	2020-08-14 15:46:31.658883234 +0800
+@@ -521,6 +521,23 @@
+         return(end_buf_ptr - start_buf_ptr);
+ }
+ 
++#define PCM_HEADER_SIZE        44
++static void skip_pcm_header(FILE *pcm_file)
++{
++    char hdr_buff[PCM_HEADER_SIZE];
++    memset(hdr_buff, 0x00, PCM_HEADER_SIZE);
++    if (fread(hdr_buff, 1, PCM_HEADER_SIZE, pcm_file) == PCM_HEADER_SIZE) {
++        if ((strncmp(hdr_buff, "RIFF", 4) == 0) && (strncmp(&hdr_buff[8], "WAVEfmt", 7) == 0)){
++            printf("in %s : skip %d bytes\n", __func__, PCM_HEADER_SIZE);
++             return;
++             }
++        }
++		fseek(pcm_file, 0, SEEK_SET);
++		return;
++}
++
++
++
+ static void *thread_func(void *in_param)
+ {
+     SrcStreamStatus srcStream = SRC_NO_STREAMING;
+@@ -652,6 +669,7 @@
+              if (len == 0) {
+                  ALOGD(LOGTAG_A2DP "Read %d bytes from file", len);
+                  fseek(in_file, 0, SEEK_SET);
++				 skip_pcm_header(in_file);
+                  continue;
+              }
+              codec_type = A2DP_SINK_AUDIO_CODEC_PCM;
+@@ -702,6 +720,7 @@
+             return;
+         }
+     }
++    skip_pcm_header(in_file);
+     ALOGD(LOGTAG_A2DP "Successfully opened input file for playback");
+     media_playing = true;
+     if (pthread_create(&playback_thread, NULL, thread_func, in_file) != 0) {

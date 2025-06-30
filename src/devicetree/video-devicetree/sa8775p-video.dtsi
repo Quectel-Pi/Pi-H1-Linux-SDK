@@ -1,0 +1,97 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+&soc {
+	iris: video-codec@aa00000 {
+		compatible = "qcom,sa8775p-iris";
+
+		reg = <0 0x0aa00000 0 0xf0000>;
+		interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
+
+		power-domains = <&videocc VIDEO_CC_MVS0C_GDSC>,
+			<&videocc VIDEO_CC_MVS0_GDSC>,
+			<&rpmhpd SA8775P_MX>,
+			<&rpmhpd SA8775P_MMCX>;
+
+		power-domain-names = "iris-ctl", "vcodec", "mx", "mmcx";
+		operating-points-v2 = <&iris_opp_table>;
+
+		clocks = <&gcc GCC_VIDEO_AXI0_CLK>,
+				<&videocc VIDEO_CC_MVS0C_CLK>,
+				<&videocc VIDEO_CC_MVS0_CLK>;
+		clock-names = "gcc_video_axi0", "core_clk", "vcodec_clk";
+
+		interconnects =
+			<&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS
+				&config_noc SLAVE_VENUS_CFG QCOM_ICC_TAG_ALWAYS>,
+			<&mmss_noc MASTER_VIDEO_P0 QCOM_ICC_TAG_ALWAYS
+				&mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
+		interconnect-names = "iris-cnoc", "iris-ddr";
+
+		/* FW load region */
+		memory-region = <&pil_video_mem>;
+
+		resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>;
+		reset-names = "video_axi_reset";
+
+		status = "okay";
+
+		/* MMUs */
+		video_resv_region: video_resv_region {
+			iommu-addresses = <&non_secure_cb 0x0 0x0 0x0 0x25800000>,
+					<&non_secure_cb 0x0 0xe0000000 0x0 0x20000000>,
+					<&secure_non_pixel_cb 0x0 0x0 0x0 0x01000000>,
+					<&secure_non_pixel_cb 0x0 0x25800000 0x0 0xda800000>,
+					<&non_secure_pixel_cb 0x0 0x0 0x0 0x00100000>,
+					<&non_secure_pixel_cb 0x0 0xe0000000 0x0 0x20000000>;
+		};
+
+		non_secure_cb: non_secure_cb {
+			compatible = "qcom,vidc,cb-ns";
+			iommus = <&apps_smmu 0x0880 0x0400>;
+			memory-region = <&video_resv_region>;
+		};
+
+		secure_non_pixel_cb: secure_non_pixel_cb {
+			compatible = "qcom,vidc,cb-sec-non-pxl";
+			iommus = <&apps_smmu 0x0884 0x0400>;
+			memory-region = <&video_resv_region>;
+		};
+
+		non_secure_pixel_cb: non_secure_pixel_cb {
+			compatible = "qcom,vidc,cb-ns-pxl";
+			iommus = <&apps_smmu 0x0887 0x0400>;
+			memory-region = <&video_resv_region>;
+		};
+
+		iris_opp_table: opp-table {
+			compatible = "operating-points-v2";
+
+			opp-366000000 {
+				opp-hz = /bits/ 64 <366000000>;
+				required-opps = <&rpmhpd_opp_svs_l1>,
+						<&rpmhpd_opp_svs_l1>;
+			};
+
+			opp-444000000 {
+				opp-hz = /bits/ 64 <444000000>;
+				required-opps = <&rpmhpd_opp_nom>,
+						<&rpmhpd_opp_nom>;
+			};
+
+			opp-533000000 {
+				opp-hz = /bits/ 64 <533000000>;
+				required-opps = <&rpmhpd_opp_turbo>,
+						<&rpmhpd_opp_turbo>;
+			};
+
+			opp-560000000 {
+				opp-hz = /bits/ 64 <560000000>;
+				required-opps = <&rpmhpd_opp_turbo_l1>,
+						<&rpmhpd_opp_turbo_l1>;
+			};
+		};
+	};
+};

@@ -1,0 +1,12 @@
+[Unit]
+Description=QCA1023 MAC address check
+DefaultDependencies=no
+After=local-fs.target usb.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/check_mac_addr
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

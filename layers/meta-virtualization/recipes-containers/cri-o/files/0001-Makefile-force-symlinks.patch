@@ -1,0 +1,26 @@
+From 53371afbf0f20a1651ee6f2406cd2be056a31066 Mon Sep 17 00:00:00 2001
+From: Bruce Ashfield <bruce.ashfield@windriver.com>
+Date: Thu, 1 Nov 2018 11:17:05 -0400
+Subject: [PATCH] Makefile: force symlinks
+
+Signed-off-by: Bruce Ashfield <bruce.ashfield@windriver.com>
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/import/Makefile b/src/import/Makefile
+index cf37bec..68c8eeb 100644
+--- a/src/import/Makefile
++++ b/src/import/Makefile
+@@ -66,7 +66,7 @@ help:
+ .gopathok:
+ ifeq ("$(wildcard $(GOPKGDIR))","")
+ 	mkdir -p "$(GOPKGBASEDIR)"
+-	ln -s "$(CURDIR)" "$(GOPKGDIR)"
++	ln -sf "$(CURDIR)" "$(GOPKGDIR)"
+ endif
+ 	touch "$(GOPATH)/.gopathok"
+ 
+-- 
+2.7.4
+

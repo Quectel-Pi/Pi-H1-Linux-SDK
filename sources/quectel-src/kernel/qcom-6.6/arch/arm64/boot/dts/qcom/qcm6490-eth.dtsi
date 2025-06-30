@@ -1,0 +1,74 @@
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&soc {	
+	rtl8111h_3v3_vreg: rtl8111h_3v3_vreg {
+		compatible = "regulator-fixed";
+		gpio = <&tlmm 116 GPIO_ACTIVE_HIGH>;
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		enable-active-high;
+		status = "okay";
+		regulator-enable-ramp-delay = <10000>;
+	};
+};
+
+&pcie1 {
+	vdda-supply = <&rtl8111h_3v3_vreg>;
+
+	iommu-map = <0x0 &apps_smmu 0x1c80 0x1>,
+		    <0x100 &apps_smmu 0x1c81 0x1>,
+		    <0x208 &apps_smmu 0x1c84 0x1>,
+		    <0x210 &apps_smmu 0x1c85 0x1>,
+		    <0x218 &apps_smmu 0x1c86 0x1>,
+		    <0x300 &apps_smmu 0x1c87 0x1>,
+		    <0x400 &apps_smmu 0x1c88 0x1>,
+		    <0x500 &apps_smmu 0x1c89 0x1>,
+		    <0x501 &apps_smmu 0x1c90 0x1>,
+		    <0x518 &apps_smmu 0x1c91 0x1>, // 05:03.0
+		    <0x538 &apps_smmu 0x1c92 0x1>, // 05:07.0
+		    <0x600 &apps_smmu 0x1c93 0x1>, // 06:00.0
+		    <0x700 &apps_smmu 0x1c94 0x1>, // 07:00.0
+		    <0x800 &apps_smmu 0x1c95 0x1>, // 08:00.0
+		    <0x801 &apps_smmu 0x1c96 0x1>; // 08:00.1
+
+	pcie1_rp {
+		device_type = "pci";
+		reg = <0x00 0x00 0x00 0x00 0x00>;
+		#address-cells = <5>;
+		#size-cells = <0>;
+
+		/* BDF 1.0.0 */
+		pcie1_bus1_dev0_fn0 {
+			reg = <0 0 0 0 0>;
+			/* BDF 2.2.0 */
+			pcie1_bus2_dev2_fn0 {
+				reg = <0x1000 0x0 0x0 0x0 0x0>;
+				/* BDF 4.0.0 */
+				pcie1_bus4_dev0_fn0 {
+					reg = <0x0 0x0 0x0 0x0 0x0>;
+					/* BDF 5.3.0 */
+					pcie1_bus5_dev3_fn0 {
+						reg = <0x1800 0x0 0x0 0x0 0x0>;
+						/* BDF 6.0.0 */
+						yt6801ch0: pcie1_bus6_dev0_fn0 {
+							reg = <0 0 0 0 0>;
+						};
+					};
+					/* BDF 5.7.0 */
+					pcie1_bus5_dev7_fn0 {
+						reg = <0x3800 0x0 0x0 0x0 0x0>;
+						/* BDF 7.0.0 */
+						yt6801ch1: pcie1_bus7_dev0_fn0 {
+							reg = <0 0 0 0 0>;
+						};
+					};
+				};
+			};
+			/* BDF 2.3.0 */
+			qps615_pcie_eth: pcie1_bus2_dev3_fn0 {
+				reg = <0x1800 0x0 0x0 0x0 0x0>;
+			};
+		};
+	};
+};

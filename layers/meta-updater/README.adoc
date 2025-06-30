@@ -1,0 +1,76 @@
+= meta-updater
+:toc: macro
+:toc-title:
+:devguide-docsroot: https://docs.ota.here.com/ota-client/latest/
+:getstarted-docsroot: https://docs.ota.here.com/getstarted/dev/
+
+Meta-updater is a link:https://www.yoctoproject.org/software-overview/layers/[Yocto layer] that enables over-the-air updates (OTA) with https://github.com/ostreedev/ostree[OSTree] and https://github.com/uptane/aktualizr[aktualizr] -- the default client for link:https://www.here.com/products/automotive/ota-technology[HERE OTA Connect].
+
+https://github.com/ostreedev/ostree[OSTree] is a tool for atomic full file system upgrades with rollback capability. OSTree has several advantages over traditional dual-bank systems, but the most important one is that it minimizes network bandwidth and data storage footprint by sharing files with the same contents across file system deployments.
+
+https://github.com/uptane/aktualizr[Aktualizr] implements https://uptane.github.io/uptane-standard/uptane-standard.html[Uptane], supports device authentication and provisioning, and is integrated with OSTree. You can connect aktualizr to your own server solution or sign up for a free account at https://connect.ota.here.com/[HERE OTA Connect] to get started.
+
+== Quickstart
+
+If you don't already have a Yocto project that you want to add OTA to, you can use the xref:{getstarted-docsroot}get-started.html[HERE OTA Connect Quickstart] project to rapidly get up and running on a xref:{getstarted-docsroot}raspberry-pi.html[Raspberry Pi] or with xref:{getstarted-docsroot}qemuvirtualbox.html[QEMU]. It takes a standard https://www.yoctoproject.org/tools-resources/projects/poky[poky] distribution, and adds OTA and OSTree capabilities.
+
+== Dependencies
+
+In addition to the link:https://www.yoctoproject.org/docs/current/ref-manual/ref-manual.html#required-packages-for-the-build-host[standard Yocto dependencies], meta-updater generally requires a few additional dependencies, depending on your use case and target platform. To install these additional packages on Debian/Ubuntu, run this:
+
+....
+sudo apt install cpu-checker default-jre parted
+....
+
+To build for https://github.com/advancedtelematic/meta-updater-minnowboard[Minnowboard] with GRUB, you will also need to install https://github.com/tianocore/tianocore.github.io/wiki/OVMF[TianoCore's ovmf] package on your host system. On Debian/Ubuntu, you can do so with this command:
+
+....
+sudo apt install ovmf
+....
+
+[discrete]
+== Table of Contents
+
+The following documentation focuses on tasks that involve the meta-updater layer. If you want to get an idea of the overall developer workflow in OTA Connect, see the link:{devguide-docsroot}index.html[OTA Connect Developer Guide].
+
+* xref:{devguide-docsroot}supported-boards.html[Supported boards]
++
+Find out if your board is supported and learn about the minimum hardware requirements.
++
+* xref:{devguide-docsroot}build-agl.html[Build an Automotive Grade Linux image]
++
+Learn how to use this layer as part of AGL.
++
+* xref:{devguide-docsroot}add-ota-functonality-existing-yocto-project.html[Add OTA functionality to an existing Yocto project]
++
+Learn how to add this layer to your own Yocto project.
++
+* xref:{devguide-docsroot}build-configuration.html[SOTA-related variables in local.conf]
++
+Learn how to configure OTA-related functionality when building images, including how to install custom versions of aktualizr.
++
+* xref:{devguide-docsroot}recommended-clientconfig.html[Recommended configuration]
++
+Learn how to optimize your build for development or production.
++
+* xref:{devguide-docsroot}client-provisioning-methods.html[Provisoning methods]
++
+Learn more about the methods for provisioning devices. For more detail, you may also want to read about how to xref:{devguide-docsroot}enable-device-cred-provisioning.html[enable device credential provisioning] or how to xref:{devguide-docsroot}simulate-device-cred-provtest.html[simulate it for testing].
++
+* xref:{devguide-docsroot}meta-updater-usage.html[Advanced usage]
++
+Learn about the `garage-push` and `garage-sign` utilities, aktualizr configuration recipes, and service resource control.
++
+* xref:{devguide-docsroot}meta-updater-testing.html[Testing with oe-selftest and ptest]
++
+Learn how to use the `oe-selftest` framework for quality assurance and how to run the aktualizr test suite via ptest.
++
+* xref:{devguide-docsroot}troubleshooting.html[Troubleshooting]
++
+Get help on common problems.
+
+== License
+
+This code is licensed under the link:COPYING.MIT[MIT license], a copy of which can be found in this repository. All code is copyright HERE Europe B.V., 2016-2020.
+
+We require that contributors accept the terms of Linux Foundation's link:https://developercertificate.org/[Developer Certificate of Origin]. Please see the https://github.com/uptane/aktualizr/blob/master/CONTRIBUTING.md[contribution instructions of aktualizr] for more information.

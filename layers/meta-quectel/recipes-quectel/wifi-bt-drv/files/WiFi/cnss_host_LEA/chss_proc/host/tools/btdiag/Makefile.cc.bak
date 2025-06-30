@@ -1,0 +1,50 @@
+#Makefile.cc for target Btdiag
+CC ?= gcc
+
+CONFIG_BT_STACK ?= fluoride
+
+LDLIBS = -lpthread -lrt
+
+CFLAGS += -g -DDEBUG
+CFLAGS += -DCSP_BUILD
+CFLAGS += -DBT_HCI_UART
+
+MY_DIR := $(realpath $(dir $(lastword ${MAKEFILE_LIST})))
+TOP_DIR := $(realpath ${MY_DIR}/../)
+FLUORIDE_DIR := ${TOP_DIR}/fluoride
+ifeq "${USE_VENDOR_LIB}" "y"
+CFLAGS += -DUSE_VENDOR_LIB
+CFLAGS += -I${FLUORIDE_DIR}/hci/include
+LDLIBS += -ldl
+endif
+
+ifeq "$(strip ${CONFIG_BT_STACK})" "fluoride"
+    CFLAGS += -DFLUORIDE_STACK
+else ifeq "$(strip ${CONFIG_BT_STACK})" "bludroid"
+    CFLAGS += -DBLUEDROID_STACK
+else ifeq "$(strip ${CONFIG_BT_STACK})" "bluetopia"
+    CFLAGS += -DBLUETOPIA_STACK
+else ifeq "$(strip ${CONFIG_BT_STACK})" "bluez"
+    CFLAGS += -DBLUEZ_STACK
+else
+    $(error invalid bluetooth stack: ${CONFIG_BT_STACK})
+endif
+
+.PHONY: all clean
+
+Btdiag: Btdiag.o connection.o hciattach_rome.o privateMembers.o uart.o
+
+Btdiag.o: Btdiag.c
+	${CC} -c $(CFLAGS) Btdiag.c
+connection.o: connection.c connection.h
+	${CC} -c $(CFLAGS) connection.c
+hciattach_rome.o: hciattach_rome.c hciattach_rome.h
+	${CC} -c $(CFLAGS) hciattach_rome.c
+privateMembers.o : privateMembers.c privateMembers.h
+	${CC} -c $(CFLAGS) privateMembers.c
+uart.o : uart.c uart.h
+	${CC} -c $(CFLAGS) uart.c
+
+clean:
+	-$(RM) *.o
+	-$(RM)  Btdiag

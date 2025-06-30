@@ -1,0 +1,249 @@
+From 0c385278a138116583879b99db867eb37813c6c9 Mon Sep 17 00:00:00 2001
+From: Zijun Hu <zijuhu@codeaurora.org>
+Date: Mon, 13 Jul 2020 15:10:58 +0800
+Subject: [PATCH 2/2] fluoride: fix hid/hogp bugs
+
+fix hid/hogp bugs.
+---
+ qcom-opensource/bt/bt-app/gap/src/Gap.cpp         |  4 ++++
+ qcom-opensource/bt/bt-app/include/ipc.h           |  1 +
+ qcom-opensource/bt/bt-app/main/include/Main.hpp   |  3 +++
+ qcom-opensource/bt/bt-app/main/src/Main.cpp       |  6 +++++-
+ system/bt/btif/co/bta_hh_co.c                     |  2 +-
+ system/bt/embdrv/sbc/decoder/include/oi_cpu_dep.h | 25 ++++++++++++-----------
+ system/bt/embdrv/sbc/encoder/include/sbc_types.h  |  6 +-----
+ system/bt/stack/btm/btm_ble_gap.c                 |  3 +++
+ system/bt/stack/gap/gap_ble.c                     |  6 +++---
+ system/bt/stack/smp/p_256_ecc_pp.h                |  7 +------
+ system/bt/stack/smp/p_256_multprecision.h         |  6 +-----
+ 11 files changed, 36 insertions(+), 33 deletions(-)
+
+diff --git a/qcom-opensource/bt/bt-app/gap/src/Gap.cpp b/qcom-opensource/bt/bt-app/gap/src/Gap.cpp
+index a91506ac11c2..15e21f7db2ab 100755
+--- a/qcom-opensource/bt/bt-app/gap/src/Gap.cpp
++++ b/qcom-opensource/bt/bt-app/gap/src/Gap.cpp
+@@ -797,6 +797,10 @@ void Gap::ProcessEvent(BtEvent* event) {
+             bluetooth_interface_->create_bond(&event->bond_device.bd_addr, 1);
+             break;
+ 
++	case GAP_API_CREATE_BOND_BLE:
++	    bluetooth_interface_->create_bond(&event->bond_device.bd_addr, 2);
++	    break;
++
+         case GAP_API_SSP_REPLY:
+             HandleSspReply(&event->ssp_reply_event);
+             break;
+diff --git a/qcom-opensource/bt/bt-app/include/ipc.h b/qcom-opensource/bt/bt-app/include/ipc.h
+index aa68a96349ca..e0796f49595d 100755
+--- a/qcom-opensource/bt/bt-app/include/ipc.h
++++ b/qcom-opensource/bt/bt-app/include/ipc.h
+@@ -356,6 +356,7 @@ typedef enum {
+     GAP_API_START_INQUIRY,
+     GAP_API_STOP_INQUIRY,
+     GAP_API_CREATE_BOND,
++    GAP_API_CREATE_BOND_BLE,
+     GAP_API_SSP_REPLY,
+     GAP_API_PIN_REPLY,
+     GAP_API_SET_BDNAME,
+diff --git a/qcom-opensource/bt/bt-app/main/include/Main.hpp b/qcom-opensource/bt/bt-app/main/include/Main.hpp
+index a4ccdd41c9a7..91a3ed122d0c 100644
+--- a/qcom-opensource/bt/bt-app/main/include/Main.hpp
++++ b/qcom-opensource/bt/bt-app/main/include/Main.hpp
+@@ -127,6 +127,7 @@ typedef enum {
+     CANCEL_ENQUIRY,
+     MAIN_EXIT,
+     START_PAIR,
++    START_PAIR_BLE,
+     INQUIRY_LIST,
+     BONDED_LIST,
+     GET_BT_NAME,
+@@ -316,6 +317,8 @@ UserMenuList GapMenu[] = {
+     {CANCEL_ENQUIRY,        "cancel_inquiry",   ZERO_PARAM,    "cancel_inquiry"},
+     {START_PAIR,            "pair",             ONE_PARAM,    "pair<space><bt_address> \
+     eg. pair 00:11:22:33:44:55"},
++    {START_PAIR_BLE,        "pair_ble",         ONE_PARAM,    "pair_ble<space><bt_address> \
++    eg. pair_ble 00:11:22:33:44:55"},
+     {UNPAIR,                "unpair",           ONE_PARAM,    "unpair<space><bt_address> \
+     eg. unpair 00:11:22:33:44:55"},
+     {INQUIRY_LIST,          "inquiry_list",     ZERO_PARAM,    "inquiry_list"},
+diff --git a/qcom-opensource/bt/bt-app/main/src/Main.cpp b/qcom-opensource/bt/bt-app/main/src/Main.cpp
+index f2e456218e08..a498572d4e8a 100755
+--- a/qcom-opensource/bt/bt-app/main/src/Main.cpp
++++ b/qcom-opensource/bt/bt-app/main/src/Main.cpp
+@@ -1677,13 +1677,17 @@ static void HandleGapCommand(int cmd_id, char user_cmd[][COMMAND_ARG_SIZE]) {
+             }
+             break;
+ 
++	case START_PAIR_BLE:
+         case START_PAIR:
+             if ((g_bt_app->status.pairing_cmd != COMMAND_INPROGRESS) &&
+                 (g_bt_app->bt_state == BT_STATE_ON)) {
+                 if (string_is_bdaddr(user_cmd[ONE_PARAM])) {
+                     g_bt_app->status.pairing_cmd = COMMAND_INPROGRESS;
+                     event = new BtEvent;
+-                    event->event_id = GAP_API_CREATE_BOND;
++		    if (cmd_id == START_PAIR_BLE)
++			    event->event_id = GAP_API_CREATE_BOND_BLE;
++		    else
++			    event->event_id = GAP_API_CREATE_BOND;
+                     string_to_bdaddr(user_cmd[ONE_PARAM], &event->bond_device.bd_addr);
+                     PostMessage (THREAD_ID_GAP, event);
+                 } else {
+diff --git a/system/bt/btif/co/bta_hh_co.c b/system/bt/btif/co/bta_hh_co.c
+index e82f4742f8be..4b4aad899db1 100644
+--- a/system/bt/btif/co/bta_hh_co.c
++++ b/system/bt/btif/co/bta_hh_co.c
+@@ -404,7 +404,7 @@ static inline void btif_hh_close_poll_thread(btif_hh_device_t *p_dev)
+ {
+     APPL_TRACE_DEBUG("%s", __FUNCTION__);
+     p_dev->hh_keep_polling = 0;
+-    if(p_dev->hh_poll_thread_id > 0)
++    if(p_dev->hh_poll_thread_id != -1)
+         pthread_join(p_dev->hh_poll_thread_id,NULL);
+ 
+     return;
+diff --git a/system/bt/embdrv/sbc/decoder/include/oi_cpu_dep.h b/system/bt/embdrv/sbc/decoder/include/oi_cpu_dep.h
+index c10da9e59c9d..64f326a2d980 100644
+--- a/system/bt/embdrv/sbc/decoder/include/oi_cpu_dep.h
++++ b/system/bt/embdrv/sbc/decoder/include/oi_cpu_dep.h
+@@ -38,6 +38,7 @@
+ /**********************************************************************************
+   $Revision: #1 $
+ ***********************************************************************************/
++#include <stdint.h>
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -121,12 +122,12 @@ typedef unsigned char   OI_BYTE;  /**< Raw bytes type uses native character data
+ /** @name CPU/compiler-dependent primitive data type definitions for x86 processor family
+  *  @{
+  */
+-typedef signed char     OI_INT8;   /**< 8-bit signed integer values use native signed character data type for x86 processor. */
+-typedef signed short    OI_INT16;  /**< 16-bit signed integer values use native signed short integer data type for x86 processor. */
+-typedef signed long     OI_INT32;  /**< 32-bit signed integer values use native signed long integer data type for x86 processor. */
+-typedef unsigned char   OI_UINT8;  /**< 8-bit unsigned integer values use native unsigned character data type for x86 processor. */
+-typedef unsigned short  OI_UINT16; /**< 16-bit unsigned integer values use native unsigned short integer data type for x86 processor. */
+-typedef unsigned long   OI_UINT32; /**< 32-bit unsigned integer values use native unsigned long integer data type for x86 processor. */
++typedef int8_t     OI_INT8;   /**< 8-bit signed integer values use native signed character data type for x86 processor. */
++typedef int16_t    OI_INT16;  /**< 16-bit signed integer values use native signed short integer data type for x86 processor. */
++typedef int32_t     OI_INT32;  /**< 32-bit signed integer values use native signed long integer data type for x86 processor. */
++typedef uint8_t   OI_UINT8;  /**< 8-bit unsigned integer values use native unsigned character data type for x86 processor. */
++typedef uint16_t  OI_UINT16; /**< 16-bit unsigned integer values use native unsigned short integer data type for x86 processor. */
++typedef uint32_t   OI_UINT32; /**< 32-bit unsigned integer values use native unsigned long integer data type for x86 processor. */
+ 
+ typedef OI_UINT32 OI_ELEMENT_UNION; /**< Type for first element of a union to support all data types up to pointer width. */
+ 
+@@ -143,12 +144,12 @@ typedef OI_UINT32 OI_ELEMENT_UNION; /**< Type for first element of a union to su
+ /** @name CPU/compiler-dependent primitive data type definitions for x86 processor family
+  *  @{
+  */
+-typedef signed char     OI_INT8;   /**< 8-bit signed integer values use native signed character data type for x86 processor. */
+-typedef signed short    OI_INT16;  /**< 16-bit signed integer values use native signed short integer data type for x86 processor. */
+-typedef signed int     OI_INT32;  /**< 32-bit signed integer values use native signed long integer data type for x86 processor. */
+-typedef unsigned char   OI_UINT8;  /**< 8-bit unsigned integer values use native unsigned character data type for x86 processor. */
+-typedef unsigned short  OI_UINT16; /**< 16-bit unsigned integer values use native unsigned short integer data type for x86 processor. */
+-typedef unsigned int   OI_UINT32; /**< 32-bit unsigned integer values use native unsigned long integer data type for x86 processor. */
++typedef int8_t     OI_INT8;   /**< 8-bit signed integer values use native signed character data type for x86 processor. */
++typedef int16_t    OI_INT16;  /**< 16-bit signed integer values use native signed short integer data type for x86 processor. */
++typedef int32_t     OI_INT32;  /**< 32-bit signed integer values use native signed long integer data type for x86 processor. */
++typedef uint8_t   OI_UINT8;  /**< 8-bit unsigned integer values use native unsigned character data type for x86 processor. */
++typedef uint16_t  OI_UINT16; /**< 16-bit unsigned integer values use native unsigned short integer data type for x86 processor. */
++typedef uint32_t   OI_UINT32; /**< 32-bit unsigned integer values use native unsigned long integer data type for x86 processor. */
+ 
+ typedef OI_UINT32 OI_ELEMENT_UNION; /**< Type for first element of a union to support all data types up to pointer width. */
+ 
+diff --git a/system/bt/embdrv/sbc/encoder/include/sbc_types.h b/system/bt/embdrv/sbc/encoder/include/sbc_types.h
+index 7a58eed27917..d6ef85117b5f 100644
+--- a/system/bt/embdrv/sbc/encoder/include/sbc_types.h
++++ b/system/bt/embdrv/sbc/encoder/include/sbc_types.h
+@@ -34,11 +34,7 @@
+ #include "bt_types.h"
+ 
+ typedef short SINT16;
+-#if __x86_64__
+-typedef int SINT32;
+-#else
+-typedef long SINT32;
+-#endif
++typedef int32_t SINT32;
+ 
+ #if (SBC_IPAQ_OPT == TRUE)
+ 
+diff --git a/system/bt/stack/btm/btm_ble_gap.c b/system/bt/stack/btm/btm_ble_gap.c
+index 3e6bb5a8a26c..71c00a5e493c 100644
+--- a/system/bt/stack/btm/btm_ble_gap.c
++++ b/system/bt/stack/btm/btm_ble_gap.c
+@@ -2226,6 +2226,9 @@ void btm_ble_read_remote_name_cmpl(BOOLEAN status, BD_ADDR bda, UINT16 length, c
+     UINT8   hci_status = HCI_SUCCESS;
+     BD_NAME bd_name;
+ 
++    if(p_name == NULL)
++     return;
++
+     memset(bd_name, 0, (BD_NAME_LEN + 1));
+     if (length > BD_NAME_LEN)
+     {
+diff --git a/system/bt/stack/gap/gap_ble.c b/system/bt/stack/gap/gap_ble.c
+index e14b13ee3050..0cbdb225b704 100644
+--- a/system/bt/stack/gap/gap_ble.c
++++ b/system/bt/stack/gap/gap_ble.c
+@@ -107,7 +107,7 @@ tGAP_CLCB *gap_ble_find_clcb_by_conn_id(UINT16 conn_id)
+         }
+     }
+ 
+-    return p_clcb;
++    return NULL;
+ }
+ 
+ /*******************************************************************************
+@@ -133,10 +133,10 @@ tGAP_CLCB *gap_clcb_alloc (BD_ADDR bda)
+             p_clcb->in_use = TRUE;
+             memcpy (p_clcb->bda, bda, BD_ADDR_LEN);
+             p_clcb->pending_req_q = fixed_queue_new(SIZE_MAX);
+-            break;
++            return p_clcb;
+         }
+     }
+-    return p_clcb;
++    return NULL;
+ }
+ 
+ /*******************************************************************************
+diff --git a/system/bt/stack/smp/p_256_ecc_pp.h b/system/bt/stack/smp/p_256_ecc_pp.h
+index 88dea009a0cf..b25a1aefa148 100644
+--- a/system/bt/stack/smp/p_256_ecc_pp.h
++++ b/system/bt/stack/smp/p_256_ecc_pp.h
+@@ -26,12 +26,7 @@
+ 
+ #include "p_256_multprecision.h"
+ 
+-#if __x86_64__
+-typedef unsigned int  DWORD;
+-#else
+-typedef unsigned long  DWORD;
+-#endif
+-
++typedef uint32_t  DWORD;
+ 
+ typedef struct {
+     DWORD x[KEY_LENGTH_DWORDS_P256];
+diff --git a/system/bt/stack/smp/p_256_multprecision.h b/system/bt/stack/smp/p_256_multprecision.h
+index 9f0a2a5010bc..b3e95f81d054 100644
+--- a/system/bt/stack/smp/p_256_multprecision.h
++++ b/system/bt/stack/smp/p_256_multprecision.h
+@@ -26,11 +26,7 @@
+ #include "bt_types.h"
+ 
+ /* Type definitions */
+-#if __x86_64__
+-typedef unsigned int  DWORD;
+-#else
+-typedef unsigned long  DWORD;
+-#endif
++typedef uint32_t  DWORD;
+ 
+ #define DWORD_BITS      32
+ #define DWORD_BYTES     4
+-- 
+2.7.4
+

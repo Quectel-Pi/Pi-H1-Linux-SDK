@@ -1,0 +1,79 @@
+# Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+qcom_loc_manage_loc_data_files(mount_t)
+qcom_loc_read_loc_etc_files(mount_t)
+qcom_bluetooth_manage_bt_etc_files(mount_t)
+qcom_wcnss_etc_manage_mount(mount_t)
+qcom_bluetooth_manage_data_files(mount_t)
+qcom_bluetooth_manage_socket_files(mount_t)
+qcom_mounton_persist(mount_t)
+files_mounton_etc_dirs(mount_t)
+qcom_qwes_cache_manage_files(mount_t)
+qcom_execute_license_store_script(mount_t)
+qcom_diag_logs_manage(mount_t)
+
+allow mount_t self:capability { dac_override dac_read_search fowner fsetid };
+logging_search_logs(mount_t)
+init_read_generic_units_files(mount_t)
+
+files_relabel_var_dirs(mount_t)
+files_relabel_all_tmp_dirs(mount_t)
+
+#should be able to update any type of files
+mls_file_downgrade(mount_t)
+mls_file_write_all_levels(mount_t)
+mls_file_read_all_levels(mount_t)
+mls_file_upgrade(mount_t)
+
+
+#needed for reading  ntp_drift_t
+ntp_read_drift_files(mount_t)
+logging_read_syslog_config(mount_t)
+files_search_runtime(mount_t)
+
+
+# As we have overlay on /etc /var following will be needed
+files_getattr_all_tmp_files(mount_t)
+files_relabel_all_tmp_files(mount_t)
+files_manage_var_dirs(mount_t)
+files_manage_generic_tmp_dirs(mount_t)
+files_manage_var_lib_dirs(mount_t)
+files_manage_etc_dirs(mount_t)
+files_manage_etc_files(mount_t);
+# Need to check permission on file/folder/dir
+# so adding getattr
+domain_getattr_all_entry_files(mount_t)
+dev_getattr_all_blk_files(mount_t)
+dev_getattr_generic_chr_files(mount_t)
+domain_getattr_all_pipes(mount_t)
+domain_getattr_all_domains(mount_t)
+domain_getattr_confined_domains(mount_t)
+mount_getattr_runtime_files(mount_t)
+corecmd_exec_bin(mount_t)
+# connecting property-vault service
+qcom_connect_property_vault_to_etc(mount_t)
+
+qcom_manage_perf_data_files(mount_t)
+qcom_perfhal_read_config(mount_t)
+
+modutils_read_module_config(mount_t)
+
+qcom_cam_server_rw_var(mount_t)
+
+#Addressing SSH denials
+auth_dontaudit_read_shadow(mount_t);
+auth_rw_lastlog(mount_t);
+auth_write_login_records(mount_t);
+
+systemd_backlight_dir_read(mount_t)
+
+#allow graceful shutdown
+access_systemd_units(mount_t)
+
+#TODO: Need to clean/remove this post fixing the permission issue
+# Mount is expected to run only by root user
+# where treated as trusted server and running in permissive
+# for not going fwd will move out of permissive
+# issue is systemd-tmpfs is triggering this for it management
+permissive mount_t;

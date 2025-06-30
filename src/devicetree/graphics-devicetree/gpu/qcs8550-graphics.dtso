@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,sm8550-gcc.h>
+#include <dt-bindings/clock/qcom,sm8550-gpucc.h>
+#include <dt-bindings/power/qcom-rpmpd.h>
+#include <dt-bindings/interconnect/qcom,sm8550-rpmh.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+
+#include "qcs8550-graphics.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. QCS8550 AIM300";
+	compatible = "qcom,kalama", "qcom,kalamap", "qcom,qcs8550-aim300", "qcom,qcs8550";
+};

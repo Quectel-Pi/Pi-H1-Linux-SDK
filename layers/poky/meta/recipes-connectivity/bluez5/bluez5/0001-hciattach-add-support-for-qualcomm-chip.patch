@@ -1,0 +1,1937 @@
+From 44f85396e445c1cffad415c03d33ef54eb1d1857 Mon Sep 17 00:00:00 2001
+From: "lidong.zhou" <lidong.zhou@quectel.com>
+Date: Wed, 7 Jun 2023 20:18:56 +0800
+Subject: [PATCH] hciattach: add support for qualcomm chip
+
+Upstream-Status: Denied
+
+---
+ Makefile.tools         |    4 +-
+ tools/hciattach.c      |   29 +-
+ tools/hciattach.h      |    2 +
+ tools/hciattach_rome.c | 1357 ++++++++++++++++++++++++++++++++++++++++
+ tools/hciattach_rome.h |  405 ++++++++++++
+ 5 files changed, 1795 insertions(+), 2 deletions(-)
+ mode change 100644 => 100755 tools/hciattach.c
+ mode change 100644 => 100755 tools/hciattach.h
+ create mode 100755 tools/hciattach_rome.c
+ create mode 100755 tools/hciattach_rome.h
+
+diff --git a/Makefile.tools b/Makefile.tools
+index 4bc355c34..c849bc2a9 100644
+--- a/Makefile.tools
++++ b/Makefile.tools
+@@ -411,7 +411,9 @@ tools_hciattach_SOURCES = tools/hciattach.c tools/hciattach.h \
+ 						tools/hciattach_ath3k.c \
+ 						tools/hciattach_qualcomm.c \
+ 						tools/hciattach_intel.c \
+-						tools/hciattach_bcm43xx.c
++						tools/hciattach_bcm43xx.c \
++						tools/hciattach_rome.c tools/hciattach_rome.h
++
+ tools_hciattach_LDADD = lib/libbluetooth-internal.la
+ 
+ tools_hciconfig_SOURCES = tools/hciconfig.c
+diff --git a/tools/hciattach.c b/tools/hciattach.c
+old mode 100644
+new mode 100755
+index 276a4e56e..0e2c9e836
+--- a/tools/hciattach.c
++++ b/tools/hciattach.c
+@@ -57,6 +57,8 @@ struct uart_t {
+ #define ENABLE_PM	1
+ #define DISABLE_PM	0
+ 
++int line_disp = 1;
++
+ static volatile sig_atomic_t __io_canceled = 0;
+ 
+ static void sig_hup(int sig)
+@@ -251,6 +253,12 @@ static int ath3k_pm(int fd, struct uart_t *u, struct termios *ti)
+ 	return ath3k_post(fd, u->pm);
+ }
+ 
++static int qca(int fd, struct uart_t *u, struct termios *ti)
++{
++	fprintf(stderr,"qca\n");
++	return qca_soc_init(fd, u->speed, u->bdaddr);
++}
++
+ static int qualcomm(int fd, struct uart_t *u, struct termios *ti)
+ {
+ 	return qualcomm_init(fd, u->speed, ti, u->bdaddr);
+@@ -1081,6 +1089,11 @@ struct uart_t uart[] = {
+ 	{ "ath3k",    0x0000, 0x0000, HCI_UART_ATH3K, 115200, 115200,
+ 			FLOW_CTL, DISABLE_PM, NULL, ath3k_ps, ath3k_pm  },
+ 
++	/* QCA ROME */
++	{ "qca",    0x0000, 0x0000, HCI_UART_H4, 115200, 3000000,
++				FLOW_CTL, DISABLE_PM, NULL, qca, NULL },
++
++
+ 	/* QUALCOMM BTS */
+ 	{ "qualcomm",   0x0000, 0x0000, HCI_UART_H4,   115200, 115200,
+ 			FLOW_CTL, DISABLE_PM, NULL, qualcomm, NULL },
+@@ -1133,6 +1146,9 @@ static int init_uart(char *dev, struct uart_t *u, int send_break, int raw)
+ 	if (u->flags & AMP_DEV)
+ 		flags |= 1 << HCI_UART_CREATE_AMP;
+ 
++	if (!strncmp(u->type, "qca", 3))
++		flags |= 1 << HCI_UART_RESET_ON_INIT;
++
+ 	fd = open(dev, O_RDWR | O_NOCTTY);
+ 	if (fd < 0) {
+ 		perror("Can't open serial port");
+@@ -1183,6 +1199,8 @@ static int init_uart(char *dev, struct uart_t *u, int send_break, int raw)
+ 		goto fail;
+ 	}
+ 
++if (line_disp) {
++	fprintf(stderr, "Setting TTY to N_HCI line discipline\n");
+ 	/* Set TTY to N_HCI line discipline */
+ 	i = N_HCI;
+ 	if (ioctl(fd, TIOCSETD, &i) < 0) {
+@@ -1199,6 +1217,7 @@ static int init_uart(char *dev, struct uart_t *u, int send_break, int raw)
+ 		perror("Can't set device");
+ 		goto fail;
+ 	}
++}
+ 
+ 	if (u->post && u->post(fd, u, &ti) < 0)
+ 		goto fail;
+@@ -1237,7 +1256,7 @@ int main(int argc, char *argv[])
+ 	printpid = 0;
+ 	raw = 0;
+ 
+-	while ((opt=getopt(argc, argv, "bnpt:s:lr")) != EOF) {
++	while ((opt=getopt(argc, argv, "bnpt:s:lrf:")) != EOF) {
+ 		switch(opt) {
+ 		case 'b':
+ 			send_break = 1;
+@@ -1270,6 +1289,11 @@ int main(int argc, char *argv[])
+ 			raw = 1;
+ 			break;
+ 
++		case 'f':
++			line_disp = atoi(optarg);
++			fprintf(stderr, "Line_disp val : %d\n", line_disp);
++			break;
++
+ 		default:
+ 			usage();
+ 			exit(1);
+@@ -1414,12 +1438,15 @@ int main(int argc, char *argv[])
+ 			break;
+ 	}
+ 
++if (line_disp) {
+ 	/* Restore TTY line discipline */
++	fprintf(stderr, "Restoring the Line Discipline driver\n");
+ 	ld = N_TTY;
+ 	if (ioctl(n, TIOCSETD, &ld) < 0) {
+ 		perror("Can't restore line discipline");
+ 		exit(1);
+ 	}
++}
+ 
+ 	return 0;
+ }
+diff --git a/tools/hciattach.h b/tools/hciattach.h
+old mode 100644
+new mode 100755
+index dfa4c1e7a..fae033e21
+--- a/tools/hciattach.h
++++ b/tools/hciattach.h
+@@ -32,6 +32,7 @@
+ #define HCI_UART_AG6XX	9
+ #define HCI_UART_NOKIA	10
+ #define HCI_UART_MRVL	11
++#define HCI_UART_IBS	12
+ 
+ #define HCI_UART_RAW_DEVICE	0
+ #define HCI_UART_RESET_ON_INIT	1
+@@ -56,6 +57,7 @@ int bgb2xx_init(int dd, bdaddr_t *bdaddr);
+ int ath3k_init(int fd, int speed, int init_speed, char *bdaddr,
+ 						struct termios *ti);
+ int ath3k_post(int fd, int pm);
++int qca_soc_init(int fd, int speed, char *bdaddr);
+ int qualcomm_init(int fd, int speed, struct termios *ti, const char *bdaddr);
+ int intel_init(int fd, int init_speed, int *speed, struct termios *ti);
+ int bcm43xx_init(int fd, int def_speed, int speed, struct termios *ti,
+diff --git a/tools/hciattach_rome.c b/tools/hciattach_rome.c
+new file mode 100755
+index 000000000..6dd7e2b0c
+--- /dev/null
++++ b/tools/hciattach_rome.c
+@@ -0,0 +1,1357 @@
++/*
++ *
++ *  Copyright (c) 2013-2015, The Linux Foundation. All rights reserved.
++ *  Not a Contribution.
++ *
++ *  Copyright 2012 The Android Open Source Project
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License"); you
++ *  may not use this file except in compliance with the License. You may
++ *  obtain a copy of the License at
++ *
++ *  http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
++ *  implied. See the License for the specific language governing
++ *  permissions and limitations under the License.
++ *
++ */
++
++/******************************************************************************
++ *
++ *  Filename:      hciattach_rome.c
++ *
++ *  Description:   Contains controller-specific functions, like
++ *                      firmware patch download
++ *                      low power mode operations
++ *
++ ******************************************************************************/
++
++
++#include <stdio.h>
++#include <unistd.h>
++#include <sys/socket.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <sys/ioctl.h>
++#include <signal.h>
++#include <time.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <dirent.h>
++#include <ctype.h>
++#include <stdlib.h>
++#include <string.h>
++#include <termios.h>
++#include <bluetooth/bluetooth.h>
++#include "hciattach_rome.h"
++#include "hciattach.h"
++
++
++unsigned char  *pdata_buffer = NULL;
++int rome_ver = 0;
++int g_soc_id = 0;
++unsigned char  gTlv_type;
++unsigned char  gtlv_dwndcfg;
++char *rampatch_file_path;
++char *nvm_file_path;
++vnd_userial_cb_t vnd_userial;
++unsigned char wait_vsc_evt = TRUE;
++static unsigned int unified_hci = 0;
++
++
++static int get_value_from_config(char *file_path, char *param)
++{
++    FILE *pfile = NULL;
++    char *line = NULL;
++    char *pch = NULL;
++    static char param_str[PARAM_LEN];
++    int bytes_read = 0;
++    long unsigned int position = 0;
++    int ret = -1;
++
++    if (!file_path || !param)
++    {
++        fprintf(stderr, "Invalid arguments\n");
++        return -EINVAL;
++    }
++
++    pfile = fopen(file_path, "r");
++    if (!pfile)
++    {
++        fprintf(stderr, "Failed to open %s\n", file_path);
++        return ret;
++    }
++
++    while (getline(&line, (size_t *)&bytes_read, pfile) > 0)
++    {
++        if (line[0] != '#' && line[0] != '\n')
++        {
++            pch = memchr(line, '=', strlen(line));
++            if (pch != NULL)
++            {
++                position = pch - line;
++                strncpy(param_str, line, sizeof(param_str)-1);
++                if (position >= sizeof(param_str))
++                    position = sizeof(param_str) - 1;
++                if (strncmp(param_str, param, position) == 0)
++                {
++                    ret = atoi(pch + 1);
++                    break;
++                }
++            }
++        }
++    }
++    /* getline() will allocate a buffer for storing the line. */
++    free(line);
++    fclose(pfile);
++    return ret;
++}
++
++static int read_bd_address(unsigned char *bdaddr)
++{
++    int fd = -1;
++    int readPtr = 0;
++    unsigned char data[BD_ADDR_LEN];
++
++    /* Open the persist file for reading device address*/
++    fd = open("/etc/bluetooth/.bt_nv.bin", O_RDONLY);
++    if (fd < 0)
++    {
++        fprintf(stderr, "%s: Open failed: Programming default BD ADDR\n", __func__);
++        return -1;
++    }
++
++    /* Read the NVM Header : fp will be advanced by readPtr number of bytes */
++    readPtr = read(fd, data, PERSIST_HEADER_LEN);
++    if (readPtr > 0)
++        fprintf(stderr, "%s: Persist header data: %02x \t %02x \t %02x\n", __func__,
++                data[NVITEM], data[RDWR_PROT], data[NVITEM_SIZE]);
++    else
++    {
++        fprintf(stderr, "%s: Read from persist memory failed : Programming default"
++                " BD ADDR\n", __func__);
++        close(fd);
++        return -1;
++    }
++
++    /* Check for BD ADDR length before programming */
++    if (data[NVITEM_SIZE] != BD_ADDR_LEN)
++    {
++        fprintf(stderr, "Invalid BD ADDR: Programming default BD ADDR!\n");
++        close(fd);
++        return -1;
++    }
++
++    /* Read the BD ADDR info */
++    readPtr = read(fd, data, BD_ADDR_LEN);
++    if (readPtr > 0)
++        fprintf(stderr, "BD-ADDR: ==> %02x:%02x:%02x:%02x:%02x:%02x\n", data[0],
++                data[1], data[2], data[3], data[4], data[5]);
++    else
++    {
++        fprintf(stderr, "%s: Read from persist memory failed : Programming default"
++                " BD ADDR\n", __func__);
++        close(fd);
++        return -1;
++    }
++    memcpy(bdaddr, data, BD_ADDR_LEN);
++    close(fd);
++    return 0;
++}
++
++static int userial_to_tcio_baud(unsigned char cfg_baud, unsigned int *baud)
++{
++    if (cfg_baud == USERIAL_BAUD_115200)
++        *baud = B115200;
++    else if (cfg_baud == USERIAL_BAUD_4M)
++        *baud = B4000000;
++    else if (cfg_baud == USERIAL_BAUD_3M)
++        *baud = B3000000;
++    else if (cfg_baud == USERIAL_BAUD_2M)
++        *baud = B2000000;
++    else if (cfg_baud == USERIAL_BAUD_1M)
++        *baud = B1000000;
++    else if (cfg_baud == USERIAL_BAUD_921600)
++        *baud = B921600;
++    else if (cfg_baud == USERIAL_BAUD_460800)
++        *baud = B460800;
++    else if (cfg_baud == USERIAL_BAUD_230400)
++        *baud = B230400;
++    else if (cfg_baud == USERIAL_BAUD_57600)
++        *baud = B57600;
++    else if (cfg_baud == USERIAL_BAUD_19200)
++        *baud = B19200;
++    else if (cfg_baud == USERIAL_BAUD_9600)
++        *baud = B9600;
++    else if (cfg_baud == USERIAL_BAUD_1200)
++        *baud = B1200;
++    else if (cfg_baud == USERIAL_BAUD_600)
++        *baud = B600;
++    else
++    {
++        fprintf(stderr, "userial vendor open: unsupported baud idx %i\n", cfg_baud);
++        *baud = B115200;
++        return -1;
++    }
++
++    return 0;
++}
++
++static int is_speed_valid(int speed, int *local_baud_rate, int *controller_baud_rate)
++{
++    switch (speed)
++    {
++    case 9600:
++        *local_baud_rate = USERIAL_BAUD_9600;
++        *controller_baud_rate = BAUDRATE_9600;
++        break;
++    case 19200:
++        *local_baud_rate = USERIAL_BAUD_19200;
++        *controller_baud_rate = BAUDRATE_19200;
++        break;
++    case 57600:
++        *local_baud_rate = USERIAL_BAUD_57600;
++        *controller_baud_rate = BAUDRATE_57600;
++        break;
++    case 115200:
++        *local_baud_rate = USERIAL_BAUD_115200;
++        *controller_baud_rate = BAUDRATE_115200;
++        break;
++    case 230400:
++        *local_baud_rate = USERIAL_BAUD_230400;
++        *controller_baud_rate = BAUDRATE_230400;
++        break;
++    case 460800:
++        *local_baud_rate = USERIAL_BAUD_460800;
++        *controller_baud_rate = BAUDRATE_460800;
++        break;
++    case 921600:
++        *local_baud_rate = USERIAL_BAUD_921600;
++        *controller_baud_rate = BAUDRATE_921600;
++        break;
++    case 1000000:
++        *local_baud_rate = USERIAL_BAUD_1M;
++        *controller_baud_rate = BAUDRATE_1000000;
++        break;
++    case 2000000:
++        *local_baud_rate = USERIAL_BAUD_2M;
++        *controller_baud_rate = BAUDRATE_2000000;
++        break;
++    case 3000000:
++        *local_baud_rate = USERIAL_BAUD_3M;
++        *controller_baud_rate = BAUDRATE_3000000;
++        break;
++    case 4000000:
++        *local_baud_rate = USERIAL_BAUD_4M;
++        *controller_baud_rate = BAUDRATE_4000000;
++        break;
++    case 300:
++    case 600:
++    case 1200:
++    case 2400:
++    default:
++        fprintf(stderr, "Invalid baud rate passed!\n");
++        *local_baud_rate = *controller_baud_rate = -1;
++        break;
++    }
++    return 0;
++}
++
++static void userial_set_baud(unsigned char userial_baud)
++{
++    unsigned int tcio_baud;
++    fprintf(stderr, "## userial_set_baud: %d\n", userial_baud);
++
++    if (tcgetattr(vnd_userial.fd, &vnd_userial.termios) < 0)
++    {
++        perror("Can't get port settings");
++        return;
++    }
++    cfmakeraw(&vnd_userial.termios);
++    vnd_userial.termios.c_cflag |= CLOCAL;
++    vnd_userial.termios.c_cflag |= CREAD;
++    vnd_userial.termios.c_cflag |= CS8;
++    tcsetattr(vnd_userial.fd, TCSANOW, &vnd_userial.termios);
++
++    userial_to_tcio_baud(userial_baud, &tcio_baud);
++
++    cfsetospeed(&vnd_userial.termios, tcio_baud);
++    cfsetispeed(&vnd_userial.termios, tcio_baud);
++    tcsetattr(vnd_userial.fd, TCSADRAIN, &vnd_userial.termios); /* don't change speed until last write done */
++}
++
++static void userial_flow_control(int fd, int opt)
++{
++    struct termios c_opt;
++
++    ioctl(fd, TIOCMGET, &c_opt);
++    c_opt.c_cc[VTIME] = 0; /* inter-character timer unused */
++    c_opt.c_cc[VMIN] = 0;  /* blocking read until 8 chars received */
++    c_opt.c_cflag &= ~CSIZE;
++    c_opt.c_cflag |= (CS8 | CLOCAL | CREAD);
++    if (opt == MSM_ENABLE_FLOW_CTRL)
++        c_opt.c_cflag |= CRTSCTS;
++    else if (opt == MSM_DISABLE_FLOW_CTRL)
++        c_opt.c_cflag &= ~CRTSCTS;
++    else
++    {
++        fprintf(stderr, "%s: Incorrect option passed for TIOCMSET\n", __func__);
++        return;
++    }
++    c_opt.c_iflag = IGNPAR;
++    c_opt.c_oflag = 0;
++    c_opt.c_lflag = 0;
++    ioctl(fd, TIOCMSET, &c_opt);
++}
++
++static int check_chip_version(int g_soc_id){
++
++    if(g_soc_id == SOC_VER_QCA6696)  return 0;
++    if(g_soc_id == SCO_VER_QCA6698)  return 0;
++    if(g_soc_id == SOC_VER_QCA6695)  return 0;
++    if(g_soc_id == SOC_VER_QCA206X)  return 0;         
++    if(g_soc_id == SOC_VER_QCA206X_G)  return 0;
++	if(g_soc_id == SOC_VER_QCC207X)  return 0;   
++    return -1;
++}
++
++static int get_vs_hci_event(unsigned char *rsp)
++{
++    int err = 0;
++    unsigned char paramlen = 0;
++    unsigned int opcode = 0;
++    unsigned char subOpcode = 0;
++    unsigned int ocf = 0;
++    // unsigned int ogf = 0;
++    unsigned char status = 0;
++
++    if ((rsp[EVENTCODE_OFFSET] == VSEVENT_CODE) || (rsp[EVENTCODE_OFFSET] == EVT_CMD_COMPLETE))
++        fprintf(stderr, "%s: Received HCI-Vendor Specific event\n", __FUNCTION__);
++    else
++    {
++        fprintf(stderr, "%s: Failed to receive HCI-Vendor Specific event\n", __FUNCTION__);
++        err = -EIO;
++        goto failed;
++    }
++
++    paramlen = rsp[EVT_PLEN];
++
++    if (!unified_hci)
++    {
++        ocf = rsp[CMD_RSP_OFFSET];
++        subOpcode = rsp[RSP_TYPE_OFFSET];
++        status = rsp[CMD_STATUS_OFFSET];
++        fprintf(stderr, "%s: Parameter Length: 0x%x\n", __FUNCTION__, paramlen = rsp[EVT_PLEN]);
++        fprintf(stderr, "%s: Command response: 0x%x\n", __FUNCTION__, rsp[CMD_RSP_OFFSET]);
++        fprintf(stderr, "%s: Response type   : 0x%x\n", __FUNCTION__, rsp[RSP_TYPE_OFFSET]);
++    }
++    else
++    {
++        opcode = rsp[5] << 8 | rsp[4];
++        ocf = opcode & 0x03ff;
++        //    ogf = opcode >> 10;
++        status = rsp[6];
++        subOpcode = rsp[7];
++    }
++    fprintf(stderr, "%s: 0x%2x 0x%2x 0x%2x 0x%2x 0x%2x 0x%2x 0x%2x 0x%2x\n", __FUNCTION__, rsp[0], rsp[1], rsp[2], rsp[3], rsp[4], rsp[5], rsp[6], rsp[7]);
++    fprintf(stderr, "%s: Command response: 0x%x\n", __FUNCTION__, ocf);
++    fprintf(stderr, "%s: Response type   : 0x%x\n", __FUNCTION__, subOpcode);
++
++    /* Check the status of the operation */
++    switch (ocf)
++    {
++    case EDL_CMD_REQ_RES_EVT:
++        fprintf(stderr, "%s: Command Request Response\n", __FUNCTION__);
++        switch (subOpcode)
++        {
++        case EDL_PATCH_VER_RES_EVT:
++        case EDL_APP_VER_RES_EVT:
++            if (!unified_hci)
++            {
++                fprintf(stderr, "\t Current Product ID\t\t: 0x%08x\n",
++                        (unsigned int)(rsp[PATCH_PROD_ID_OFFSET + 3] << 24 |
++                                       rsp[PATCH_PROD_ID_OFFSET + 2] << 16 |
++                                       rsp[PATCH_PROD_ID_OFFSET + 1] << 8 |
++                                       rsp[PATCH_PROD_ID_OFFSET]));
++
++                /* Patch Version indicates FW patch version */
++                fprintf(stderr, "\t Current Patch Version\t\t: 0x%04x\n",
++                        (unsigned short)(rsp[PATCH_PATCH_VER_OFFSET + 1] << 8 |
++                                         rsp[PATCH_PATCH_VER_OFFSET]));
++
++                /* ROM Build Version indicates ROM build version like 1.0/1.1/2.0 */
++                fprintf(stderr, "\t Current ROM Build Version\t: 0x%04x\n", rome_ver = (int)(rsp[PATCH_ROM_BUILD_VER_OFFSET + 1] << 8 | rsp[PATCH_ROM_BUILD_VER_OFFSET]));
++
++                /* In case rome 1.0/1.1, there is no SOC ID version available */
++                if (paramlen - 10)
++                {
++                    fprintf(stderr, "\t Current SOC Version\t\t: 0x%08x\n", g_soc_id = (unsigned int)(rsp[PATCH_SOC_VER_OFFSET + 3] << 24 | rsp[PATCH_SOC_VER_OFFSET + 2] << 16 | rsp[PATCH_SOC_VER_OFFSET + 1] << 8 | rsp[PATCH_SOC_VER_OFFSET]));
++                }
++
++                /* Rome Chipset Version can be decided by Patch version and SOC version,
++                Upper 2 bytes will be used for Patch version and Lower 2 bytes will be
++                used for SOC as combination for BT host driver */
++                rome_ver = (rome_ver << 16) | (g_soc_id & 0x0000ffff);
++            }
++            else
++            {
++
++                fprintf(stderr, "\t unified Current Product ID\t\t: 0x%08x\n",
++                        (unsigned int)(rsp[PATCH_PROD_ID_OFFSET_UNIFIED + 3] << 24 |
++                                       rsp[PATCH_PROD_ID_OFFSET_UNIFIED + 2] << 16 |
++                                       rsp[PATCH_PROD_ID_OFFSET_UNIFIED + 1] << 8 |
++                                       rsp[PATCH_PROD_ID_OFFSET_UNIFIED]));
++
++                /* Patch Version indicates FW patch version */
++                rome_ver = (unsigned short)(rsp[PATCH_ROM_BUILD_VER_OFFSET_UNIFIED + 1] << 8 |
++                                            rsp[PATCH_ROM_BUILD_VER_OFFSET_UNIFIED]);
++                fprintf(stderr, "\t unified Current Patch Version\t\t: 0x%04x\n", rome_ver);
++
++                if ((paramlen - 14) > 0)
++                {
++                    g_soc_id =
++                        (uint32_t)(rsp[PATCH_SOC_VER_OFFSET_UNIFIED + 3] << 24 |
++                                   rsp[PATCH_SOC_VER_OFFSET_UNIFIED + 2] << 16 |
++                                   rsp[PATCH_SOC_VER_OFFSET_UNIFIED + 1] << 8 |
++                                   rsp[PATCH_SOC_VER_OFFSET_UNIFIED]);
++                    fprintf(stderr, "\t unified Current SOC Version\t\t: 0x%08x\n", g_soc_id);
++                }
++                rome_ver = (rome_ver << 16) | (g_soc_id & 0x0000ffff);
++            }
++            break;
++        case EDL_TVL_DNLD_RES_EVT:
++        case EDL_CMD_EXE_STATUS_EVT:
++            switch (status)
++            {
++            case HCI_CMD_SUCCESS:
++                fprintf(stderr, "%s: Download Packet successfully!\n", __FUNCTION__);
++                break;
++            case PATCH_LEN_ERROR:
++                fprintf(stderr, "%s: Invalid patch length argument passed for EDL PATCH "
++                        "SET REQ cmd\n",
++                        __FUNCTION__);
++                break;
++            case PATCH_VER_ERROR:
++                fprintf(stderr, "%s: Invalid patch version argument passed for EDL PATCH "
++                        "SET REQ cmd\n",
++                        __FUNCTION__);
++                break;
++            case PATCH_CRC_ERROR:
++                fprintf(stderr, "%s: CRC check of patch failed!!!\n", __FUNCTION__);
++                break;
++            case PATCH_NOT_FOUND:
++                fprintf(stderr, "%s: Invalid patch data!!!\n", __FUNCTION__);
++                break;
++            case TLV_TYPE_ERROR:
++                fprintf(stderr, "%s: TLV Type Error !!!\n", __FUNCTION__);
++                break;
++            default:
++                fprintf(stderr, "%s: Undefined error (0x%x)", __FUNCTION__, err);
++                break;
++            }
++            break;
++        }
++        break;
++
++    case NVM_ACCESS_CODE:
++        fprintf(stderr, "%s: NVM Access Code!!!\n", __FUNCTION__);
++        err = HCI_CMD_SUCCESS;
++        break;
++    case EDL_SET_BAUDRATE_CMD_OCF:
++    case EDL_SET_BAUDRATE_RSP_EVT:
++        if (!unified_hci)
++        {
++            /* Rome 1.1 has bug with the response, so it should ignore it. */
++            if (rsp[BAUDRATE_RSP_STATUS_OFFSET] != BAUDRATE_CHANGE_SUCCESS)
++            {
++                fprintf(stderr, "%s: Set Baudrate request failed - 0x%x\n", __FUNCTION__,
++                        rsp[CMD_STATUS_OFFSET]);
++                err = -1;
++            }
++        }
++        else
++        {
++            if (status != BAUDRATE_CHANGE_SUCCESS)
++                err = -1;
++            else
++                err = HCI_CMD_SUCCESS;
++        }
++        fprintf(stderr, "%s: EDL_SET_BAUDRATE_CMD_OCF err=%d!!!\n", __FUNCTION__, err);
++        break;
++    default:
++        fprintf(stderr, "%s: Not a valid status!!!\n", __FUNCTION__);
++        err = -1;
++        break;
++    }
++
++failed:
++    return err;
++}
++
++static int wait_for_data(int fd, int max_timeout)
++{
++    fd_set infids;
++    struct timeval timeout;
++
++    if (max_timeout <= 0)
++    {
++        fprintf(stderr, "%s: Invalid timeout value specified", __func__);
++        return -EINVAL;
++    }
++
++    FD_ZERO(&infids);
++    FD_SET(fd, &infids);
++    timeout.tv_sec = max_timeout;
++    timeout.tv_usec = 0;
++
++    /* Check whether data is available in TTY buffer before calling read() */
++    if (select(fd + 1, &infids, NULL, NULL, &timeout) < 1)
++    {
++        fprintf(stderr, "%s: Timing out on select for %d secs.\n", __FUNCTION__, max_timeout);
++        return -1;
++    }
++    else
++        fprintf(stderr, "%s: HCI-VS-EVENT available in TTY Serial buffer\n",
++                __FUNCTION__);
++
++    return 1;
++}
++
++/*
++ * Read an VS HCI event from the given file descriptor.
++ */
++static int read_vs_hci_event(int fd, unsigned char *buf, int size)
++{
++    int remain, r, retry = 0;
++    int count = 0;
++    unsigned short int opcode;
++
++    if (size <= 0)
++    {
++        fprintf(stderr, "Invalid size arguement!\n");
++        return -1;
++    }
++
++    fprintf(stderr, "%s: Wait for HCI-Vendor Specfic Event from SOC\n",
++            __FUNCTION__);
++
++    /* Check whether data is available in TTY buffer before calling read() */
++    if (wait_for_data(fd, SELECT_TIMEOUT) < 1)
++        return -1;
++
++    /* The first byte identifies the packet type. For HCI event packets, it
++     * should be 0x04, so we read until we get to the 0x04. */
++    /* It will keep reading until find 0x04 byte */
++    while (1)
++    {
++        /* Read UART Buffer for HCI-DATA */
++        r = read(fd, buf, 1);
++        if (r <= 0)
++        {
++            fprintf(stderr, "%s: read() failed. error: %d\n",
++                    __FUNCTION__, r);
++            return -1;
++        }
++
++        /* Check if received data is HCI-DATA or not.
++         * If not HCI-DATA, then retry reading the UART Buffer once.
++         * Sometimes there could be corruption on the UART lines and to
++         * avoid that retry once reading the UART Buffer for HCI-DATA.
++         */
++        if (buf[0] == 0x04)
++        {
++            /* Recvd. HCI DATA */
++            retry = 0;
++            break;
++        }
++        else if (retry < MAX_RETRY_CNT)
++        {
++            /* Retry mechanism */
++            retry++;
++            fprintf(stderr, "%s: Not an HCI-VS-Event! buf[0]: %d",
++                    __FUNCTION__, buf[0]);
++            if (wait_for_data(fd, SELECT_TIMEOUT) < 1)
++                return -1;
++            else /* Data available in UART Buffer: Continue to read */
++                continue;
++        }
++        else
++        {
++            /* RETRY failed : Exiting with failure */
++            fprintf(stderr, "%s: RETRY failed!", __FUNCTION__);
++            return -1;
++        }
++    }
++    count++;
++
++    fprintf(stderr, "%s: Wait for HCI-Vendor Specfic Event from SOC, buf[0] - 0x%x\n", __FUNCTION__, buf[0]);
++    /* The next two bytes are the event code and parameter total length. */
++    while (count < 3)
++    {
++        r = read(fd, buf + count, 3 - count);
++        if ((r <= 0) || ((buf[1] != 0xFF) && (buf[1] != 0x0E)))
++        {
++            fprintf(stderr, "It is not VS event !!\n");
++            return -1;
++        }
++        count += r;
++    }
++
++    fprintf(stderr, "%s: Wait for HCI-Vendor Specfic Event from SOC, buf[1] - 0x%x\n", __FUNCTION__, buf[1]);
++    /* Now we read the parameters. */
++    if (buf[2] < (size - 3))
++        remain = buf[2];
++    else
++        remain = size - 3;
++
++    while ((count - 3) < remain)
++    {
++        r = read(fd, buf + count, remain - (count - 3));
++        if (r <= 0)
++            return -1;
++        count += r;
++    }
++
++    if (buf[1] == 0x0e)
++    {
++        opcode = (buf[4] | (buf[5] << 8));
++        if ((0xFC00 == opcode) && (buf[7] == 0x19))
++        {
++            unified_hci = 1;
++        }
++    }
++
++    /* Check if the set patch command is successful or not */
++    if (get_vs_hci_event(buf) != HCI_CMD_SUCCESS)
++        return -1;
++
++    fprintf(stderr, "%s: Wait for HCI-Vendor Specfic Event from SOC, count - 0x%x\n", __FUNCTION__, count);
++    return count;
++}
++
++static int hci_send_vs_cmd(int fd, unsigned char *cmd, unsigned char *rsp, int size)
++{
++    int ret = 0;
++
++    /* Send the HCI command packet to UART for transmission */
++    ret = write(fd, cmd, size);
++    if (ret != size)
++    {
++        fprintf(stderr, "%s: Send failed with ret value: %d\n", __FUNCTION__, ret);
++        goto failed;
++    }
++
++    if (wait_vsc_evt)
++    {
++        /* Check for response from the Controller */
++        if (read_vs_hci_event(fd, rsp, HCI_MAX_EVENT_SIZE) < 0)
++        {
++            ret = -ETIMEDOUT;
++            fprintf(stderr, "%s: Failed to get HCI-VS Event from SOC\n", __FUNCTION__);
++            goto failed;
++        }
++        fprintf(stderr, "%s: Received HCI-Vendor Specific Event from SOC\n", __FUNCTION__);
++    }
++
++failed:
++    return ret;
++}
++
++static void frame_hci_cmd_pkt(
++    unsigned char *cmd,
++    int edl_cmd, unsigned int p_base_addr,
++    int segtNo, int size)
++{
++    int offset = 0;
++    hci_command_hdr *cmd_hdr;
++
++    memset(cmd, 0x0, HCI_MAX_CMD_SIZE);
++
++    cmd_hdr = (void *)(cmd + 1);
++
++    cmd[0] = HCI_COMMAND_PKT;
++    cmd_hdr->opcode = cmd_opcode_pack(HCI_VENDOR_CMD_OGF, HCI_PATCH_CMD_OCF);
++    cmd_hdr->plen = size;
++    cmd[4] = edl_cmd;
++
++    switch (edl_cmd)
++    {
++    case EDL_PATCH_DLD_REQ_CMD:
++        offset = ((segtNo - 1) * MAX_DATA_PER_SEGMENT);
++        p_base_addr += offset;
++        cmd_hdr->plen = (size + 6);
++        cmd[5] = (size + 4);
++        cmd[6] = EXTRACT_BYTE(p_base_addr, 0);
++        cmd[7] = EXTRACT_BYTE(p_base_addr, 1);
++        cmd[8] = EXTRACT_BYTE(p_base_addr, 2);
++        cmd[9] = EXTRACT_BYTE(p_base_addr, 3);
++        memcpy(&cmd[10], (pdata_buffer + offset), size);
++
++        fprintf(stderr, "%s: Sending EDL_PATCH_DLD_REQ_CMD: size: %d bytes\n",
++                __FUNCTION__, size);
++        fprintf(stderr, "HCI-CMD %d:\t0x%x\t0x%x\t0x%x\t0x%x\t0x%x\t0x%x\t0x%x\t"
++                "0x%x\t0x%x\t0x%x\t\n",
++                segtNo, cmd[0], cmd[1], cmd[2],
++                cmd[3], cmd[4], cmd[5], cmd[6], cmd[7], cmd[8], cmd[9]);
++        break;
++    case EDL_PATCH_ATCH_REQ_CMD:
++        fprintf(stderr, "%s: Sending EDL_PATCH_ATTACH_REQ_CMD\n", __FUNCTION__);
++        fprintf(stderr, "HCI-CMD %d:\t0x%x \t0x%x \t0x%x \t0x%x \t0x%x\n",
++                segtNo, cmd[0], cmd[1], cmd[2], cmd[3], cmd[4]);
++        break;
++    case EDL_PATCH_RST_REQ_CMD:
++        fprintf(stderr, "%s: Sending EDL_PATCH_RESET_REQ_CMD\n", __FUNCTION__);
++        fprintf(stderr, "HCI-CMD %d:\t0x%x \t0x%x \t0x%x \t0x%x \t0x%x\n",
++                segtNo, cmd[0], cmd[1], cmd[2], cmd[3], cmd[4]);
++        break;
++    case EDL_PATCH_VER_REQ_CMD:
++        fprintf(stderr, "%s: Sending EDL_PATCH_VER_REQ_CMD\n", __FUNCTION__);
++        fprintf(stderr, "HCI-CMD %d:\t0x%x \t0x%x \t0x%x \t0x%x \t0x%x\n",
++                segtNo, cmd[0], cmd[1], cmd[2], cmd[3], cmd[4]);
++        break;
++    case EDL_PATCH_TLV_REQ_CMD:
++        fprintf(stderr, "%s: Sending EDL_PATCH_TLV_REQ_CMD\n", __FUNCTION__);
++        /* Parameter Total Length */
++        cmd[3] = size + 2;
++
++        /* TLV Segment Length */
++        cmd[5] = size;
++        fprintf(stderr, "HCI-CMD %d:\t0x%x \t0x%x \t0x%x \t0x%x \t0x%x \t0x%x\n",
++                segtNo, cmd[0], cmd[1], cmd[2], cmd[3], cmd[4], cmd[5]);
++        offset = (segtNo * MAX_SIZE_PER_TLV_SEGMENT);
++        memcpy(&cmd[6], (pdata_buffer + offset), size);
++        break;
++    default:
++        fprintf(stderr, "%s: Unknown EDL CMD !!!\n", __FUNCTION__);
++    }
++}
++
++static int rome_get_tlv_file(char *file_path)
++{
++    FILE *pFile;
++    long fileSize;
++    int readSize, nvm_length, nvm_index;
++    int i = 0;
++    unsigned short nvm_tag_len;
++    tlv_patch_info *ptlv_header;
++    tlv_nvm_hdr *nvm_ptr;
++    char data_buf[PRINT_BUF_SIZE] =
++    {
++        0,
++    };
++
++    unsigned char *nvm_byte_ptr;
++    unsigned char bdaddr[6];
++    int pcm_value = 0;
++
++    fprintf(stderr, "File Open (%s)\n", file_path);
++    pFile = fopen(file_path, "r");
++    if (pFile == NULL)
++    {
++        ;
++        fprintf(stderr, "%s File Open Fail\n", file_path);
++        return -1;
++    }
++
++    /* Get File Size */
++    fseek(pFile, 0, SEEK_END);
++
++    if ((fileSize = ftell(pFile)) < 0)
++    {
++        fprintf(stderr, "%s: fail to get current file position\n", file_path);
++        fclose(pFile);
++        return -1;
++    }
++
++    if (fileSize == 0)
++    {
++        fprintf(stderr, "%s: no content in the file\n", file_path);
++        fclose(pFile);
++        return -1;
++    }
++
++    rewind(pFile);
++
++    pdata_buffer = (unsigned char *)malloc(sizeof(char) * fileSize);
++    if (pdata_buffer == NULL)
++    {
++        fprintf(stderr, "Allocated Memory failed\n");
++        fclose(pFile);
++        return -1;
++    }
++
++    /* Copy file into allocated buffer */
++    readSize = fread(pdata_buffer, 1, fileSize, pFile);
++
++    /* File Close */
++    fclose(pFile);
++
++    if (readSize != fileSize)
++    {
++        fprintf(stderr, "Read file size(%d) not matched with actual file size (%ld bytes)\n", readSize, fileSize);
++        return -1;
++    }
++
++    ptlv_header = (tlv_patch_info *)pdata_buffer;
++
++    /* To handle different event between rampatch and NVM */
++    gTlv_type = ptlv_header->tlv_type;
++    gtlv_dwndcfg = ptlv_header->tlv.patch.dwnd_cfg;
++
++    if (ptlv_header->tlv_type == TLV_TYPE_PATCH)
++    {
++        fprintf(stderr, "====================================================\n");
++        fprintf(stderr, "TLV Type\t\t\t : 0x%x\n", ptlv_header->tlv_type);
++        fprintf(stderr, "Length\t\t\t : %d bytes\n", (ptlv_header->tlv_length1) | (ptlv_header->tlv_length2 << 8) | (ptlv_header->tlv_length3 << 16));
++        fprintf(stderr, "Total Length\t\t\t : %d bytes\n", ptlv_header->tlv.patch.tlv_data_len);
++        fprintf(stderr, "Patch Data Length\t\t\t : %d bytes\n", ptlv_header->tlv.patch.tlv_patch_data_len);
++        fprintf(stderr, "Signing Format Version\t : 0x%x\n", ptlv_header->tlv.patch.sign_ver);
++        fprintf(stderr, "Signature Algorithm\t\t : 0x%x\n", ptlv_header->tlv.patch.sign_algorithm);
++        fprintf(stderr, "Event Handling\t\t\t : 0x%x", ptlv_header->tlv.patch.dwnd_cfg);
++        fprintf(stderr, "Reserved\t\t\t : 0x%x\n", ptlv_header->tlv.patch.reserved1);
++        fprintf(stderr, "Product ID\t\t\t : 0x%04x\n", ptlv_header->tlv.patch.prod_id);
++        fprintf(stderr, "Rom Build Version\t\t : 0x%04x\n", ptlv_header->tlv.patch.build_ver);
++        fprintf(stderr, "Patch Version\t\t : 0x%04x\n", ptlv_header->tlv.patch.patch_ver);
++        fprintf(stderr, "Reserved\t\t\t : 0x%x\n", ptlv_header->tlv.patch.reserved2);
++        fprintf(stderr, "Patch Entry Address\t\t : 0x%x\n", (ptlv_header->tlv.patch.patch_entry_addr));
++        fprintf(stderr, "====================================================\n");
++    }
++    else if (ptlv_header->tlv_type == TLV_TYPE_NVM)
++    {
++        fprintf(stderr, "====================================================\n");
++        fprintf(stderr, "TLV Type\t\t\t : 0x%x\n", ptlv_header->tlv_type);
++        fprintf(stderr, "Length\t\t\t : %d bytes\n", nvm_length = (ptlv_header->tlv_length1) | (ptlv_header->tlv_length2 << 8) | (ptlv_header->tlv_length3 << 16));
++
++        if (nvm_length <= 0)
++            return readSize;
++
++        for (nvm_byte_ptr = (unsigned char *)(nvm_ptr = &(ptlv_header->tlv.nvm)), nvm_index = 0;
++                nvm_index < nvm_length; nvm_ptr = (tlv_nvm_hdr *)nvm_byte_ptr)
++        {
++            fprintf(stderr, "TAG ID\t\t\t : %d\n", nvm_ptr->tag_id);
++            fprintf(stderr, "TAG Length\t\t\t : %d\n", nvm_tag_len = nvm_ptr->tag_len);
++            fprintf(stderr, "TAG Pointer\t\t\t : %d\n", nvm_ptr->tag_ptr);
++            fprintf(stderr, "TAG Extended Flag\t\t : %d\n", nvm_ptr->tag_ex_flag);
++
++            /* Increase nvm_index to NVM data */
++            nvm_index += sizeof(tlv_nvm_hdr);
++            nvm_byte_ptr += sizeof(tlv_nvm_hdr);
++
++            /* Write BD Address */
++            if (nvm_ptr->tag_id == TAG_NUM_2 && read_bd_address(bdaddr) == 0)
++            {
++                memcpy(nvm_byte_ptr, bdaddr, 6);
++                fprintf(stderr, "Overriding default BD ADDR with user"
++                        " programmed BD Address: %02x:%02x:%02x:%02x:%02x:%02x\n",
++                        *nvm_byte_ptr, *(nvm_byte_ptr + 1), *(nvm_byte_ptr + 2),
++                        *(nvm_byte_ptr + 3), *(nvm_byte_ptr + 4), *(nvm_byte_ptr + 5));
++            }
++
++            if (check_chip_version(g_soc_id) == 0)
++            {
++                if (nvm_ptr->tag_id == TAG_NUM_27)
++                {
++                    /* TxP Sleep Mode: Disable */
++					*(nvm_byte_ptr) &= ~0x01;
++					*(nvm_byte_ptr + 1) &= ~0x01;
++                    fprintf(stderr, "ibs was disabled\n");
++                }
++            }
++            else
++            {
++                if (nvm_ptr->tag_id == TAG_NUM_17)
++                {
++                    nvm_byte_ptr[FWCONF_IBS_VAL_OFFSET] &=
++                                (~(FWCONF_IBS_ENABLE << FWCONF_IBS_VAL_BIT));
++                }
++
++				if (nvm_ptr->tag_id == TAG_NUM_27)
++                {
++                     *nvm_byte_ptr = 0;
++                }
++            }
++            /* Read from file and check what PCM Configuration is required:
++             * Master = 0 /Slave = 1 */
++            /* Override PCM configuration */
++            if (nvm_ptr->tag_id == TAG_NUM_44)
++            {
++                pcm_value = get_value_from_config(FW_CONFIG_FILE_PATH, "PCM");
++                if (pcm_value >= 0)
++                {
++
++                    if (pcm_value == FWCONF_PCM_SLAVE)
++                    {
++                        nvm_byte_ptr[FWCONF_PCM_MS_OFFSET_1] |=
++                            (1 << FWCONF_PCM_ROLE_BIT_OFFSET);
++                        nvm_byte_ptr[FWCONF_PCM_MS_OFFSET_2] |=
++                            (1 << FWCONF_PCM_ROLE_BIT_OFFSET);
++                    }
++                    else if (pcm_value == FWCONF_PCM_MASTER)
++                    {
++                        nvm_byte_ptr[FWCONF_PCM_MS_OFFSET_1] &=
++                            (~(1 << FWCONF_PCM_ROLE_BIT_OFFSET));
++                        nvm_byte_ptr[FWCONF_PCM_MS_OFFSET_2] &=
++                            (~(1 << FWCONF_PCM_ROLE_BIT_OFFSET));
++                    }
++                }
++            }
++
++            for (i = 0; (i < nvm_ptr->tag_len && (i * 3 + 2) < PRINT_BUF_SIZE); i++)
++                //snprintf(data_buf, PRINT_BUF_SIZE, "%s%.02x ", data_buf, *(nvm_byte_ptr + i));
++                snprintf(data_buf, PRINT_BUF_SIZE, "%.02x ", *(nvm_byte_ptr + i));
++
++            fprintf(stderr, "TAG Data\t\t\t : %s\n", data_buf);
++
++            /* Clear buffer */
++            memset(data_buf, 0x0, PRINT_BUF_SIZE);
++
++            /* increased by tag_len */
++            nvm_index += nvm_ptr->tag_len;
++            nvm_byte_ptr += nvm_ptr->tag_len;
++        }
++
++        fprintf(stderr, "====================================================\n");
++    }
++    else
++    {
++        fprintf(stderr, "TLV Header type is unknown (%d) \n", ptlv_header->tlv_type);
++    }
++
++    return readSize;
++}
++
++static int rome_tlv_dnld_segment(int fd, int index, int seg_size, unsigned char wait_cc_evt)
++{
++    int size = 0;
++    int err = -1;
++    unsigned char cmd[HCI_MAX_CMD_SIZE];
++    unsigned char rsp[HCI_MAX_EVENT_SIZE];
++
++    fprintf(stderr, "%s: g_soc_id:0x%x Downloading TLV Patch segment no.%d, size:%d\n", __FUNCTION__, g_soc_id,index, seg_size);
++
++
++	if(g_soc_id == SOC_VER_QCA9377)
++	{
++		usleep(5*1000);
++	}
++
++    /* Frame the HCI CMD PKT to be sent to Controller*/
++    frame_hci_cmd_pkt(cmd, EDL_PATCH_TLV_REQ_CMD, 0, index, seg_size);
++
++    /* Total length of the packet to be sent to the Controller */
++    size = (HCI_CMD_IND + HCI_COMMAND_HDR_SIZE + cmd[PLEN]);
++
++    /* Initialize the RSP packet everytime to 0 */
++    memset(rsp, 0x0, HCI_MAX_EVENT_SIZE);
++
++    /* Send HCI Command packet to Controller */
++    err = hci_send_vs_cmd(fd, (unsigned char *)cmd, rsp, size);
++    if (err != size)
++    {
++        fprintf(stderr, "Failed to send the patch payload to the Controller! 0x%x\n", err);
++        return err;
++    }
++
++    if (!unified_hci)
++    {
++        if (wait_cc_evt)
++        {
++            err = read_hci_event(fd, rsp, HCI_MAX_EVENT_SIZE);
++            if (err < 0)
++            {
++                fprintf(stderr, "%s: Failed to downlaod patch segment: %d!\n", __FUNCTION__, index);
++                return err;
++            }
++        }
++    }
++
++    fprintf(stderr, "%s: Successfully downloaded patch segment: %d\n", __FUNCTION__, index);
++    return err;
++}
++
++static int rome_tlv_dnld_req(int fd, int tlv_size)
++{
++    int total_segment = 0;
++    int remain_size = 0;
++    int i = 0;
++    int err = -1;
++    unsigned char wait_cc_evt = FALSE;
++    //unsigned int rom = rome_ver >> 16;
++
++    total_segment = tlv_size / MAX_SIZE_PER_TLV_SEGMENT;
++    remain_size = (tlv_size < MAX_SIZE_PER_TLV_SEGMENT) ? tlv_size : (tlv_size % MAX_SIZE_PER_TLV_SEGMENT);
++
++    fprintf(stderr, "%s: TLV size: %d, Total Seg num: %d, remain size: %d\n",
++            __FUNCTION__, tlv_size, total_segment, remain_size);
++
++    if (gTlv_type == TLV_TYPE_PATCH)
++    {
++        /* Prior to Rome version 3.2(including inital few rampatch release of
++         * Rome 3.2), the event handling mechanism is ROME_SKIP_EVT_NONE. After
++         * few release of rampatch for Rome 3.2, the mechamism is changed to
++         * ROME_SKIP_EVT_VSE_CC. Rest of the mechanism is not used for now
++         */
++        switch (gtlv_dwndcfg)
++        {
++        case ROME_SKIP_EVT_NONE:
++            wait_vsc_evt = TRUE;
++            wait_cc_evt = TRUE;
++            fprintf(stderr, "%s: Event handling type: ROME_SKIP_EVT_NONE", __func__);
++            break;
++        case ROME_SKIP_EVT_VSE_CC:
++            wait_vsc_evt = FALSE;
++            wait_cc_evt = FALSE;
++            fprintf(stderr, "%s: Event handling type: ROME_SKIP_EVT_VSE_CC", __func__);
++            break;
++        /* Not handled for now */
++        case ROME_SKIP_EVT_VSE:
++        case ROME_SKIP_EVT_CC:
++        default:
++            fprintf(stderr, "%s: Unsupported Event handling: %d", __func__, gtlv_dwndcfg);
++            break;
++        }
++    }
++    else
++    {
++        wait_vsc_evt = TRUE;
++        wait_cc_evt = TRUE;
++    }
++
++    for (i = 0; i < total_segment; i++)
++    {
++
++        if ((err = rome_tlv_dnld_segment(fd, i, MAX_SIZE_PER_TLV_SEGMENT, wait_cc_evt)) < 0)
++            goto error;
++    }
++
++    if ((gTlv_type == TLV_TYPE_PATCH))
++    {
++
++        if (gtlv_dwndcfg == ROME_SKIP_EVT_NONE)
++        {
++            wait_cc_evt = remain_size ? FALSE : TRUE;
++        }
++        else if (gtlv_dwndcfg == ROME_SKIP_EVT_VSE_CC)
++        {
++            wait_vsc_evt = remain_size ? TRUE : FALSE;
++        }
++        fprintf(stderr, "rome_tlv_dnld_segment start3 %d\n", wait_cc_evt);
++    }
++    fprintf(stderr, "rome_tlv_dnld_segment start %d\n", wait_cc_evt);
++    if (remain_size)
++        err = rome_tlv_dnld_segment(fd, i, remain_size, wait_cc_evt);
++    fprintf(stderr, "rome_tlv_dnld_segment end\n");
++error:
++    return err;
++}
++
++static int rome_download_tlv_file(int fd)
++{
++    int tlv_size = 0;
++    int err = -1;
++
++    /* Rampatch TLV file Downloading */
++    pdata_buffer = NULL;
++
++    if ((tlv_size = rome_get_tlv_file(rampatch_file_path)) < 0)
++        goto error;
++
++    if ((err = rome_tlv_dnld_req(fd, tlv_size)) < 0)
++        goto error;
++
++    if (pdata_buffer != NULL)
++    {
++        free(pdata_buffer);
++        pdata_buffer = NULL;
++    }
++    usleep(100*1000);
++    /* NVM TLV file Downloading */
++    if ((tlv_size = rome_get_tlv_file(nvm_file_path)) < 0)
++        goto error;
++
++    if ((err = rome_tlv_dnld_req(fd, tlv_size)) < 0)
++        goto error;
++
++error:
++    if (pdata_buffer != NULL)
++        free(pdata_buffer);
++
++    return err;
++}
++
++static int rome_patch_ver_req(int fd)
++{
++    int size = 0;
++    int err = 0;
++    unsigned char cmd[HCI_MAX_CMD_SIZE];
++    unsigned char rsp[HCI_MAX_EVENT_SIZE];
++
++    /* Frame the HCI CMD to be sent to the Controller */
++    frame_hci_cmd_pkt(cmd, EDL_PATCH_VER_REQ_CMD, 0,
++                      -1, EDL_PATCH_CMD_LEN);
++
++    /* Total length of the packet to be sent to the Controller */
++    size = (HCI_CMD_IND + HCI_COMMAND_HDR_SIZE + EDL_PATCH_CMD_LEN);
++
++    /* Send HCI Command packet to Controller */
++    err = hci_send_vs_cmd(fd, (unsigned char *)cmd, rsp, size);
++    if (err != size)
++    {
++        fprintf(stderr, "Failed to attach the patch payload to the Controller!\n");
++        goto error;
++    }
++
++    /* Read Command Complete Event - This is extra routine for ROME 1.0. From ROM 2.0, it should be removed. */
++    if (!unified_hci)
++    {
++        err = read_hci_event(fd, rsp, HCI_MAX_EVENT_SIZE);
++        if (err < 0)
++        {
++            fprintf(stderr, "%s: Failed to get patch version(s)\n", __FUNCTION__);
++            goto error;
++        }
++    }
++error:
++    return err;
++}
++
++static int rome_set_baudrate_req(int fd, int local_baud_rate, int controller_baud_rate)
++{
++    int size = 0;
++    int err = 0;
++    unsigned char cmd[HCI_MAX_CMD_SIZE];
++    unsigned char rsp[HCI_MAX_EVENT_SIZE];
++    hci_command_hdr *cmd_hdr;
++
++    memset(cmd, 0x0, HCI_MAX_CMD_SIZE);
++
++    cmd_hdr = (void *)(cmd + 1);
++    cmd[0] = HCI_COMMAND_PKT;
++    cmd_hdr->opcode = cmd_opcode_pack(HCI_VENDOR_CMD_OGF, EDL_SET_BAUDRATE_CMD_OCF);
++    cmd_hdr->plen = VSC_SET_BAUDRATE_REQ_LEN;
++    cmd[4] = controller_baud_rate;
++
++    /* Total length of the packet to be sent to the Controller */
++    size = (HCI_CMD_IND + HCI_COMMAND_HDR_SIZE + VSC_SET_BAUDRATE_REQ_LEN);
++
++    /* Flow off during baudrate change */
++    userial_flow_control(fd, MSM_DISABLE_FLOW_CTRL);
++
++    /* Send the HCI command packet to UART for transmission */
++    fprintf(stderr, "%s: HCI CMD: 0x%x 0x%x 0x%x 0x%x 0x%x\n", __FUNCTION__, cmd[0], cmd[1], cmd[2], cmd[3], cmd[4]);
++    err = write(fd, cmd, size);
++    if (err != size)
++    {
++        fprintf(stderr, "%s: Send failed with ret value: %d\n", __FUNCTION__, err);
++        goto error;
++    }
++    /* Change Local UART baudrate to high speed UART */
++    userial_set_baud(local_baud_rate);
++    err = write(fd, cmd, size);
++    if (err != size)
++    {
++        fprintf(stderr, "%s: Send failed with ret value: %d\n", __FUNCTION__, err);
++        goto error;
++    }
++    /* Flow on after changing local uart baudrate */
++    userial_flow_control(fd, MSM_ENABLE_FLOW_CTRL);
++    /* Check for response from the Controller */
++    if ((err = read_vs_hci_event(fd, rsp, HCI_MAX_EVENT_SIZE)) < 0)
++    {
++        fprintf(stderr, "%s: Failed to get HCI-VS Event from SOC\n", __FUNCTION__);
++        goto error;
++    }
++
++    fprintf(stderr, "%s: Received HCI-Vendor Specific Event from SOC\n", __FUNCTION__);
++
++    /* Wait for command complete event */
++    if (!unified_hci)
++    {
++        err = read_hci_event(fd, rsp, HCI_MAX_EVENT_SIZE);
++        if (err < 0)
++        {
++            fprintf(stderr, "%s: Failed to set patch info on Controller\n", __FUNCTION__);
++            goto error;
++        }
++    }
++    fprintf(stderr, "%s\n", __FUNCTION__);
++error:
++    return err;
++}
++
++static int rome_hci_reset_req(int fd, char baud)
++{
++    int size = 0;
++    int err = 0;
++    unsigned char cmd[HCI_MAX_CMD_SIZE];
++    unsigned char rsp[HCI_MAX_EVENT_SIZE];
++    hci_command_hdr *cmd_hdr;
++    // int flags;
++
++    fprintf(stderr, "%s: HCI RESET \n", __FUNCTION__);
++
++    memset(cmd, 0x0, HCI_MAX_CMD_SIZE);
++
++    cmd_hdr = (void *)(cmd + 1);
++    cmd[0] = HCI_COMMAND_PKT;
++    cmd_hdr->opcode = HCI_RESET;
++    cmd_hdr->plen = 0;
++
++    /* Total length of the packet to be sent to the Controller */
++    size = (HCI_CMD_IND + HCI_COMMAND_HDR_SIZE);
++
++    /* Flow off during baudrate change */
++    userial_flow_control(fd, MSM_DISABLE_FLOW_CTRL);
++
++    /* Send the HCI command packet to UART for transmission */
++    fprintf(stderr, "%s: HCI CMD: 0x%x 0x%x 0x%x 0x%x\n", __FUNCTION__, cmd[0], cmd[1], cmd[2], cmd[3]);
++    err = write(fd, cmd, size);
++    if (err != size)
++    {
++        fprintf(stderr, "%s: Send failed with ret value: %d\n", __FUNCTION__, err);
++        goto error;
++    }
++
++    /* Change Local UART baudrate to high speed UART */
++    userial_set_baud(baud);
++
++    /* Flow on after changing local uart baudrate */
++    userial_flow_control(fd, MSM_ENABLE_FLOW_CTRL);
++
++    /* Wait for command complete event */
++    err = read_hci_event(fd, rsp, HCI_MAX_EVENT_SIZE);
++    if (err < 0)
++    {
++        fprintf(stderr, "%s: Failed to set patch info on Controller\n", __FUNCTION__);
++        goto error;
++    }
++
++error:
++    return err;
++}
++
++int qca_soc_init(int fd, int speed, char *bdaddr)
++{
++    int err = -1;
++    int local_baud_rate = 0;
++    int controller_baud_rate = 0;
++
++    vnd_userial.fd = fd;
++
++#ifdef _PLATFORM_MDM_
++    /* Vote for UART CLK prior to FW download */
++    err = ioctl(fd, USERIAL_OP_CLK_ON);
++    if (err < 0)
++    {
++        fprintf(stderr, "%s: Failed to vote UART CLK ON\n", __func__);
++        return -1;
++    }
++#endif
++    /* Get Rome version information */
++    if ((err = rome_patch_ver_req(fd)) < 0)
++    {
++        fprintf(stderr, "%s: Fail to get Rome Version (0x%x)\n", __FUNCTION__, err);
++        goto error;
++    }
++
++    fprintf(stderr, "%s: Rome Version (0x%08x) g_soc_id(0x%x)\n", __FUNCTION__, rome_ver, g_soc_id);
++
++    switch (g_soc_id)
++    {
++    case SOC_VER_QCA6695:
++        rampatch_file_path = QCA6595_RAMPATCH_TLV_UART_2_0_PATH;
++        nvm_file_path = QCA6595_NVM_TLV_UART_2_0_PATH;
++        break;
++    case SOC_VER_QCA6696:
++        rampatch_file_path = QCA6696_RAMPATCH_TLV_UART_2_0_PATH;
++        nvm_file_path = QCA6696_NVM_TLV_UART_2_0_PATH;
++        break;
++    case SOC_VER_QCA206X:
++        rampatch_file_path = QCA206X_RAMPATCH_TLV_UART_2_0_PATH;
++        nvm_file_path = QCA206X_NVM_TLV_UART_2_0_PATH;
++        break;
++    case SOC_VER_QCA206X_G:
++        rampatch_file_path = QCA206X_RAMPATCH_TLV_UART_2_1_PATH;
++        nvm_file_path = QCA206X_NVM_TLV_UART_2_1_G_PATH;
++        break;
++    case SCO_VER_QCA6698:
++        rampatch_file_path = QCA6698_RAMPATCH_TLV_UART_2_1_PATH;
++        nvm_file_path = QCA6698_NVM_TLV_UART_2_1_PATH;
++        break;
++    case SOC_VER_QCA9377:
++        rampatch_file_path = QCA9377_RAMPATCH_TLV_1_0_1_PATH;
++        nvm_file_path = QCA9377_NVM_TLV_1_0_1_PATH;
++        break;
++	case SOC_VER_QCC207X:
++		rampatch_file_path = QCC207X_RAMPATCH_TLV_UART_2_0_PATH;
++        nvm_file_path = QCC207X_NVM_TLV_UART_2_0_PATH;
++        break;
++    default:
++        fprintf(stderr, "Detected unknown ROME soc id:0x%x", g_soc_id);
++        goto error;
++    }
++
++    /* Check if user requested for 115200 kbps */
++    if (speed == 115200)
++    {
++        local_baud_rate = USERIAL_BAUD_115200;
++        controller_baud_rate = BAUDRATE_115200;
++    }
++    else
++    {
++        /* Change only if baud rate requested is valid or not */
++        is_speed_valid(speed, &local_baud_rate, &controller_baud_rate);
++        if (local_baud_rate < 0 || controller_baud_rate < 0)
++        {
++            err = -1;
++            goto error;
++        }
++        err = rome_set_baudrate_req(fd, local_baud_rate, controller_baud_rate);
++        if (err < 0)
++        {
++            fprintf(stderr, "%s: Baud rate change failed!\n", __FUNCTION__);
++            goto error;
++        }
++    }
++    fprintf(stderr, "%s: Baud rate changed successfully \n", __FUNCTION__);
++
++    /* Donwload TLV files (rampatch, NVM) */
++    err = rome_download_tlv_file(fd);
++    if (err < 0)
++    {
++        fprintf(stderr, "%s: Download TLV file failed!\n", __FUNCTION__);
++        goto error;
++    }
++    fprintf(stderr, "%s: Download TLV file successfully \n", __FUNCTION__);
++
++    /*
++     * Overriding the baud rate value in NVM file with the user
++     * requested baud rate, since default baud rate in NVM file is 3M.
++     */
++    err = rome_set_baudrate_req(fd, local_baud_rate, controller_baud_rate);
++    if (err < 0)
++    {
++        fprintf(stderr, "%s: Baud rate change failed!\n", __FUNCTION__);
++        goto error;
++    }
++    /* Perform HCI reset here*/
++    err = rome_hci_reset_req(fd, local_baud_rate);
++    if (err < 0)
++    {
++        fprintf(stderr, "HCI Reset Failed !!!\n");
++        goto error;
++    }
++    fprintf(stderr, "HCI Reset is done\n");
++error:
++#ifdef _PLATFORM_MDM_
++    /* Vote UART CLK OFF post to FW download */
++    err = ioctl(fd, USERIAL_OP_CLK_OFF);
++    if (err < 0)
++        fprintf(stderr, "%s: Failed to vote UART CLK OFF!!!\n", __func__);
++#endif
++
++    return err;
++}
+diff --git a/tools/hciattach_rome.h b/tools/hciattach_rome.h
+new file mode 100755
+index 000000000..0441b8d4c
+--- /dev/null
++++ b/tools/hciattach_rome.h
+@@ -0,0 +1,405 @@
++/*
++ * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
++ * Not a Contribution.
++ * Copyright 2012 The Android Open Source Project
++ *
++ *  Licensed under the Apache License, Version 2.0 (the "License");
++ *  you may not use this file except in compliance with the License.
++ * You may obtain a copy of the License at
++ *
++ *  http://www.apache.org/licenses/LICENSE-2.0
++ *
++ *  Unless required by applicable law or agreed to in writing, software
++ *  distributed under the License is distributed on an "AS IS" BASIS,
++ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ *  See the License for the specific language governing permissions and
++ *  limitations under the License.
++ */
++#ifndef HW_ROME_H
++#define HW_ROME_H
++
++/******************************************************************************
++**  Constants & Macros
++******************************************************************************/
++#define HCI_MAX_CMD_SIZE 260
++#define HCI_MAX_EVENT_SIZE 260
++#define PRINT_BUF_SIZE ((HCI_MAX_CMD_SIZE * 3) + 2)
++/* HCI Command/Event Opcode */
++#define HCI_RESET 0x0C03
++#define EVT_CMD_COMPLETE 0x0E
++/* HCI Packet types */
++#define HCI_COMMAND_PKT 0x01
++#define HCI_ACLDATA_PKT 0x02
++#define HCI_SCODATA_PKT 0x03
++#define HCI_EVENT_PKT 0x04
++#define HCI_VENDOR_PKT 0xff
++#define cmd_opcode_pack(ogf, ocf) (unsigned short)((ocf & 0x03ff) | (ogf << 10))
++
++#define NVITEM 0
++#define RDWR_PROT 1
++#define NVITEM_SIZE 2
++#define PERSIST_HEADER_LEN 3
++#define BD_ADDR_LEN 6
++#define MSM_DISABLE_FLOW_CTRL 0
++#define MSM_ENABLE_FLOW_CTRL 1
++
++#ifdef _PLATFORM_MDM_
++#define USERIAL_OP_CLK_ON 0x5441
++#define USERIAL_OP_CLK_OFF 0x5442
++#endif
++
++unsigned char vnd_local_bd_addr[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
++typedef enum
++{
++    USERIAL_OP_FLOW_ON,
++    USERIAL_OP_FLOW_OFF,
++    USERIAL_OP_NOP,
++} userial_vendor_ioctl_op_t;
++
++/* vendor serial control block */
++typedef struct
++{
++    int fd;                 /* fd to Bluetooth device */
++    struct termios termios; /* serial terminal of BT port */
++    char port_name[256];
++} vnd_userial_cb_t;
++
++/**** baud rates ****/
++#define USERIAL_BAUD_300 0
++#define USERIAL_BAUD_600 1
++#define USERIAL_BAUD_1200 2
++#define USERIAL_BAUD_2400 3
++#define USERIAL_BAUD_9600 4
++#define USERIAL_BAUD_19200 5
++#define USERIAL_BAUD_57600 6
++#define USERIAL_BAUD_115200 7
++#define USERIAL_BAUD_230400 8
++#define USERIAL_BAUD_460800 9
++#define USERIAL_BAUD_921600 10
++#define USERIAL_BAUD_1M 11
++#define USERIAL_BAUD_1_5M 12
++#define USERIAL_BAUD_2M 13
++#define USERIAL_BAUD_3M 14
++#define USERIAL_BAUD_4M 15
++#define USERIAL_BAUD_AUTO 16
++
++/* Vendor specific baud rate values */
++#define UART_Baud_Rate_Baud_9600 4
++#define UART_Baud_Rate_Baud_19200 3
++#define UART_Baud_Rate_Baud_57600 1
++#define UART_Baud_Rate_Baud_115200 0
++#define UART_Baud_Rate_Baud_230400 5
++#define UART_Baud_Rate_Baud_460800 7
++#define UART_Baud_Rate_Baud_921600 10
++#define UART_Baud_Rate_Baud_1000000 11
++#define UART_Baud_Rate_Baud_2000000 13
++#define UART_Baud_Rate_Baud_3000000 14
++#define UART_Baud_Rate_Baud_4000000 15
++
++#define UART_Baud_Rate_Baud_250000 6
++#define UART_Baud_Rate_Baud_500000 8
++#define UART_Baud_Rate_Baud_720000 9
++#define UART_Baud_Rate_Baud_125000 12
++#define UART_Baud_Rate_Baud_1600000 16
++#define UART_Baud_Rate_Baud_3200000 17
++#define UART_Baud_Rate_Baud_3500000 18
++
++#ifndef FALSE
++#define FALSE 0
++#endif
++
++#ifndef TRUE
++#define TRUE (!FALSE)
++#endif
++
++#define HCI_CHG_BAUD_CMD_OCF 0x0C
++#define HCI_VENDOR_CMD_OGF 0x3F
++#define WRITE_BDADDR_CMD_LEN 14
++#define WRITE_BAUD_CMD_LEN 6
++#define MAX_CMD_LEN WRITE_BDADDR_CMD_LEN
++#define GET_VERSION_OCF 0x1E
++
++#define PS_HDR_LEN 4
++#define HCI_VENDOR_CMD_OGF 0x3F
++#define HCI_PS_CMD_OCF 0x0B
++
++#define HCI_COMMAND_HDR_SIZE 3
++#define EVT_CMD_COMPLETE_SIZE 3
++#define EVT_CMD_STATUS 0x0F
++#define EVT_CMD_STATUS_SIZE 4
++#define HCI_EVENT_HDR_SIZE 2
++#define HCI_EV_SUCCESS 0x00
++/* HCI Socket options */
++#define HCI_DATA_DIR 1
++#define HCI_FILTER 2
++#define HCI_TIME_STAMP 3
++
++#define P_ID_OFFSET (0)
++#define HCI_CMD_IND (1)
++#define EVENTCODE_OFFSET (1)
++#define EVT_PLEN (2)
++#define PLEN (3)
++#define CMD_RSP_OFFSET (3)
++#define RSP_TYPE_OFFSET (4)
++#define BAUDRATE_RSP_STATUS_OFFSET (4)
++#define CMD_STATUS_OFFSET (5)
++#define P_ROME_VER_OFFSET (4)
++#define P_BUILD_VER_OFFSET (6)
++#define P_BASE_ADDR_OFFSET (8)
++#define P_ENTRY_ADDR_OFFSET (12)
++#define P_LEN_OFFSET (16)
++#define P_CRC_OFFSET (20)
++#define P_CONTROL_OFFSET (24)
++#define PATCH_HDR_LEN (28)
++#define MAX_DATA_PER_SEGMENT (239)
++#define VSEVENT_CODE (0xFF)
++#define HC_VS_MAX_CMD_EVENT (0xFF)
++#define PATCH_PROD_ID_OFFSET (5)
++#define PATCH_PATCH_VER_OFFSET (9)
++#define PATCH_ROM_BUILD_VER_OFFSET (11)
++#define PATCH_SOC_VER_OFFSET (13)
++#define MAX_SIZE_PER_TLV_SEGMENT (243)
++
++/* Unified VSC offset*/
++#define PATCH_PROD_ID_OFFSET_UNIFIED (9)
++#define PATCH_PATCH_VER_OFFSET_UNIFIED (13)
++#define PATCH_ROM_BUILD_VER_OFFSET_UNIFIED (15)
++#define PATCH_SOC_VER_OFFSET_UNIFIED (17)
++#define UNIFIED_HCI_CODE (0x01)
++#define UNIFIED_HCI_CC_MIN_LENGTH (6)
++#define HCI_VS_WIPOWER_CMD_OPCODE (0xFC1F)
++#define HCI_VS_GET_VER_CMD_OPCODE (0xFC00)
++
++/* VS Opcode */
++#define HCI_PATCH_CMD_OCF (0)
++#define EDL_SET_BAUDRATE_CMD_OCF (0x48)
++
++/* VS Commands */
++#define VSC_SET_BAUDRATE_REQ_LEN (1)
++#define EDL_PATCH_CMD_LEN (1)
++#define EDL_PATCH_CMD_REQ_LEN (1)
++#define EDL_PATCH_DLD_REQ_CMD (0x01)
++#define EDL_PATCH_RST_REQ_CMD (0x05)
++#define EDL_PATCH_SET_REQ_CMD (0x16)
++#define EDL_PATCH_ATCH_REQ_CMD (0x17)
++#define EDL_PATCH_VER_REQ_CMD (0x19)
++#define EDL_PATCH_TLV_REQ_CMD (0x1E)
++#define VSC_DISABLE_IBS_LEN (0x04)
++
++/* VS Event */
++#define EDL_CMD_REQ_RES_EVT (0x00)
++#define EDL_CMD_EXE_STATUS_EVT (0x00)
++#define EDL_SET_BAUDRATE_RSP_EVT (0x92)
++#define EDL_PATCH_VER_RES_EVT (0x19)
++#define EDL_TVL_DNLD_RES_EVT (0x04)
++#define EDL_APP_VER_RES_EVT (0x02)
++
++/* Status Codes of HCI CMD execution*/
++#define HCI_CMD_SUCCESS (0x0)
++#define PATCH_LEN_ERROR (0x1)
++#define PATCH_VER_ERROR (0x2)
++#define PATCH_CRC_ERROR (0x3)
++#define PATCH_NOT_FOUND (0x4)
++#define TLV_TYPE_ERROR (0x10)
++#define NVM_ACCESS_CODE (0x0B)
++#define BAUDRATE_CHANGE_SUCCESS (1)
++
++/* TLV_TYPE */
++#define TLV_TYPE_PATCH (1)
++#define TLV_TYPE_NVM (2)
++
++/* NVM */
++#define MAX_TAG_CMD 30
++#define TAG_END 0xFF
++#define NVM_ACCESS_SET 0x01
++#define TAG_NUM_OFFSET 5
++#define TAG_NUM_2 2
++#define TAG_NUM_17 (17)
++#define TAG_NUM_27 (27)
++#define TAG_NUM_44 44
++#define TAG_BDADDR_OFFSET 7
++
++/* FW PCM Configuration */
++#define FWCONF_PCM_MS_OFFSET_1 9
++#define FWCONF_PCM_MS_OFFSET_2 33
++#define FWCONF_PCM_SLAVE 1
++#define FWCONF_PCM_MASTER 0
++#define FWCONF_PCM_ROLE_BIT_OFFSET 4
++
++/* FW IBS Configuration */
++#define FWCONF_IBS_DISABLE (0)
++#define FWCONF_IBS_ENABLE (1)
++#define FWCONF_IBS_VAL_BIT (7)
++#define FWCONF_IBS_VAL_OFFSET (0)
++
++#define MAX_RETRY_CNT 1
++#define SELECT_TIMEOUT 3
++
++#define PARAM_LEN 20
++
++#define LSH(val, n) ((unsigned int)(val) << (n))
++#define EXTRACT_BYTE(val, pos) (char)(((val) >> (8 * (pos))) & 0xFF)
++#define CALC_SEG_SIZE(len, max) ((plen) % (max)) ? ((plen / max) + 1) : ((plen) / (max))
++
++/******************************************************************************
++**  Quectel  definitions
++******************************************************************************/
++/* QCA chipsets SOC version */
++#define SOC_VER_QCA6574 0x00000044    /* Rome    */
++#define SOC_VER_QCA9377 0x00000023    /* Tufello 1.1 */
++#define SOC_VER_QCA6290 0x40040100    /* Napier  */
++#define SOC_VER_QCA6690 0x400a0110    /* Hasting 1.1 */
++#define SOC_VER_QCA6696 0x400a0200    /* Hasting 2.0 FG50L/FG50v/FG50K/AF50T(QCA6696)*/
++#define SCO_VER_QCA6698 0x400c0210	/* AF68E */
++#define SOC_VER_QCA7605 0x400b0100    /* Genoa 1.0 */
++#define SOC_VER_QCA6695 0x400b0200    /* Genoa 2.0 AF51Y*/
++#define SOC_VER_QCA206X 0x400c0200    /* QCA2066*/
++#define SOC_VER_QCA206X_G 0x400c1211    /* QCA2066 hsp gf chip*/
++#define SOC_VER_QCC207X 0x40170200
++
++#define SOC_VER_WCN3990 0x40020140    /* WCN 3990*/
++
++/* Automative module fw */
++#define QCA6574_RAMPATCH_TLV_3_0_2_PATH    "/lib/firmware/qca/btfw32.tlv"
++#define QCA6574_NVM_TLV_3_0_2_PATH         "/lib/firmware/qca/btnv32.bin"
++
++#define QCA6595_RAMPATCH_TLV_UART_2_0_PATH    "/lib/firmware/qca/gnbtfw20.tlv"
++#define QCA6595_NVM_TLV_UART_2_0_PATH         "/lib/firmware/qca/gnnv20.bin"
++
++#define QCA6696_RAMPATCH_TLV_UART_2_0_PATH    "/lib/firmware/qca/htbtfw20.tlv"
++#define QCA6696_NVM_TLV_UART_2_0_PATH         "/lib/firmware/qca/htnv20.bin"
++
++#define QCA6698_RAMPATCH_TLV_UART_2_1_PATH    "/lib/firmware/qca/hpbtfw21.tlv"
++#define QCA6698_NVM_TLV_UART_2_1_PATH         "/lib/firmware/qca/hpnv21.bin"
++
++/* Industry module fw */
++#define QCA9377_RAMPATCH_TLV_1_0_1_PATH      "/lib/firmware/qca/tfbtfw11.tlv"
++#define QCA9377_NVM_TLV_1_0_1_PATH           "/lib/firmware/qca/tfbtnv11.bin"
++
++#define QCA206X_RAMPATCH_TLV_UART_2_0_PATH    "/lib/firmware/qca/hpbtfw20.tlv"
++#define QCA206X_NVM_TLV_UART_2_0_PATH         "/lib/firmware/qca/hpnv20.bin"
++
++#define QCA206X_RAMPATCH_TLV_UART_2_1_PATH    "/lib/firmware/qca/hpbtfw21.tlv"
++#define QCA206X_NVM_TLV_UART_2_1_PATH         "/lib/firmware/qca/hpnv21.bin"
++#define QCA206X_NVM_TLV_UART_2_1_G_PATH       "/lib/firmware/qca/hpnv21.bin"
++
++#define QCC207X_RAMPATCH_TLV_UART_2_0_PATH    "/lib/firmware/qca/hmtbtfw20.tlv"
++#define QCC207X_NVM_TLV_UART_2_0_PATH         "/lib/firmware/qca/hmtnv20.bin"
++
++
++
++/* This header value in rampatch file decides event handling mechanism in the HOST */
++#define ROME_SKIP_EVT_NONE 0x00
++#define ROME_SKIP_EVT_VSE 0x01
++#define ROME_SKIP_EVT_CC 0x02
++#define ROME_SKIP_EVT_VSE_CC 0x03
++
++#define FW_CONFIG_FILE_PATH "/etc/bluetooth/firmware.conf"
++/******************************************************************************
++**  Local type definitions
++******************************************************************************/
++
++typedef struct
++{
++    unsigned char ncmd;
++    unsigned short opcode;
++} __attribute__((packed)) evt_cmd_complete;
++
++typedef struct
++{
++    unsigned char status;
++    unsigned char ncmd;
++    unsigned short opcode;
++} __attribute__((packed)) evt_cmd_status;
++
++typedef struct
++{
++    unsigned short opcode;
++    unsigned char plen;
++} __attribute__((packed)) hci_command_hdr;
++
++typedef struct
++{
++    unsigned char evt;
++    unsigned char plen;
++} __attribute__((packed)) hci_event_hdr;
++typedef struct
++{
++    unsigned short rom_version;
++    unsigned short build_version;
++} __attribute__((packed)) patch_version;
++
++typedef struct
++{
++    unsigned int patch_id;
++    patch_version patch_ver;
++    unsigned int patch_base_addr;
++    unsigned int patch_entry_addr;
++    unsigned short patch_length;
++    int patch_crc;
++    unsigned short patch_ctrl;
++} __attribute__((packed)) patch_info;
++
++typedef struct
++{
++    unsigned int tlv_data_len;
++    unsigned int tlv_patch_data_len;
++    unsigned char sign_ver;
++    unsigned char sign_algorithm;
++    unsigned char dwnd_cfg;
++    unsigned char reserved1;
++    unsigned short prod_id;
++    unsigned short build_ver;
++    unsigned short patch_ver;
++    unsigned short reserved2;
++    unsigned int patch_entry_addr;
++} __attribute__((packed)) tlv_patch_hdr;
++
++typedef struct
++{
++    unsigned short tag_id;
++    unsigned short tag_len;
++    unsigned int tag_ptr;
++    unsigned int tag_ex_flag;
++} __attribute__((packed)) tlv_nvm_hdr;
++
++typedef struct
++{
++    unsigned char tlv_type;
++    unsigned char tlv_length1;
++    unsigned char tlv_length2;
++    unsigned char tlv_length3;
++
++    union
++    {
++        tlv_patch_hdr patch;
++        tlv_nvm_hdr nvm;
++    } tlv;
++} __attribute__((packed)) tlv_patch_info;
++
++enum
++{
++    BAUDRATE_115200 = 0x00,
++    BAUDRATE_57600 = 0x01,
++    BAUDRATE_38400 = 0x02,
++    BAUDRATE_19200 = 0x03,
++    BAUDRATE_9600 = 0x04,
++    BAUDRATE_230400 = 0x05,
++    BAUDRATE_250000 = 0x06,
++    BAUDRATE_460800 = 0x07,
++    BAUDRATE_500000 = 0x08,
++    BAUDRATE_720000 = 0x09,
++    BAUDRATE_921600 = 0x0A,
++    BAUDRATE_1000000 = 0x0B,
++    BAUDRATE_1250000 = 0x0C,
++    BAUDRATE_2000000 = 0x0D,
++    BAUDRATE_3000000 = 0x0E,
++    BAUDRATE_4000000 = 0x0F,
++    BAUDRATE_1600000 = 0x10,
++    BAUDRATE_3200000 = 0x11,
++    BAUDRATE_3500000 = 0x12,
++    BAUDRATE_AUTO = 0xFE,
++    BAUDRATE_Reserved = 0xFF
++};
++
++#endif /* HW_ROME_H */
+-- 
+2.25.1
+

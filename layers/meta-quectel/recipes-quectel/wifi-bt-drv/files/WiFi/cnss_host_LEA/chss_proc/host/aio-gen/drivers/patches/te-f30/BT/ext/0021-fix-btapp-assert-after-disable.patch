@@ -1,0 +1,20 @@
+diff -Nur bt_workspace-org/system/bt/btif/src/btif_av.c bt_workspace/system/bt/btif/src/btif_av.c
+--- bt_workspace-org/system/bt/btif/src/btif_av.c	2022-12-14 17:45:03.477565122 +0800
++++ bt_workspace/system/bt/btif/src/btif_av.c	2022-12-14 17:46:38.181032022 +0800
+@@ -2933,9 +2933,14 @@
+ static void btif_media_clear_pcm_queue()
+ {
+     void *p_buf = NULL;
+-    BTIF_TRACE_DEBUG(" Clear PCM QUeue ");
+-    while ( NULL != fixed_queue_get_list(btif_av_cb[0].RxPcmQ) )
++    if(btif_av_cb[0].RxPcmQ == NULL)
+     {
++        BTIF_TRACE_DEBUG("%s: RxPcmQ is NULL",__func__);
++        return;
++    }
++    BTIF_TRACE_DEBUG(" Clear PCM QUeue ++");
++    while ( NULL != fixed_queue_get_list(btif_av_cb[0].RxPcmQ) )
++   {
+ 	if(! fixed_queue_is_empty(btif_av_cb[0].RxPcmQ))
+          {
+              p_buf = fixed_queue_try_dequeue(btif_av_cb[0].RxPcmQ);

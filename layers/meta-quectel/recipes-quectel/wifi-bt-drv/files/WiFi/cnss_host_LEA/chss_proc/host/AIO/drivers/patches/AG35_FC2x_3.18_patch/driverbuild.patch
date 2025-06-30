@@ -1,0 +1,28 @@
+diff --git a/drivers/net/wireless/wlan/fc20/Kbuild b/drivers/net/wireless/wlan/fc20/Kbuild
+index b8c930d..db8ea07 100644
+--- a/drivers/net/wireless/wlan/fc20/Kbuild
++++ b/drivers/net/wireless/wlan/fc20/Kbuild
+@@ -19,10 +19,12 @@ ifeq ($(KERNEL_BUILD),1)
+ 	# These are provided in external module based builds
+ 	# Need to explicitly define for Kernel-based builds
+ 	MODNAME := wlan
+-	WLAN_ROOT := drivers/staging/qcacld-2.0
++	WLAN_ROOT := $(srctree)/drivers/net/wireless/wlan/fc20
+ 	WLAN_OPEN_SOURCE := 1
+ endif
+ 
++WLAN_ROOT := $(srctree)/drivers/net/wireless/wlan/fc20
++
+ ifeq ($(KERNEL_BUILD), 0)
+ 	# These are configurable via Kconfig for kernel-based builds
+ 	# Need to explicitly configure for Android-based builds
+diff --git a/drivers/net/wireless/wlan/fc20/Makefile b/drivers/net/wireless/wlan/fc20/Makefile
+index f78d774..6fef542 100644
+--- a/drivers/net/wireless/wlan/fc20/Makefile
++++ b/drivers/net/wireless/wlan/fc20/Makefile
+@@ -1,4 +1,4 @@
+-KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
++KERNEL_SRC ?= $(PWD)/../../../../../build
+ 
+ KBUILD_OPTIONS := WLAN_ROOT=$(PWD)
+ KBUILD_OPTIONS += MODNAME?=wlan

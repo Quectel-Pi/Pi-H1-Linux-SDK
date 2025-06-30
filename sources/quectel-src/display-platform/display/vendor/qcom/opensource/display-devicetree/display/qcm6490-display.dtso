@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include "qcm6490-sde.dtsi"
+#include "qcm6490-sde-display-idp.dtsi"
+/ {
+	model = "Qualcomm Technologies, Inc. QCM6490 IDP";
+	compatible = "qcom,qcm6490-idp", "qcom,qcm6490";
+};

@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,gcc-sc7280.h>
+#include <dt-bindings/interconnect/qcom,sc7280.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/power/qcom-rpmpd.h>
+#include "qcm6490-wlan-rb3.dtsi"
+
+/ {
+       model = "Qualcomm Technologies, Inc. WLAN QCM6490 Rb3";
+       compatible = "qcom,qcm6490-idp", "qcom,qcm6490";
+};

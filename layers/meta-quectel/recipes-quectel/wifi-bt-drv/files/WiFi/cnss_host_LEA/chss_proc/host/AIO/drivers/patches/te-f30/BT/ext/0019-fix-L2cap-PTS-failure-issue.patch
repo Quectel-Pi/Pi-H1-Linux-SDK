@@ -1,0 +1,55 @@
+diff -Nur bt_workspace-org/system/bt/stack/btm/btm_sec.c bt_workspace/system/bt/stack/btm/btm_sec.c
+--- bt_workspace-org/system/bt/stack/btm/btm_sec.c	2022-12-06 19:42:09.281655791 +0800
++++ bt_workspace/system/bt/stack/btm/btm_sec.c	2022-12-06 19:44:19.436928021 +0800
+@@ -113,6 +113,17 @@
+ static BOOLEAN btm_sec_use_smp_br_chnl(tBTM_SEC_DEV_REC *p_dev_rec);
+ static BOOLEAN btm_sec_is_master(tBTM_SEC_DEV_REC *p_dev_rec);
+ 
++#if BLE_INCLUDED == TRUE && SMP_INCLUDED == TRUE
++static const BOOLEAN btm_sec_io_map [BTM_IO_CAP_MAX][BTM_IO_CAP_MAX] =
++{
++    /*   OUT,    IO,     IN,     NONE   KD */
++/* OUT  */ {FALSE,  FALSE,  TRUE,   FALSE, TRUE},
++/* IO   */ {FALSE,  TRUE,   TRUE,   FALSE, TRUE},
++/* IN   */ {TRUE,   TRUE,   TRUE,   FALSE, TRUE},
++/* NONE */ {FALSE,  FALSE,  FALSE,  FALSE, FALSE},
++/* KD   */ {TRUE,	TRUE,	TRUE,	FALSE, TRUE}
++};
++#else
+ /* TRUE - authenticated link key is possible */
+ static const BOOLEAN btm_sec_io_map [BTM_IO_CAP_MAX][BTM_IO_CAP_MAX] =
+ {
+@@ -122,6 +133,7 @@
+ /* IN   */ {TRUE,   TRUE,   TRUE,   FALSE},
+ /* NONE */ {FALSE,  FALSE,  FALSE,  FALSE}
+ };
++#endif
+ /*  BTM_IO_CAP_OUT      0   DisplayOnly */
+ /*  BTM_IO_CAP_IO       1   DisplayYesNo */
+ /*  BTM_IO_CAP_IN       2   KeyboardOnly */
+diff -Nur bt_workspace-org/system/bt/stack/l2cap/l2c_ble.c bt_workspace/system/bt/stack/l2cap/l2c_ble.c
+--- bt_workspace-org/system/bt/stack/l2cap/l2c_ble.c	2022-12-06 19:42:09.277655813 +0800
++++ bt_workspace/system/bt/stack/l2cap/l2c_ble.c	2022-12-06 19:45:18.756592755 +0800
+@@ -835,8 +835,8 @@
+                 }
+             }
+             else
+-                l2cu_send_peer_disc_rsp (p_lcb, id, lcid, rcid);
+-
++/*L2CAP/LE/CFC/BV-23-C says L2CAP_COMMAND_REJECT_RSP instead of L2CAP_DISCONNECTION_RSP should be responded*/
++                l2cu_send_peer_cmd_reject (p_lcb, L2CAP_CMD_REJ_INVALID_CID, id, lcid, rcid);
+             break;
+ 
+          case L2CAP_CMD_DISC_RSP:
+diff -Nur bt_workspace-org/system/bt/stack/smp/smp_act.c bt_workspace/system/bt/stack/smp/smp_act.c
+--- bt_workspace-org/system/bt/stack/smp/smp_act.c	2022-12-06 19:42:09.277655813 +0800
++++ bt_workspace/system/bt/stack/smp/smp_act.c	2022-12-06 19:46:34.176166518 +0800
+@@ -484,7 +484,7 @@
+ void smp_proc_sec_req(tSMP_CB *p_cb, tSMP_INT_DATA *p_data)
+ {
+     tBTM_LE_AUTH_REQ auth_req = *(tBTM_LE_AUTH_REQ *)p_data;
+-    tBTM_BLE_SEC_REQ_ACT sec_req_act;
++    tBTM_BLE_SEC_REQ_ACT sec_req_act = BTM_BLE_SEC_REQ_ACT_DISCARD;
+     UINT8 reason;
+ 
+     SMP_TRACE_DEBUG("%s auth_req=0x%x", __func__, auth_req);

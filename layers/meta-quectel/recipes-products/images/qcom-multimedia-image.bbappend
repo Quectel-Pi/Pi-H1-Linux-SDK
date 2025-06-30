@@ -1,0 +1,8 @@
+IMAGE_OVERHEAD_FACTOR = "1.2"
+EXTRA_USERS_PARAMS:append = " usermod -p '' root;"
+IMAGE_FEATURES:remove = "read-only-rootfs"
+IMAGE_INSTALL:append = " pciutils usbutils"
+IMAGE_INSTALL:append = " yt6801 r8168 qca1023-wlan"
+IMAGE_INSTALL:append = " qmi-wwan-q quectel-cm quectel-firehose quectel-log"
+IMAGE_INSTALL:append = " quectel-tests lgpio"
+IMAGE_INSTALL:append = " atci key-event-handler"

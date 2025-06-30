@@ -1,0 +1,54 @@
+diff -Nur bt_workspace-org/hardware/qcom/bt/libbt-vendor/src/bt_vendor_qcom.c bt_workspace/hardware/qcom/bt/libbt-vendor/src/bt_vendor_qcom.c
+--- bt_workspace-org/hardware/qcom/bt/libbt-vendor/src/bt_vendor_qcom.c	2019-09-24 11:49:06.338132517 +0800
++++ bt_workspace/hardware/qcom/bt/libbt-vendor/src/bt_vendor_qcom.c	2019-09-24 11:55:07.430146278 +0800
+@@ -604,9 +604,7 @@
+        /* Check if rfkill has been disabled */
+ #ifdef ANDROID
+        ret = property_get("ro.rfkilldisabled", disable, "0");
+-#else
+-       ret = property_get_bt("ro.rfkilldisabled", disable, "0");
+-#endif
++//       ret = property_get_bt("ro.rfkilldisabled", disable, "0");
+        if (!ret ){
+           ALOGE("Couldn't get ro.rfkilldisabled (%d)", ret);
+           return -1;
+@@ -616,6 +614,7 @@
+           ALOGI("ro.rfkilldisabled : %s", disable);
+           return -1;
+        }
++#endif
+     }
+ 
+     if(on == '0'){
+@@ -928,7 +927,7 @@
+     memset(&name, 0, sizeof(struct sockaddr_un));
+     name.sun_family = AF_UNIX;
+     strlcpy(name.sun_path, SOCKETNAME, sizeof(name.sun_path));
+-    ALOGE("connecting to %s, fd = %d", SOCKETNAME, bt_prop_socket);
++    ALOGE("connecting to %s, bt_prop_socket = %d", SOCKETNAME, bt_prop_socket);
+     len = sizeof(name.sun_family) + strlen(name.sun_path);
+     /*Connect to the server.*/
+     if (connect(bt_prop_socket, (struct sockaddr *) &name, len) < 0){
+@@ -1628,7 +1627,7 @@
+                                         }
+                                         if (!skip_init) {
+                                             /*Skip if already sent*/
+-                                            enable_controller_log(fd_filter, (is_ant_req || is_fm_req) );
++                                            //enable_controller_log(fd_filter, (is_ant_req || is_fm_req) );
+                                             skip_init = true;
+                                         }
+                                         for (idx=0; idx < CH_MAX; idx++)
+@@ -2051,9 +2050,10 @@
+     pthread_mutex_unlock(&q_lock);
+ 
+ #ifndef ANDROID
+-    ALOGI("cleanup : calling shutdown of bt_sock fd = %d", bt_socket);
+-    shutdown(bt_socket, SHUT_RDWR);
+-    close(bt_socket);
++    ALOGI("cleanup : calling shutdown bt_prop_socket = %d", bt_prop_socket);
++    shutdown(bt_prop_socket, SHUT_RDWR);
++    close(bt_prop_socket);
++	bt_prop_socket = -1;
+ #endif
+ #ifdef WIFI_BT_STATUS_SYNC
+     isInit = 0;

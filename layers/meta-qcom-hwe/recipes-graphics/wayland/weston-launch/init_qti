@@ -1,0 +1,181 @@
+#!/bin/sh
+########################################################################
+#Copyright (c) 2017, The Linux Foundation. All rights reserved.
+#
+#Redistribution and use in source and binary forms, with or without
+#modification, are permitted provided that the following conditions are
+#met:
+#    * Redistributions of source code must retain the above copyright
+#      notice, this list of conditions and the following disclaimer.
+#    * Redistributions in binary form must reproduce the above
+#      copyright notice, this list of conditions and the following
+#      disclaimer in the documentation and/or other materials provided
+#      with the distribution.
+#    * Neither the name of The Linux Foundation nor the names of its
+#      contributors may be used to endorse or promote products derived
+#      from this software without specific prior written permission.
+#
+#THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
+#WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+#MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
+#ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
+#BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+#CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+#SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+#BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+#WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+#OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+#IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#########################################################################
+
+###################################################################################
+#Changes from Qualcomm Innovation Center are provided under the following license:
+#
+#Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+#
+#Redistribution and use in source and binary forms, with or without
+#modification, are permitted (subject to the limitations in the
+#disclaimer below) provided that the following conditions are met:
+#
+#    * Redistributions of source code must retain the above copyright
+#      notice, this list of conditions and the following disclaimer.
+#
+#    * Redistributions in binary form must reproduce the above
+#      copyright notice, this list of conditions and the following
+#      disclaimer in the documentation and/or other materials provided
+#      with the distribution.
+#
+#    * Neither the name of Qualcomm Innovation Center, Inc. nor the names of its
+#      contributors may be used to endorse or promote products derived
+#      from this software without specific prior written permission.
+#
+#NO EXPRESS OR IMPLIED LICENSES TO ANY PARTY'S PATENT RIGHTS ARE
+#GRANTED BY THIS LICENSE. THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT
+#HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED
+#WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+#MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+#IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+#ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+#DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE
+#GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+#INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER
+#IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR
+#OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+#IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+###################################################################################
+
+### BEGIN INIT INFO
+# Provides: weston
+# Required-Start: $local_fs $remote_fs
+# Required-Stop: $local_fs $remote_fs
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+### END INIT INFO
+
+if test -e /etc/default/weston ; then
+        . /etc/default/weston
+fi
+
+killproc() {
+        pid=`/bin/pidof $1`
+        [ "$pid" != "" ] && kill $pid
+}
+
+launch_weston=`getprop persist.display.launch.weston.at.bootup`
+
+read CMDLINE < /proc/cmdline
+for x in $CMDLINE; do
+        case $x in
+        weston=false)
+        echo "Weston disabled"
+        exit 0;
+                ;;
+        esac
+done
+
+case "$1" in
+  start)
+        . /etc/profile
+
+        # This is all a nasty hack
+        if test -z "$XDG_RUNTIME_DIR"; then
+            export XDG_RUNTIME_DIR=/dev/socket/weston
+        fi
+
+        if test -z "$XDG_PICTURES_DIR"; then
+            export XDG_PICTURES_DIR=/data/misc/display
+        fi
+
+        if [[ -z "$SHELL" && -x "/bin/sh" ]]; then
+            export SHELL=/bin/sh
+        fi
+
+        if [ -f /sys/devices/soc0/soc_id ]; then
+            soc_id=`cat /sys/devices/soc0/soc_id`
+            if [ "$soc_id" == 497 ] || [ "$soc_id" == 498 ]; then
+                `setprop sdm.max_pipe_config 2`
+            fi
+        fi
+
+        export PATH_DRM_NODE=/dev/dri
+        filename_drm=$(find $PATH_DRM_NODE  -name 'card0' -print -quit )
+        while  [ -z "$filename_drm" ]; do
+            sleep 1
+            filename_drm=$(find $PATH_DRM_NODE  -name 'card0' -print -quit )
+        done
+
+        echo "WESTON INITIALIZATION STARTUP"
+
+        if [ -f /sys/devices/soc0/soc_id ]; then
+            soc_id=`cat /sys/devices/soc0/soc_id`
+            if [ "$soc_id" == 497 ] || [ "$soc_id" == 498 ] ||
+                    [ "$soc_id" == 575 ] || [ "$soc_id" == 576 ]; then
+                        weston --tty=2 --idle-time=0 --log=/tmp/weston.log --config=/etc/xdg/weston/weston.ini \
+                        --continue-without-input &
+            fi
+        fi
+
+        if [ -f /sys/devices/soc0/soc_id ]; then
+            soc_id=`cat /sys/devices/soc0/soc_id`
+            if [ "$soc_id" == 534 ] || [ "$soc_id" == 667 ] || [ "$soc_id" == 606 ] ||
+                    [ "$soc_id" == 674 ] || [ "$soc_id" == 675 ] || [ "$soc_id" == 676 ]; then
+                        weston --tty=2 --idle-time=0 --log=/tmp/weston.log --backend=drm-backend.so \
+                        --continue-without-input &
+            fi
+        fi
+
+        # Wait wayland socket node create.
+        filename=$(find $XDG_RUNTIME_DIR -maxdepth 1 -name 'wayland-*' -print -quit)
+        while [ -z "$filename" ]; do
+            sleep 0.1
+            filename=$(find $XDG_RUNTIME_DIR -maxdepth 1 -name 'wayland-*' -print -quit)
+        done
+
+        chown -hR system:video $XDG_RUNTIME_DIR
+        chmod 756 /dev/socket/weston/wayland-1
+  ;;
+
+  stop)
+        echo "Stopping Weston"
+  ;;
+
+  restart)
+    $0 stop
+        sleep 1
+        $0 start
+  ;;
+
+  *)
+        echo "usage: $0 { start | stop | restart }"
+  ;;
+esac
+
+#For drm based display driver
+vbfile=/sys/module/drm/parameters/vblankoffdelay
+if [ -w $vbfile ]; then
+    echo -1 >  $vbfile
+else
+    echo "vblankoffdelay perms doesn't exist"
+fi
+
+exit 0

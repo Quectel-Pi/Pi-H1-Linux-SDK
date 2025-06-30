@@ -1,0 +1,143 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/serial/qcom,serial-geni-qcom.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm Geni based QUP UART interface
+
+maintainers:
+  - Andy Gross <agross@kernel.org>
+  - Bjorn Andersson <bjorn.andersson@linaro.org>
+
+allOf:
+  - $ref: /schemas/serial/serial.yaml#
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            enum:
+              - qcom,sa7255p-geni-uart
+              - qcom,sa7255p-geni-debug-uart
+              - qcom,sa8255p-geni-uart
+              - qcom,sa8255p-geni-debug-uart
+    then:
+      required:
+        - power-domains
+        - power-domain-names
+      properties:
+        power-domains:
+          minItems: 2
+          maxItems: 2
+    else:
+      required:
+        - clocks
+        - clock-names
+      properties:
+        power-domains:
+          maxItems: 1
+        interconnects:
+          maxItems: 2
+        interconnect-names:
+          items:
+            - const: qup-core
+            - const: qup-config
+
+properties:
+  compatible:
+    enum:
+      - qcom,geni-uart
+      - qcom,geni-debug-uart
+      - qcom,sa7255p-geni-uart
+      - qcom,sa7255p-geni-debug-uart
+      - qcom,sa8255p-geni-uart
+      - qcom,sa8255p-geni-debug-uart
+
+  clocks:
+    maxItems: 1
+
+  clock-names:
+    const: se
+
+  interconnects:
+    description: phandles of interconnect bw provider
+
+  interconnect-names:
+    description: names of interconnects
+
+  interrupts:
+    minItems: 1
+    items:
+      - description: UART core irq
+      - description: Wakeup irq (RX GPIO)
+
+  operating-points-v2: true
+
+  pinctrl-0: true
+  pinctrl-1: true
+
+  pinctrl-names:
+    minItems: 1
+    items:
+      - const: default
+      - const: sleep
+
+  power-domains:
+    minItems: 1
+    maxItems: 2
+
+  power-domain-names:
+    items:
+      - const: power
+      - const: perf
+
+  reg:
+    maxItems: 1
+
+  qcom,load-firmware: true
+    description: Optional property which indicate if QUP firmware to be loaded from Linux.
+
+  qcom,xfer-mode:
+    const: 1
+    description: Value 1,2 and 3 represents FIFO, CPU DMA and GSI DMA mode respectively. This is an optional property.
+
+required:
+  - compatible
+  - interrupts
+  - reg
+
+unevaluatedProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+    #include <dt-bindings/clock/qcom,gcc-sc7180.h>
+    #include <dt-bindings/interconnect/qcom,sc7180.h>
+
+    serial@a88000 {
+        compatible = "qcom,geni-uart";
+        reg = <0xa88000 0x7000>;
+        interrupts = <GIC_SPI 355 IRQ_TYPE_LEVEL_HIGH>;
+        clock-names = "se";
+        clocks = <&gcc GCC_QUPV3_WRAP0_S0_CLK>;
+        pinctrl-0 = <&qup_uart0_default>;
+        pinctrl-names = "default";
+        interconnects = <&qup_virt MASTER_QUP_CORE_0 0 &qup_virt SLAVE_QUP_CORE_0 0>,
+                        <&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_QUP_0 0>;
+        interconnect-names = "qup-core", "qup-config";
+        qcom,load-firmware;
+        qcom,xfer-mode = <1>;
+    };
+
+  - |
+    #include <dt-bindings/interrupt-controller/arm-gic.h>
+
+    serial@990000 {
+        compatible = "qcom,sa8255p-geni-uart";
+        reg = <0x990000 0x4000>;
+        interrupts = <GIC_SPI 531 IRQ_TYPE_LEVEL_HIGH>;
+        power-domains = <&scmi11_pd 4>, <&scmi11_dvfs 4>;
+        power-domain-names = "power", "perf";
+    };
+...

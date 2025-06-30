@@ -1,0 +1,4320 @@
+From 0d02746cc234ee168c6b29ab385865c49af75ed8 Mon Sep 17 00:00:00 2001
+From: Zijun Hu <zijuhu@codeaurora.org>
+Date: Tue, 7 Jul 2020 12:03:29 +0800
+Subject: [PATCH] Add gattctest and gattstest support
+
+port gattctest and gattstest from re-f30c1.
+---
+ .../bt/bt-app/gattctest/include/GattcTest.hpp      |  209 +++
+ .../bt/bt-app/gattctest/src/GattcTest.cpp          | 1339 ++++++++++++++++++++
+ .../bt/bt-app/gattstest/include/GattsTest.hpp      |  236 ++++
+ .../bt/bt-app/gattstest/src/GattsTest.cpp          |  873 +++++++++++++
+ qcom-opensource/bt/bt-app/include/ipc.h            |   68 +-
+ qcom-opensource/bt/bt-app/main/Makefile.am         |    4 +
+ qcom-opensource/bt/bt-app/main/include/Main.hpp    |   72 +-
+ qcom-opensource/bt/bt-app/main/src/Main.cpp        |  225 ++++
+ qcom-opensource/bt/bt-app/rsp/include/Rsp.hpp      |    7 +-
+ qcom-opensource/bt/bt-app/rsp/src/Rsp.cpp          |   34 +-
+ qcom-opensource/bt/gatt/src/Gatt.cpp               |  120 +-
+ qcom-opensource/bt/property-ops/src/sock_ops.c     |    4 +-
+ system/bt/bta/gatt/bta_gatts_act.c                 |    2 +-
+ system/bt/btif/src/btif_core.c                     |   12 +-
+ system/bt/btif/src/btif_dm.c                       |    4 +-
+ system/bt/btif/src/btif_sock_thread.c              |    1 -
+ system/bt/stack/btm/btm_ble.c                      |   83 ++
+ system/bt/stack/btm/btm_ble_bgconn.c               |   17 +
+ system/bt/stack/btm/btm_ble_int.h                  |    4 +-
+ system/bt/stack/btm/btm_dev.c                      |    1 +
+ system/bt/stack/gatt/gatt_api.c                    |   23 +
+ system/bt/stack/gatt/gatt_main.c                   |    1 +
+ system/bt/stack/include/gatt_api.h                 |    1 +
+ 23 files changed, 3223 insertions(+), 117 deletions(-)
+ create mode 100644 qcom-opensource/bt/bt-app/gattctest/include/GattcTest.hpp
+ create mode 100755 qcom-opensource/bt/bt-app/gattctest/src/GattcTest.cpp
+ create mode 100644 qcom-opensource/bt/bt-app/gattstest/include/GattsTest.hpp
+ create mode 100755 qcom-opensource/bt/bt-app/gattstest/src/GattsTest.cpp
+
+diff --git a/qcom-opensource/bt/bt-app/gattctest/include/GattcTest.hpp b/qcom-opensource/bt/bt-app/gattctest/include/GattcTest.hpp
+new file mode 100644
+index 000000000000..7233105e0ea2
+--- /dev/null
++++ b/qcom-opensource/bt/bt-app/gattctest/include/GattcTest.hpp
+@@ -0,0 +1,209 @@
++/*
++ * Copyright (c) 2017, The Linux Foundation. All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are
++ * met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above
++ *       copyright notice, this list of conditions and the following
++ *       disclaimer in the documentation and/or other materials provided
++ *       with the distribution.
++ *     * Neither the name of The Linux Foundation nor the names of its
++ *       contributors may be used to endorse or promote products derived
++ *       from this software without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
++ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
++ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
++ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
++ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
++ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
++ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
++ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef GATTCTEST_APP_H
++#define GATTCTEST_APP_H
++
++#pragma once
++
++#include <hardware/bluetooth.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++
++
++
++#include "osi/include/log.h"
++#include "osi/include/thread.h"
++#include "osi/include/config.h"
++#include "ipc.h"
++#include "Gatt.hpp"
++
++#define RSP_MIN_CI           (100)
++#define RSP_MAX_CI           (1000)
++
++#define GATT_PROP_READ       (0x02)
++#define GATT_PROP_WRITE      (0x08)
++
++#define GATT_PERM_READ       (0x01)
++#define GATT_PERM_WRITE      (0x10)
++
++#define LOGTAG "GATTCTEST "
++
++typedef enum {
++   LOW_ALERT=0,
++   MID_ALERT,
++   HIGH_ALERT,
++}AlertLevel;
++
++typedef struct{
++    int conn_id;
++    int handle;
++    btgatt_srvc_id_t *srvc_id;
++    btgatt_gatt_id_t *char_id;
++    btgatt_gatt_id_t *descr_id;
++    bt_bdaddr_t* bda;
++} ServiceData;
++
++
++class Gatt;
++class GattcTest {
++    private:
++        config_t *config;
++        int wlan_state;
++
++        RspEnableEvent attr;
++        GattcRegisterAppEvent app_client_if;
++        GattsRegisterAppEvent app_if;
++        GattsServiceAddedEvent srvc_data;
++        GattsCharacteristicAddedEvent char_data;
++        GattsDescriptorAddedEvent desc_data;
++        GattsConnectionEvent conn_data;
++        GattcOpenEvent client_conn_data;
++        btgatt_interface_t *gatt_interface;
++     public:
++        Gatt *app_gatt;
++/***************************/
++
++    public:
++        GattcTest(btgatt_interface_t *, Gatt *);
++        ~GattcTest();
++
++        bool EnableGATTCTEST();
++        bool DisableGATTCTEST();
++        inline btgatt_interface_t* GetGattInterface()
++        {
++            return gatt_interface;
++        }
++        inline int GetDeviceState()
++        {
++            fprintf(stdout, "(%s) WLAN Current State (%d) \n",__FUNCTION__, wlan_state);
++            return wlan_state;
++        }
++        inline void SetDeviceState(int currentstate)
++        {
++            fprintf(stdout, "(%s) WLAN Prev State (%d) New State(%d) \n"
++                   ,__FUNCTION__, wlan_state, currentstate);
++            wlan_state = currentstate;
++        }
++        inline void SetGATTCTESTClientAppData(GattcRegisterAppEvent *event)
++        {
++            memset(&app_client_if, 0, sizeof(app_client_if));
++            memcpy(&app_client_if, event, sizeof(GattcRegisterAppEvent));
++        }
++        inline GattcRegisterAppEvent* GetGATTCTESTClientAppData()
++        {
++            return &app_client_if;
++        }
++        inline void SetGATTCTESTAttrData(RspEnableEvent *attrib)
++        {
++            memset (&attr, 0, sizeof(RspEnableEvent));
++            memcpy (&attr, attrib, sizeof(RspEnableEvent));
++        }
++        inline RspEnableEvent* GetGATTCTESTAttrData()
++        {
++            return &attr;
++        }
++        inline void SetGATTCTESTAppData(GattsRegisterAppEvent *event)
++        {
++            memset(&app_if, 0, sizeof(GattsRegisterAppEvent));
++            memcpy(&app_if, event, sizeof(GattsRegisterAppEvent));
++        }
++        inline GattsRegisterAppEvent* GetGATTCTESTAppData()
++        {
++            return &app_if;
++        }
++        inline void SetGATTCTESTSrvcData(GattsServiceAddedEvent *event)
++        {
++            memset(&srvc_data, 0, sizeof(GattsServiceAddedEvent));
++            memcpy(&srvc_data, event, sizeof(GattsServiceAddedEvent));
++        }
++        inline GattsServiceAddedEvent* GetGATTCTESTSrvcData()
++        {
++            return &srvc_data;
++        }
++        inline void SetGATTCTESTCharacteristicData(GattsCharacteristicAddedEvent
++                *event)
++        {
++            memset(&char_data, 0, sizeof(GattsCharacteristicAddedEvent));
++            memcpy(&char_data, event, sizeof(GattsCharacteristicAddedEvent));
++        }
++        inline GattsCharacteristicAddedEvent* GetGATTCTESTCharacteristicData()
++        {
++            return &char_data;
++        }
++        inline void SetGATTCTESTDescriptorData(GattsDescriptorAddedEvent *event)
++        {
++            memset(&desc_data, 0, sizeof(GattsDescriptorAddedEvent));
++            memcpy(&desc_data, event, sizeof(GattsDescriptorAddedEvent));
++        }
++        inline GattsDescriptorAddedEvent* GetGATTCTESTDescriptorData()
++        {
++            return &desc_data;
++        }
++        inline void SetGATTCTESTConnectionData(GattcOpenEvent*event)
++        {
++            memset(&client_conn_data, 0, sizeof(GattcOpenEvent));
++            memcpy(&client_conn_data, event, sizeof(GattcOpenEvent));
++        }
++        inline GattcOpenEvent* GetGATTCTESTConnectionData()
++        {
++            return &client_conn_data;
++        }
++        bool SendResponse(GattsRequestWriteEvent *);
++        bool CopyUUID(bt_uuid_t *);
++        bool CopyClientUUID(bt_uuid_t *);
++        bool CopyGenUUID(bt_uuid_t *);
++        bool ClientSetAdvData(char *);
++        bool CopyParams(bt_uuid_t *, bt_uuid_t *);
++        bool MatchParams(bt_uuid_t *, bt_uuid_t *);
++        bool RegisterApp(void);
++        bool DisconnectServer(void);
++        bool UnregisterServer(int);
++        bool RegisterClient(void);
++        bool UnregisterClient(int);
++        bool StartAdvertisement(void);
++        bool StopAdvertisement(void);
++        bool StartScan(void);
++        bool StopScan(void);
++        bool Connect(const bt_bdaddr_t *);
++        bool Disconnect(const bt_bdaddr_t *);
++        bool SendAlert(int);
++        bool SearchService(int);
++        bool AddService(void);
++        bool AddCharacteristics(void);
++        bool AddDescriptor(void);
++        bool StartService(void);
++        bool StopService(void);
++        bool DeleteService(void);
++        bool HandleWlanOn(void);
++        void CleanUp(int);
++};
++#endif
++
+diff --git a/qcom-opensource/bt/bt-app/gattctest/src/GattcTest.cpp b/qcom-opensource/bt/bt-app/gattctest/src/GattcTest.cpp
+new file mode 100755
+index 000000000000..dfe2c65ed133
+--- /dev/null
++++ b/qcom-opensource/bt/bt-app/gattctest/src/GattcTest.cpp
+@@ -0,0 +1,1339 @@
++/*
++ * Copyright (c) 2017, The Linux Foundation. All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are
++ * met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above
++ *       copyright notice, this list of conditions and the following
++ *       disclaimer in the documentation and/or other materials provided
++ *       with the distribution.
++ *     * Neither the name of The Linux Foundation nor the names of its
++ *       contributors may be used to endorse or promote products derived
++ *       from this software without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
++ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
++ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
++ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
++ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
++ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
++ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
++ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include "Gatt.hpp"
++#include "GattcTest.hpp"
++#include "utils.h"
++#include <stdlib.h>
++
++
++
++#define LOGTAG "GATTCTEST "
++#define UNUSED
++
++#define COPYMAXLEN 200
++
++ServiceData *gattctestServData;
++ServiceData *gattctestAlertData;
++
++int testest;
++
++int gattctestserverif, gattctestclientif;
++
++GattcTest *gattctest = NULL;
++
++bt_uuid_t client_uuid;
++bt_uuid_t gen_uuid;
++
++#define ADDRESS_STR_LEN 18
++#define UUID_STR_LEN 37
++#define HEX_VAL_STR_LEN 100
++
++#define CHARID_STR_LEN UUID_STR_LEN + 3 + 11
++#define SRVCID_STR_LEN UUID_STR_LEN + 3 + 11 + 1 + 11
++#define desc_id_to_string gatt_id_to_string
++
++#define MAX_NOTIFY_PARAMS_STR_LEN (SRVCID_STR_LEN + CHARID_STR_LEN \
+++ ADDRESS_STR_LEN + HEX_VAL_STR_LEN + 60)
++#define MAX_READ_PARAMS_STR_LEN (SRVCID_STR_LEN + CHARID_STR_LEN \
+++ UUID_STR_LEN + HEX_VAL_STR_LEN + 80)
++
++
++static char *uuid_to_string(const bt_uuid_t *uuid, char *buf)
++{
++    int shift = 0;
++    int i = 16;
++    int limit = 0;
++    int j = 0;
++
++    /* for bluetooth uuid only 32 bits */
++    if (0 == memcmp(&uuid->uu, &(gen_uuid.uu),
++    sizeof(bt_uuid_t) - 4)) {
++    limit = 12;
++    /* make it 16 bits */
++    if (uuid->uu[15] == 0 && uuid->uu[14] == 0)
++    i = 14;
++    }
++
++    while (i-- > limit) {
++    if (i == 11 || i == 9 || i == 7 || i == 5) {
++    buf[j * 2 + shift] = '-';
++    shift++;
++    }
++
++    snprintf(buf + j * 2 + shift,COPYMAXLEN, "%02x", uuid->uu[i]);
++    ++j;
++    }
++
++    return buf;
++}
++
++
++/* service_id formating function */
++char *service_id_to_string(const btgatt_srvc_id_t *srvc_id, char *buf) {
++    char uuid_buf[UUID_STR_LEN];
++    snprintf(buf,COPYMAXLEN,"{%s,%d,%d}", uuid_to_string(&srvc_id->id.uuid,
++    uuid_buf),srvc_id->id.inst_id,srvc_id->is_primary);
++    return buf;
++}
++
++
++static char *gatt_id_to_string(const btgatt_gatt_id_t *char_id, char *buf)
++{
++    char uuid_buf[UUID_STR_LEN];
++
++    snprintf(buf,COPYMAXLEN, "{%s,%d}", uuid_to_string(&char_id->uuid, uuid_buf),
++    char_id->inst_id);
++    return buf;
++}
++
++static char *arr_to_string(const uint8_t *v, int size, char *buf, int out_size)
++{
++    int limit = size;
++    int i;
++
++    if (out_size > 0) {
++    *buf = '\0';
++    if (size >= 2 * out_size)
++    limit = (out_size - 2) / 2;
++
++    for (i = 0; i < limit; ++i)
++    snprintf(buf + 2 * i,COPYMAXLEN, "%02x", v[i]);
++
++    /* output buffer not enough to hold whole field fill with ...*/
++    if (limit < size)
++    snprintf(buf + 2 * i,COPYMAXLEN, "...");
++    }
++
++    return buf;
++}
++
++
++static char *raw_data_to_string(const btgatt_unformatted_value_t *v,
++    char *buf, int size)
++{
++    return arr_to_string(v->value, v->len, buf, size);
++}
++
++static char *read_param_to_string(const btgatt_read_params_t *data,
++             char *buf)
++{
++    char srvc_id[SRVCID_STR_LEN];
++    char char_id[CHARID_STR_LEN];
++    char descr_id[UUID_STR_LEN];
++    char value[HEX_VAL_STR_LEN];
++/*    snprintf(buf,COPYMAXLEN, "{srvc_id=%s, char_id=%s, descr_id=%s, val=%s value_type=%d, status=%d}",
++        service_id_to_string(&data->srvc_id, srvc_id),
++        gatt_id_to_string(&data->char_id, char_id),
++        desc_id_to_string(&data->descr_id, descr_id),
++        raw_data_to_string(&data->value, value, 100),
++        data->value_type, data->status);
++*/
++    return buf;
++}
++
++
++/*****************************/
++class gattctestClientCallback : public BluetoothGattClientCallback
++{
++    private:
++        bool AlertServiceMatches;
++        bool srvcMatching;
++    public:
++        bool foundAlertService() {
++             return AlertServiceMatches;  
++        }
++
++       bool CpUUID(bt_uuid_t *uuid_dest, bt_uuid_t *uuid_src)
++      {
++
++        CHECK_PARAM(uuid_dest)
++        CHECK_PARAM(uuid_src)
++
++        for (int i = 0; i < 16; i++) {
++         uuid_dest->uu[i] = uuid_src->uu[i];
++        }
++        return true;
++}
++    void btgattc_client_register_app_cb(int status,int client_if,bt_uuid_t *uuid) {
++
++        fprintf(stdout,"gattctest btgattc_client_register_app_cb\n ");
++        AlertServiceMatches = false;
++        srvcMatching = false;
++
++        if(!gattctest) {
++            fprintf(stdout,"Client not initialized ... returning%s \n", __func__);
++            return;
++        }
++
++        GattcRegisterAppEvent event;
++        event.event_id = RSP_ENABLE_EVENT;
++        event.status = status;
++        event.clientIf = client_if;
++        memcpy(&event.app_uuid,uuid,sizeof(bt_uuid_t));
++
++        gattctest->SetGATTCTESTClientAppData(&event);
++    }
++
++    void btgattc_scan_result_cb(bt_bdaddr_t* bda, int rssi, uint8_t* adv_data) {
++         bdstr_t bd_str;
++         bdaddr_to_string(bda, &bd_str[0], sizeof(bd_str));
++         fprintf(stdout,"btgattc_scan_result_cb %s \n ", bd_str);
++    }
++
++    void btgattc_open_cb(int conn_id, int status, int clientIf, bt_bdaddr_t* bda)
++    {
++         fprintf(stdout,"btgattc_open_cb  gattctest   status is %d\n ", status);
++
++        GattcOpenEvent event;
++        event.event_id = BTGATTC_OPEN_EVENT;
++        event.conn_id = conn_id;
++        event.status = status;
++        event.clientIf = clientIf;
++        memcpy(&event.bda, bda, sizeof(bt_bdaddr_t));
++
++        if (gattctest) {
++            gattctest->SetGATTCTESTConnectionData(&event);
++            if (status == 0)
++            {
++                gattctest->SearchService(conn_id);
++            } else {
++             fprintf(stdout, "(%s): Open With error (%d)\n", __FUNCTION__, status);
++            }
++      }
++    }
++
++    void btgattc_close_cb(int conn_id, int status, int clientIf, bt_bdaddr_t* bda)
++    {
++        fprintf(stdout,"btgattc_close_cb  gattctest \n ");
++        AlertServiceMatches = false;
++        srvcMatching = false;
++        if (gattctestAlertData != NULL ) {
++             fprintf(stdout,"Diagnostic:(%s), freeing testAlert\n", __FUNCTION__);
++            if (gattctestAlertData->srvc_id != NULL) {
++                osi_free (gattctestAlertData->srvc_id);
++                gattctestAlertData->srvc_id = NULL;
++            }
++            if (gattctestAlertData->char_id != NULL) {
++                osi_free (gattctestAlertData->char_id);
++                gattctestAlertData->char_id = NULL;
++            }
++            if (gattctestAlertData->descr_id != NULL) {
++                osi_free (gattctestAlertData->descr_id);
++                gattctestAlertData->descr_id = NULL;
++            }
++            osi_free(gattctestAlertData);
++            gattctestAlertData = NULL;
++        }
++        if (gattctestServData != NULL ) {
++             fprintf(stdout,"Diagnostic:(%s), freeing testServerData\n", __FUNCTION__);
++            if (gattctestServData->srvc_id != NULL) {
++                osi_free (gattctestServData->srvc_id);
++                gattctestServData->srvc_id = NULL;
++            }
++            if (gattctestServData->char_id != NULL) {
++                osi_free (gattctestServData->char_id);
++                gattctestServData->char_id = NULL;
++            }
++            if (gattctestServData->descr_id != NULL) {
++                osi_free (gattctestServData->descr_id);
++                gattctestServData->descr_id = NULL;
++            }
++             osi_free(gattctestServData);
++             gattctestServData = NULL;
++        }
++    }
++
++    void btgattc_search_complete_cb(int conn_id, int status)
++    {
++         fprintf(stdout,"btgattc_search_complete_cb  conn_id %d, status %d \n ", conn_id,status);
++        if(status == 0) {
++           fprintf(stdout,"go for get db search\n");
++           gattctest->app_gatt->get_gatt_db(conn_id);
++        } else {
++           fprintf(stdout,"btgattc_search_complete_cb no result\n");
++        }
++    }
++
++    void btgattc_search_result_cb(int conn_id, btgatt_srvc_id_t *srvc_id)
++    {
++        char srvc_id_buf[(SRVCID_STR_LEN)];
++        fprintf(stdout,"%s: conn_id=%d srvc_id=%s ++ \n", __func__, conn_id,service_id_to_string(srvc_id, srvc_id_buf));
++
++        srvcMatching = MatchAlertServiceUUID(&srvc_id->id.uuid) ;
++        if( srvcMatching == true) {
++            if (gattctestServData == NULL ) {
++                 fprintf(stdout,"Return: Could not allocate service data\n");
++                return;
++            }
++            gattctestServData->conn_id = conn_id;
++            gattctestServData->srvc_id = (btgatt_srvc_id_t*) osi_malloc(sizeof (btgatt_srvc_id_t));
++            if(gattctestServData->srvc_id == NULL) {
++                fprintf(stdout,"Could not allocate memory to gattctestServData->srvc_id\n");
++                return;
++            }
++            memcpy(gattctestServData->srvc_id, srvc_id, sizeof (btgatt_srvc_id_t));
++
++             fprintf(stdout,"%s: Matching Service UUID in Search CB--\n", __func__);
++        } else {
++             fprintf(stdout,"%s: Service UUID in Search CB doesnt match--\n", __func__);
++        }
++        fprintf(stdout,"%s: --\n", __func__);
++    }
++
++
++    bool CompareParams(bt_uuid_t *uuid_dest, bt_uuid_t *uuid_src)
++    {
++        CHECK_PARAM(uuid_dest)
++        CHECK_PARAM(uuid_src)
++
++        for (int i = 0; i < 16; i++) {
++            if(uuid_dest->uu[i] != uuid_src->uu[i]){
++             fprintf(stdout, "(%s) UUID Failed Matches\n",__FUNCTION__);
++                return false;
++        }
++        }
++         fprintf(stdout,"(%s) UUID Matches\n",__FUNCTION__);
++        return true;
++    }
++
++    bool MatchAlertServiceUUID(bt_uuid_t *suuid)
++    {
++        CHECK_PARAM(suuid)
++        bt_uuid_t uuid;
++        uuid.uu[15] = 0x00;
++        uuid.uu[14] = 0x00;
++        uuid.uu[13] = 0x18;
++        uuid.uu[12] = 0x02;
++        uuid.uu[11] = 0x00;
++        uuid.uu[10] =0x00;
++        uuid.uu[9] = 0x10;
++        uuid.uu[8] = 0x00;
++        uuid.uu[7] =0x80;
++        uuid.uu[6] = 0x00;
++        uuid.uu[5] = 0x00;
++        uuid.uu[4] = 0x80;
++        uuid.uu[3] = 0x5f;
++        uuid.uu[2] = 0x9b;
++        uuid.uu[1] = 0x34;
++        uuid.uu[0] = 0xfb;
++
++	 fprintf(stdout,"(%s) Matching Service UUID\n", __FUNCTION__);
++        return CompareParams(&uuid, suuid);
++    }
++
++    bool MatchAlertCharUUID(bt_uuid_t *suuid)
++    {
++        CHECK_PARAM(suuid)
++        bt_uuid_t uuid;
++        uuid.uu[15] = 0x00;
++        uuid.uu[14] = 0x00;
++        uuid.uu[13] = 0x2a;
++        uuid.uu[12] = 0x06;
++        uuid.uu[11] = 0x00;
++        uuid.uu[10] =0x00;
++        uuid.uu[9] = 0x10;
++        uuid.uu[8] = 0x00;
++        uuid.uu[7] =0x80;
++        uuid.uu[6] = 0x00;
++        uuid.uu[5] = 0x00;
++        uuid.uu[4] = 0x80;
++        uuid.uu[3] = 0x5f;
++        uuid.uu[2] = 0x9b;
++        uuid.uu[1] = 0x34;
++        uuid.uu[0] = 0xfb;
++
++	 fprintf(stdout, "(%s) Matching Char UUID\n", __FUNCTION__);
++        return CompareParams(&uuid, suuid);
++     }
++
++
++    void btgattc_get_characteristic_cb(int conn_id, int status,
++                                     btgatt_srvc_id_t *srvc_id, btgatt_gatt_id_t *char_id,
++                                     int char_prop)
++    {
++    char srvc_id_buf[SRVCID_STR_LEN];
++    char char_id_buf[CHARID_STR_LEN];
++
++     fprintf(stdout,"%s: conn_id=%d status=%d srvc_id=%s char_id=%s, char_prop=%x ++ \n",
++       __func__, conn_id, status,
++    service_id_to_string(srvc_id, srvc_id_buf),
++    gatt_id_to_string(char_id, char_id_buf), char_prop);
++
++    if(AlertServiceMatches!= true ) {
++        gattctestAlertData = (ServiceData *) (osi_malloc(sizeof(ServiceData)));
++        if (gattctestAlertData == NULL ) {
++             fprintf(stdout, "Return: Could not allocate service data\n");
++            return;
++        }
++         fprintf(stdout, "%s, got characteristics successfully\n",__func__);
++
++
++         fprintf(stdout, "\Diagnostic: srvc_id->id.uuid is ++\n");
++        for (int j = 0; j < sizeof(srvc_id->id.uuid); j++) {
++              fprintf(stdout,  "%02x", srvc_id->id.uuid.uu[j]);
++         }
++
++         fprintf(stdout, "\Diagnostic: char_id->id.uuid is \n");
++        for (int j = 0; j < sizeof(char_id->uuid); j++) {
++              fprintf(stdout, "%02x", char_id->uuid.uu[j]);
++        }
++
++        AlertServiceMatches = MatchAlertCharUUID(&char_id->uuid)& MatchAlertServiceUUID(&srvc_id->id.uuid);
++        if(AlertServiceMatches == true){
++             fprintf(stdout, "Saving the Alert Level details\n");
++            gattctestAlertData->conn_id = conn_id;
++
++            gattctestAlertData->srvc_id = (btgatt_srvc_id_t*) osi_malloc(sizeof(btgatt_srvc_id_t));
++            if (gattctestAlertData->srvc_id == NULL) {
++                fprintf(stdout,"Could not allocate memory to gattctestAlertData->srvc_id \n");
++                return;
++            }
++            memcpy(gattctestAlertData->srvc_id, srvc_id, sizeof(btgatt_srvc_id_t));
++
++            gattctestAlertData->char_id = (btgatt_gatt_id_t*) osi_malloc(sizeof(btgatt_gatt_id_t));
++            if (gattctestAlertData->char_id == NULL) {
++                fprintf(stdout,"Could not allocate memory to gattctestAlertData->char_id \n");
++                return;
++            }
++            memcpy(gattctestAlertData->char_id, char_id, sizeof(btgatt_gatt_id_t));
++            fprintf(stdout, "%s, Return 1  -- \n", __func__);
++            return;
++            }
++        } else {
++             fprintf(stdout, "%s, All Characteristics fetched, no more characteristcs --\n", __func__);
++        }
++    }
++
++    void btgattc_get_descriptor_cb(int conn_id, int status,
++                                     btgatt_srvc_id_t *srvc_id, btgatt_gatt_id_t *char_id,
++                                     btgatt_gatt_id_t *descr_id)
++    {
++        char buf[UUID_STR_LEN];
++        char srvc_id_buf[SRVCID_STR_LEN];
++        char char_id_buf[CHARID_STR_LEN];
++
++        gattctestServData->conn_id = conn_id;
++        gattctestServData->srvc_id = (btgatt_srvc_id_t*) osi_malloc (sizeof(btgatt_srvc_id_t));
++        if (gattctestServData->srvc_id == NULL) {
++            fprintf(stdout,"Could not allocate memory to gattctestServData->srvc_id \n");
++            return;
++        }
++        memcpy(gattctestServData->srvc_id,srvc_id, (sizeof(btgatt_srvc_id_t)));
++
++        gattctestServData->char_id = (btgatt_gatt_id_t*)osi_malloc (sizeof(btgatt_gatt_id_t));
++        if (gattctestServData->char_id == NULL) {
++            fprintf(stdout,"Could not allocate memory to gattctestServData->char_id \n");
++            return;
++        }
++        memcpy(gattctestServData->char_id, char_id, sizeof(btgatt_gatt_id_t));
++        gattctestServData->descr_id = descr_id;
++
++         fprintf(stdout,"%s: conn_id=%d status=%d srvc_id=%s char_id=%s, descr_id=%s\n",
++               __func__, conn_id, status,
++              service_id_to_string(srvc_id, srvc_id_buf),
++              gatt_id_to_string(char_id, char_id_buf),
++              desc_id_to_string(descr_id, buf));
++
++        if(status == 0) {
++             fprintf(stdout, "%s, got descriptor successfully\n", __func__);
++            gattctest->app_gatt->get_descriptor(conn_id,srvc_id,char_id,descr_id);
++        } else {
++             fprintf(stdout,"%s, All Descriptors fetched, no more descriptors\n",__func__);
++        }
++    }
++
++    void btgattc_register_for_notification_cb(int conn_id, int registered,
++                                                int status, btgatt_srvc_id_t *srvc_id,
++                                                btgatt_gatt_id_t *char_id)
++    {
++        UNUSED
++    }
++
++    void btgattc_notify_cb(int conn_id, btgatt_notify_params_t *p_data)
++    {
++        UNUSED
++    }
++
++    void btgattc_read_characteristic_cb(int conn_id, int status,
++                                          btgatt_read_params_t *p_data)
++    {
++        char buf[MAX_READ_PARAMS_STR_LEN];
++
++         fprintf(stdout,"%s: conn_id=%d status=%d data=%s\n", __func__, conn_id,
++                status, read_param_to_string(p_data, buf));
++    }
++
++    void btgattc_write_characteristic_cb(int conn_id, int status,
++                                           btgatt_write_params_t *p_data)
++    {
++         fprintf(stdout,"btgattc_write_characteristic_cb status is %d conn_id %d \n ", status,conn_id);
++    }
++
++    void btgattc_read_descriptor_cb(int conn_id, int status, btgatt_read_params_t *p_data)
++    {
++
++    char buf[MAX_READ_PARAMS_STR_LEN];
++
++     fprintf(stdout,"%s: conn_id=%d status=%d data=%s\n", __func__, conn_id,
++           status, read_param_to_string(p_data, buf));
++
++    }
++
++    void btgattc_write_descriptor_cb(int conn_id, int status, btgatt_write_params_t *p_data)
++    {
++        UNUSED
++    }
++
++    void btgattc_execute_write_cb(int conn_id, int status)
++    {
++        UNUSED
++    }
++
++    void btgattc_remote_rssi_cb(int client_if,bt_bdaddr_t* bda, int rssi, int status)
++    {
++       UNUSED
++    }
++
++    void btgattc_advertise_cb(int status, int client_if)
++    {
++        UNUSED
++
++    }
++
++    void btgattc_configure_mtu_cb(int conn_id, int status, int mtu)
++    {
++        UNUSED
++    }
++
++    void btgattc_get_included_service_cb(int conn_id, int status,
++                                       btgatt_srvc_id_t *srvc_id, btgatt_srvc_id_t *incl_srvc_id)
++    {
++        UNUSED
++    }
++
++    void btgattc_scan_filter_cfg_cb(int action, int client_if, int status, int filt_type, int avbl_space)
++    {
++        UNUSED
++    }
++
++    void btgattc_scan_filter_param_cb(int action, int client_if, int status, int avbl_space)
++    {
++        UNUSED
++    }
++
++    void btgattc_scan_filter_status_cb(int action, int client_if, int status)
++    {
++        UNUSED
++    }
++
++    void btgattc_multiadv_enable_cb(int client_if, int status)
++    {
++        UNUSED
++    }
++
++    void btgattc_multiadv_update_cb(int client_if, int status)
++    {
++        UNUSED
++    }
++
++    void btgattc_multiadv_setadv_data_cb(int client_if, int status)
++    {
++        UNUSED
++    }
++
++    void btgattc_multiadv_disable_cb(int client_if, int status)
++    {
++        UNUSED
++    }
++
++    void btgattc_congestion_cb(int conn_id, bool congested)
++    {
++        UNUSED
++    }
++
++    void btgattc_batchscan_cfg_storage_cb(int client_if, int status)
++    {
++        UNUSED
++    }
++
++    void btgattc_batchscan_startstop_cb(int startstop_action, int client_if, int status)
++    {
++        UNUSED
++
++    }
++
++    void btgattc_batchscan_reports_cb(int client_if, int status, int report_format,
++        int num_records, int data_len, uint8_t *p_rep_data)
++    {
++        UNUSED
++    }
++
++    void btgattc_batchscan_threshold_cb(int client_if)
++    {
++        UNUSED
++    }
++
++    void btgattc_track_adv_event_cb(btgatt_track_adv_info_t *p_adv_track_info)
++    {
++        UNUSED
++    }
++
++    void btgattc_scan_parameter_setup_completed_cb(int client_if, btgattc_error_t status)
++    {
++        UNUSED
++    }
++
++    void btgattc_get_gatt_db_cb(int conn_id, btgatt_db_element_t *db, int count)
++    {
++          fprintf(stdout, "btgattc_get_gatt_db_cb conn_id is %d, count is %d\n", conn_id, count);
++
++          for(int i = 0; i < count ; i++) {
++             btgatt_db_element_t curr = db[i];
++             fprintf(stdout,"curr type is %d\n", curr.type);
++             switch(curr.type ) {
++
++                case BTGATT_DB_PRIMARY_SERVICE:
++                    srvcMatching = false;
++                    fprintf(stdout," id is %d \n", curr.id);
++                    fprintf(stdout," type is BTGATT_DB_PRIMARY_SERVICE  %d \n", curr.type);
++                     fprintf(stdout," uuid is \n");
++                    for (int j = 0; j < sizeof(curr.uuid); j++) {
++                      fprintf(stdout,  "%02x", curr.uuid.uu[j]);
++                    }
++                    fprintf(stdout,"\n");
++                    srvcMatching = MatchAlertServiceUUID(&curr.uuid) ;
++                    if( srvcMatching == true) {
++                         if (gattctestServData == NULL ) {
++                              fprintf(stdout,"Return: Could not allocate service data\n");
++                             return;
++                         }
++                         gattctestServData->conn_id = conn_id;
++                         gattctestServData->srvc_id = (btgatt_srvc_id_t*) osi_malloc(sizeof (btgatt_srvc_id_t));
++                         if (gattctestServData->srvc_id == NULL) {
++                            fprintf(stdout,"Could not allocate memory to "
++                                "gattctestServData->srvc_id \n");
++                            return;
++                         }
++                         CpUUID(&gattctestServData->srvc_id->id.uuid, &(curr.uuid));
++                         gattctestServData->srvc_id->id.inst_id = curr.id;
++
++                          fprintf(stdout,"%s: Matching Service UUID in Search CB--\n", __func__);
++                     } else {
++                          fprintf(stdout, "%s: Service UUID in Search CB doesnt match--\n", __func__);
++                     }
++
++                      fprintf(stdout," \n");
++                     fprintf(stdout," attribute handle is %d \n", curr.attribute_handle);
++                      fprintf(stdout," start handle is %d \n", curr.start_handle);
++                      fprintf(stdout," end handle is %d \n", curr.end_handle);
++                      fprintf(stdout," properties are %d \n", curr.properties);
++
++                     break;
++
++             case BTGATT_DB_SECONDARY_SERVICE:
++
++                     fprintf(stdout," id is %d \n", curr.id);
++                      fprintf(stdout," type is BTGATT_DB_SECONDARY_SERVICE %d \n", curr.type);
++                      fprintf(stdout," uuid is \n");
++                     for (int j = 0; j < sizeof(curr.uuid); j++) {
++                        fprintf(stdout,  "%02x", curr.uuid.uu[j]);
++                        fprintf(stdout,  "%02x", curr.uuid.uu[j]);
++                     }
++
++                      fprintf(stdout," \n");
++                      fprintf(stdout," attribute handle is %d \n", curr.attribute_handle);
++                      fprintf(stdout," start handle is %d \n", curr.start_handle);
++                     fprintf(stdout," end handle is %d \n", curr.end_handle);
++                      fprintf(stdout," properties are %d \n", curr.properties);
++                     break;
++
++             case BTGATT_DB_CHARACTERISTIC:
++
++                      fprintf(stdout," id is %d \n", curr.id);
++                      fprintf(stdout," type is  BTGATT_DB_CHARACTERISTIC %d \n", curr.type);
++                      fprintf(stdout," uuid is \n");
++                     for (int j = 0; j < sizeof(curr.uuid); j++) {
++                           fprintf(stdout,  "%02x", curr.uuid.uu[j]);
++                     }
++                     AlertServiceMatches = MatchAlertCharUUID(&curr.uuid) && srvcMatching;
++                     if(AlertServiceMatches == true){
++                          fprintf(stdout, "Saving the Alert Level details\n");
++                         gattctestAlertData = (ServiceData *) (osi_malloc(sizeof(ServiceData)));
++                         if (gattctestAlertData == NULL) {
++                            fprintf(stdout,"Could not allocate memory to gattctestAlertData \n");
++                            return;
++                         }
++                         gattctestAlertData->conn_id = conn_id;
++                         gattctestAlertData->srvc_id = (btgatt_srvc_id_t*) osi_malloc(sizeof(btgatt_srvc_id_t));
++                         gattctestAlertData->char_id = (btgatt_gatt_id_t*) osi_malloc(sizeof(btgatt_gatt_id_t));
++                          fprintf(stdout," \n");
++                          fprintf(stdout," attribute handle is %d \n", curr.attribute_handle);
++                         gattctestAlertData->handle = curr.attribute_handle;
++                          fprintf(stdout," start handle is %d \n", curr.start_handle);
++                          fprintf(stdout," end handle is %d \n", curr.end_handle);
++                          fprintf(stdout," properties are %d \n", curr.properties);
++                     }
++                      else {
++                          fprintf(stdout, "%s, All Characteristics fetched, no more characteristcs --\n", __func__);
++                     }
++                     break;
++
++             case BTGATT_DB_DESCRIPTOR:
++
++                     fprintf(stdout," id is %d \n", curr.id);
++                     fprintf(stdout," type is BTGATT_DB_DESCRIPTOR %d \n", curr.type);
++                     fprintf(stdout," uuid is \n");
++                    for (int j = 0; j < sizeof(curr.uuid); j++) {
++                          fprintf(stdout,  "%02x", curr.uuid.uu[j]);
++                    }
++
++                     fprintf(stdout," \n");
++                     fprintf(stdout," attribute handle is %d \n", curr.attribute_handle);
++                     fprintf(stdout," start handle is %d \n", curr.start_handle);
++                     fprintf(stdout," end handle is %d \n", curr.end_handle);
++                     fprintf(stdout," properties are %d \n", curr.properties);
++                    break;
++          }
++ 
++       }
++
++   }
++
++};
++
++class gattctestServerCallback :public BluetoothGattServerCallback
++{
++
++    public:
++
++    void gattServerRegisterAppCb(int status, int server_if, bt_uuid_t *uuid) {
++
++        fprintf(stdout,"gattServerRegisterAppCb status is %d, serverif is %d \n ",
++               status, server_if);
++
++       if (status == BT_STATUS_SUCCESS)
++       {
++          GattsRegisterAppEvent rev;
++          rev.event_id = RSP_ENABLE_EVENT;
++          rev.server_if = server_if;
++          memcpy(&rev.uuid, uuid,sizeof(bt_uuid_t));
++          rev.status = status;
++           fprintf(stdout," set gattctest data \n");
++          gattctest->SetGATTCTESTAppData(&rev);
++          gattctest->AddService();
++       } else {
++          fprintf (stdout,"(%s) Failed to registerApp, %d \n",__FUNCTION__, server_if);
++       }
++    }
++
++    void btgatts_connection_cb(int conn_id, int server_if, int connected, bt_bdaddr_t *bda)
++    {
++        fprintf(stdout,"btgatts_connection_cb  gattctest \n ");
++    }
++
++    void btgatts_service_added_cb(int status, int server_if,
++                                btgatt_srvc_id_t *srvc_id, int srvc_handle)
++    {
++        fprintf(stdout,"btgatts_service_added_cb \n");
++       if (status == BT_STATUS_SUCCESS) {
++          GattsServiceAddedEvent event;
++           event.event_id =RSP_ENABLE_EVENT;
++           event.status = status;
++           event.server_if = server_if;
++           memcpy(&event.srvc_id, srvc_id, sizeof(btgatt_srvc_id_t));
++           event.srvc_handle = srvc_handle;
++           gattctest->SetGATTCTESTSrvcData(&event);
++           gattctest->AddCharacteristics();
++       } else {
++            fprintf(stdout, "(%s) Failed to Add_Service %d ",__FUNCTION__, server_if);
++       }
++    }
++
++    void btgatts_included_service_added_cb(int status, int server_if, int srvc_handle,
++                                               int incl_srvc_handle)
++    {
++        UNUSED;
++    }
++
++    void btgatts_characteristic_added_cb(int status, int server_if, bt_uuid_t *char_id,
++                                                  int srvc_handle, int char_handle)
++    {
++        fprintf(stdout,"btgatts_characteristic_added_cb \n");
++       if (status == BT_STATUS_SUCCESS) {
++           GattsCharacteristicAddedEvent event;
++           event.event_id = RSP_ENABLE_EVENT;
++           event.status = status;
++           event.server_if = server_if;
++           memcpy(&event.char_id, char_id, sizeof(bt_uuid_t));
++           event.srvc_handle = srvc_handle;
++           event.char_handle = char_handle;
++           gattctest->SetGATTCTESTCharacteristicData(&event);
++           gattctest->AddDescriptor();
++       } else {
++            fprintf(stdout, "(%s) Failed to Add Characteristics %d ",__FUNCTION__, server_if);
++       }
++    }
++
++    void btgatts_descriptor_added_cb(int status, int server_if, bt_uuid_t *descr_id,
++                                              int srvc_handle, int descr_handle)
++    {
++        fprintf(stdout,"btgatts_descriptor_added_cb \n");
++       if (status == BT_STATUS_SUCCESS) {
++           GattsDescriptorAddedEvent event;
++           event.event_id = RSP_ENABLE_EVENT;
++           event.status = status;
++           event.server_if = server_if;
++           memcpy(&event.descr_id, descr_id,sizeof(bt_uuid_t));
++           event.srvc_handle = srvc_handle;
++           event.descr_handle= descr_handle;
++           gattctest->SetGATTCTESTDescriptorData(&event);
++           gattctest->StartService();
++        } else {
++            fprintf(stdout, "(%s) Failed to add descriptor %d \n",__FUNCTION__, server_if);
++        }
++    }
++
++    void btgatts_service_started_cb(int status, int server_if, int srvc_handle)
++    {
++        fprintf(stdout,"btgatts_service_started_cb \n");
++      // gattctest->RegisterClient();
++    }
++
++    void btgatts_service_stopped_cb(int status, int server_if, int srvc_handle)
++    {
++        fprintf(stdout,"btgatts_service_stopped_cb \n");
++
++      if (gattctest) {
++          if (!status)
++              gattctest->DeleteService();
++      }
++       fprintf(stdout,  "GATTCTEST Service stopped successfully, deleting the service");
++    }
++
++    void btgatts_service_deleted_cb(int status, int server_if, int srvc_handle)
++    {
++      fprintf(stdout,"btgatts_service_deleted_cb \n");
++
++     if (gattctestAlertData != NULL ) {
++          fprintf(stdout,"Diagnostic:(%s), freeing testAlert\n", __FUNCTION__);
++         if (gattctestAlertData->srvc_id != NULL) {
++             osi_free (gattctestAlertData->srvc_id);
++	     gattctestAlertData->srvc_id = NULL;
++	 }
++         if (gattctestAlertData->char_id != NULL) {
++	     osi_free (gattctestAlertData->char_id);
++	     gattctestAlertData->char_id = NULL;
++	 }
++         free(gattctestAlertData);
++	 gattctestAlertData = NULL;
++      }
++      if (gattctest) {
++          if (!status) {
++              gattctest->CleanUp(server_if);
++              delete gattctest;
++              gattctest = NULL;
++          }
++      }
++       fprintf(stdout,"GATTCTEST Service stopped & Unregistered successfully\n");
++    }
++
++    void btgatts_request_read_cb(int conn_id, int trans_id, bt_bdaddr_t *bda, int attr_handle,
++                                          int offset, bool is_long)
++    {
++       UNUSED;
++    }
++
++    void btgatts_request_write_cb(int conn_id, int trans_id, bt_bdaddr_t *bda, int attr_handle,
++                                          int offset, int length, bool need_rsp, bool is_prep,
++                                          uint8_t* value)
++    {
++        fprintf(stdout,"onCharacteristicWriteRequest \n");
++       GattsRequestWriteEvent event;
++       event.event_id = RSP_ENABLE_EVENT;
++       event.conn_id = conn_id;
++       event.trans_id = trans_id;
++       memcpy(&event.bda, bda, sizeof(bt_uuid_t));
++       event.attr_handle = attr_handle;
++       event.offset = offset;
++       event.length = length;
++       event.need_rsp = need_rsp;
++       event.is_prep = is_prep;
++       event.value = value;
++       gattctest->SendResponse(&event);
++    }
++
++    void btgatts_request_exec_write_cb(int conn_id, int trans_id,
++                                                  bt_bdaddr_t *bda, int exec_write)
++    {
++       UNUSED;
++    }
++
++    void btgatts_response_confirmation_cb(int status, int handle)
++    {
++       UNUSED;
++    }
++
++    void btgatts_indication_sent_cb(int conn_id, int status)
++    {
++       UNUSED;
++    }
++
++    void btgatts_congestion_cb(int conn_id, bool congested)
++    {
++       UNUSED;
++    }
++
++    void btgatts_mtu_changed_cb(int conn_id, int mtu)
++    {
++       UNUSED;
++    }
++};
++
++gattctestServerCallback *gattctestServerCb = NULL;
++gattctestClientCallback *gattctestClientCb = NULL;
++
++GattcTest::GattcTest(btgatt_interface_t *gatt_itf, Gatt* gatt)
++{
++     fprintf(stdout,"gattctest instantiated ");
++    //gatt_interface = gatt_itf;
++    gatt_interface = gatt->GetGattInterface();
++    app_gatt = gatt;
++    gattctestClientCb = new gattctestClientCallback;
++    gattctestServerCb = new gattctestServerCallback;
++}
++
++GattcTest::~GattcTest()
++{
++     fprintf(stdout, "(%s) GATTCTEST DeInitialized\n",__FUNCTION__);
++    delete(gattctestClientCb);
++    delete(gattctestServerCb);
++}
++
++bool GattcTest::CopyUUID(bt_uuid_t *uuid)
++{
++    CHECK_PARAM(uuid)
++    for (int i = 0; i < 16; i++) {
++        uuid->uu[i] = 0x30;
++    }
++    return true;
++}
++
++bool GattcTest::CopyClientUUID(bt_uuid_t *uuid)
++{
++    CHECK_PARAM(uuid)
++    uuid->uu[0] = 0xff;
++    for (int i = 1; i < 16; i++) {
++        uuid->uu[i] = 0x30;
++    }
++    return true;
++}
++
++bool GattcTest::CopyGenUUID(bt_uuid_t *uuid)
++{
++    CHECK_PARAM(uuid)
++     uuid->uu[0] = 0xfb;
++     uuid->uu[1] = 0x34;
++     uuid->uu[2] = 0x9b;
++     uuid->uu[3] = 0x5f;
++     uuid->uu[4] = 0x80;
++     uuid->uu[5] =0x00;
++     uuid->uu[6] = 0x00;
++     uuid->uu[7] = 0x80;
++     uuid->uu[8] =0x00;
++     uuid->uu[9] = 0x10;
++     uuid->uu[10] = 0x00;
++     uuid->uu[11] = 0x00;
++     uuid->uu[12] = 0x00;
++     uuid->uu[13] = 0x00;
++     uuid->uu[14] = 0x00;
++     uuid->uu[15] = 0x00;
++
++    return true;
++}
++
++
++bool GattcTest::CopyParams(bt_uuid_t *uuid_dest, bt_uuid_t *uuid_src)
++{
++    CHECK_PARAM(uuid_dest)
++    CHECK_PARAM(uuid_src)
++
++    for (int i = 0; i < 16; i++) {
++        uuid_dest->uu[i] = uuid_src->uu[i];
++    }
++    return true;
++}
++
++bool GattcTest::MatchParams(bt_uuid_t *uuid_dest, bt_uuid_t *uuid_src)
++{
++    CHECK_PARAM(uuid_dest)
++    CHECK_PARAM(uuid_src)
++
++    for (int i = 0; i < 16; i++) {
++        if(uuid_dest->uu[i] != uuid_src->uu[i]) {
++             fprintf(stdout, "(%s) UUID Failed Matches\n",__FUNCTION__);
++            return false;
++        }
++    }
++     fprintf(stdout, "(%s) UUID Matches\n",__FUNCTION__);
++    return true;
++}
++
++bool GattcTest::EnableGATTCTEST()
++{
++    fprintf(stdout, "(%s) Enable GATTCTEST Initiated \n",__FUNCTION__);
++    CopyClientUUID(&client_uuid);
++    CopyGenUUID(&gen_uuid);
++    return gattctest->RegisterClient();
++}
++
++bool GattcTest::DisableGATTCTEST()
++{
++     fprintf(stdout, "(%s) Disable GATTCTEST Initiated",__FUNCTION__);
++
++      if (gattctest) {
++          UnregisterClient(GetGATTCTESTClientAppData()->clientIf);
++          delete gattctest;
++          gattctest = NULL;
++      }
++      return true;
++}
++
++bool GattcTest::RegisterApp()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    bt_uuid_t server_uuid = GetGATTCTESTAttrData()->server_uuid;
++    fprintf(stdout,"reg app addr is %d \n", GetGATTCTESTAttrData()->server_uuid);
++    app_gatt->RegisterServerCallback(gattctestServerCb,&GetGATTCTESTAttrData()->server_uuid);
++    return app_gatt->register_server(&server_uuid) == BT_STATUS_SUCCESS;
++}
++
++bool GattcTest::RegisterClient()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    app_gatt->RegisterClientCallback(gattctestClientCb,&client_uuid);
++    return app_gatt->register_client(&client_uuid) == BT_STATUS_SUCCESS;
++}
++
++bool GattcTest::UnregisterClient(int client_if)
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    app_gatt->UnRegisterClientCallback(client_if);
++    return app_gatt->unregister_client(client_if) == BT_STATUS_SUCCESS;
++}
++
++bool GattcTest::ClientSetAdvData(char *str)
++{
++    bt_status_t        Ret;
++    bool              SetScanRsp        = false;
++    bool              IncludeName       = true;
++    bool              IncludeTxPower    = false;
++    int               min_conn_interval = RSP_MIN_CI;
++    int               max_conn_interval = RSP_MAX_CI;
++
++    return (app_gatt->set_adv_data(GetGATTCTESTClientAppData()->clientIf, SetScanRsp,
++                                                IncludeName, IncludeTxPower, min_conn_interval,
++                                                max_conn_interval, 0,strlen(str), str,
++                                                strlen(str), str, 0,NULL) == BT_STATUS_SUCCESS);
++}
++
++void GattcTest::CleanUp(int server_if)
++{
++    UnregisterServer(server_if);
++    UnregisterClient(GetGATTCTESTClientAppData()->clientIf);
++}
++
++bool GattcTest::UnregisterServer(int server_if)
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "Gatt Interface Not present");
++        return false;
++    }
++    app_gatt->UnRegisterServerCallback(server_if);
++    return app_gatt->unregister_server(server_if) == BT_STATUS_SUCCESS;
++}
++
++bool GattcTest::StartAdvertisement()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++     fprintf(stdout,  "(%s) Listening on the interface (%d) ",__FUNCTION__,
++            GetGATTCTESTAppData()->server_if);
++    //SetDeviceState(WLAN_INACTIVE);
++    return app_gatt->listen(GetGATTCTESTClientAppData()->clientIf, true);
++}
++
++bool GattcTest::StartScan()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    ALOGE(LOGTAG  "(%s) start scan",__FUNCTION__);
++    return app_gatt->scan(true, GetGATTCTESTClientAppData()->clientIf);
++}
++
++bool GattcTest::StopScan()
++{
++     fprintf(stdout,"Stop scan GattInterface  =%p\n",GetGattInterface());
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    ALOGE(LOGTAG  "(%s) stop scan",__FUNCTION__);
++     fprintf(stdout,"stopScan app_gatt =%p clientif =%d \n",app_gatt, GetGATTCTESTClientAppData()->clientIf);
++    return app_gatt->scan(false, GetGATTCTESTClientAppData()->clientIf);
++}
++
++bool GattcTest::Connect(const bt_bdaddr_t *bd_addr)
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    ALOGE(LOGTAG  "(%s) Connect",__FUNCTION__);
++    return app_gatt->clientConnect(GetGATTCTESTClientAppData()->clientIf,bd_addr,true,GATT_TRANSPORT_LE);
++
++}
++
++bool GattcTest::Disconnect(const bt_bdaddr_t *bd_addr)
++{
++   if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    ALOGE(LOGTAG  "(%s) Disconnect",__FUNCTION__);
++    return app_gatt->clientDisconnect(GetGATTCTESTConnectionData()->clientIf,bd_addr,GetGATTCTESTConnectionData()->conn_id);
++}
++
++bool GattcTest::SendAlert(int alert_level)
++{
++    char buf[UUID_STR_LEN];
++    char srvc_id_buf[SRVCID_STR_LEN];
++    char char_id_buf[CHARID_STR_LEN];
++
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++
++    if (gattctestClientCb->foundAlertService() == true) {
++
++
++         fprintf(stdout, "sending alert now alert level =%d \n", alert_level);
++
++        if (alert_level == LOW_ALERT ) {
++             fprintf(stdout, "in LOW_ALERT %s\n", __func__);
++            return gattctest->app_gatt->write_characteristic(gattctestAlertData->conn_id,gattctestAlertData->handle,1,2,0,"00");
++        } else if (alert_level == MID_ALERT) {
++             fprintf(stdout, "in MID_ALERT %s\n", __func__);
++            return app_gatt->write_characteristic(gattctestAlertData->conn_id,gattctestAlertData->handle,1,2,0,"01");
++        } else if (alert_level == HIGH_ALERT) {
++             fprintf(stdout, "in HIGH_ALERT %s\n", __func__);
++            return gattctest->app_gatt->write_characteristic(gattctestAlertData->conn_id,gattctestAlertData->handle,1,2,0,"02");
++        }
++
++    } else {
++        fprintf(stdout," Matching Alert not found - dont send alert, try disc and connect again\n");
++    }
++    return false;
++}
++
++bool GattcTest::SearchService(int conn_id)
++{
++     if (GetGattInterface() == NULL) {
++         ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++         return false;
++     }
++     ALOGE(LOGTAG  "(%s) SearchService",__FUNCTION__);
++
++    if(!gattctestServData) { //To be freed up at disconnect/off.
++        gattctestServData = (ServiceData *) (osi_malloc(sizeof(ServiceData)));
++        memset(gattctestServData, 0, sizeof(ServiceData));
++    }
++    return app_gatt->search_service(conn_id, NULL);
++}
++
++bool GattcTest::SendResponse(GattsRequestWriteEvent *event)
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present \n",__FUNCTION__);
++        return false;
++    }
++    CHECK_PARAM(event)
++    btgatt_response_t att_resp;
++    int response = -1;
++    memset(att_resp.attr_value.value,0,BTGATT_MAX_ATTR_LEN);
++    memcpy(att_resp.attr_value.value, event->value, event->length);
++    att_resp.attr_value.handle = event->attr_handle;
++    att_resp.attr_value.offset = event->offset;
++    att_resp.attr_value.len = event->length;
++    att_resp.attr_value.auth_req = 0;
++
++    if(!strncasecmp((const char *)(event->value), "on", 2)) {
++        response = 0;
++    } else {
++        response = -1;
++    }
++
++     fprintf(stdout, "(%s) Sending GATTCTEST response to write (%d) value (%s) State (%d)",__FUNCTION__,
++            GetGATTCTESTAppData()->server_if, event->value,GetDeviceState());
++
++    return app_gatt->send_response(event->conn_id, event->trans_id,
++                                                         response, &att_resp);
++}
++
++bool GattcTest::HandleWlanOn()
++{
++    BtEvent *event = new BtEvent;
++    CHECK_PARAM(event);
++    event->event_id = SKT_API_IPC_MSG_WRITE;
++    event->bt_ipc_msg_event.ipc_msg.type = BT_IPC_REMOTE_START_WLAN;
++    event->bt_ipc_msg_event.ipc_msg.status = INITIATED;
++    StopAdvertisement();
++     fprintf(stdout, "(%s) Posting wlan start to main thread \n",__FUNCTION__);
++    PostMessage (THREAD_ID_MAIN, event);
++    return true;
++}
++
++bool GattcTest::StopAdvertisement()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++     fprintf(stdout, "(%s) Stopping listen on the interface (%d) \n",__FUNCTION__,
++            GetGATTCTESTClientAppData()->clientIf);
++    return app_gatt->listen(GetGATTCTESTClientAppData()->clientIf, false);
++}
++
++bool GattcTest::AddService()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    btgatt_srvc_id_t srvc_id;
++    srvc_id.id.inst_id = 0;   // 1 instance
++    srvc_id.is_primary = 1;   // Primary addition
++    srvc_id.id.uuid = GetGATTCTESTAttrData()->service_uuid;
++    return app_gatt->add_service(GetGATTCTESTAppData()->server_if, &srvc_id,4)
++                                                        ==BT_STATUS_SUCCESS;
++}
++
++bool GattcTest::DisconnectServer()
++{
++    int server_if = GetGATTCTESTConnectionData()->clientIf;
++    bt_bdaddr_t bda;
++    memcpy(&bda, &(GetGATTCTESTConnectionData()->bda),sizeof(bt_bdaddr_t));
++    int conn_id = GetGATTCTESTConnectionData()->conn_id;
++     fprintf(stdout,  "(%s) Disconnecting interface (%d), connid (%d) ",__FUNCTION__,
++            server_if, conn_id);
++    return app_gatt->serverDisconnect(server_if, &bda, conn_id) == BT_STATUS_SUCCESS;
++}
++
++bool GattcTest::DeleteService()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    bool status = false;
++    int srvc_handle = GetGATTCTESTSrvcData()->srvc_handle;
++    return app_gatt->delete_service(GetGATTCTESTAppData()->server_if,
++                                                            srvc_handle) == BT_STATUS_SUCCESS;
++}
++
++bool GattcTest::AddCharacteristics()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    bt_uuid_t char_uuid;
++    CopyParams(&char_uuid, &(GetGATTCTESTSrvcData()->srvc_id.id.uuid));
++    int srvc_handle = GetGATTCTESTSrvcData()->srvc_handle;
++    int server_if = GetGATTCTESTSrvcData()->server_if;
++     fprintf(stdout,  "(%s) Adding Characteristics server_if (%d), srvc_handle (%d) \n",
++            __FUNCTION__, server_if,srvc_handle);
++    return app_gatt->add_characteristic(server_if, srvc_handle, &char_uuid,
++                                                            GATT_PROP_WRITE, GATT_PERM_WRITE)
++                                                            ==BT_STATUS_SUCCESS;
++}
++
++bool GattcTest::AddDescriptor(void)
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++
++    bt_uuid_t desc_uuid;
++    desc_uuid = GetGATTCTESTAttrData()->descriptor_uuid;
++    int srvc_handle = GetGATTCTESTSrvcData()->srvc_handle;
++    return app_gatt->add_descriptor(GetGATTCTESTAppData()->server_if,
++                                                        srvc_handle, &desc_uuid,
++                                                        GATT_PERM_READ) == BT_STATUS_SUCCESS;
++}
++
++bool GattcTest::StartService()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++
++    int srvc_handle = GetGATTCTESTSrvcData()->srvc_handle;
++    return app_gatt->start_service(GetGATTCTESTAppData()->server_if,
++                                                        srvc_handle, GATT_TRANSPORT_LE)
++                                                        == BT_STATUS_SUCCESS;
++}
++
++bool GattcTest::StopService()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++
++    int srvc_handle = GetGATTCTESTSrvcData()->srvc_handle;
++    return app_gatt->stop_service(GetGATTCTESTAppData()->server_if,
++                                                        srvc_handle) == BT_STATUS_SUCCESS;
++}
+diff --git a/qcom-opensource/bt/bt-app/gattstest/include/GattsTest.hpp b/qcom-opensource/bt/bt-app/gattstest/include/GattsTest.hpp
+new file mode 100644
+index 000000000000..8335587221c6
+--- /dev/null
++++ b/qcom-opensource/bt/bt-app/gattstest/include/GattsTest.hpp
+@@ -0,0 +1,236 @@
++/*
++ * Copyright (c) 2017, The Linux Foundation. All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are
++ * met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above
++ *       copyright notice, this list of conditions and the following
++ *       disclaimer in the documentation and/or other materials provided
++ *       with the distribution.
++ *     * Neither the name of The Linux Foundation nor the names of its
++ *       contributors may be used to endorse or promote products derived
++ *       from this software without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
++ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
++ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
++ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
++ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
++ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
++ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
++ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#ifndef GATTSTEST_APP_H
++#define GATTSTEST_APP_H
++
++#pragma once
++
++#include <hardware/bluetooth.h>
++
++#include "osi/include/log.h"
++#include "osi/include/thread.h"
++#include <stdio.h>
++#include "osi/include/config.h"
++#include "ipc.h"
++#include "GattsTest.hpp"
++#include "Gatt.hpp"
++
++#define GATTSTEST_MIN_CI           (100)
++#define GATTSTEST_MAX_CI           (1000)
++
++#define GATT_PROP_READ       (0x02)
++#define GATT_PROP_WRITE      (0x08)
++
++#define GATT_PERM_READ       (0x01)
++#define GATT_PERM_WRITE      (0x10)
++
++
++
++#define LOGTAG "GATTSTEST "
++
++
++static char *arr_to_string(const uint8_t *v, int size, char *buf, int out_size)
++{
++int limit = size;
++int i;
++
++if (out_size > 0) {
++*buf = '\0';
++if (size >= 2 * out_size)
++limit = (out_size - 2) / 2;
++
++for (i = 0; i < limit; ++i)
++snprintf(buf + 2 * i,200, "%02x", v[i]);
++
++/* output buffer not enough to hold whole field fill with ...*/
++if (limit < size)
++snprintf(buf + 2 * i,200, "...");
++}
++
++fprintf(stdout,"\nconverted to %s \n",buf);
++return buf;
++}
++
++
++/* Remote start profile support */
++typedef struct {
++    int event_id;
++    bt_uuid_t server_uuid;
++    bt_uuid_t client_uuid;
++    bt_uuid_t service_uuid;
++    bt_uuid_t characteristics_uuid;
++    bt_uuid_t descriptor_uuid;
++} GattsTestEnableEvent;
++
++
++class Gatt;
++class GattsTest {
++    private:
++        config_t *config;
++        int wlan_state;
++        bool isAdvertising;
++
++        GattsTestEnableEvent attr;
++        GattcRegisterAppEvent app_client_if;
++        GattsRegisterAppEvent app_if;
++        GattsServiceAddedEvent srvc_data;
++        GattsCharacteristicAddedEvent char_data;
++        GattsDescriptorAddedEvent desc_data;
++        GattsConnectionEvent conn_data;
++        GattsOpenEvent client_conn_data;
++        btgatt_interface_t *gatt_interface;
++        Gatt *app_gatt;
++        bool isClientRegistered;
++        bool isServerRegistered;
++
++    public:
++        GattsTest(btgatt_interface_t *, Gatt *);
++        ~GattsTest();
++
++        bool EnableGATTSTEST();
++        bool DisableGATTSTEST();
++        inline btgatt_interface_t* GetGattInterface()
++        {
++            return gatt_interface;
++        }
++        inline int GetDeviceState()
++        {
++            fprintf(stdout, "(%s) WLAN Current State (%d) \n",__FUNCTION__, wlan_state);
++            return wlan_state;
++        }
++        inline void SetDeviceState(int currentstate)
++        {
++            fprintf(stdout, "(%s) WLAN Prev State (%d) New State(%d) \n"
++                   ,__FUNCTION__, wlan_state, currentstate);
++            wlan_state = currentstate;
++        }
++        inline void SetGATTSTESTClientAppData(GattcRegisterAppEvent *event)
++        {
++            memset(&app_client_if, 0, sizeof(app_client_if));
++            memcpy(&app_client_if, event, sizeof(GattcRegisterAppEvent));
++        }
++        inline GattcRegisterAppEvent* GetGATTSTESTClientAppData()
++        {
++            return &app_client_if;
++        }
++        inline void SetGATTSTESTAttrData(GattsTestEnableEvent *attrib)
++        {
++            memset (&attr, 0, sizeof(GattsTestEnableEvent));
++            memcpy (&attr, attrib, sizeof(GattsTestEnableEvent));
++        }
++        inline GattsTestEnableEvent* GetGATTSTESTAttrData()
++        {
++            return &attr;
++        }
++        inline void SetGATTSTESTAppData(GattsRegisterAppEvent *event)
++        {
++            memset(&app_if, 0, sizeof(GattsRegisterAppEvent));
++            memcpy(&app_if, event, sizeof(GattsRegisterAppEvent));
++        }
++        inline GattsRegisterAppEvent* GetGATTSTESTAppData()
++        {
++            return &app_if;
++        }
++        inline void SetGATTSTESTSrvcData(GattsServiceAddedEvent *event)
++        {
++            memset(&srvc_data, 0, sizeof(GattsServiceAddedEvent));
++            memcpy(&srvc_data, event, sizeof(GattsServiceAddedEvent));
++        }
++        inline GattsServiceAddedEvent* GetGattsTestSrvcData()
++        {
++            return &srvc_data;
++        }
++        inline void SetGATTSTESTCharacteristicData(GattsCharacteristicAddedEvent
++                *event)
++        {
++            memset(&char_data, 0, sizeof(GattsCharacteristicAddedEvent));
++            memcpy(&char_data, event, sizeof(GattsCharacteristicAddedEvent));
++        }
++        inline GattsCharacteristicAddedEvent* GetGATTSTESTCharacteristicData()
++        {
++            return &char_data;
++        }
++        inline void SetGATTSTESTDescriptorData(GattsDescriptorAddedEvent *event)
++        {
++            memset(&desc_data, 0, sizeof(GattsDescriptorAddedEvent));
++            memcpy(&desc_data, event, sizeof(GattsDescriptorAddedEvent));
++        }
++        inline GattsDescriptorAddedEvent* GetGATTSTESTDescriptorData()
++        {
++            return &desc_data;
++        }
++        inline void SetGATTSTESTConnectionData(GattsConnectionEvent *event)
++        {
++            memset(&conn_data, 0, sizeof(GattsConnectionEvent));
++            memcpy(&conn_data, event, sizeof(GattsConnectionEvent));
++        }
++        inline GattsConnectionEvent* GetGATTSTESTConnectionData()
++        {
++            return &conn_data;
++        }
++        inline void SetGATTSTESTClientConnectionData(GattsOpenEvent *event)
++        {
++            memset(&client_conn_data, 0, sizeof(GattsOpenEvent));
++            memcpy(&client_conn_data, event, sizeof(GattsOpenEvent));
++        }
++        inline GattsOpenEvent* GetGATTSTESTClientConnectionData()
++        {
++            return &client_conn_data;
++        }
++
++        bool SendResponse(GattsRequestWriteEvent *);
++        bool CopyUUID(bt_uuid_t *);
++        bool CopyClientUUID(bt_uuid_t *);
++        bool CopyAlertServUUID(bt_uuid_t *);
++        bool CopyAlertCharUUID(bt_uuid_t *);
++        bool CopyAlertDescUUID(bt_uuid_t *);
++        bool ClientSetAdvData(char *);
++        bool CopyParams(bt_uuid_t *, bt_uuid_t *);
++        bool MatchParams(bt_uuid_t *, bt_uuid_t *);
++        bool RegisterApp(void);
++        bool DisconnectServer(void);
++        bool UnregisterServer(int);
++        bool RegisterClient(void);
++        bool UnregisterClient(int);
++        bool StartAdvertisement(void);
++        bool StopAdvertisement(void);
++        bool AddService(void);
++        bool AddCharacteristics(void);
++        bool AddDescriptor(void);
++        bool StartService(void);
++        bool StopService(void);
++        bool DeleteService(void);
++        bool HandleWlanOn(void);
++        void CleanUp(int);
++        bool getIsAdvertising();
++        void setIsAdvertising(bool);
++};
++#endif
++
+diff --git a/qcom-opensource/bt/bt-app/gattstest/src/GattsTest.cpp b/qcom-opensource/bt/bt-app/gattstest/src/GattsTest.cpp
+new file mode 100755
+index 000000000000..daa95a20225f
+--- /dev/null
++++ b/qcom-opensource/bt/bt-app/gattstest/src/GattsTest.cpp
+@@ -0,0 +1,873 @@
++/*
++ * Copyright (c) 2017, The Linux Foundation. All rights reserved.
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are
++ * met:
++ *     * Redistributions of source code must retain the above copyright
++ *       notice, this list of conditions and the following disclaimer.
++ *     * Redistributions in binary form must reproduce the above
++ *       copyright notice, this list of conditions and the following
++ *       disclaimer in the documentation and/or other materials provided
++ *       with the distribution.
++ *     * Neither the name of The Linux Foundation nor the names of its
++ *       contributors may be used to endorse or promote products derived
++ *       from this software without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED "AS IS" AND ANY EXPRESS OR IMPLIED
++ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
++ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NON-INFRINGEMENT
++ * ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS
++ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
++ * BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
++ * WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
++ * OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
++ * IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
++ */
++
++#include "Gatt.hpp"
++#include "GattsTest.hpp"
++
++#define LOGTAG "GATTSTEST "
++#define UNUSED
++
++GattsTest *gattstest = NULL;
++int gattstestserverif, gattstestclientif;
++
++class gattstestClientCallback : public BluetoothGattClientCallback
++{
++   public:
++   void btgattc_client_register_app_cb(int status,int client_if,bt_uuid_t *uuid) {
++
++        ALOGD(LOGTAG"gattServerRegisterAppCb\n ");
++
++        GattcRegisterAppEvent event;
++        event.event_id = GEN_GATT_EVENT;
++        event.status = status;
++        event.clientIf = client_if;
++        memcpy(&event.app_uuid,uuid,sizeof(bt_uuid_t));
++        gattstest->SetGATTSTESTClientAppData(&event);
++#if 0
++        gattstest->ClientSetAdvData("Remote Start Profile");
++        if (!gattstest->StartAdvertisement())
++             gattstest->setIsAdvertising(1);
++        ALOGD(LOGTAG, "isAdvertising %d",gattstest->getIsAdvertising() );
++#endif
++   }
++
++   void btgattc_scan_result_cb(bt_bdaddr_t* bda, int rssi, uint8_t* adv_data) {
++        UNUSED
++   }
++
++   void btgattc_open_cb(int conn_id, int status, int clientIf, bt_bdaddr_t* bda)
++   {
++        ALOGD(LOGTAG"btgattc_open_cb: conn_id = %d\n ", conn_id);
++        GattsOpenEvent event;
++        event.event_id = GEN_GATT_EVENT;
++        event.conn_id = conn_id;
++        event.clientIf = clientIf;
++        memcpy(&event.bda, bda, sizeof(bt_bdaddr_t));
++        event.status=status;
++
++        if (gattstest) {
++            gattstest->SetGATTSTESTClientConnectionData(&event);
++        }else {
++             fprintf(stdout, "(%s): Open With error (%d)\n", __FUNCTION__, status);
++        }
++   }
++
++   void btgattc_close_cb(int conn_id, int status, int clientIf, bt_bdaddr_t* bda)
++   {
++       ALOGD(LOGTAG"btgattc_close_cb: conn_id = %d\n ", conn_id);
++   }
++
++   void btgattc_search_complete_cb(int conn_id, int status)
++   {
++        UNUSED
++   }
++
++   void btgattc_search_result_cb(int conn_id, btgatt_srvc_id_t *srvc_id)
++   {
++        UNUSED
++   }
++
++   void btgattc_get_characteristic_cb(int conn_id, int status,
++                                     btgatt_srvc_id_t *srvc_id, btgatt_gatt_id_t *char_id,
++                                     int char_prop)
++   {
++        UNUSED
++   }
++
++   void btgattc_get_descriptor_cb(int conn_id, int status,
++                                 btgatt_srvc_id_t *srvc_id, btgatt_gatt_id_t *char_id,
++                                 btgatt_gatt_id_t *descr_id)
++   {
++        UNUSED
++   }
++
++   void btgattc_get_included_service_cb(int conn_id, int status,
++                                       btgatt_srvc_id_t *srvc_id, btgatt_srvc_id_t *incl_srvc_id)
++   {
++        UNUSED
++   }
++
++   void btgattc_register_for_notification_cb(int conn_id, int registered,
++                                                int status, btgatt_srvc_id_t *srvc_id,
++                                                btgatt_gatt_id_t *char_id)
++   {
++        UNUSED
++   }
++
++   void btgattc_notify_cb(int conn_id, btgatt_notify_params_t *p_data)
++   {
++        UNUSED
++   }
++
++   void btgattc_read_characteristic_cb(int conn_id, int status,
++                                          btgatt_read_params_t *p_data)
++   {
++        UNUSED
++   }
++
++   void btgattc_write_characteristic_cb(int conn_id, int status,
++                                           btgatt_write_params_t *p_data)
++   {
++        UNUSED
++   }
++
++   void btgattc_read_descriptor_cb(int conn_id, int status, btgatt_read_params_t *p_data)
++   {
++        UNUSED
++   }
++
++    void btgattc_write_descriptor_cb(int conn_id, int status, btgatt_write_params_t *p_data)
++    {
++        UNUSED
++    }
++
++   void btgattc_execute_write_cb(int conn_id, int status)
++   {
++        UNUSED
++   }
++
++   void btgattc_remote_rssi_cb(int client_if,bt_bdaddr_t* bda, int rssi, int status)
++   {
++       UNUSED
++   }
++
++   void btgattc_advertise_cb(int status, int client_if)
++   {
++        UNUSED
++
++   }
++
++   void btgattc_configure_mtu_cb(int conn_id, int status, int mtu)
++   {
++        UNUSED
++   }
++
++   void btgattc_scan_filter_cfg_cb(int action, int client_if, int status, int filt_type, int avbl_space)
++   {
++        UNUSED
++   }
++
++   void btgattc_scan_filter_param_cb(int action, int client_if, int status, int avbl_space)
++   {
++        UNUSED
++   }
++
++   void btgattc_scan_filter_status_cb(int action, int client_if, int status)
++   {
++        UNUSED
++   }
++
++   void btgattc_multiadv_enable_cb(int client_if, int status)
++   {
++        UNUSED
++   }
++
++   void btgattc_multiadv_update_cb(int client_if, int status)
++   {
++        UNUSED
++   }
++
++    void btgattc_multiadv_setadv_data_cb(int client_if, int status)
++   {
++        UNUSED
++   }
++
++   void btgattc_multiadv_disable_cb(int client_if, int status)
++   {
++        UNUSED
++   }
++
++   void btgattc_congestion_cb(int conn_id, bool congested)
++   {
++        UNUSED
++   }
++
++   void btgattc_batchscan_cfg_storage_cb(int client_if, int status)
++   {
++        UNUSED
++   }
++
++   void btgattc_batchscan_startstop_cb(int startstop_action, int client_if, int status)
++   {
++        UNUSED
++
++   }
++
++   void btgattc_batchscan_reports_cb(int client_if, int status, int report_format,
++        int num_records, int data_len, uint8_t *p_rep_data)
++   {
++        UNUSED
++   }
++
++   void btgattc_batchscan_threshold_cb(int client_if)
++   {
++        UNUSED
++   }
++
++   void btgattc_track_adv_event_cb(btgatt_track_adv_info_t *p_adv_track_info)
++   {
++        UNUSED
++   }
++
++   void btgattc_scan_parameter_setup_completed_cb(int client_if, btgattc_error_t status)
++   {
++        UNUSED
++   }
++
++};
++
++class gattstestServerCallback :public BluetoothGattServerCallback
++{
++
++    public:
++
++    void gattServerRegisterAppCb(int status, int server_if, bt_uuid_t *uuid) {
++
++        ALOGD(LOGTAG"gattServerRegisterAppCb status is %d, serverif is %d \n ",
++                status, server_if);
++
++        if (status == BT_STATUS_SUCCESS) {
++            GattsRegisterAppEvent rev;
++            rev.event_id = GEN_GATT_EVENT;
++            rev.server_if = server_if;
++            memcpy(&rev.uuid, uuid, sizeof(bt_uuid_t));
++            rev.status = status;
++            ALOGD(LOGTAG" set gattstest data \n");
++            gattstest->SetGATTSTESTAppData(&rev);
++            gattstest->AddService();
++        } else {
++            fprintf (stdout,"(%s) Failed to registerApp, %d \n",__FUNCTION__, server_if);
++        }
++    }
++
++    void btgatts_connection_cb(int conn_id, int server_if, int connected, bt_bdaddr_t *bda)
++    {
++
++        ALOGD(LOGTAG"btgatts_connection_cb  gattstest \n ");
++
++        GattsConnectionEvent event;
++        event.event_id = GEN_GATT_EVENT;
++        event.conn_id = conn_id;
++        event.server_if = server_if;
++        event.connected = connected;
++        memcpy(&event.bda, bda, sizeof(bt_bdaddr_t));
++
++        if (gattstest) {
++            gattstest->SetGATTSTESTConnectionData(&event);
++#if 0  //just for test multi BLE
++            if (connected) {
++                if(!gattstest->StopAdvertisement())
++                    gattstest->setIsAdvertising(0);
++            }
++#endif
++            ALOGD(LOGTAG, "isAdvertising %d connected %d",gattstest->getIsAdvertising(),connected);
++        }
++
++    }
++
++    void btgatts_service_added_cb(int status, int server_if,
++                                    btgatt_srvc_id_t *srvc_id, int srvc_handle)
++    {
++        ALOGD(LOGTAG"btgatts_service_added_cb \n");
++        if (status == BT_STATUS_SUCCESS) {
++            GattsServiceAddedEvent event;
++            event.event_id = GEN_GATT_EVENT;
++            event.status = status;
++            event.server_if = server_if;
++            memcpy(&event.srvc_id, srvc_id,sizeof(btgatt_srvc_id_t));
++            event.srvc_handle = srvc_handle;
++            gattstest->SetGATTSTESTSrvcData(&event);
++            gattstest->AddCharacteristics();
++        } else {
++            ALOGD(LOGTAG "(%s) Failed to Add_Service %d ",__FUNCTION__, server_if);
++        }
++    }
++
++    void btgatts_included_service_added_cb(int status, int server_if, int srvc_handle,
++                                                int incl_srvc_handle)
++    {
++            UNUSED;
++    }
++
++    void btgatts_characteristic_added_cb(int status, int server_if, bt_uuid_t *char_id,
++                                                    int srvc_handle, int char_handle)
++    {
++        ALOGD(LOGTAG"btgatts_characteristic_added_cb \n");
++        if (status == BT_STATUS_SUCCESS) {
++            GattsCharacteristicAddedEvent event;
++            event.event_id = GEN_GATT_EVENT;
++            event.status = status;
++            event.server_if = server_if;
++            memcpy(&event.char_id, char_id,sizeof(bt_uuid_t));
++            event.srvc_handle = srvc_handle;
++            event.char_handle = char_handle;
++            gattstest->SetGATTSTESTCharacteristicData(&event);
++            gattstest->AddDescriptor();
++        } else {
++            ALOGD(LOGTAG "(%s) Failed to Add Characteristics %d ",__FUNCTION__, server_if);
++        }
++    }
++
++    void btgatts_descriptor_added_cb(int status, int server_if, bt_uuid_t *descr_id,
++                                                int srvc_handle, int descr_handle)
++    {
++        ALOGD(LOGTAG"btgatts_descriptor_added_cb \n");
++        if (status == BT_STATUS_SUCCESS) {
++            GattsDescriptorAddedEvent event;
++            event.event_id = GEN_GATT_EVENT;
++            event.status = status;
++            event.server_if = server_if;
++            memcpy(&event.descr_id, descr_id,sizeof(bt_uuid_t));
++            event.srvc_handle = srvc_handle;
++            event.descr_handle= descr_handle;
++            gattstest->SetGATTSTESTDescriptorData(&event);
++            gattstest->StartService();
++            } else {
++            ALOGD(LOGTAG "(%s) Failed to add descriptor %d \n",__FUNCTION__, server_if);
++            }
++    }
++
++    void btgatts_service_started_cb(int status, int server_if, int srvc_handle)
++    {
++        ALOGD(LOGTAG"btgatts_service_started_cb \n");
++        gattstest->RegisterClient();
++    }
++
++    void btgatts_service_stopped_cb(int status, int server_if, int srvc_handle)
++    {
++        ALOGD(LOGTAG"btgatts_service_stopped_cb \n");
++
++        if (gattstest) {
++            if (!status)
++                gattstest->DeleteService();
++        }
++        ALOGD(LOGTAG  "GATTSTEST Service stopped successfully, deleting the service\n");
++    }
++
++    void btgatts_service_deleted_cb(int status, int server_if, int srvc_handle)
++    {
++        ALOGD(LOGTAG"btgatts_service_deleted_cb \n");
++
++        if (gattstest) {
++            if (!status) {
++                gattstest->CleanUp(server_if);
++                delete gattstest;
++                gattstest = NULL;
++            }
++        }
++        ALOGD(LOGTAG"GATTSTEST Service stopped & Unregistered successfully\n");
++    }
++
++    void btgatts_request_read_cb(int conn_id, int trans_id, bt_bdaddr_t *bda, int attr_handle,
++                                            int offset, bool is_long)
++    {
++        UNUSED;
++    }
++
++    void btgatts_request_write_cb(int conn_id, int trans_id, bt_bdaddr_t *bda, int attr_handle,
++                                            int offset, int length, bool need_rsp, bool is_prep,
++                                            uint8_t* value)
++    {
++        ALOGD(LOGTAG"onCharacteristicWriteRequest \n");
++        GattsRequestWriteEvent event;
++        event.event_id = GEN_GATT_EVENT;
++        event.conn_id = conn_id;
++        event.trans_id = trans_id;
++        memcpy(&event.bda, bda, sizeof(bt_uuid_t));
++        event.attr_handle = attr_handle;
++        event.offset = offset;
++        event.length = length;
++        event.need_rsp = need_rsp;
++        event.is_prep = is_prep;
++    event.value = value;
++
++        gattstest->SendResponse(&event);
++    }
++    void btgatts_request_exec_write_cb(int conn_id, int trans_id,
++                                                    bt_bdaddr_t *bda, int exec_write)
++    {
++        UNUSED;
++    }
++
++    void btgatts_response_confirmation_cb(int status, int handle)
++    {
++        UNUSED;
++    }
++
++    void btgatts_indication_sent_cb(int conn_id, int status)
++    {
++        UNUSED;
++    }
++
++    void btgatts_congestion_cb(int conn_id, bool congested)
++    {
++        UNUSED;
++    }
++
++    void btgatts_mtu_changed_cb(int conn_id, int mtu)
++    {
++        UNUSED;
++    }
++};
++
++gattstestServerCallback *gattstestServerCb = NULL;
++gattstestClientCallback *gattstestClientCb = NULL;
++
++GattsTest::GattsTest(btgatt_interface_t *gatt_itf, Gatt* gatt)
++{
++    ALOGD(LOGTAG"gattstest instantiated ");
++    gatt_interface = gatt_itf;
++    app_gatt = gatt;
++    gattstestClientCb = new gattstestClientCallback;
++    gattstestServerCb = new gattstestServerCallback;
++    isClientRegistered = false;
++    isServerRegistered = false;
++    isAdvertising = false;
++}
++
++
++GattsTest::~GattsTest()
++{
++    if(gattstestClientCb != NULL) {
++        delete(gattstestClientCb);
++        gattstestClientCb = NULL;
++    }
++    if(gattstestServerCb != NULL) {
++        delete(gattstestServerCb);
++        gattstestServerCb = NULL;
++    }
++    ALOGD(LOGTAG "(%s) GATTSTEST DeInitialized\n",__FUNCTION__);
++    isClientRegistered = false;
++    isServerRegistered = false;
++    isAdvertising = false;
++}
++
++bool GattsTest::CopyUUID(bt_uuid_t *uuid)
++{
++    CHECK_PARAM(uuid)
++    for (int i = 0; i < 16; i++) {
++        uuid->uu[i] = 0x30;
++    }
++    return true;
++}
++
++bool GattsTest::CopyClientUUID(bt_uuid_t *uuid)
++{
++    CHECK_PARAM(uuid)
++    uuid->uu[0] = 0xff;
++    for (int i = 1; i < 16; i++) {
++        uuid->uu[i] = 0x30;
++    }
++    return true;
++}
++
++bool GattsTest::CopyAlertServUUID(bt_uuid_t *uuid)
++{
++    CHECK_PARAM(uuid)
++    uuid->uu[15] = 0x00;
++    uuid->uu[14] = 0x00;
++    uuid->uu[13] = 0x18;
++    uuid->uu[12] = 0x02;
++    uuid->uu[11] = 0x00;
++    uuid->uu[10] =0x00;
++    uuid->uu[9] = 0x10;
++    uuid->uu[8] = 0x00;
++    uuid->uu[7] =0x80;
++    uuid->uu[6] = 0x00;
++    uuid->uu[5] = 0x00;
++    uuid->uu[4] = 0x80;
++    uuid->uu[3] = 0x5f;
++    uuid->uu[2] = 0x9b;
++    uuid->uu[1] = 0x34;
++    uuid->uu[0] = 0xfb;
++
++    return true;
++}
++bool GattsTest::CopyAlertCharUUID(bt_uuid_t *uuid)
++{
++    CHECK_PARAM(uuid)
++    uuid->uu[15] = 0x00;
++    uuid->uu[14] = 0x00;
++    uuid->uu[13] = 0x2a;
++    uuid->uu[12] = 0x06;
++    uuid->uu[11] = 0x00;
++    uuid->uu[10] =0x00;
++    uuid->uu[9] = 0x10;
++    uuid->uu[8] = 0x00;
++    uuid->uu[7] =0x80;
++    uuid->uu[6] = 0x00;
++    uuid->uu[5] = 0x00;
++    uuid->uu[4] = 0x80;
++    uuid->uu[3] = 0x5f;
++    uuid->uu[2] = 0x9b;
++    uuid->uu[1] = 0x34;
++    uuid->uu[0] = 0xfb;
++
++    return true;
++}
++
++bool GattsTest::CopyAlertDescUUID(bt_uuid_t *uuid)
++{
++    CHECK_PARAM(uuid)
++    uuid->uu[15] = 0x00;
++    uuid->uu[14] = 0x00;
++    uuid->uu[13] = 0x2a;
++    uuid->uu[12] = 0x07;
++    uuid->uu[11] = 0x00;
++    uuid->uu[10] =0x00;
++    uuid->uu[9] = 0x10;
++    uuid->uu[8] = 0x00;
++    uuid->uu[7] =0x80;
++    uuid->uu[6] = 0x00;
++    uuid->uu[5] = 0x00;
++    uuid->uu[4] = 0x80;
++    uuid->uu[3] = 0x5f;
++    uuid->uu[2] = 0x9b;
++    uuid->uu[1] = 0x34;
++    uuid->uu[0] = 0xfb;
++
++
++    return true;
++}
++
++
++bool GattsTest::CopyParams(bt_uuid_t *uuid_dest, bt_uuid_t *uuid_src)
++{
++    CHECK_PARAM(uuid_dest)
++    CHECK_PARAM(uuid_src)
++
++    for (int i = 0; i < 16; i++) {
++        uuid_dest->uu[i] = uuid_src->uu[i];
++    }
++    return true;
++}
++
++bool GattsTest::MatchParams(bt_uuid_t *uuid_dest, bt_uuid_t *uuid_src)
++{
++    CHECK_PARAM(uuid_dest)
++    CHECK_PARAM(uuid_src)
++
++    for (int i = 0; i < 16; i++) {
++        if(uuid_dest->uu[i] != uuid_src->uu[i])
++            return false;
++    }
++    ALOGD(LOGTAG "(%s) UUID Matches",__FUNCTION__);
++    return true;
++}
++
++bool GattsTest::EnableGATTSTEST()
++{
++    ALOGD(LOGTAG "(%s) Enable GATTSTEST Initiated \n",__FUNCTION__);
++
++    GattsTestEnableEvent rev;
++    rev.event_id = GEN_GATT_EVENT;// change it later
++    CopyAlertCharUUID(&rev.characteristics_uuid);
++    CopyAlertDescUUID(&rev.descriptor_uuid);
++    CopyUUID(&rev.server_uuid);
++    CopyClientUUID(&rev.client_uuid);
++    CopyAlertServUUID(&rev.service_uuid);
++
++    ALOGD(LOGTAG" set gattstest data \n");
++    SetGATTSTESTAttrData(&rev);
++    return RegisterApp();
++}
++
++bool GattsTest::DisableGATTSTEST()
++{
++    ALOGD(LOGTAG "(%s) Disable GATTSTEST Initiated",__FUNCTION__);
++    return StopService();
++}
++
++bool GattsTest::RegisterApp()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    bt_uuid_t server_uuid = GetGATTSTESTAttrData()->server_uuid;
++    ALOGD(LOGTAG"reg app addr is %d \n", GetGATTSTESTAttrData()->server_uuid);
++    app_gatt->RegisterServerCallback(gattstestServerCb,&GetGATTSTESTAttrData()->server_uuid);
++    isServerRegistered = (app_gatt->register_server(&server_uuid) == BT_STATUS_SUCCESS);
++    return isServerRegistered;
++}
++
++bool GattsTest::RegisterClient()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    bt_uuid_t client_uuid = GetGATTSTESTAttrData()->client_uuid;
++    app_gatt->RegisterClientCallback(gattstestClientCb,&GetGATTSTESTAttrData()->client_uuid);
++    isClientRegistered =(app_gatt->register_client(&client_uuid) == BT_STATUS_SUCCESS);
++    return isClientRegistered;
++}
++
++bool GattsTest::UnregisterClient(int client_if)
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    app_gatt->UnRegisterClientCallback(client_if);
++    return app_gatt->unregister_client(client_if) == BT_STATUS_SUCCESS;
++}
++
++bool GattsTest::ClientSetAdvData(char *str)
++{
++    bt_status_t        Ret;
++    bool              SetScanGattsTest        = false;
++    bool              IncludeName       = true;
++    bool              IncludeTxPower    = false;
++    bool              dataset;
++    int               min_conn_interval = GATTSTEST_MIN_CI;
++    int               max_conn_interval = GATTSTEST_MAX_CI;
++
++    dataset = app_gatt->set_adv_data(GetGATTSTESTClientAppData()->clientIf, SetScanGattsTest,
++                                                IncludeName, IncludeTxPower, min_conn_interval,
++                                                max_conn_interval, 0,strlen(str), str,
++                                                strlen(str), str, 0,NULL);
++    return dataset;
++}
++
++void GattsTest::CleanUp(int server_if)
++{
++    int client_if = GetGATTSTESTClientAppData()->clientIf ;
++    ALOGD(LOGTAG "(%s) unregistering serverif(%d) & ClientIf(%d)\n",__FUNCTION__, server_if,client_if);
++    if (isServerRegistered)
++        UnregisterServer(server_if);
++    if (isClientRegistered)
++        UnregisterClient(client_if);
++    ALOGD(LOGTAG "(%s) unregistered serverif(%d) & ClientIf(%d)\n",__FUNCTION__, server_if,client_if);
++}
++
++bool GattsTest::UnregisterServer(int server_if)
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "Gatt Interface Not present");
++        return false;
++    }
++    app_gatt->UnRegisterServerCallback(server_if);
++    return app_gatt->unregister_server(server_if) == BT_STATUS_SUCCESS;
++}
++
++bool GattsTest::StartAdvertisement()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    ALOGD(LOGTAG  "(%s) Listening on the interface (%d) ",__FUNCTION__,
++            GetGATTSTESTClientAppData()->clientIf);
++    //SetDeviceState(WLAN_INACTIVE);
++    return app_gatt->listen(GetGATTSTESTClientAppData()->clientIf, true);
++}
++
++bool GattsTest::SendResponse(GattsRequestWriteEvent *event)
++{
++    char val[5];
++    unsigned char *p;
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present \n",__FUNCTION__);
++        return false;
++    }
++    CHECK_PARAM(event)
++    btgatt_response_t att_resp;
++    int response = -1;
++    memset(att_resp.attr_value.value,0,BTGATT_MAX_ATTR_LEN);
++    memcpy(att_resp.attr_value.value, event->value, event->length);
++    att_resp.attr_value.handle = event->attr_handle;
++    att_resp.attr_value.offset = event->offset;
++    att_resp.attr_value.len = event->length;
++    att_resp.attr_value.auth_req = 0;
++
++
++    ALOGD(LOGTAG "(%s) Sending GATTSTEST response to write (%d) ",__FUNCTION__,
++        GetGATTSTESTAppData()->server_if);
++
++    p = (unsigned char *)att_resp.attr_value.value;
++    if (p[0] == 0x00) {
++         response = 0;
++         ALOGI(LOGTAG"low alert written \n");
++    } else if (p[0] == 0x01) {
++         response = 0;
++         ALOGI(LOGTAG"mid alert written \n");
++    } else if (p[0] == 0x02) {
++         response = 0;
++         ALOGI(LOGTAG"high alert written \n");
++    } else {
++         ALOGI(LOGTAG"default alert written \n");
++    }
++    return app_gatt->send_response(event->conn_id, event->trans_id,
++                                                         response, &att_resp);
++}
++
++bool GattsTest::HandleWlanOn()
++{
++    BtEvent *event = new BtEvent;
++    CHECK_PARAM(event);
++    event->event_id = SKT_API_IPC_MSG_WRITE;
++    event->bt_ipc_msg_event.ipc_msg.type = BT_IPC_REMOTE_START_WLAN;
++    event->bt_ipc_msg_event.ipc_msg.status = INITIATED;
++    StopAdvertisement();
++    ALOGD(LOGTAG "(%s) Posting wlan start to main thread \n",__FUNCTION__);
++    PostMessage (THREAD_ID_MAIN, event);
++    return true;
++}
++
++bool GattsTest::StopAdvertisement()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    ALOGD(LOGTAG "(%s) Stopping listen on the interface (%d) \n",__FUNCTION__,
++            GetGATTSTESTClientAppData()->clientIf);
++    return app_gatt->listen(GetGATTSTESTClientAppData()->clientIf, false);
++}
++
++bool GattsTest::AddService()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    btgatt_srvc_id_t srvc_id;
++    srvc_id.id.inst_id = 0;   // 1 instance
++    srvc_id.is_primary = 1;   // Primary addition
++    srvc_id.id.uuid = GetGATTSTESTAttrData()->service_uuid;
++    return app_gatt->add_service(GetGATTSTESTAppData()->server_if, &srvc_id,4)
++                                                        ==BT_STATUS_SUCCESS;
++}
++
++bool GattsTest::DisconnectServer()
++{
++    int status;
++    int server_if = GetGATTSTESTConnectionData()->server_if;
++    bt_bdaddr_t bda;
++    memcpy(&bda, &(GetGATTSTESTConnectionData()->bda),sizeof(bt_bdaddr_t));
++    int server_conn_id = GetGATTSTESTConnectionData()->conn_id;
++    ALOGD(LOGTAG  "(%s) Disconnecting server interface (%d), connid (%d) ",__FUNCTION__,
++         server_if, server_conn_id);
++    status = app_gatt->serverDisconnect(server_if, &bda, server_conn_id);
++
++    int client_if = GetGATTSTESTClientConnectionData()->clientIf;
++    bt_bdaddr_t client_bda;
++    memcpy(&client_bda, &(GetGATTSTESTClientConnectionData()->bda),sizeof(bt_bdaddr_t));
++    int client_conn_id =  GetGATTSTESTClientConnectionData()->conn_id;
++    if (gattstest) {
++       ALOGD(LOGTAG,  "(%s) Disconnecting client interface (%d), connid (%d) ",__FUNCTION__,
++          client_if, client_conn_id);
++       status = app_gatt->clientDisconnect(client_if, &client_bda, client_conn_id);
++    }
++
++    if (status == BT_STATUS_SUCCESS)
++        return true;
++    else
++        return false;
++}
++
++bool GattsTest::DeleteService()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    bool status = false;
++    int srvc_handle = GetGattsTestSrvcData()->srvc_handle;
++    return app_gatt->delete_service(GetGATTSTESTAppData()->server_if,
++                                                            srvc_handle) == BT_STATUS_SUCCESS;
++}
++
++bool GattsTest::AddCharacteristics()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++    bt_uuid_t char_uuid;
++    char_uuid = GetGATTSTESTAttrData()->characteristics_uuid;
++    int srvc_handle = GetGattsTestSrvcData()->srvc_handle;
++    int server_if = GetGattsTestSrvcData()->server_if;
++    ALOGD(LOGTAG  "(%s) Adding Characteristics server_if (%d), srvc_handle (%d) \n",
++            __FUNCTION__, server_if,srvc_handle);
++    return app_gatt->add_characteristic(server_if, srvc_handle, &char_uuid,
++                                                            GATT_PROP_WRITE, GATT_PERM_WRITE)
++                                                            ==BT_STATUS_SUCCESS;
++}
++
++bool GattsTest::AddDescriptor(void)
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++
++    bt_uuid_t desc_uuid;
++    desc_uuid = GetGATTSTESTAttrData()->descriptor_uuid;
++    int srvc_handle = GetGattsTestSrvcData()->srvc_handle;
++    return app_gatt->add_descriptor(GetGATTSTESTAppData()->server_if,
++                                                        srvc_handle, &desc_uuid,
++                                                        GATT_PERM_READ) == BT_STATUS_SUCCESS;
++}
++
++bool GattsTest::StartService()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++
++    int srvc_handle = GetGattsTestSrvcData()->srvc_handle;
++    return app_gatt->start_service(GetGATTSTESTAppData()->server_if,
++                                                        srvc_handle, GATT_TRANSPORT_LE)
++                                                        == BT_STATUS_SUCCESS;
++}
++
++bool GattsTest::StopService()
++{
++    if (GetGattInterface() == NULL) {
++        ALOGE(LOGTAG  "(%s) Gatt Interface Not present",__FUNCTION__);
++        return false;
++    }
++
++    int srvc_handle = GetGattsTestSrvcData()->srvc_handle;
++    return app_gatt->stop_service(GetGATTSTESTAppData()->server_if,
++                                                        srvc_handle) == BT_STATUS_SUCCESS;
++}
++
++bool GattsTest::getIsAdvertising()
++{
++    return isAdvertising;
++}
++
++void GattsTest::setIsAdvertising(bool value){
++    ALOGD(LOGTAG "setIsAdvertising %d ", value);
++    isAdvertising = value;
++}
+diff --git a/qcom-opensource/bt/bt-app/include/ipc.h b/qcom-opensource/bt/bt-app/include/ipc.h
+index 8cf57ab4e2a5..aa68a96349ca 100755
+--- a/qcom-opensource/bt/bt-app/include/ipc.h
++++ b/qcom-opensource/bt/bt-app/include/ipc.h
+@@ -394,7 +394,8 @@ typedef enum {
+     PAN_EVENT_DEVICE_CONNECTED_LIST_REQ,
+ 
+     //GATTS EVENTS
+-    BTGATTS_REGISTER_APP_EVENT = GATT_MSG_BASE,
++    GEN_GATT_EVENT = GATT_MSG_BASE,
++    BTGATTS_REGISTER_APP_EVENT,
+     BTGATTS_CONNECTION_EVENT,
+     BTGATTS_SERVICE_ADDED_EVENT,
+     BTGATTS_INCLUDED_SERVICE_ADDED_EVENT,
+@@ -874,14 +875,14 @@ typedef struct{
+     BluetoothEventId event_id;
+     int status;
+     int clientIf;
+-    bt_uuid_t *app_uuid;
++    bt_uuid_t app_uuid;
+ } GattcRegisterAppEvent;
+ 
+ typedef struct{
+     BluetoothEventId event_id;
+-    bt_bdaddr_t* bda;
++    bt_bdaddr_t bda;
+     int rssi;
+-    uint8_t* adv_data;
++    uint8_t adv_data;
+ } GattcScanResultEvent;
+ 
+ typedef struct{
+@@ -889,7 +890,7 @@ typedef struct{
+     int conn_id;
+     int status;
+     int clientIf;
+-    bt_bdaddr_t* bda;
++    bt_bdaddr_t bda;
+ } GattcOpenEvent;
+ 
+ typedef struct{
+@@ -897,7 +898,7 @@ typedef struct{
+     int conn_id;
+     int status;
+     int clientIf;
+-    bt_bdaddr_t* bda;
++    bt_bdaddr_t bda;
+ } GattcCloseEvent;
+ 
+ typedef struct{
+@@ -909,15 +910,15 @@ typedef struct{
+ typedef struct{
+     BluetoothEventId event_id;
+     int conn_id;
+-    btgatt_srvc_id_t *srvc_id;
++    btgatt_srvc_id_t srvc_id;
+ } GattcSearchResultEvent;
+ 
+ typedef struct{
+    BluetoothEventId event_id;
+    int conn_id;
+    int status;
+-   btgatt_srvc_id_t *srvc_id;
+-   btgatt_gatt_id_t *char_id;
++   btgatt_srvc_id_t srvc_id;
++   btgatt_gatt_id_t char_id;
+    int char_prop;
+ } GattcGetCharacteristicEvent;
+ 
+@@ -925,17 +926,17 @@ typedef struct{
+     BluetoothEventId event_id;
+     int conn_id;
+     int status;
+-    btgatt_srvc_id_t *srvc_id;
+-    btgatt_gatt_id_t *char_id;
+-    btgatt_gatt_id_t *descr_id;
++    btgatt_srvc_id_t srvc_id;
++    btgatt_gatt_id_t char_id;
++    btgatt_gatt_id_t descr_id;
+ } GattcGetDescriptorEvent;
+ 
+ typedef struct{
+     BluetoothEventId event_id;
+     int conn_id;
+     int status;
+-    btgatt_srvc_id_t *srvc_id;
+-    btgatt_srvc_id_t *incl_srvc_id;
++    btgatt_srvc_id_t srvc_id;
++    btgatt_srvc_id_t incl_srvc_id;
+ } GattcGetIncludedServiceEvent;
+ 
+ typedef struct{
+@@ -949,14 +950,14 @@ typedef struct{
+ typedef struct{
+     BluetoothEventId event_id;
+     int conn_id;
+-    btgatt_notify_params_t *p_data;
++    btgatt_notify_params_t p_data;
+ } GattcNotifyEvent;
+ 
+ typedef struct{
+     BluetoothEventId event_id;
+     int conn_id;
+     int status;
+-    btgatt_read_params_t *p_data;
++    btgatt_read_params_t p_data;
+ } GattcReadCharacteristicEvent;
+ 
+ typedef struct{
+@@ -976,7 +977,7 @@ typedef struct{
+     BluetoothEventId event_id;
+     int conn_id;
+     int status;
+-    btgatt_read_params_t *p_data;
++    btgatt_read_params_t p_data;
+ } GattcReadDescriptorEvent;
+ 
+ typedef struct{
+@@ -989,7 +990,7 @@ typedef struct{
+ typedef struct{
+     BluetoothEventId event_id;
+     int client_if;
+-    bt_bdaddr_t* bda;
++    bt_bdaddr_t bda;
+     int rssi;
+     int status;
+ } GattcRemoteRssiEvent;
+@@ -1083,7 +1084,7 @@ typedef struct
+     int report_format;
+     int num_records;
+     int data_len;
+-    uint8_t *p_rep_data;
++    uint8_t p_rep_data;
+ } GattcBatchscanReportsEvent;
+ 
+ typedef struct
+@@ -1095,7 +1096,7 @@ typedef struct
+ typedef struct
+ {
+     BluetoothEventId event_id;
+-    btgatt_track_adv_info_t *p_adv_track_info;
++    btgatt_track_adv_info_t p_adv_track_info;
+ } GattcTrackAdvEventEvent;
+ 
+ typedef struct
+@@ -1122,7 +1123,7 @@ typedef struct {
+     BluetoothEventId event_id;
+     int status;
+     int server_if;
+-    bt_uuid_t *uuid;
++    bt_uuid_t uuid;
+ } GattsRegisterAppEvent;
+ 
+ typedef struct {
+@@ -1130,14 +1131,14 @@ typedef struct {
+     int conn_id;
+     int server_if;
+     int connected;
+-    bt_bdaddr_t *bda;
++    bt_bdaddr_t bda;
+ } GattsConnectionEvent;
+ 
+ typedef struct {
+     BluetoothEventId event_id;
+     int status;
+     int server_if;
+-    btgatt_srvc_id_t *srvc_id;
++    btgatt_srvc_id_t srvc_id;
+     int srvc_handle;
+ } GattsServiceAddedEvent;
+ 
+@@ -1155,7 +1156,7 @@ typedef struct
+     BluetoothEventId event_id;
+     int status;
+     int server_if;
+-    bt_uuid_t *char_id;
++    bt_uuid_t char_id;
+     int srvc_handle;
+     int char_handle;
+ } GattsCharacteristicAddedEvent;
+@@ -1165,7 +1166,7 @@ typedef struct
+     BluetoothEventId event_id;
+     int status;
+     int server_if;
+-    bt_uuid_t *descr_id;
++    bt_uuid_t descr_id;
+     int srvc_handle;
+     int descr_handle;
+ } GattsDescriptorAddedEvent;
+@@ -1199,7 +1200,7 @@ typedef struct
+     BluetoothEventId event_id;
+     int conn_id;
+     int trans_id;
+-    bt_bdaddr_t *bda;
++    bt_bdaddr_t bda;
+     int attr_handle;
+     int offset;
+     bool is_long;
+@@ -1210,13 +1211,13 @@ typedef struct
+     BluetoothEventId event_id;
+     int conn_id;
+     int trans_id;
+-    bt_bdaddr_t *bda;
++    bt_bdaddr_t bda;
+     int attr_handle;
+     int offset;
+     int length;
+     bool need_rsp;
+     bool is_prep;
+-    uint8_t* value;
++    uint8_t *value;
+ } GattsRequestWriteEvent;
+ 
+ typedef struct
+@@ -1224,7 +1225,7 @@ typedef struct
+     BluetoothEventId event_id;
+     int conn_id;
+     int trans_id;
+-    bt_bdaddr_t *bda;
++    bt_bdaddr_t bda;
+     int exec_write;
+ } GattsRequestExecWriteEvent;
+ 
+@@ -1256,6 +1257,15 @@ typedef struct
+     int mtu;
+ } GattsMTUchangedEvent;
+ 
++typedef struct{
++    BluetoothEventId event_id;
++    int conn_id;
++    int status;
++    int clientIf;
++    bt_bdaddr_t bda;
++} GattsOpenEvent;
++
++
+ /* Remote start profile support */
+ typedef struct {
+     BluetoothEventId event_id;
+diff --git a/qcom-opensource/bt/bt-app/main/Makefile.am b/qcom-opensource/bt/bt-app/main/Makefile.am
+index 35ef83fdcd76..20fb6b615d39 100644
+--- a/qcom-opensource/bt/bt-app/main/Makefile.am
++++ b/qcom-opensource/bt/bt-app/main/Makefile.am
+@@ -23,6 +23,8 @@ AM_CPPFLAGS += -I../../bt-app \
+                -I../../bt-app/pan/include \
+                -I../../bt-app/hid/include \
+                -I../../bt-app/rsp/include \
++               -I../../bt-app/gattctest/include \
++               -I../../bt-app/gattstest/include \
+                -I../../../../vendor/qcom/opensource/bluetooth/hal/include \
+                -I../../bt-app/main/include \
+                -I../../bt-app/hfp_client/include \
+@@ -73,6 +75,8 @@ c_sources = ../utils/src/utils.c \
+             ../pan/src/Pan.cpp \
+             ../sdp_client/src/SdpClient.cpp\
+             ../rsp/src/Rsp.cpp \
++            ../gattctest/src/GattcTest.cpp \
++            ../gattstest/src/GattsTest.cpp \
+             ../spp_server/src/spp_server.cpp \
+             ../spp_client/src/spp_client.cpp \
+ 	    ../hid/src/Hid.cpp
+diff --git a/qcom-opensource/bt/bt-app/main/include/Main.hpp b/qcom-opensource/bt/bt-app/main/include/Main.hpp
+index 12d966f39898..a4ccdd41c9a7 100644
+--- a/qcom-opensource/bt/bt-app/main/include/Main.hpp
++++ b/qcom-opensource/bt/bt-app/main/include/Main.hpp
+@@ -30,6 +30,8 @@
+ #include <hardware/bluetooth.h>
+ #include "include/ipc.h"
+ #include "utils.h"
++#include "GattcTest.hpp"
++#include "GattsTest.hpp"
+ #include "Rsp.hpp"
+ 
+ #include <sys/un.h>
+@@ -193,6 +195,18 @@ typedef enum {
+     OPP_SEND,
+     OPP_ABORT,
+ #endif
++    GATTCTEST_OPTION,
++    GATTCTEST_INIT,
++    GATTCTEST_START_SCAN,
++    GATTCTEST_STOP_SCAN,
++    GATTCTEST_CONNECT,
++    GATTCTEST_DISCONNECT,
++    GATTCTEST_ALERT,
++    GATTSTEST_OPTION,
++    GATTSTEST_INIT,
++    GATTSTEST_START,
++    GATTSTEST_STOP,
++    GATTSTEST_CLOSE,
+     HFP_CLIENT,
+     CREATE_SCO_CONN,
+     DESTROY_SCO_CONN,
+@@ -264,7 +278,9 @@ typedef enum {
+     HFP_CLIENT_MENU,
+     PAN_MENU,
+     RSP_MENU,
+-	HIDH_MENU,
++    HIDH_MENU,
++    GATTCTEST_MENU,
++    GATTSTEST_MENU,
+ #ifdef USE_BT_OBEX
+     PBAP_CLIENT_MENU,
+     OPP_MENU,
+@@ -319,6 +335,8 @@ UserMenuList MainMenu[] = {
+     {GAP_OPTION,            "gap_menu",         ZERO_PARAM,   "gap_menu"},
+     {PAN_OPTION,            "pan_menu",         ZERO_PARAM,   "pan_menu"},
+     {RSP_OPTION,            "rsp_menu",         ZERO_PARAM,   "rsp_menu"},
++    {GATTCTEST_OPTION,            "gattctest_menu",         ZERO_PARAM,   "gattctest_menu"},
++    {GATTSTEST_OPTION,            "gattstest_menu",         ZERO_PARAM,   "gattstest_menu"},
+     {TEST_MODE,             "test_menu",        ZERO_PARAM,   "test_menu"},
+     {A2DP_SINK,             "a2dp_sink_menu",   ZERO_PARAM,   "a2dp_sink_menu"},
+     {HFP_CLIENT,            "hfp_client_menu",  ZERO_PARAM,   "hfp_client_menu"},
+@@ -367,6 +385,36 @@ UserMenuList RspMenu[] = {
+ };
+ 
+ /**
++ * list of supported commands for GATTCTEST Menu
++ */
++UserMenuList GattcTestMenu[] = {
++    {GATTCTEST_INIT,              "gattctest_init",       ZERO_PARAM,    "gattctest_init (only for Init time)"},
++    {GATTCTEST_START_SCAN,        "gattctest_start_scan", ZERO_PARAM,    "gattctest_start_scan"},
++    {GATTCTEST_STOP_SCAN,         "gattctest_stop_scan",  ZERO_PARAM,    "gattctest_stop_scan"},
++    {BACK_TO_MAIN,          "main_menu",      ZERO_PARAM,    "main_menu"},
++    {GATTCTEST_CONNECT,           "gattctest_connect",    ONE_PARAM,     "gattctest_connect<space><bt_address> \
++         eg. gattctest_connect 00:11:22:33:44:55"},
++    {GATTCTEST_DISCONNECT,           "gattctest_disconnect", ONE_PARAM,     "gattctest_disconnect<space><bt_address> \
++          eg.gattctest_connect 00:11:22:33:44:55"},
++    {GATTCTEST_ALERT,             "gattctest_alert",      ONE_PARAM,    "gattctest_alert<space><alert_level> \
++         rg. gattctest_alert 1"},
++
++};
++
++/**
++ * list of supported commands for GATTSTEST Menu
++ */
++UserMenuList GattsTestMenu[] = {
++    {GATTSTEST_INIT,              "gattstest_init",  ZERO_PARAM,    "gattstest_init (only for Init time)"},
++    {GATTSTEST_START,             "gattstest_start", ZERO_PARAM,	"gattstest_start (would start adv)"},
++    {GATTSTEST_STOP,              "gattstest_stop", ZERO_PARAM,		"gattstest_stop (would stop adv)"},
++    {GATTSTEST_CLOSE,              "gattstest_disconnect", ZERO_PARAM, "gattstest_disconnect (would disconnect)"},
++    {BACK_TO_MAIN,          "main_menu",  ZERO_PARAM, "main_menu"},
++};
++
++
++
++/**
+  * list of supported commands for A2DP_SINK Menu
+  */
+ UserMenuList A2dpSinkMenu[] = {
+@@ -690,6 +738,28 @@ static void HandleTestCommand(int cmd_id, char user_cmd[][COMMAND_ARG_SIZE]);
+  */
+ static void HandleRspCommand(int cmd_id, char user_cmd[][COMMAND_ARG_SIZE]);
+ 
++/**
++ * @brief HandleGattcTestCommand
++ *
++ *  This function will handle all the commands in @ref RspMenu
++ *
++ * @param[in] cmd_id It has command id from @ref CommandList
++ * @param[in] user_cmd It has parsed commands with arguments passed by user
++ * @return none
++ */
++static void HandleGattcTestCommand(int cmd_id, char user_cmd[][COMMAND_ARG_SIZE]);
++
++/**
++ * @brief HandleGattcTestCommand
++ *
++ *  This function will handle all the commands in @ref RspMenu
++ *
++ * @param[in] cmd_id It has command id from @ref CommandList
++ * @param[in] user_cmd It has parsed commands with arguments passed by user
++ * @return none
++ */
++static void HandleGattsTestCommand(int cmd_id, char user_cmd[][COMMAND_ARG_SIZE]);
++
+ 
+ /**
+  * @brief HandleGapCommand
+diff --git a/qcom-opensource/bt/bt-app/main/src/Main.cpp b/qcom-opensource/bt/bt-app/main/src/Main.cpp
+index f38a5053bfc0..f2e456218e08 100755
+--- a/qcom-opensource/bt/bt-app/main/src/Main.cpp
++++ b/qcom-opensource/bt/bt-app/main/src/Main.cpp
+@@ -67,6 +67,9 @@ extern Pan *g_pan;
+ extern Gatt *g_gatt;
+ extern BT_Audio_Manager *pBTAM;
+ extern Rsp *rsp;
++extern GattcTest *gattctest;
++extern GattsTest *gattstest;
++bool gattsEnabled = false;
+ 
+ extern SdpClient *g_sdpClient;
+ #ifdef USE_BT_OBEX
+@@ -168,6 +171,14 @@ static bool HandleUserInput (int *cmd_id, char input_args[][COMMAND_ARG_SIZE],
+             menu = &RspMenu[0];
+             num_cmds  = NO_OF_COMMANDS(RspMenu);
+             break;
++        case GATTCTEST_MENU:
++            menu = &GattcTestMenu[0];
++            num_cmds  = NO_OF_COMMANDS(GattcTestMenu);
++            break;
++        case GATTSTEST_MENU:
++            menu = &GattsTestMenu[0];
++            num_cmds  = NO_OF_COMMANDS(GattsTestMenu);
++            break;
+         case A2DP_SINK_MENU:
+             menu = &A2dpSinkMenu[0];
+             num_cmds  = NO_OF_COMMANDS(A2dpSinkMenu);
+@@ -374,6 +385,14 @@ static void DisplayMenu(MenuType menu_type) {
+             menu = &RspMenu[0];
+             num_cmds  = NO_OF_COMMANDS(RspMenu);
+             break;
++        case GATTCTEST_MENU:
++            menu = &GattcTestMenu[0];
++            num_cmds  = NO_OF_COMMANDS(GattcTestMenu);
++            break;
++        case GATTSTEST_MENU:
++            menu = &GattsTestMenu[0];
++            num_cmds  = NO_OF_COMMANDS(GattsTestMenu);
++            break;
+         case MAIN_MENU:
+             menu = &MainMenu[0];
+             num_cmds  = NO_OF_COMMANDS(MainMenu);
+@@ -1013,6 +1032,14 @@ static void HandleMainCommand(int cmd_id, char user_cmd[][COMMAND_ARG_SIZE]) {
+             menu_type = RSP_MENU;
+             DisplayMenu(menu_type);
+             break;
++        case GATTCTEST_OPTION:
++            menu_type = GATTCTEST_MENU;
++            DisplayMenu(menu_type);
++            break;
++        case GATTSTEST_OPTION:
++            menu_type = GATTSTEST_MENU;
++            DisplayMenu(menu_type);
++            break;
+         case A2DP_SINK:
+             menu_type = A2DP_SINK_MENU;
+             DisplayMenu(menu_type);
+@@ -1352,6 +1379,198 @@ static void SendInitToGap(){
+         ALOGV (LOGTAG " Posting BT Init  to GAP thread");
+         PostMessage (THREAD_ID_GAP, event);	
+ }
++
++static void HandleGattcTestCommand(int cmd_id, char user_cmd[][COMMAND_ARG_SIZE]) {
++
++    long num;
++    char *end;
++    int index = 0;
++    switch (cmd_id) {
++
++        case GATTCTEST_INIT:
++            if ((g_bt_app->bt_state == BT_STATE_ON)) {
++                fprintf( stdout, "ENABLE GATTCTEST\n");
++                if (gattctest) {
++                   fprintf(stdout,"gattctest already initialized \n");
++                   return;
++                } else {
++                  if (g_gatt) {
++                     gattctest = new GattcTest(g_gatt->GetGattInterface(),g_gatt);
++                     if (gattctest) {
++                        gattctest->EnableGATTCTEST();
++                        fprintf(stdout, " EnableGATTCTEST done \n");
++                     }
++                     else {
++                        fprintf(stdout, " GATTCTEST Alloc failed return failure \n");
++                     }
++                  } else {
++                     fprintf(stdout," gatt interface us null \n");
++                  }
++                }
++             }
++             else {
++                fprintf( stdout, "BT is in OFF State now \n");
++             }
++            break;
++
++         case GATTCTEST_START_SCAN:
++            if (gattctest) {
++                fprintf(stdout,"starting scan \n");
++                gattctest->StartScan();
++            } else {
++                fprintf(stdout,"Do the GATTCINIT first\n");
++            }
++            break;
++
++        case GATTCTEST_STOP_SCAN:
++           if (gattctest) {
++                fprintf(stdout,"stopping scan \n");
++                gattctest->StopScan();
++           } else {
++                fprintf(stdout,"Do the GATTCINIT first\n");
++           }
++           break;
++
++        case GATTCTEST_CONNECT:
++            if (string_is_bdaddr(user_cmd[ONE_PARAM])) {
++                bt_bdaddr_t bd_addr;
++                string_to_bdaddr(user_cmd[ONE_PARAM], &bd_addr);
++                if (gattctest) {
++                    fprintf(stdout,"connecting \n");
++                    gattctest->Connect(&bd_addr);
++                } else {
++                    fprintf(stdout,"Do the GATTCINIT first\n");
++                }
++           } else {
++                fprintf( stdout, " BD address is NULL/Invalid \n");
++           }
++            break;
++
++        case GATTCTEST_DISCONNECT:
++            if (string_is_bdaddr(user_cmd[ONE_PARAM])) {
++               bt_bdaddr_t         bd_addr;
++               string_to_bdaddr(user_cmd[ONE_PARAM], &bd_addr);
++               if (gattctest) {
++                   fprintf(stdout,"disconnecting \n");
++                   gattctest->Disconnect(&bd_addr);
++               } else {
++                    fprintf(stdout,"Do the GATTCINIT first\n");
++               }
++            } else {
++                fprintf( stdout, " BD address is NULL/Invalid \n");
++            }
++            break;
++        case GATTCTEST_ALERT:
++
++           if (gattctest){
++               fprintf(stdout, "GATTCTEST_WRITE_CHAR \n");
++               gattctest->SendAlert(atoi(user_cmd[ONE_PARAM]));
++           }
++           else{
++               fprintf(stdout, "Do the GATTCINIT first\n");
++           }
++            break;
++
++        case BACK_TO_MAIN:
++            menu_type = MAIN_MENU;
++            DisplayMenu(menu_type);
++            break;
++
++        default:
++            fprintf(stdout, " Command not handled");
++            break;
++    }
++}
++
++
++static void HandleGattsTestCommand(int cmd_id, char user_cmd[][COMMAND_ARG_SIZE]) {
++
++    long num;
++    char *end;
++    int index = 0;
++    switch (cmd_id) {
++        case GATTSTEST_INIT:
++            if ((g_bt_app->bt_state == BT_STATE_ON)) {
++                fprintf( stdout, "ENABLE GATTSTEST\n");
++                if (gattstest) {
++                   fprintf(stdout,"rsp already initialized \n");
++                   return;
++                } else {
++                  if (g_gatt) {
++                     gattstest = new GattsTest(g_gatt->GetGattInterface(),g_gatt);
++                     if (gattstest) {
++                         gattsEnabled = gattstest->EnableGATTSTEST();
++                        fprintf(stdout, " EnableGATTSTEST done \n");
++                     }
++                     else {
++                        fprintf(stdout, " GATTSTEST Alloc failed return failure \n");
++                     }
++                  } else {
++                     fprintf(stdout," gatt interface us null \n");
++                  }
++                }
++             }
++             else {
++                fprintf( stdout, "BT is in OFF State now \n");
++             }
++            break;
++
++        case GATTSTEST_START:
++            if ((g_bt_app->bt_state == BT_STATE_ON)) {
++                if (gattstest) {
++                    fprintf( stdout, "Start Advertisement \n");
++                    gattstest->ClientSetAdvData("Remote Start Profile");
++                    if (!gattstest->StartAdvertisement())
++                        gattstest->setIsAdvertising(1);
++                    fprintf(stdout, "isAdvertising %d\n",gattstest->getIsAdvertising() );
++
++                } else {
++                    fprintf(stdout , "Do Init first\n");
++                }
++            } else {
++                fprintf( stdout, "BT is in OFF State now \n");
++            }
++            break;
++        case GATTSTEST_STOP:
++            if ((g_bt_app->bt_state == BT_STATE_ON)) {
++                if (gattstest) {
++                    fprintf( stdout, "Stop Advertisement \n");
++                    //gattstest->ClientSetAdvData("Remote Start Profile");
++                    if(!gattstest->StopAdvertisement())
++                        gattstest->setIsAdvertising(0);
++                    fprintf(stdout, "isAdvertising %d\n",gattstest->getIsAdvertising() );
++                } else {
++                    fprintf(stdout , "Do Init first\n");
++                }
++            } else {
++                fprintf( stdout, "BT is in OFF State now \n");
++            }
++            break;
++        case GATTSTEST_CLOSE:
++            if ((g_bt_app->bt_state == BT_STATE_ON)) {
++                if (gattstest) {
++                    fprintf( stdout, "Gatts Disconnect \n");
++                    if(gattstest->DisconnectServer())
++                        gattstest->StartAdvertisement();
++                } else {
++                    fprintf(stdout , "Do Init first\n");
++                }
++            } else {
++                fprintf( stdout, "BT is in OFF State now \n");
++            }
++            break;
++
++        case BACK_TO_MAIN:
++            menu_type = MAIN_MENU;
++            DisplayMenu(menu_type);
++            break;
++
++        default:
++            fprintf(stdout, " Command not handled\n");
++            break;
++    }
++}
++
+ static void SendEnableCmdToGap() {
+ 
+     if ((g_bt_app->status.enable_cmd != COMMAND_INPROGRESS) &&
+@@ -2133,6 +2352,12 @@ static void BtCmdHandler (void *context) {
+             case RSP_MENU:
+                 HandleRspCommand(cmd_id, user_cmd);
+                 break;
++            case GATTCTEST_MENU:
++                HandleGattcTestCommand(cmd_id, user_cmd);
++                break;
++            case GATTSTEST_MENU:
++                HandleGattsTestCommand(cmd_id, user_cmd);
++                break;
+             case MAIN_MENU:
+                 HandleMainCommand(cmd_id,user_cmd );
+                 break;
+diff --git a/qcom-opensource/bt/bt-app/rsp/include/Rsp.hpp b/qcom-opensource/bt/bt-app/rsp/include/Rsp.hpp
+index e1e8898eaf45..f75eead192d7 100644
+--- a/qcom-opensource/bt/bt-app/rsp/include/Rsp.hpp
++++ b/qcom-opensource/bt/bt-app/rsp/include/Rsp.hpp
+@@ -54,6 +54,7 @@
+ 
+ #define LOGTAG "RSP "
+ 
++
+ typedef enum
+ {
+     WLAN_ACTIVE = 1,
+@@ -117,8 +118,6 @@ class Rsp {
+         }
+         inline void SetRSPAppData(GattsRegisterAppEvent *event)
+         {
+-            if(app_if.uuid != NULL)
+-                osi_free(app_if.uuid);
+             memset(&app_if, 0, sizeof(GattsRegisterAppEvent));
+             memcpy(&app_if, event, sizeof(GattsRegisterAppEvent));
+         }
+@@ -138,8 +137,6 @@ class Rsp {
+         inline void SetRSPCharacteristicData(GattsCharacteristicAddedEvent
+                 *event)
+         {
+-            if(char_data.char_id != NULL)
+-                osi_free(char_data.char_id);
+             memset(&char_data, 0, sizeof(GattsCharacteristicAddedEvent));
+             memcpy(&char_data, event, sizeof(GattsCharacteristicAddedEvent));
+         }
+@@ -149,8 +146,6 @@ class Rsp {
+         }
+         inline void SetRSPDescriptorData(GattsDescriptorAddedEvent *event)
+         {
+-            if(desc_data.descr_id != NULL)
+-                osi_free(desc_data.descr_id);
+             memset(&desc_data, 0, sizeof(GattsDescriptorAddedEvent));
+             memcpy(&desc_data, event, sizeof(GattsDescriptorAddedEvent));
+         }
+diff --git a/qcom-opensource/bt/bt-app/rsp/src/Rsp.cpp b/qcom-opensource/bt/bt-app/rsp/src/Rsp.cpp
+index fd4c14ba7d30..a93428508304 100644
+--- a/qcom-opensource/bt/bt-app/rsp/src/Rsp.cpp
++++ b/qcom-opensource/bt/bt-app/rsp/src/Rsp.cpp
+@@ -47,6 +47,7 @@ class clientCallback : public BluetoothGattClientCallback
+         event.event_id = RSP_ENABLE_EVENT;
+         event.status = status;
+         event.clientIf = client_if;
++        memcpy(&event.app_uuid,uuid,sizeof(bt_uuid_t));
+         rsp->SetRSPClientAppData(&event);
+ 
+         rsp->ClientSetAdvData("Remote Start Profile");
+@@ -241,7 +242,7 @@ class serverCallback :public BluetoothGattServerCallback
+               GattsRegisterAppEvent rev;
+               rev.event_id = RSP_ENABLE_EVENT;
+               rev.server_if = server_if;
+-              rev.uuid = uuid;
++              memcpy(&rev.uuid, uuid,sizeof(bt_uuid_t));
+               rev.status = status;
+               fprintf(stdout," set rsp data \n");
+               rsp->SetRSPAppData(&rev);
+@@ -261,7 +262,7 @@ class serverCallback :public BluetoothGattServerCallback
+            event.conn_id = conn_id;
+            event.server_if = server_if;
+            event.connected = connected;
+-           event.bda = bda;
++           memcpy(&event.bda, bda,sizeof(bt_bdaddr_t));
+ 
+            if (rsp) {
+                rsp->SetRSPConnectionData(&event);
+@@ -280,7 +281,7 @@ class serverCallback :public BluetoothGattServerCallback
+               GattsServiceAddedEvent event;
+                event.event_id =RSP_ENABLE_EVENT;
+                event.server_if = server_if;
+-               event.srvc_id = srvc_id;
++               memcpy(&event.srvc_id, srvc_id,sizeof(btgatt_srvc_id_t));
+                event.srvc_handle = srvc_handle;
+                rsp->SetRSPSrvcData(&event);
+                rsp->AddCharacteristics();
+@@ -303,7 +304,7 @@ class serverCallback :public BluetoothGattServerCallback
+                GattsCharacteristicAddedEvent event;
+                event.event_id =RSP_ENABLE_EVENT;
+                event.server_if = server_if;
+-               event.char_id = char_id;
++               memcpy(&event.char_id, char_id, sizeof(bt_uuid_t));
+                event.srvc_handle = srvc_handle;
+                event.char_handle = char_handle;
+                rsp->SetRSPCharacteristicData(&event);
+@@ -321,7 +322,7 @@ class serverCallback :public BluetoothGattServerCallback
+                GattsDescriptorAddedEvent event;
+                event.event_id =RSP_ENABLE_EVENT;
+                event.server_if = server_if;
+-               event.descr_id= descr_id;
++               memcpy(&event.descr_id, descr_id,sizeof(bt_uuid_t));
+                event.srvc_handle = srvc_handle;
+                event.descr_handle= descr_handle;
+                rsp->SetRSPDescriptorData(&event);
+@@ -377,7 +378,7 @@ class serverCallback :public BluetoothGattServerCallback
+            event.event_id = RSP_ENABLE_EVENT;
+            event.conn_id = conn_id;
+            event.trans_id = trans_id;
+-           event.bda = bda;
++           memcpy(&event.bda, bda,sizeof(bt_bdaddr_t));
+            event.attr_handle = attr_handle;
+            event.offset = offset;
+            event.length = length;
+@@ -443,16 +444,11 @@ Rsp::~Rsp()
+     SetDeviceState(WLAN_INACTIVE);
+ 
+     GattsRegisterAppEvent* p_app_if = GetRSPAppData();
+-    if(p_app_if->uuid != NULL)
+-        osi_free(p_app_if->uuid);
+ 
+     GattsCharacteristicAddedEvent* p_char_data = GetRSPCharacteristicData();
+-    if(p_char_data->char_id != NULL)
+-        osi_free(p_char_data->char_id);
+ 
+     GattsDescriptorAddedEvent* p_desc_data = GetRSPDescriptorData();
+-    if(p_desc_data->descr_id != NULL)
+-        osi_free(p_desc_data->descr_id);
++
+ }
+ 
+ bool Rsp::CopyUUID(bt_uuid_t *uuid)
+@@ -742,11 +738,12 @@ bool Rsp::SendResponse(GattsRequestWriteEvent *event)
+         response = -1;
+     }
+ 
+-    fprintf(stdout, "(%s) Sending RSP response to write (%d) value (%s) State (%d)",__FUNCTION__,
+-            GetRSPAppData()->server_if, event->value,GetDeviceState());
+-    if(event->value != NULL)
++    if (event->value != NULL) {
++        fprintf(stdout, "(%s) Sending RSP response to write (%d) value (%s) "
++            "State (%d)",__FUNCTION__, GetRSPAppData()->server_if, event->value,
++            GetDeviceState());
+         osi_free(event->value);
+-
++    }
+     rsp->SetDeviceState(WLAN_ACTIVE);;
+     return app_gatt->send_response(event->conn_id, event->trans_id,
+                                                          response, &att_resp);
+@@ -795,11 +792,12 @@ bool Rsp::AddService()
+ bool Rsp::DisconnectServer()
+ {
+     int server_if = GetRSPConnectionData()->server_if;
+-    bt_bdaddr_t * bda = GetRSPConnectionData()->bda;
++    bt_bdaddr_t bda;
++    memcpy(&bda,&(GetRSPConnectionData()->bda),sizeof(bt_bdaddr_t));
+     int conn_id = GetRSPConnectionData()->conn_id;
+     fprintf(stdout,  "(%s) Disconnecting interface (%d), connid (%d) ",__FUNCTION__,
+             server_if, conn_id);
+-    return app_gatt->serverDisconnect(server_if, bda, conn_id) == BT_STATUS_SUCCESS;
++    return app_gatt->serverDisconnect(server_if, &bda, conn_id) == BT_STATUS_SUCCESS;
+ }
+ 
+ bool Rsp::DeleteService()
+diff --git a/qcom-opensource/bt/gatt/src/Gatt.cpp b/qcom-opensource/bt/gatt/src/Gatt.cpp
+index 34f70453cce0..cbc666b783cd 100644
+--- a/qcom-opensource/bt/gatt/src/Gatt.cpp
++++ b/qcom-opensource/bt/gatt/src/Gatt.cpp
+@@ -63,8 +63,7 @@ void btgattc_register_app_cb(int status, int clientIf, bt_uuid_t *app_uuid)
+     event->event_id = BTGATTC_REGISTER_APP_EVENT;
+     event->gattc_register_app_event.status = status;
+     event->gattc_register_app_event.clientIf = clientIf;
+-    event->gattc_register_app_event.app_uuid = (bt_uuid_t *) osi_malloc (sizeof(bt_uuid_t));;
+-    memcpy(event->gattc_register_app_event.app_uuid, app_uuid, sizeof(bt_uuid_t));
++    memcpy(&event->gattc_register_app_event.app_uuid, app_uuid, sizeof(bt_uuid_t));
+ 
+     PostMessage(THREAD_ID_GATT, event);
+ }
+@@ -82,9 +81,9 @@ void btgattc_scan_result_cb(bt_bdaddr_t* bda, int rssi, uint8_t* adv_data)
+     CHECK_PARAM_VOID(event)
+ 
+     event->event_id = BTGATTC_SCAN_RESULT_EVENT;
+-    event->gattc_scan_result_event.bda = bda;
++    memcpy(&event->gattc_scan_result_event.bda, bda,sizeof(bt_bdaddr_t));
+     event->gattc_scan_result_event.rssi= rssi;
+-    event->gattc_scan_result_event.adv_data= adv_data;
++    memcpy(&event->gattc_scan_result_event.adv_data, adv_data,sizeof(uint8_t));
+ 
+     PostMessage(THREAD_ID_GATT, event);
+ 
+@@ -101,7 +100,7 @@ void btgattc_open_cb(int conn_id, int status, int clientIf, bt_bdaddr_t* bda)
+     event->gattc_open_event.status= status;
+     event->gattc_open_event.clientIf= clientIf;
+     event->gattc_open_event.conn_id= conn_id;
+-    event->gattc_open_event.bda = bda;
++    memcpy(&event->gattc_open_event.bda, bda, sizeof(bt_bdaddr_t));
+ 
+     PostMessage(THREAD_ID_GATT, event);
+ 
+@@ -118,7 +117,7 @@ void btgattc_close_cb(int conn_id, int status, int clientIf, bt_bdaddr_t* bda)
+     event->gattc_close_event.status= status;
+     event->gattc_close_event.clientIf= clientIf;
+     event->gattc_close_event.conn_id= conn_id;
+-    event->gattc_close_event.bda= bda;
++    memcpy(&event->gattc_close_event.bda, bda, sizeof(bt_bdaddr_t));
+ 
+     PostMessage(THREAD_ID_GATT, event);
+ 
+@@ -166,7 +165,7 @@ void btgattc_notify_cb(int conn_id, btgatt_notify_params_t *p_data)
+ 
+     event->event_id = BTGATTC_NOTIFY_EVENT;
+     event->gattc_notify_event.conn_id= conn_id;
+-    event->gattc_notify_event.p_data= p_data;
++    memcpy(&event->gattc_notify_event.p_data, p_data,sizeof(btgatt_notify_params_t));
+ 
+     PostMessage(THREAD_ID_GATT, event);
+ 
+@@ -183,7 +182,7 @@ void btgattc_read_characteristic_cb(int conn_id, int status,
+     event->event_id = BTGATTC_READ_CHARACTERISTIC_EVENT;
+     event->gattc_read_characteristic_event.status= status;
+     event->gattc_read_characteristic_event.conn_id= conn_id;
+-    event->gattc_read_characteristic_event.p_data= p_data;
++    memcpy(&event->gattc_read_characteristic_event.p_data, p_data,sizeof(btgatt_read_params_t));
+ 
+     PostMessage(THREAD_ID_GATT, event);
+ 
+@@ -231,7 +230,7 @@ void btgattc_read_descriptor_cb(int conn_id, int status, btgatt_read_params_t *p
+     event->event_id = BTGATTC_READ_DESCRIPTOR_EVENT;
+     event->gattc_read_descriptor_event.status= status;
+     event->gattc_read_descriptor_event.conn_id= conn_id;
+-    event->gattc_read_descriptor_event.p_data= p_data;
++    memcpy(&event->gattc_read_descriptor_event.p_data, p_data,sizeof(btgatt_read_params_t));
+ 
+     PostMessage(THREAD_ID_GATT, event);
+ 
+@@ -264,7 +263,7 @@ void btgattc_remote_rssi_cb(int client_if,bt_bdaddr_t* bda, int rssi, int status
+     event->gattc_remote_rssi_event.status = status;
+     event->gattc_remote_rssi_event.client_if= client_if;
+         event->gattc_remote_rssi_event.rssi= rssi;
+-        event->gattc_remote_rssi_event.bda= bda;
++        memcpy(&event->gattc_remote_rssi_event.bda, bda, sizeof(bt_bdaddr_t));
+ 
+     PostMessage(THREAD_ID_GATT, event);
+ 
+@@ -472,7 +471,7 @@ void btgattc_batchscan_reports_cb(int client_if, int status, int report_format,
+     event->gattc_batchscan_reports_event.report_format = report_format;
+     event->gattc_batchscan_reports_event.num_records= num_records;
+     event->gattc_batchscan_reports_event.data_len= data_len;
+-    event->gattc_batchscan_reports_event.p_rep_data= p_rep_data;
++    memcpy(&event->gattc_batchscan_reports_event.p_rep_data, p_rep_data,sizeof(uint8_t));
+ 
+     PostMessage(THREAD_ID_GATT, event);
+ 
+@@ -500,7 +499,7 @@ void btgattc_track_adv_event_cb(btgatt_track_adv_info_t *p_adv_track_info)
+     CHECK_PARAM_VOID(event)
+ 
+     event->event_id = BTGATTC_TRACK_ADV_EVENT_EVENT;
+-    event->gattc_track_adv_event_event.p_adv_track_info= p_adv_track_info;
++    memcpy(&event->gattc_track_adv_event_event.p_adv_track_info, p_adv_track_info,sizeof(btgatt_track_adv_info_t));
+ 
+     PostMessage(THREAD_ID_GATT, event);
+ 
+@@ -523,7 +522,7 @@ void btgattc_scan_parameter_setup_completed_cb(int client_if, btgattc_error_t st
+ 
+ void btgattc_get_gatt_db_cb(int conn_id, btgatt_db_element_t *db, int count)
+ {
+-    ALOGD(LOGTAG "(%s) conn_id (%d)",__FUNCTION__,conn_id);
++    ALOGD(LOGTAG "(%s) conn_id (%d \n)",__FUNCTION__,conn_id);
+ 
+     BtEvent *event = new BtEvent;
+     CHECK_PARAM_VOID(event)
+@@ -578,14 +577,19 @@ void btgatts_register_app_cb(int status, int server_if, bt_uuid_t *uuid)
+ {
+     ALOGD(LOGTAG "\n (%s) status (%d) server_if (%d) \n",__FUNCTION__, status, server_if);
+ 
++	ALOGD(LOGTAG"printing uuid \n");
++	int itr;
++    for (itr = 0; itr < 16; itr++) {
++        ALOGD(LOGTAG " uuid is %d \n",uuid->uu[itr]);
++
++    }
++
+     BtEvent *event = new BtEvent;
+     CHECK_PARAM_VOID(event)
+     event->event_id = BTGATTS_REGISTER_APP_EVENT;
+     event->gatts_register_app_event.status = status;
+     event->gatts_register_app_event.server_if = server_if;
+-    event->gatts_register_app_event.uuid = (bt_uuid_t *) osi_malloc (sizeof(bt_uuid_t));
+-    memcpy(event->gatts_register_app_event.uuid, uuid, sizeof(bt_uuid_t));
+-    
++    memcpy(&event->gatts_register_app_event.uuid, uuid, sizeof(bt_uuid_t));
+     PostMessage(THREAD_ID_GATT, event);
+     ALOGD(LOGTAG "exiting btgatts_register_app_cb \n");
+ }
+@@ -608,7 +612,7 @@ void btgatts_connection_cb(int conn_id, int server_if, int connected, bt_bdaddr_
+     event->gatts_connection_event.conn_id = conn_id;
+     event->gatts_connection_event.server_if = server_if;
+     event->gatts_connection_event.connected = connected;
+-    event->gatts_connection_event.bda = bda;
++    memcpy(&event->gatts_connection_event.bda, bda, sizeof(bt_bdaddr_t));
+     PostMessage(THREAD_ID_GATT, event);
+ 
+ }
+@@ -625,7 +629,7 @@ void btgatts_service_added_cb(int status, int server_if,
+     event->event_id = BTGATTS_SERVICE_ADDED_EVENT;
+     event->gatts_service_added_event.status = status;
+     event->gatts_service_added_event.server_if = server_if;
+-    event->gatts_service_added_event.srvc_id = srvc_id ;
++    memcpy(&event->gatts_service_added_event.srvc_id, srvc_id, sizeof(btgatt_srvc_id_t)) ;
+     event->gatts_service_added_event.srvc_handle = srvc_handle ;
+ 
+     PostMessage(THREAD_ID_GATT, event);
+@@ -660,8 +664,7 @@ void btgatts_characteristic_added_cb(int status, int server_if, bt_uuid_t *char_
+     event->event_id = BTGATTS_CHARACTERISTIC_ADDED_EVENT;
+     event->gatts_characteristic_added_event.status = status;
+     event->gatts_characteristic_added_event.server_if = server_if;
+-    event->gatts_characteristic_added_event.char_id = (bt_uuid_t *) osi_malloc (sizeof(bt_uuid_t));;
+-    memcpy(event->gatts_characteristic_added_event.char_id, char_id, sizeof(bt_uuid_t));
++    memcpy(&event->gatts_characteristic_added_event.char_id, char_id, sizeof(bt_uuid_t));
+     event->gatts_characteristic_added_event.srvc_handle = srvc_handle ;
+     event->gatts_characteristic_added_event.char_handle = char_handle ;
+ 
+@@ -679,8 +682,7 @@ void btgatts_descriptor_added_cb(int status, int server_if, bt_uuid_t *descr_id,
+     event->event_id = BTGATTS_DESCRIPTOR_ADDED_EVENT;
+     event->gatts_descriptor_added_event.status = status;
+     event->gatts_descriptor_added_event.server_if = server_if;
+-    event->gatts_descriptor_added_event.descr_id = (bt_uuid_t *) osi_malloc (sizeof(bt_uuid_t));;
+-    memcpy(event->gatts_descriptor_added_event.descr_id, descr_id, sizeof(bt_uuid_t));
++    memcpy(&event->gatts_descriptor_added_event.descr_id, descr_id, sizeof(bt_uuid_t));
+     event->gatts_descriptor_added_event.srvc_handle = srvc_handle ;
+     event->gatts_descriptor_added_event.descr_handle = descr_handle ;
+ 
+@@ -748,7 +750,7 @@ void btgatts_request_read_cb(int conn_id, int trans_id, bt_bdaddr_t *bda, int at
+     event->event_id = BTGATTS_REQUEST_READ_EVENT;
+     event->gatts_request_read_event.conn_id = conn_id;
+     event->gatts_request_read_event.trans_id = trans_id;
+-    event->gatts_request_read_event.bda = bda;
++    memcpy(&event->gatts_request_read_event.bda, bda, sizeof(bt_bdaddr_t));
+     event->gatts_request_read_event.attr_handle = attr_handle;
+     event->gatts_request_read_event.offset = offset;
+     event->gatts_request_read_event.is_long = is_long ;
+@@ -767,8 +769,8 @@ void btgatts_request_write_cb(int conn_id, int trans_id, bt_bdaddr_t *bda, int a
+             bda->address[0], bda->address[1], bda->address[2],
+            bda->address[3], bda->address[4], bda->address[5]);
+ 
+-    ALOGD(LOGTAG "(%s) connid:(%d) bdaddr:(%s) value (%s) need_rsp (%d)\n",__FUNCTION__, conn_id,
+-            c_address, value, need_rsp);
++    ALOGD(LOGTAG "(%s) connid:(%d) bdaddr:(%s) need_rsp (%d)\n",__FUNCTION__, conn_id,
++            c_address, need_rsp);
+ 
+     BtEvent *event = new BtEvent;
+     CHECK_PARAM_VOID(event)
+@@ -776,7 +778,7 @@ void btgatts_request_write_cb(int conn_id, int trans_id, bt_bdaddr_t *bda, int a
+     event->event_id = BTGATTS_REQUEST_WRITE_EVENT;
+     event->gatts_request_write_event.conn_id = conn_id;
+     event->gatts_request_write_event.trans_id = trans_id;
+-    event->gatts_request_write_event.bda = bda;
++    memcpy(&event->gatts_request_write_event.bda, bda,sizeof(bt_bdaddr_t));
+     event->gatts_request_write_event.attr_handle = attr_handle;
+     event->gatts_request_write_event.offset = offset;
+     event->gatts_request_write_event.length = length;
+@@ -809,7 +811,7 @@ void btgatts_request_exec_write_cb(int conn_id, int trans_id,
+     event->event_id = BTGATTS_REQUEST_EXEC_WRITE_EVENT;
+     event->gatts_request_exec_write_event.conn_id = conn_id;
+     event->gatts_request_exec_write_event.trans_id = trans_id;
+-    event->gatts_request_exec_write_event.bda = bda;
++    memcpy(&event->gatts_request_exec_write_event.bda, bda,sizeof(bt_bdaddr_t));
+     event->gatts_request_exec_write_event.exec_write = exec_write;
+ 
+     PostMessage(THREAD_ID_GATT, event);
+@@ -960,18 +962,25 @@ void Gatt::HandleGattIpcMsg(BtIpcMsg *ipc_msg)
+ void Gatt::HandleGattsRegisterAppEvent(GattsRegisterAppEvent *event)
+ {
+     ALOGD(LOGTAG  "(%s) server_if =%d status =%d uuid =%x \n ",__FUNCTION__, event->server_if,
+-            event->status, event->uuid->uu);
++            event->status, event->uuid.uu);
+ 
+     int itr;
+     std::map<uint8_t *,BluetoothGattServerCallback *> ::iterator it;
+ 
+     for (it = serverCbUuidMap.begin(); it != serverCbUuidMap.end(); ++it) {
+-        if (it->first &&  event->uuid->uu) {
++        if (it->first &&  event->uuid.uu) {
+            ALOGD(LOGTAG "checking \n");
++           for (itr = 0; itr < 16; itr++) {
++             ALOGD(LOGTAG " saved uuid is %d \n",it->first[itr]);  
++           }
++
++           for (itr = 0; itr < 16; itr++) {
++             ALOGD(LOGTAG " received uuid is %d \n",event->uuid.uu[itr]);
++           } 
+            itr = 0;
+            for (itr = 0; itr < 16; itr++) {
+-               ALOGD(LOGTAG " it->first is %d, uuid is %d \n",it->first[itr], event->uuid->uu[itr]);
+-               if ( it->first[itr] == event->uuid->uu[itr]) {
++               ALOGD(LOGTAG " it->first is %d, uuid is %d \n",it->first[itr], event->uuid.uu[itr]);
++               if ( it->first[itr] == event->uuid.uu[itr]) {
+                   continue;
+                } else {
+                  break;
+@@ -988,7 +997,7 @@ void Gatt::HandleGattsRegisterAppEvent(GattsRegisterAppEvent *event)
+      }
+ 
+      if (it->second) {
+-        it->second->gattServerRegisterAppCb(event->status,event->server_if,event->uuid);
++        it->second->gattServerRegisterAppCb(event->status,event->server_if,&event->uuid);
+      } else {
+         ALOGD(LOGTAG "Callback is null \n");
+      }
+@@ -1005,7 +1014,7 @@ void Gatt::HandleGattsConnectionEvent(GattsConnectionEvent *event)
+ 
+     it = serverCbSifMap.find(event->server_if);
+     if (it != serverCbSifMap.end()) {
+-       it->second->btgatts_connection_cb(event->conn_id,event->server_if,event->connected, event->bda);
++       it->second->btgatts_connection_cb(event->conn_id,event->server_if,event->connected, &event->bda);
+     } else {
+        ALOGD(LOGTAG "Not found \n");
+     }
+@@ -1021,7 +1030,7 @@ void Gatt::HandleGattsServiceAddedEvent(GattsServiceAddedEvent *event)
+     it = serverCbSifMap.find(event->server_if);
+     if (it != serverCbSifMap.end()) {
+        ALOGD(LOGTAG "found \n");
+-       it->second->btgatts_service_added_cb(event->status,event->server_if,event->srvc_id, event->srvc_handle);
++       it->second->btgatts_service_added_cb(event->status,event->server_if,&event->srvc_id, event->srvc_handle);
+     } else {
+        ALOGD(LOGTAG "Not found \n");
+     }
+@@ -1039,7 +1048,7 @@ void Gatt::HandleGattsCharacteristicAddedEvent(GattsCharacteristicAddedEvent *ev
+     it = serverCbSifMap.find(event->server_if);
+     if(it != serverCbSifMap.end()) {
+        ALOGD(LOGTAG "found \n");
+-       it->second->btgatts_characteristic_added_cb(event->status,event->server_if,event->char_id, event->srvc_handle,event->char_handle);
++       it->second->btgatts_characteristic_added_cb(event->status,event->server_if,&event->char_id, event->srvc_handle,event->char_handle);
+     } else {
+        ALOGD(LOGTAG "Not found \n");
+     }
+@@ -1056,7 +1065,7 @@ void Gatt::HandleGattsDescriptorAddedEvent(GattsDescriptorAddedEvent *event)
+     it = serverCbSifMap.find(event->server_if);
+     if(it != serverCbSifMap.end()) {
+        ALOGD(LOGTAG "found \n");
+-       it->second->btgatts_descriptor_added_cb(event->status,event->server_if,event->descr_id, event->srvc_handle, event->descr_handle);
++       it->second->btgatts_descriptor_added_cb(event->status,event->server_if,&event->descr_id, event->srvc_handle, event->descr_handle);
+     } else {
+        ALOGD(LOGTAG "Not found \n");
+     }
+@@ -1113,16 +1122,16 @@ void Gatt::HandleGattsRequestWriteEvent(GattsRequestWriteEvent *event)
+ {
+     char c_address[32];
+     snprintf(c_address,sizeof(c_address), "%02X:%02X:%02X:%02X:%02X:%02X",
+-                event->bda->address[0], event->bda->address[1], event->bda->address[2],
+-                event->bda->address[3], event->bda->address[4], event->bda->address[5]);
++                event->bda.address[0], event->bda.address[1], event->bda.address[2],
++                event->bda.address[3], event->bda.address[4], event->bda.address[5]);
+ 
+     ALOGD(LOGTAG "server if is %d \n", ConnidServerifMap[event->conn_id]);
+     std::map<int,BluetoothGattServerCallback *> ::iterator it;
+ 
+     it = serverCbSifMap.find(ConnidServerifMap[event->conn_id]);
+     if (it != serverCbSifMap.end()) {
+-        ALOGD(LOGTAG "found \n");
+-        it->second->btgatts_request_write_cb(event->conn_id,event->trans_id, event->bda, event->attr_handle,
++        ALOGD(LOGTAG "found in the connection server map\n");
++        it->second->btgatts_request_write_cb(event->conn_id,event->trans_id, &event->bda, event->attr_handle,
+                                     event->offset, event->length, event->need_rsp, event->is_prep,
+                                     event->value);
+     } else {
+@@ -1142,7 +1151,7 @@ void Gatt::HandleGattsRequestReadEvent(GattsRequestReadEvent *event)
+     it = serverCbSifMap.find(ConnidServerifMap[event->conn_id]);
+     if (it != serverCbSifMap.end()) {
+        ALOGD(LOGTAG "found \n");
+-       it->second->btgatts_request_read_cb(event->conn_id, event->trans_id, event->bda, event->attr_handle,
++       it->second->btgatts_request_read_cb(event->conn_id, event->trans_id, &event->bda, event->attr_handle,
+                                        event->offset, event->is_long);
+     } else {
+        ALOGD(LOGTAG "Not found \n");
+@@ -1179,7 +1188,7 @@ void Gatt::HandleGattsRequestExecWriteEvent(GattsRequestExecWriteEvent *event)
+     if (it != serverCbSifMap.end()) {
+         ALOGD(LOGTAG "found \n");
+         it->second->btgatts_request_exec_write_cb(event->conn_id, event->trans_id,
+-                                               event->bda, event->exec_write);
++                                               &event->bda, event->exec_write);
+     } else {
+         ALOGD(LOGTAG "Not found \n");
+     }
+@@ -1249,12 +1258,12 @@ void Gatt::HandleGattcRegisterAppEvent(GattcRegisterAppEvent *event)
+ 
+     for (it = clientCbUuidMap.begin(); it != clientCbUuidMap.end(); ++it) {
+ 
+-         if (it->first &&  event->app_uuid->uu) {
++         if (it->first &&  event->app_uuid.uu) {
+             ALOGD(LOGTAG "checking \n");
+             itr = 0;
+             for (itr = 0; itr < 16; itr++) {
+-                ALOGD(LOGTAG " it->first is %d, uuid is %d \n",it->first[itr], event->app_uuid->uu[itr]);
+-                if ( it->first[itr] == event->app_uuid->uu[itr]) {
++                ALOGD(LOGTAG " it->first is %d, uuid is %d \n",it->first[itr], event->app_uuid.uu[itr]);
++                if ( it->first[itr] == event->app_uuid.uu[itr]) {
+                    continue;
+                 } else {
+                     break;
+@@ -1271,7 +1280,7 @@ void Gatt::HandleGattcRegisterAppEvent(GattcRegisterAppEvent *event)
+     }
+ 
+     if (it->second) {
+-       it->second->btgattc_client_register_app_cb(event->status,event->clientIf,event->app_uuid);
++       it->second->btgattc_client_register_app_cb(event->status,event->clientIf,&event->app_uuid);
+     } else {
+        ALOGD(LOGTAG "Callback is null \n");
+     }
+@@ -1289,7 +1298,7 @@ void Gatt::HandleGattcScanResultEvent (GattcScanResultEvent *event)
+                  if(it2 != clientCbCifMap.end()) {
+                    ALOGD(LOGTAG "found \n");
+                     if ( it2->second) {
+-                        it2->second->btgattc_scan_result_cb(event->bda,event->rssi,event->adv_data);
++                        it2->second->btgattc_scan_result_cb(&event->bda,event->rssi,&event->adv_data);
+                     } else {
+                         ALOGD(LOGTAG "Not found \n");
+                     }
+@@ -1311,7 +1320,7 @@ void Gatt::HandleGattcOpenEvent(GattcOpenEvent *event) {
+     it = clientCbCifMap.find(event->clientIf);
+     if(it != clientCbCifMap.end()) {
+        ALOGD(LOGTAG "found \n");
+-       it->second->btgattc_open_cb(event->conn_id, event->status, event->clientIf, event->bda);
++       it->second->btgattc_open_cb(event->conn_id, event->status, event->clientIf,&event->bda);
+     } else {
+        ALOGD(LOGTAG "Not found \n");
+     }
+@@ -1327,7 +1336,7 @@ void Gatt::HandleGattcCloseEvent(GattcCloseEvent *event)  {
+     it = clientCbCifMap.find(event->clientIf);
+     if(it != clientCbCifMap.end()) {
+        ALOGD(LOGTAG "found \n");
+-       it->second->btgattc_close_cb(event->conn_id, event->status, event->clientIf, event->bda);
++       it->second->btgattc_close_cb(event->conn_id, event->status, event->clientIf, &event->bda);
+     } else {
+        ALOGD(LOGTAG "Not found \n");
+     }
+@@ -1375,7 +1384,7 @@ void Gatt::HandleGattcNotifyEvent(GattcNotifyEvent *event)  {
+       it = clientCbCifMap.find(ConnidClientifMap[event->conn_id]);
+       if(it != clientCbCifMap.end()) {
+         ALOGD(LOGTAG "found \n");
+-        it->second->btgattc_notify_cb(event->conn_id, event->p_data);
++        it->second->btgattc_notify_cb(event->conn_id, &event->p_data);
+       }  else {
+         ALOGD(LOGTAG "Not found \n");
+       }
+@@ -1391,7 +1400,7 @@ void Gatt::HandleGattcReadCharacteristicEvent(GattcReadCharacteristicEvent *even
+      if(it != clientCbCifMap.end()) {
+         ALOGD(LOGTAG "found \n");
+         it->second->btgattc_read_characteristic_cb(event->conn_id, event->status,
+-                                                    event->p_data);
++                                                    &event->p_data);
+      } else {
+         ALOGD(LOGTAG "Not found \n");
+      }
+@@ -1423,7 +1432,7 @@ void Gatt::HandleGattcReadDescriptorEvent(GattcReadDescriptorEvent *event)  {
+      it = clientCbCifMap.find(ConnidClientifMap[event->conn_id]);
+      if(it != clientCbCifMap.end()) {
+         ALOGD(LOGTAG "found \n");
+-        it->second->btgattc_read_descriptor_cb(event->conn_id, event->status, event->p_data);
++        it->second->btgattc_read_descriptor_cb(event->conn_id, event->status, &event->p_data);
+      } else {
+         ALOGD(LOGTAG "Not found \n");
+      }
+@@ -1467,7 +1476,7 @@ void Gatt::HandleGattcRemoteRssiEvent(GattcRemoteRssiEvent *event)  {
+      it = clientCbCifMap.find(event->client_if);
+      if(it != clientCbCifMap.end()) {
+         ALOGD(LOGTAG "found \n");
+-        it->second->btgattc_remote_rssi_cb(event->client_if,event->bda, event->rssi, event->status);
++        it->second->btgattc_remote_rssi_cb(event->client_if,&event->bda, event->rssi, event->status);
+      } else {
+         ALOGD(LOGTAG "Not found \n");
+      }
+@@ -1651,7 +1660,7 @@ void Gatt::HandleGattcBatchscanReportsEvent(GattcBatchscanReportsEvent *event)
+      if(it != clientCbCifMap.end()) {
+         ALOGD(LOGTAG "found \n");
+         it->second->btgattc_batchscan_reports_cb(event->client_if, event->status, event->report_format,
+-                               event->num_records, event->data_len, event->p_rep_data);
++                               event->num_records, event->data_len, &event->p_rep_data);
+         } else {
+         ALOGD(LOGTAG "Not found \n");
+         }
+@@ -1909,6 +1918,7 @@ void Gatt::UnRegisterServerCallback( int serverif)
+      it2 = serverCbSifMap.find(serverif);
+      if (it2 != serverCbSifMap.end())
+      serverCbSifMap.erase (it2);
++
+      it3 = ConnidServerifMap.find(serverif);
+      if (it3 != ConnidServerifMap.end())
+      ConnidServerifMap.erase(it3);
+@@ -1934,6 +1944,7 @@ void Gatt::UnRegisterClientCallback( int clientif)
+      it2 = clientCbCifMap.find(clientif);
+      if (it2 != clientCbCifMap.end())
+      clientCbCifMap.erase (it2);
++
+      it3 = ConnidClientifMap.find(clientif);
+      if (it3 != ConnidClientifMap.end())
+      ConnidClientifMap.erase(it3);
+@@ -1982,6 +1993,7 @@ bool Gatt::HandleDisableGatt()
+ 
+ bt_status_t Gatt::register_client( bt_uuid_t *client_uuid ) {
+ 
++            ALOGD(LOGTAG"gatt register_client \n");
+             if (gatt_interface) {
+                 return gatt_interface->client->register_client(client_uuid);
+             }
+diff --git a/qcom-opensource/bt/property-ops/src/sock_ops.c b/qcom-opensource/bt/property-ops/src/sock_ops.c
+index 1bb6f5cb3b39..56a0070b8fbc 100644
+--- a/qcom-opensource/bt/property-ops/src/sock_ops.c
++++ b/qcom-opensource/bt/property-ops/src/sock_ops.c
+@@ -393,7 +393,7 @@ void *io_thread_handler (void *param)
+                 {
+                     //LOG_DEBUG("Data set available on (%d)\n",selectloop);
+                    bytes_available = recv(sdata.conn_fd[selectloop], buf,
+-                            sizeof(buf), 0);
++                            sizeof(buf)-1, 0);
+ 
+                     if(bytes_available  == 0) {
+                        /* LOG_DEBUG("I/O Done EOF counter=(%d)selectloop =(%d)\n",
+@@ -405,7 +405,7 @@ void *io_thread_handler (void *param)
+                         //LOG_DEBUG("I/O data on fd, at index(%d)=%s\n",
+                         //        selectloop,buf);
+                         /* Read out the property Value */
+-                        //buf[bytes_available] = NULL;
++                        buf[bytes_available] = NULL;
+                         //char *data = strdup(buf);
+                         memset(prop_val, 0, MAX_ALLOWED_LINE_LEN);
+                         no_of_separate_strings = separate_recvd_commands(buf);
+diff --git a/system/bt/bta/gatt/bta_gatts_act.c b/system/bt/bta/gatt/bta_gatts_act.c
+index 3f357bf7c1d4..08f08401ab16 100644
+--- a/system/bt/bta/gatt/bta_gatts_act.c
++++ b/system/bt/bta/gatt/bta_gatts_act.c
+@@ -765,7 +765,7 @@ void bta_gatts_close (tBTA_GATTS_CB *p_cb, tBTA_GATTS_DATA * p_msg)
+ 
+     if (GATT_GetConnectionInfor(p_msg->hdr.layer_specific, &gatt_if, remote_bda, &transport))
+     {
+-        if (GATT_Disconnect(p_msg->hdr.layer_specific) != GATT_SUCCESS)
++        if (GATTS_Disconnect(p_msg->hdr.layer_specific) != GATT_SUCCESS)
+         {
+             APPL_TRACE_ERROR("bta_gatts_close fail conn_id=%d", p_msg->hdr.layer_specific);
+         }
+diff --git a/system/bt/btif/src/btif_core.c b/system/bt/btif/src/btif_core.c
+index c25eb8ff229f..376e635b803d 100644
+--- a/system/bt/btif/src/btif_core.c
++++ b/system/bt/btif/src/btif_core.c
+@@ -61,6 +61,7 @@
+ #include "osi/include/properties.h"
+ #include "osi/include/thread.h"
+ #include "stack_manager.h"
++#include "btm_int.h"
+ 
+ /************************************************************************************
+ **  Constants & Macros
+@@ -942,13 +943,18 @@ static bt_status_t btif_in_get_remote_device_properties(bt_bdaddr_t *bd_addr)
+ 
+     bt_bdname_t name, alias;
+     uint32_t cod, devtype;
++    bt_status_t ret;
+     bt_uuid_t remote_uuids[BT_MAX_NUM_UUIDS];
+ 
++	tBTM_SEC_DEV_REC *p_dev_rec = btm_find_dev (bd_addr->address);
++
+     memset(remote_properties, 0, sizeof(remote_properties));
+     BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props], BT_PROPERTY_BDNAME,
+                                sizeof(name), &name);
+-    btif_storage_get_remote_device_property(bd_addr,
++    ret = btif_storage_get_remote_device_property(bd_addr,
+                                             &remote_properties[num_props]);
++    if(ret == BT_STATUS_FAIL && p_dev_rec != NULL)
++        strlcpy(&name, p_dev_rec->sec_bd_name,sizeof(name));
+     num_props++;
+ 
+     BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props], BT_PROPERTY_REMOTE_FRIENDLY_NAME,
+@@ -965,8 +971,10 @@ static bt_status_t btif_in_get_remote_device_properties(bt_bdaddr_t *bd_addr)
+ 
+     BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props], BT_PROPERTY_TYPE_OF_DEVICE,
+                                sizeof(devtype), &devtype);
+-    btif_storage_get_remote_device_property(bd_addr,
++    ret = btif_storage_get_remote_device_property(bd_addr,
+                                             &remote_properties[num_props]);
++    if(ret == BT_STATUS_FAIL && p_dev_rec != NULL)
++        devtype = p_dev_rec->device_type;
+     num_props++;
+ 
+     BTIF_STORAGE_FILL_PROPERTY(&remote_properties[num_props], BT_PROPERTY_UUIDS,
+diff --git a/system/bt/btif/src/btif_dm.c b/system/bt/btif/src/btif_dm.c
+index ce83f61b19e3..44b4043c715c 100644
+--- a/system/bt/btif/src/btif_dm.c
++++ b/system/bt/btif/src/btif_dm.c
+@@ -2020,9 +2020,9 @@ static void btif_dm_upstreams_evt(UINT16 event, char* p_param)
+              */
+              LOG_INFO(LOG_TAG," Sending BT ON to upper 1 %s",__func__);
+              btif_storage_load_bonded_devices();
+-        LOG_INFO(LOG_TAG," Sending BT ON to upper  2%s",__func__);
++             LOG_INFO(LOG_TAG," Sending BT ON to upper  2%s",__func__);
+              load_iot_devlist(IOT_DEV_CONF_FILE);
+-        LOG_INFO(LOG_TAG," Sending BT ON to upper 3 %s",__func__);
++             LOG_INFO(LOG_TAG," Sending BT ON to upper 3 %s",__func__);
+              btif_enable_bluetooth_evt(p_data->enable.status);
+         }
+         break;
+diff --git a/system/bt/btif/src/btif_sock_thread.c b/system/bt/btif/src/btif_sock_thread.c
+index d1651c85b226..7f55c4012aca 100644
+--- a/system/bt/btif/src/btif_sock_thread.c
++++ b/system/bt/btif/src/btif_sock_thread.c
+@@ -599,7 +599,6 @@ static void *sock_poll_thread(void *arg)
+         }
+         else {APPL_TRACE_DEBUG("no data, select ret: %d", ret)};
+     }
+-    ts[h].thread_id = -1;
+     APPL_TRACE_DEBUG("socket poll thread exiting, h:%d", h);
+     return 0;
+ }
+diff --git a/system/bt/stack/btm/btm_ble.c b/system/bt/stack/btm/btm_ble.c
+index 3db87dced9b6..ec45ecde7da7 100644
+--- a/system/bt/stack/btm/btm_ble.c
++++ b/system/bt/stack/btm/btm_ble.c
+@@ -102,6 +102,7 @@ BOOLEAN BTM_SecAddBleDevice (const BD_ADDR bd_addr, BD_NAME bd_name, tBT_DEVICE_
+         strlcpy((char *)p_dev_rec->sec_bd_name,
+                 (char *)bd_name, BTM_MAX_REM_BD_NAME_LEN);
+     }
++    BTM_TRACE_DEBUG ("%s: dev_type=0x%x,ble_addr_type=0x%x", __func__, dev_type,addr_type);
+     p_dev_rec->device_type |= dev_type;
+     p_dev_rec->ble.ble_addr_type = addr_type;
+ 
+@@ -688,11 +689,35 @@ void BTM_ReadDevInfo (BD_ADDR remote_bda, tBT_DEVICE_TYPE *p_dev_type, tBLE_ADDR
+     }
+     else /* there is a security device record exisitng */
+     {
++        BD_ADDR *bda = p_dev_rec->ble.pseudo_addr;
++        BD_ADDR *bda1 = p_dev_rec->bd_addr;
++        BTM_TRACE_DEBUG("BTM_ReadDevInfo: remote_bda %.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
++        *((uint8_t *)remote_bda + (0)), *((uint8_t *)remote_bda + (1)),
++		*((uint8_t *)remote_bda + (2)),
++        *((uint8_t *)remote_bda + (3)), *((uint8_t *)remote_bda + (4)),
++		*((uint8_t *)remote_bda + (5)));
++
++		BTM_TRACE_DEBUG("BTM_ReadDevInfo: pseudo_bda %.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
++        *((uint8_t *)bda + (0)), *((uint8_t *)bda + (1)),
++		*((uint8_t *)bda + (2)),
++        *((uint8_t *)bda + (3)), *((uint8_t *)bda + (4)),
++		*((uint8_t *)bda + (5)));
++
++		BTM_TRACE_DEBUG("BTM_ReadDevInfo: bd_addr %.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
++        *((uint8_t *)bda1 + (0)), *((uint8_t *)bda1 + (1)),
++		*((uint8_t *)bda1 + (2)),
++        *((uint8_t *)bda1 + (3)), *((uint8_t *)bda1 + (4)),
++		*((uint8_t *)bda1 + (5)));
++
++
++
+         /* new inquiry result, overwrite device type in security device record */
+         if (p_inq_info)
+         {
+             p_dev_rec->device_type          = p_inq_info->results.device_type;
+             p_dev_rec->ble.ble_addr_type    = p_inq_info->results.ble_addr_type;
++            BTM_TRACE_DEBUG ("%s: dev_type=0x%x,ble_addr_type=0x%x", __func__,
++					p_dev_rec->device_type,p_dev_rec->ble.ble_addr_type);
+         }
+         if (memcmp(p_dev_rec->bd_addr, remote_bda, BD_ADDR_LEN) == 0 &&
+             memcmp(p_dev_rec->ble.pseudo_addr, remote_bda, BD_ADDR_LEN) == 0)
+@@ -2079,6 +2104,7 @@ void btm_ble_connected (UINT8 *bda, UINT16 handle, UINT8 enc_mode, UINT8 role,
+     p_dev_rec->device_type |= BT_DEVICE_TYPE_BLE;
+     p_dev_rec->ble_hci_handle = handle;
+     p_dev_rec->ble.ble_addr_type = addr_type;
++    BTM_TRACE_EVENT ("btm_ble_connected:ble_addr_type = 0x%x",addr_type);
+     /* update pseudo address */
+     memcpy(p_dev_rec->ble.pseudo_addr, bda, BD_ADDR_LEN);
+ 
+@@ -2896,6 +2922,63 @@ void btm_ble_set_random_address(BD_ADDR random_bda)
+ 
+ }
+ 
++/*******************************************************************************
++**
++** Function         btm_add_whitelist_to_controller
++**
++** Description      This function load the device into controller white list
++*******************************************************************************/
++BOOLEAN btm_add_whitelist_to_controller (BOOLEAN to_add, BD_ADDR bd_addr)
++{
++    tBTM_SEC_DEV_REC    *p_dev_rec = btm_find_dev (bd_addr);
++    BOOLEAN             started = FALSE;
++    BD_ADDR             dummy_bda = {0};
++
++    BTM_TRACE_DEBUG("%s ", __func__);
++    if (p_dev_rec != NULL && p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) {
++        BD_ADDR *remote_bda = p_dev_rec->bd_addr;
++        BD_ADDR *bda = bd_addr;
++        BTM_TRACE_DEBUG("btm_add_whitelist_to_controller: p_dev_rec->bda %.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
++        *((uint8_t *)remote_bda + (0)), *((uint8_t *)remote_bda + (1)),
++		*((uint8_t *)remote_bda + (2)),
++        *((uint8_t *)remote_bda + (3)), *((uint8_t *)remote_bda + (4)),
++		*((uint8_t *)remote_bda + (5)));
++        BTM_TRACE_DEBUG("btm_add_whitelist_to_controller: bd_addr %.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
++        *((uint8_t *)bda + (0)), *((uint8_t *)bda + (1)),
++		*((uint8_t *)bda + (2)),
++        *((uint8_t *)bda + (3)), *((uint8_t *)bda + (4)),
++		*((uint8_t *)bda + (5)));
++
++        BTM_TRACE_DEBUG("%s ble_addr_type = %d", __func__, p_dev_rec->ble.ble_addr_type);
++        if (to_add) {
++            if (p_dev_rec->ble.ble_addr_type == BLE_ADDR_PUBLIC) {
++                BTM_TRACE_DEBUG("%s add public addr", __func__);
++                started = btsnd_hcic_ble_add_white_list(p_dev_rec->ble.ble_addr_type, p_dev_rec->bd_addr);
++                p_dev_rec->ble.in_controller_list |= BTM_WHITE_LIST_BIT;
++            } else if (memcmp(p_dev_rec->ble.static_addr, dummy_bda, BD_ADDR_LEN) != 0) {
++                BTM_TRACE_DEBUG("%s add static addr", __func__);
++                started = btsnd_hcic_ble_add_white_list(p_dev_rec->ble.static_addr_type,
++                                                        p_dev_rec->ble.static_addr);
++                p_dev_rec->ble.in_controller_list |= BTM_WHITE_LIST_BIT;
++            }
++        } else {
++            if (p_dev_rec->ble.ble_addr_type == BLE_ADDR_PUBLIC)
++            {
++                BTM_TRACE_DEBUG("%s remove public addr", __func__);
++                started = btsnd_hcic_ble_remove_from_white_list(p_dev_rec->ble.ble_addr_type, p_dev_rec->bd_addr);
++            }
++            else if (memcmp(p_dev_rec->ble.static_addr, bd_addr, BD_ADDR_LEN) != 0)
++            {
++                BTM_TRACE_DEBUG("%s remove static addr", __func__);
++                started = btsnd_hcic_ble_remove_from_white_list(p_dev_rec->ble.static_addr_type, p_dev_rec->ble.static_addr);
++            }
++            p_dev_rec->ble.in_controller_list &= ~BTM_WHITE_LIST_BIT;
++        }
++    }
++    return started;
++
++}
++
+     #if BTM_BLE_CONFORMANCE_TESTING == TRUE
+ /*******************************************************************************
+ **
+diff --git a/system/bt/stack/btm/btm_ble_bgconn.c b/system/bt/stack/btm/btm_ble_bgconn.c
+index 3dd01bc51496..1d2e408a7c53 100644
+--- a/system/bt/stack/btm/btm_ble_bgconn.c
++++ b/system/bt/stack/btm/btm_ble_bgconn.c
+@@ -166,13 +166,30 @@ BOOLEAN btm_add_dev_to_controller (BOOLEAN to_add, BD_ADDR bd_addr)
+     BOOLEAN             started = FALSE;
+     BD_ADDR             dummy_bda = {0};
+ 
++    BTM_TRACE_DEBUG("%s ", __func__);
+     if (p_dev_rec != NULL && p_dev_rec->device_type & BT_DEVICE_TYPE_BLE) {
++        BD_ADDR *remote_bda = p_dev_rec->bd_addr;
++        BD_ADDR *bda = bd_addr;
++        BTM_TRACE_DEBUG("btm_add_dev_to_controller: p_dev_rec->bda %.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
++        *((uint8_t *)remote_bda + (0)), *((uint8_t *)remote_bda + (1)),
++		*((uint8_t *)remote_bda + (2)),
++        *((uint8_t *)remote_bda + (3)), *((uint8_t *)remote_bda + (4)),
++		*((uint8_t *)remote_bda + (5)));
++        BTM_TRACE_DEBUG("btm_add_dev_to_controller: bd_addr %.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
++        *((uint8_t *)bda + (0)), *((uint8_t *)bda + (1)),
++		*((uint8_t *)bda + (2)),
++        *((uint8_t *)bda + (3)), *((uint8_t *)bda + (4)),
++		*((uint8_t *)bda + (5)));
++
++        BTM_TRACE_DEBUG("%s ble_addr_type = %d", __func__, p_dev_rec->ble.ble_addr_type);
+         if (to_add) {
+             if (p_dev_rec->ble.ble_addr_type == BLE_ADDR_PUBLIC || !BTM_BLE_IS_RESOLVE_BDA(bd_addr)) {
++                BTM_TRACE_DEBUG("%s 1", __func__);
+                 started = btsnd_hcic_ble_add_white_list(p_dev_rec->ble.ble_addr_type, bd_addr);
+                 p_dev_rec->ble.in_controller_list |= BTM_WHITE_LIST_BIT;
+             } else if (memcmp(p_dev_rec->ble.static_addr, bd_addr, BD_ADDR_LEN) != 0 &&
+                 memcmp(p_dev_rec->ble.static_addr, dummy_bda, BD_ADDR_LEN) != 0) {
++                BTM_TRACE_DEBUG("%s 2", __func__);
+                 started = btsnd_hcic_ble_add_white_list(p_dev_rec->ble.static_addr_type,
+                                                         p_dev_rec->ble.static_addr);
+                 p_dev_rec->ble.in_controller_list |= BTM_WHITE_LIST_BIT;
+diff --git a/system/bt/stack/btm/btm_ble_int.h b/system/bt/stack/btm/btm_ble_int.h
+index 70ee1a97a16d..20070b54d5b4 100644
+--- a/system/bt/stack/btm/btm_ble_int.h
++++ b/system/bt/stack/btm/btm_ble_int.h
+@@ -90,7 +90,7 @@ typedef UINT8   tBTM_BLE_SEC_REQ_ACT;
+ 
+ #define BLE_PUBLIC_ADDR_MSB_MASK            0xC0
+ #define BLE_PUBLIC_ADDR_MSB                 0x80   /*  most significant bit, bit7, bit6 is 10 to be public address*/
+-#define BTM_IS_PUBLIC_BDA(x)               ((x[0]  & BLE_PUBLIC_ADDR_MSB) == BLE_PUBLIC_ADDR_MSB_MASK)
++#define BTM_IS_PUBLIC_BDA(x)               ((x[0]  & BLE_PUBLIC_ADDR_MSB_MASK) == BLE_PUBLIC_ADDR_MSB)
+ 
+ /* LE scan activity bit mask, continue with LE inquiry bits */
+ #define BTM_LE_SELECT_CONN_ACTIVE      0x40     /* selection connection is in progress */
+@@ -446,6 +446,8 @@ extern void btm_write_dir_conn_wl(BD_ADDR target_addr);
+ extern void btm_ble_update_mode_operation(UINT8 link_role, BD_ADDR bda, UINT8 status);
+ extern BOOLEAN btm_execute_wl_dev_operation(void);
+ extern void btm_ble_update_link_topology_mask(UINT8 role, BOOLEAN increase);
++extern BOOLEAN btm_add_dev_to_controller (BOOLEAN to_add, BD_ADDR bd_addr);
++extern BOOLEAN btm_add_whitelist_to_controller (BOOLEAN to_add, BD_ADDR bd_addr);
+ 
+ /* direct connection utility */
+ extern BOOLEAN btm_send_pending_direct_conn(void);
+diff --git a/system/bt/stack/btm/btm_dev.c b/system/bt/stack/btm/btm_dev.c
+index 5db85f52a747..076acfbffd15 100644
+--- a/system/bt/stack/btm/btm_dev.c
++++ b/system/bt/stack/btm/btm_dev.c
+@@ -584,6 +584,7 @@ tBTM_SEC_DEV_REC* btm_sec_allocate_dev_rec(void)
+     }
+ 
+     p_dev_rec = osi_calloc(sizeof(tBTM_SEC_DEV_REC));
++    memset(p_dev_rec,0x0,sizeof(tBTM_SEC_DEV_REC));
+     list_append(btm_cb.sec_dev_rec, p_dev_rec);
+ 
+     // Initialize defaults
+diff --git a/system/bt/stack/gatt/gatt_api.c b/system/bt/stack/gatt/gatt_api.c
+index e343d180ec0f..a72a01de42d9 100644
+--- a/system/bt/stack/gatt/gatt_api.c
++++ b/system/bt/stack/gatt/gatt_api.c
+@@ -1506,6 +1506,29 @@ tGATT_STATUS GATT_Disconnect (UINT16 conn_id)
+     return ret;
+ }
+ 
++tGATT_STATUS GATTS_Disconnect (UINT16 conn_id)
++{
++    tGATT_STATUS    ret = GATT_ILLEGAL_PARAMETER;
++    tGATT_TCB       *p_tcb=NULL;
++    tGATT_IF        gatt_if=GATT_GET_GATT_IF(conn_id);
++    UINT8          tcb_idx = GATT_GET_TCB_IDX(conn_id);
++
++    GATT_TRACE_API ("GATTS_Disconnect conn_id=%d ", conn_id);
++
++    p_tcb = gatt_get_tcb_by_idx(tcb_idx);
++
++    if (!gatt_num_apps_hold_link(p_tcb)) {
++            /* acl link is connected but no application needs to use the link
++               so set the timeout value to GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP seconds */
++            GATT_TRACE_DEBUG("%s: start link idle timer =%d sec", __func__,
++                             GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP);
++            GATT_SetIdleTimeout(p_tcb->peer_bda, GATT_LINK_IDLE_TIMEOUT_WHEN_NO_APP,
++                                p_tcb->transport);
++        ret = GATT_SUCCESS;
++    }
++
++    return ret;
++}
+ 
+ /*******************************************************************************
+ **
+diff --git a/system/bt/stack/gatt/gatt_main.c b/system/bt/stack/gatt/gatt_main.c
+index 72d56a398059..6bb28e991bcc 100644
+--- a/system/bt/stack/gatt/gatt_main.c
++++ b/system/bt/stack/gatt/gatt_main.c
+@@ -960,6 +960,7 @@ static void gatt_send_conn_cback(tGATT_TCB *p_tcb)
+     {
+         if (p_reg->in_use)
+         {
++            GATT_TRACE_DEBUG("%s: gatt_if=%d", __func__, p_reg->gatt_if);
+             if (p_bg_dev && gatt_is_bg_dev_for_app(p_bg_dev, p_reg->gatt_if))
+                 gatt_update_app_use_link_flag(p_reg->gatt_if, p_tcb, TRUE, TRUE);
+ 
+diff --git a/system/bt/stack/include/gatt_api.h b/system/bt/stack/include/gatt_api.h
+index 182b5ba437e5..cb0b69fae972 100644
+--- a/system/bt/stack/include/gatt_api.h
++++ b/system/bt/stack/include/gatt_api.h
+@@ -1115,6 +1115,7 @@ extern BOOLEAN GATT_CancelConnect (tGATT_IF gatt_if, BD_ADDR bd_addr,
+ **
+ *******************************************************************************/
+ extern tGATT_STATUS GATT_Disconnect (UINT16 conn_id);
++extern tGATT_STATUS GATTS_Disconnect (UINT16 conn_id);
+ 
+ 
+ 
+-- 
+2.7.4
+

@@ -1,0 +1,6 @@
+# Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+/usr/bin/property-vault            --      gen_context(system_u:object_r:qcom_property_vault_exec_t,s0)
+/tmp/property-vault.socket         --      gen_context(system_u:object_r:qcom_property_vault_sock_t,s0)
+/etc/build.prop            --      gen_context(system_u:object_r:qcom_property_vault_etc_t,s0)

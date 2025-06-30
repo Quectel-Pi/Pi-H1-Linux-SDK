@@ -1,0 +1,24 @@
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+// SPDX-License-Identifier: BSD-3-Clause
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/clock/qcom,qcs8300-gcc.h>
+#include <dt-bindings/clock/qcom,sa8775p-gpucc.h>
+#include <dt-bindings/interconnect/qcom,qcs8300-rpmh.h>
+#include <dt-bindings/interrupt-controller/arm-gic.h>
+#include <dt-bindings/power/qcom-rpmpd.h>
+
+#include "qcs8300-graphics.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. QCS8300 Ride";
+	compatible = "qcom,qcs8300-ride", "qcom,qcs8300";
+
+	qcom,msm-id = <606 0x10000>;
+	qcom,board-id = <0x00010019 0>, <0x01010019 1>;
+};
+

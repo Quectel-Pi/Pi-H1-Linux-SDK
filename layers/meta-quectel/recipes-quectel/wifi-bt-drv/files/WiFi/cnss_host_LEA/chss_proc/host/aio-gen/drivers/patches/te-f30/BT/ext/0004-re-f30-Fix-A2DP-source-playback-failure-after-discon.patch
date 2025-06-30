@@ -1,0 +1,49 @@
+From 90bbf122a85bb2e414bea1e3ea2dee75b789bfa0 Mon Sep 17 00:00:00 2001
+From: Zijun Hu <zijuhu@codeaurora.org>
+Date: Mon, 20 Apr 2020 19:17:57 +0800
+Subject: [PATCH] re-f30: Fix A2DP source playback failure after disconnection
+
+Fix A2DP source playback failure after disconnection.
+---
+ system/bt/audio_a2dp_hw/audio_a2dp_hw.c | 6 ++++++
+ system/bt/udrv/ulinux/uipc.c            | 4 ++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/system/bt/audio_a2dp_hw/audio_a2dp_hw.c b/system/bt/audio_a2dp_hw/audio_a2dp_hw.c
+index 7c625e5..331fbaf 100644
+--- a/system/bt/audio_a2dp_hw/audio_a2dp_hw.c
++++ b/system/bt/audio_a2dp_hw/audio_a2dp_hw.c
+@@ -278,8 +278,14 @@ static int skt_connect(char *path, size_t buffer_sz)
+ 
+     skt_fd = socket(AF_LOCAL, SOCK_STREAM, 0);
+ 
++#ifdef ANDROID
+     if(osi_socket_local_client_connect(skt_fd, path,
+             ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM) < 0)
++#else
++    if(osi_socket_local_client_connect(skt_fd, path,
++            ANDROID_SOCKET_NAMESPACE_FILESYSTEM, SOCK_STREAM) < 0)
++
++#endif
+     {
+         ERROR("failed to connect (%s)", strerror(errno));
+         close(skt_fd);
+diff --git a/system/bt/udrv/ulinux/uipc.c b/system/bt/udrv/ulinux/uipc.c
+index c5cf905..ea43110 100644
+--- a/system/bt/udrv/ulinux/uipc.c
++++ b/system/bt/udrv/ulinux/uipc.c
+@@ -153,7 +153,11 @@ static inline int create_server_socket(const char* name)
+ 
+     BTIF_TRACE_EVENT("create_server_socket %s", name);
+ 
++#ifdef ANDROID
+     if(osi_socket_local_server_bind(s, name, ANDROID_SOCKET_NAMESPACE_ABSTRACT) < 0)
++#else
++    if(osi_socket_local_server_bind(s, name, ANDROID_SOCKET_NAMESPACE_FILESYSTEM) < 0)
++#endif
+     {
+         ret = (errno == EADDRINUSE ? -EADDRINUSE : -1);
+         BTIF_TRACE_EVENT("socket failed to create (%s)", strerror(errno));
+-- 
+2.7.4
+

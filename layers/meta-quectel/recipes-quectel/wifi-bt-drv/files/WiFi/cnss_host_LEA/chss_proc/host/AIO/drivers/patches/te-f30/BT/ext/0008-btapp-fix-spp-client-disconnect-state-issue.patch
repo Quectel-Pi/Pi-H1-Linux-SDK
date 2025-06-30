@@ -1,0 +1,19 @@
+diff -Nur bt_workspace-org/qcom-opensource/bt/bt-app/spp_client/src/spp_client.cpp bt_workspace-new/qcom-opensource/bt/bt-app/spp_client/src/spp_client.cpp
+--- bt_workspace-org/qcom-opensource/bt/bt-app/spp_client/src/spp_client.cpp	2020-06-29 16:56:24.442819928 +0800
++++ bt_workspace-new/qcom-opensource/bt/bt-app/spp_client/src/spp_client.cpp	2020-06-29 17:04:48.978837461 +0800
+@@ -337,6 +337,7 @@
+                 shutdown(kernel_sock_fd, SHUT_RDWR);
+                 close(kernel_sock_fd);
+                 kernel_sock_fd = 0;
++                change_state(STATE_SPP_CLIENT_DISCONNECTED);
+             }
+ 
+             client_write_thread_exit = 1;
+@@ -454,6 +455,7 @@
+                 shutdown(kernel_sock_fd, SHUT_RDWR);
+                 close(kernel_sock_fd);
+                 kernel_sock_fd = 0;
++                change_state(STATE_SPP_CLIENT_DISCONNECTED);
+             }
+             client_read_thread_exit =1;
+             pthread_exit(NULL);

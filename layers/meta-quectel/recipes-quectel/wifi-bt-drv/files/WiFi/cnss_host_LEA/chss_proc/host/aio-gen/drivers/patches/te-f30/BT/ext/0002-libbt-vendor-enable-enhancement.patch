@@ -1,0 +1,12 @@
+diff -Nur bt_workspace-org/hardware/qcom/bt/libbt-vendor/src/bt_vendor_qcom.c bt_workspace/hardware/qcom/bt/libbt-vendor/src/bt_vendor_qcom.c
+--- bt_workspace-org/hardware/qcom/bt/libbt-vendor/src/bt_vendor_qcom.c	2019-10-21 17:52:51.764568924 +0800
++++ bt_workspace/hardware/qcom/bt/libbt-vendor/src/bt_vendor_qcom.c	2019-10-21 17:57:15.228578964 +0800
+@@ -1593,7 +1593,7 @@
+                                 system("wcnssfilter &");
+                                 ALOGI("%s:wcnssfilter GOOD State!!!!!!@@@@@@@@@@@@", __func__);
+                                 property_set_bt("wc_transport.soc_initialized", "1");
+-                                usleep(10 * 1000);
++                                usleep(100 * 1000);
+                                 property_set_bt("wc_transport.hci_filter_status", "1");
+                                 retval = 1;
+ #endif

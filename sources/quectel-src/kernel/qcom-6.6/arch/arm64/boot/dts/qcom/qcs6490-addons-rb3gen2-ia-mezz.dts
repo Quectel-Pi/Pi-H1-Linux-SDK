@@ -1,0 +1,666 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+/dts-v1/;
+
+#include "qcs6490-rb3gen2.dts"
+#include "qcs6490-addons-rb3gen2.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Robotics RB3gen2 addons ia mezz platform";
+	compatible = "qcom,qcs6490-addons-rb3gen2-ia-mezz", "qcom,qcm6490";
+
+	qcom,msm-id = <497 0x10000>, <498 0x10000>, <475 0x10000>, <515 0x10000>;
+	qcom,board-id = <32 0x9>, <32 0x609>;
+
+	aliases {
+		hsuart0 = &uart4;
+	};
+
+	wcd9375: audio-codec-0 {
+		compatible = "qcom,wcd9370-codec";
+		pinctrl-names = "default", "sleep";
+		pinctrl-0 = <&wcd_reset_n>;
+		pinctrl-1 = <&wcd_reset_n_sleep>;
+		reset-gpios = <&tlmm 83 GPIO_ACTIVE_HIGH>;
+		qcom,micbias1-microvolt = <1800000>;
+		qcom,micbias2-microvolt = <1800000>;
+		qcom,micbias3-microvolt = <1800000>;
+		qcom,rx-device = <&wcd937x_rx>;
+		qcom,tx-device = <&wcd937x_tx>;
+		qcom,hphl-jack-type-normally-closed = <1>;
+		qcom,ground-jack-type-normally-closed = <1>;
+		qcom,always-on-supply;
+		#sound-dai-cells = <1>;
+	};
+
+	qps615_rc0_resx_vreg: qps615-rc0-resx-vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "qps615_rc0_resx_vreg";
+		gpio = <&tlmm 78 0>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <10000>;
+	};
+
+	qps615_rc1_resx_vreg: qps615-rc1-resx-vreg {
+		compatible = "regulator-fixed";
+		regulator-name = "qps615_rc1_resx_vreg";
+		gpio = <&tlmm 124 0>;
+		vin-supply = <&qps615_1p8_vreg>;
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		enable-active-high;
+		regulator-enable-ramp-delay = <10000>;
+	};
+};
+
+&i2c1 {
+	status = "okay";
+
+	i2c-mux@71 {
+		compatible = "nxp,pca9847";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x71>;
+
+		i2c@1 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <1>;
+			usb-hub@2d {
+				compatible = "microchip,usb5807";
+				reg = <0x2d>;
+				/* Swapped D+/D- on port 0 */
+				swap-dx-lanes = <1>;
+			};
+		};
+
+		i2c@2 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <2>;
+			usb-hub@2d {
+				compatible = "microchip,usb5807";
+				reg = <0x2d>;
+				/* Swapped D+/D- on port 0 */
+				swap-dx-lanes = <1>;
+			};
+		};
+
+		i2c@3 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <3>;
+		};
+
+		i2c@4 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <4>;
+		};
+
+		i2c@5 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <5>;
+		};
+
+		i2c@6 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <6>;
+		};
+
+		i2c@7 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <7>;
+		};
+	};
+
+	qps615_rc0_switch: pcie-switch-0@33 {
+		compatible = "qcom,switch-i2c";
+		reg = <0x33>;
+		vdda-supply = <&qps615_rc0_resx_vreg>;
+		status = "okay";
+	};
+};
+
+&i2c2 {
+	status = "okay";
+
+	i2c-mux@71 {
+		compatible = "nxp,pca9847";
+		#address-cells = <1>;
+		#size-cells = <0>;
+		reg = <0x71>;
+
+		i2c@0 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0>;
+		};
+
+		i2c@1 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <1>;
+		};
+
+		i2c@2 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <2>;
+		};
+
+		i2c@3 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <3>;
+		};
+
+		i2c@4 {
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <4>;
+		};
+	};
+
+	qps615_rc1_switch: pcie-switch-1@77 {
+		compatible = "qcom,switch-i2c";
+		reg = <0x77>;
+		status = "okay";
+	};
+};
+
+&lpass_rx_swr_clk {
+	drive-strength = <2>;
+	slew-rate = <1>;
+	bias-disable;
+};
+
+&lpass_rx_swr_data {
+	drive-strength = <2>;
+	slew-rate = <1>;
+	bias-bus-hold;
+};
+
+&lpass_tx_swr_clk {
+	drive-strength = <2>;
+	slew-rate = <1>;
+	bias-disable;
+};
+
+&lpass_tx_swr_data {
+	drive-strength = <2>;
+	slew-rate = <1>;
+	bias-bus-hold;
+};
+
+
+&pcie0 {
+	bus-range = <0x80 0xff>;
+	iommu-map = <0x8000 &apps_smmu 0x1c00 0x1>,
+		    <0x8100 &apps_smmu 0x1c01 0x1>,
+		    <0x8208 &apps_smmu 0x1c04 0x1>,
+		    <0x8210 &apps_smmu 0x1c05 0x1>,
+		    <0x8218 &apps_smmu 0x1c06 0x1>,
+		    <0x8300 &apps_smmu 0x1c07 0x1>,
+		    <0x8400 &apps_smmu 0x1c08 0x1>,
+		    <0x8500 &apps_smmu 0x1c09 0x1>,
+		    <0x8501 &apps_smmu 0x1c10 0x1>;
+	dummy-supply = <&qps615_rc0_switch>;
+	status = "okay";
+
+	pcieport: pcie@0 {
+		device_type = "pci";
+		reg = <0x0 0x0 0x0 0x0 0x0>;
+		#address-cells = <5>;
+		#size-cells = <0>;
+		/* BDF 1.0.0 */
+		pcie0_bus1_dev0_fn0: pcie0-bus1-dev0-fn0 {
+			reg = <0x0 0x0 0x0 0x0 0x0>;
+			/* BDF 2.1.0 */
+			pcie0_bus2_dev1_fn0: pcie0-bus2-dev1-fn0 {
+				reg = <0x800 0x0 0x0 0x0 0x0>;
+				/* BDF 3.0.0 */
+				pcie0_bus3_dev0_fn0: pcie0-bus3-dev0-fn0 {
+					reg = <0x0 0x0 0x0 0x0 0x0>;
+				};
+			};
+			/* BDF 2.2.0 */
+			pcie0_bus2_dev2_fn0: pcie0-bus2-dev2-fn0 {
+				reg = <0x1000 0x0 0x0 0x0 0x0>;
+				/* BDF 4.0.0 */
+				pcie0_bus4_dev0_fn0: pcie0-bus4-dev0-fn0 {
+					reg = <0x0 0x0 0x0 0x0 0x0>;
+				};
+			};
+			/* BDF 2.3.0 */
+			pcie0_bus2_dev3_fn0: pcie0-bus2-dev3-fn0 {
+				reg = <0x1800 0x0 0x0 0x0 0x0>;
+				pcie0_qps615_eth0,pcie0_qps615_eth0@pcie0_rp {
+					reg = <0x0 0x0 0x0 0x0 0x0>;
+					pinctrl-names = "default";
+					pinctrl-0 = <&aqr_rc0_intn_wol_sig>;
+					phy-rst-som-gpios = <&tlmm 90 GPIO_ACTIVE_HIGH>;
+					interrupts-extended = <&tlmm 136 IRQ_TYPE_EDGE_FALLING>;
+					interrupt-names = "wol_irq";
+					qcom,always-on-supply;
+					qcom,phy-rst-delay-us = <221000>;
+					#address-cells = <1>;
+					#size-cells = <1>;
+				};
+
+
+				/* BDF 5.0.0 */
+				pcie0_bus5_dev0_fn0: pcie1-qps-eth0 {
+					reg = <0x0 0x0 0x0 0x0 0x0>;
+				};
+
+
+				pcie0_qps615_eth1,pcie0_qps615_eth1@pcie0_rp {
+					reg = <0x100 0x0 0x0 0x0 0x0>;
+					pinctrl-names = "default";
+					pinctrl-0 = <&napa_rc0_intn_wol_sig>;
+					phy-rst-som-gpios = <&tlmm 25 GPIO_ACTIVE_HIGH>;
+					interrupts-extended = <&tlmm 142 IRQ_TYPE_EDGE_FALLING>;
+					interrupt-names = "wol_irq";
+					qcom,always-on-supply;
+					qcom,phy-rst-delay-us = <20000>;
+					#address-cells = <1>;
+					#size-cells = <1>;
+				};
+				/* BDF 5.0.1 */
+				pcie0_bus5_dev0_fn1: pcie1-qps-eth1 {
+					reg = <0x100 0x0 0x0 0x0 0x0>;
+				};
+			};
+		};
+	};
+};
+
+&pcie0_phy {
+	qcom,refclk-always-on;
+	status = "okay";
+};
+
+&pcie1 {
+	iommu-map = <0x0 &apps_smmu 0x1c80 0x1>,
+		    <0x100 &apps_smmu 0x1c81 0x1>,
+		    <0x208 &apps_smmu 0x1c84 0x1>,
+		    <0x210 &apps_smmu 0x1c85 0x1>,
+		    <0x218 &apps_smmu 0x1c86 0x1>,
+		    <0x300 &apps_smmu 0x1c87 0x1>,
+		    <0x408 &apps_smmu 0x1c90 0x1>,
+		    <0x410 &apps_smmu 0x1c91 0x1>,
+		    <0x418 &apps_smmu 0x1c92 0x1>,
+		    <0x500 &apps_smmu 0x1c93 0x1>,
+		    <0x600 &apps_smmu 0x1c94 0x1>,
+		    <0x700 &apps_smmu 0x1c95 0x1>,
+		    <0x701 &apps_smmu 0x1c96 0x1>,
+		    <0x800 &apps_smmu 0x1c97 0x1>,
+		    <0x900 &apps_smmu 0x1c98 0x1>,
+		    <0x901 &apps_smmu 0x1c99 0x1>;
+};
+
+&pcie1_bus3_dev0_fn0 {
+	reg = <0x0 0x0 0x0 0x0 0x0>;
+
+	/* BDF 4.1.0 */
+	pcie1_bus4_dev1_fn0: pcie1-bus4-dev1-fn0 {
+		reg = <0x800 0x0 0x0 0x0 0x0>;
+
+		/* BDF 5.0.0 */
+		pcie1_bus5_rc1_dev0_fn0: pcie1-bus5-rc1-dev0-fn0 {
+			reg = <0x0 0x0 0x0 0x0 0x0>;
+		};
+	};
+
+	/* BDF 4.2.0 */
+	pcie1_bus4_dev2_fn0: pcie1-bus4-dev2-fn0 {
+		reg = <0x1000 0x0 0x0 0x0 0x0>;
+
+		/* BDF 6.0.0 */
+		pcie1_bus6_dev0_fn0: pcie1-bus6-dev0-fn0 {
+			reg = <0x0 0x0 0x0 0x0 0x0>;
+		};
+	};
+
+	/* BDF 4.3.0 */
+	pcie1_bus4_dev3_fn0: pcie1-bus4-dev3-fn0 {
+		reg = <0x1800 0x0 0x0 0x0 0x0>;
+		/* BDF 7.0.0 */
+		pcie1_bus7_dev0_fn0: pcie1-bus7-dev0-fn0 {
+			reg = <0x0 0x0 0x0 0x0 0x0>;
+		};
+
+		pcie1_qps615_eth2,pcie1_qps615_eth2@pcie1_rp {
+			reg = <0x100 0x0 0x0 0x0 0x0>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&napa_rc1_intn_wol_sig>;
+			phy-rst-som-gpios = <&tlmm 120 GPIO_ACTIVE_HIGH>;
+			interrupts-extended = <&tlmm 6 IRQ_TYPE_EDGE_FALLING>;
+			interrupt-names = "wol_irq";
+			qcom,always-on-supply;
+			qcom,phy-rst-delay-us = <20000>;
+			#address-cells = <1>;
+			#size-cells = <1>;
+		};
+
+		/* BDF 7.0.1 */
+		pcie1_bus7_dev0_fn1: pcie1-bus7-dev0-fn1 {
+			reg = <0x100 0x0 0x0 0x0 0x0>;
+		};
+	};
+};
+
+&pm7250b_gpios {
+	gpio5_tpm_dig_out {
+		gpio5_dig_out_default: gpio5_dig_out_default {
+			pins = "gpio5";
+			function = "normal";
+			power-source = <1>;
+			output-high;
+			input-disable;
+			bias-pull-up;
+			qcom,drive-strength = <3>;
+		};
+	};
+};
+
+&qps615_rsex_vreg {
+	vin-supply = <&qps615_rc1_resx_vreg>;
+};
+
+&qupv3_id_1 {
+	status = "okay";
+};
+
+&sound {
+	compatible = "qcom,qcs6490-rb3gen2-ia-sndcard";
+	model = "qcm6490-rb3-ia-snd-card";
+	audio-routing =
+		"SpkrLeft IN", "WSA_SPK1 OUT",
+		"SpkrRight IN", "WSA_SPK2 OUT",
+		"IN1_HPHL", "HPHL_OUT",
+		"IN2_HPHR", "HPHR_OUT",
+		"AMIC2", "MIC BIAS2",
+		"TX SWR_ADC1", "ADC2_OUTPUT",
+		"VA DMIC0", "vdd-micb",
+		"VA DMIC1", "vdd-micb",
+		"VA DMIC2", "vdd-micb",
+		"VA DMIC3", "vdd-micb";
+	#address-cells = <1>;
+	#size-cells = <0>;
+	wcd-playback-dai-link {
+		link-name = "CODEC_DMA-LPAIF_RXTX-RX-0";
+		cpu {
+			sound-dai = <&q6apmbedai RX_CODEC_DMA_RX_0>;
+		};
+
+
+		codec {
+			sound-dai = <&wcd9375 0>, <&swr0 0>, <&lpass_rx_macro 0>;
+		};
+	};
+
+
+	wcd-capture-dai-link {
+		link-name = "CODEC_DMA-LPAIF_RXTX-TX-3";
+		cpu {
+			sound-dai = <&q6apmbedai TX_CODEC_DMA_TX_3>;
+		};
+
+
+		codec {
+			sound-dai = <&wcd9375 1>, <&swr1 0>, <&lpass_tx_macro 0>;
+		};
+	};
+};
+
+&spi11 {
+	status = "okay";
+
+	st33htpm0: st33htpm@0 {
+		compatible = "st,st33htpm-spi";
+		reg = <0>;
+		spi-max-frequency = <20000000>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&gpio5_dig_out_default>;
+		status = "okay";
+	};
+};
+
+&spmi_bus {
+	pmic@PM7250B_SID {
+		pm7250b_bcl: bcl@1d00 {
+			compatible = "qcom,bcl-v5";
+			reg = <0x1d00>;
+			interrupts = <PM7250B_SID 0x1d 0x0 IRQ_TYPE_EDGE_RISING>,
+					<PM7250B_SID 0x1d 0x1 IRQ_TYPE_EDGE_RISING>,
+					<PM7250B_SID 0x1d 0x2 IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "bcl-lvl0",
+						"bcl-lvl1",
+						"bcl-lvl2";
+			#thermal-sensor-cells = <1>;
+		};
+	};
+};
+
+&swr0 {
+	wcd937x_rx: codec@0,4 {
+		compatible = "sdw20217010a00";
+		reg = <0 4>;
+		qcom,rx-port-mapping = <1 2 3 4 5>;
+	};
+};
+
+&swr1 {
+	wcd937x_tx: codec@0,3 {
+		compatible = "sdw20217010a00";
+		reg = <0 3>;
+		qcom,tx-port-mapping = <1 1 2 3>;
+	};
+};
+
+&thermal_zones {
+	pm7250b-ibat-lvl0 {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm7250b_bcl 0>;
+
+		trips {
+			ibat_lvl0:ibat-lvl0 {
+				temperature = <6000>;
+				hysteresis = <200>;
+				type = "passive";
+			};
+		};
+	};
+
+	pm7250b-ibat-lvl1 {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm7250b_bcl 1>;
+
+		trips {
+			ibat_lvl1:ibat-lvl1 {
+				temperature = <7500>;
+				hysteresis = <200>;
+				type = "passive";
+			};
+		};
+	};
+
+	pm7250b-bcl-lvl0 {
+		polling-delay-passive = <100>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm7250b_bcl 5>;
+
+		trips {
+			b_bcl_lvl0: b-bcl-lvl0 {
+				temperature = <1>;
+				hysteresis = <1>;
+				type = "passive";
+			};
+		};
+
+		cooling-maps {
+			map0 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&CPU4_idle 100 100>;
+			};
+
+			map1 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&CPU5_idle 100 100>;
+			};
+
+			map2 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&CPU6_idle 100 100>;
+			};
+
+			map3 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&CPU7_idle 100 100>;
+			};
+
+			map4 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&cdsp_sw 2 2>;
+			};
+
+			map5 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&modem_pa 2 2>;
+			};
+
+			map6 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&modem_tj 1 1>;
+			};
+		};
+	};
+
+	pm7250b-bcl-lvl1 {
+		polling-delay-passive = <100>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm7250b_bcl 6>;
+
+		trips {
+			b_bcl_lvl1: b-bcl-lvl1 {
+				temperature = <1>;
+				hysteresis = <1>;
+				type = "passive";
+			};
+		};
+
+		cooling-maps {
+			map0 {
+				trip = <&b_bcl_lvl1>;
+				cooling-device = <&msm_gpu 5 THERMAL_NO_LIMIT>;
+			};
+
+			map1 {
+				trip = <&b_bcl_lvl1>;
+				cooling-device = <&cdsp_sw 4 4>;
+			};
+
+			map2 {
+				trip = <&b_bcl_lvl1>;
+				cooling-device = <&modem_tj 3 3>;
+			};
+		};
+	};
+
+	pm7250b-bcl-lvl2 {
+		polling-delay-passive = <100>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm7250b_bcl 7>;
+
+		trips {
+			b_bcl_lvl2: b-bcl-lvl2 {
+				temperature = <1>;
+				hysteresis = <1>;
+				type = "passive";
+			};
+		};
+
+		cooling-maps {
+			map0 {
+				trip = <&b_bcl_lvl2>;
+				cooling-device = <&cdsp_sw 5 5>;
+			};
+		};
+	};
+};
+
+&tlmm {
+	qps615_rc0_intn_wol {
+		aqr_rc0_intn_wol_sig: aqr-rc0-intn-wol-sig {
+			pins = "gpio136";
+			function = "gpio";
+			input-enable;
+			bias-disable;
+		};
+
+		napa_rc0_intn_wol_sig: napa-rc0-intn-wol-sig {
+			pins = "gpio142";
+			function = "gpio";
+			input-enable;
+			bias-disable;
+		};
+	};
+
+	qps615_rc1_intn_wol {
+		napa_rc1_intn_wol_sig: napa-rc1-intn-wol-sig {
+			pins = "gpio6";
+			function = "gpio";
+			input-enable;
+			bias-disable;
+		};
+	};
+
+
+	wcd_reset_n: wcd-reset-n-state {
+		pins = "gpio83";
+		function = "gpio";
+		drive-strength = <8>;
+	};
+
+
+	wcd_reset_n_sleep: wcd-reset-n-sleep-state {
+		pins = "gpio83";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+};
+
+&uart4 {
+	status = "okay";
+};
+
+&soc {
+	leds {
+		compatible = "gpio-leds";
+
+		led-0 {
+			label = "blue:user1";
+			function = LED_FUNCTION_INDICATOR;
+			color = <LED_COLOR_ID_BLUE>;
+			gpios = <&pm8350c_gpios 9 GPIO_ACTIVE_HIGH>;
+			default-state = "off";
+			panic-indicator;
+			status = "okay";
+		};
+	};
+};

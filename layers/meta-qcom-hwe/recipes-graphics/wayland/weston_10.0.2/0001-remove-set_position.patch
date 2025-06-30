@@ -1,0 +1,25 @@
+From d951e37e81357a40d638c1366937e44a9c36e0c5 Mon Sep 17 00:00:00 2001
+From: "crown.yu" <crown.yu@quectel.com>
+Date: Mon, 24 Feb 2025 20:20:24 +0800
+Subject: [PATCH] remove set_position
+
+---
+ libweston-desktop/xdg-shell.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/libweston-desktop/xdg-shell.c b/libweston-desktop/xdg-shell.c
+index c863ccc..5ae2025 100644
+--- a/libweston-desktop/xdg-shell.c
++++ b/libweston-desktop/xdg-shell.c
+@@ -838,7 +838,7 @@ static const struct xdg_toplevel_interface weston_desktop_xdg_toplevel_implement
+ 	.set_app_id          = weston_desktop_xdg_toplevel_protocol_set_app_id,
+ 	.show_window_menu    = weston_desktop_xdg_toplevel_protocol_show_window_menu,
+ 	.move                = weston_desktop_xdg_toplevel_protocol_move,
+-	.set_position        = weston_desktop_xdg_toplevel_protocol_set_position,
++	//.set_position        = weston_desktop_xdg_toplevel_protocol_set_position,
+ 	.resize              = weston_desktop_xdg_toplevel_protocol_resize,
+ 	.set_min_size        = weston_desktop_xdg_toplevel_protocol_set_min_size,
+ 	.set_max_size        = weston_desktop_xdg_toplevel_protocol_set_max_size,
+-- 
+2.34.1
+

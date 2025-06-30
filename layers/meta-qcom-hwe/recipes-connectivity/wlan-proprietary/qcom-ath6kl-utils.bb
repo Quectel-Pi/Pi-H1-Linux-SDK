@@ -1,0 +1,20 @@
+inherit qprebuilt pkgconfig
+
+LICENSE          = "Qualcomm-Technologies-Inc.-Proprietary"
+LIC_FILES_CHKSUM = "file://${QCOM_COMMON_LICENSE_DIR}${LICENSE};md5=58d50a3d36f27f1a1e6089308a49b403"
+
+DESCRIPTION = "Qualcomm Atheros ath6kl utils."
+
+DEPENDS += "diag libnl glib-2.0"
+
+PV = "1.0"
+
+QCM6490_SHA256SUM = "49e6bd7b7ae754b320eba73fd78d87c70483ea688918a9d8840d75657d411e60"
+QCS9100_SHA256SUM = "7e3480985311bfe9c0496ba41e46b0125cb8f0b8deed3c0603771bf619c2db3b"
+QCS8300_SHA256SUM = "68e5179d2f882bfc18a572a2b3fe4e963c1a234d909ae8ae942f8ea48b841e0b"
+
+SRC_URI[qcm6490.sha256sum] = "${QCM6490_SHA256SUM}"
+SRC_URI[qcs9100.sha256sum] = "${QCS9100_SHA256SUM}"
+SRC_URI[qcs8300.sha256sum] = "${QCS8300_SHA256SUM}"
+
+SRC_URI = "https://${PBT_ARTIFACTORY}/${PBT_BUILD_ID}/${PBT_BIN_PATH}/${BPN}_${PV}_${PBT_ARCH}.tar.gz;name=${PBT_ARCH}"

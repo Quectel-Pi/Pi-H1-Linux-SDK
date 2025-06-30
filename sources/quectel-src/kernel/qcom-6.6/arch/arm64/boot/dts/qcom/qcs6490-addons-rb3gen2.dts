@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * qcs6490-addons RB3gen2 device tree source
+ *
+ * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
+ */
+
+/dts-v1/;
+
+#include "qcs6490-rb3gen2.dts"
+#include "qcs6490-addons-rb3gen2.dtsi"
+
+/ {
+	model = "Qualcomm Technologies, Inc. Robotics RB3gen2 addons platform";
+	compatible = "qcom,qcs6490-addons-rb3gen2","qcom,qcm6490";
+};

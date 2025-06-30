@@ -1,0 +1,257 @@
+diff -Nur bt_workspace-org/hardware/libhardware/hardware.c bt_workspace-new/hardware/libhardware/hardware.c
+--- bt_workspace-org/hardware/libhardware/hardware.c	2020-12-23 16:27:46.618893581 +0800
++++ bt_workspace-new/hardware/libhardware/hardware.c	2020-12-24 15:31:35.597778827 +0800
+@@ -92,7 +92,7 @@
+ 
+ void init()
+ {
+-#ifndef ANDROID
++#if 0
+   int len;    /* length of sockaddr */
+   struct sockaddr_un name;
+   if( (bt_prop_socket = socket(AF_UNIX, SOCK_STREAM, 0) ) < 0) {
+@@ -198,7 +198,7 @@
+ 
+     return -ENOENT;
+ }
+-#ifndef ANDROID
++#if 0
+ int property_get_bt(const char *key, char *value, const char *default_value)
+ {
+     char prop_string[200] = {'\0'};
+diff -Nur bt_workspace-org/qcom-opensource/bt/bt-app/gap/src/Gap.cpp bt_workspace-new/qcom-opensource/bt/bt-app/gap/src/Gap.cpp
+--- bt_workspace-org/qcom-opensource/bt/bt-app/gap/src/Gap.cpp	2020-12-23 16:27:46.602893581 +0800
++++ bt_workspace-new/qcom-opensource/bt/bt-app/gap/src/Gap.cpp	2020-12-24 15:37:03.693790228 +0800
+@@ -550,6 +550,7 @@
+ 
+                 adapter_properties_obj_->FlushBondedDeviceList();
+                 remote_devices_obj_->FlushDiscoveredDeviceList();
++                bluetooth_interface_->cleanup();
+ #ifdef USE_BT_OBEX
+                 if (is_obex_enabled_) {
+                     OI_OBEX_LOWER_SetSocketInterface(NULL);
+@@ -566,11 +567,12 @@
+             break;
+ 	case GAP_API_INIT:
+ 	    ALOGV("Bluetooth Interface Initialised\n");
+-	    bluetooth_interface_->init(&sBluetoothCallbacks);
++//	    bluetooth_interface_->init(&sBluetoothCallbacks);
+ 	    break;
+         case GAP_API_ENABLE:
+-
+-            if (adapter_properties_obj_->GetState() == BT_ADAPTER_STATE_ON) {           
++            if (adapter_properties_obj_->GetState() == BT_ADAPTER_STATE_OFF) {
++	            bluetooth_interface_->init(&sBluetoothCallbacks);
++	        } else {           
+                 ALOGV (LOGTAG "Ignoring GAP_API_ENABLE command state : %d",
+                                 adapter_properties_obj_->GetState());
+                 fprintf(stdout, "Ignoring GAP_API_ENABLE command state : %d\n",
+@@ -583,18 +585,11 @@
+                 PostMessage(THREAD_ID_MAIN, bt_event);
+                 break;
+             }
+-
+-            // check if there are profiles enabled
+-            if(!supported_profiles_count) {
+-                HandleEnable();
+-                break;
+-            }
+-
+-
+ #ifdef ANDROID
+             ALOGV (LOGTAG "Start QC BT Daemon");
+             system("qcbtdaemon &");
+ #endif
++	    HandleEnable();
+ 
+ #ifdef USE_BT_OBEX
+             /* Initialize OBEX if enabled in config */
+@@ -659,7 +654,6 @@
+             ALOGD(LOGTAG " All profiles started");
+             //stoping profile_startup_timer
+             alarm_cancel(profile_startup_timer);
+-            HandleEnable();
+ 
+             break;
+         case PROFILE_EVENT_STOP_DONE:
+@@ -680,8 +674,10 @@
+             // check if all profiles stopped
+             for(profile_id = PROFILE_ID_A2DP_SINK; profile_id < PROFILE_ID_MAX;
+                                                                 profile_id++) {
+-                if((profile_config[profile_id].is_enabled)  &&
++                if((profile_config[profile_id].is_enabled && profile_config[profile_id].start_status)  &&
+                     (!profile_config[profile_id].stop_status)) {
++                    ALOGD(LOGTAG " profile %d,is_enabled %d,status %d",
++							profile_id,profile_config[profile_id].is_enabled,profile_config[profile_id].stop_status);
+                     return;
+                 }
+             }
+@@ -715,7 +711,6 @@
+                 break;
+ 
+             }
+-	     HandleDisable();
+ 
+             if (profile_config[PROFILE_ID_A2DP_SINK].is_enabled)
+             {
+@@ -751,6 +746,7 @@
+                     PostMessage(profile_config[profile_id].thread_id, bt_event);
+                 }
+             }
++			usleep(500*1000);
+             break;
+ 
+         case GAP_API_SET_BDNAME:
+diff -Nur bt_workspace-org/system/bt/btif/src/btif_av.c bt_workspace-new/system/bt/btif/src/btif_av.c
+--- bt_workspace-org/system/bt/btif/src/btif_av.c	2020-12-23 16:27:46.578893580 +0800
++++ bt_workspace-new/system/bt/btif/src/btif_av.c	2020-12-24 15:38:24.441793034 +0800
+@@ -2944,6 +2944,7 @@
+ 	else
+ 	    break;
+     }
++    BTIF_TRACE_DEBUG(" Clear PCM QUeue --");
+ }
+ #endif
+ 
+@@ -3278,6 +3279,7 @@
+ 
+     btif_disable_service(service_uuid);
+ #ifndef ANDROID
++    btif_media_clear_pcm_queue();
+     fixed_queue_free(btif_av_cb[0].RxPcmQ , NULL);
+ 
+     btif_av_cb[0].RxPcmQ = NULL;
+@@ -3293,9 +3295,6 @@
+ static void cleanup_sink(void) {
+     BTIF_TRACE_EVENT("%s", __FUNCTION__);
+     cleanup(BTA_A2DP_SINK_SERVICE_ID);
+-#ifndef ANDROID
+-    btif_media_clear_pcm_queue();
+-#endif
+ }
+ 
+ static void allow_connection(int is_valid, bt_bdaddr_t *bd_addr)
+diff -Nur bt_workspace-org/system/bt/stack/btm/btm_ble_gap.c bt_workspace-new/system/bt/stack/btm/btm_ble_gap.c
+--- bt_workspace-org/system/bt/stack/btm/btm_ble_gap.c	2020-12-23 16:27:46.598893581 +0800
++++ bt_workspace-new/system/bt/stack/btm/btm_ble_gap.c	2020-12-24 15:40:37.077797644 +0800
+@@ -3829,6 +3829,18 @@
+ #endif
+ }
+ 
++void btm_ble_free(void)
++{
++    tBTM_BLE_CB *p_cb = &btm_cb.ble_ctr_cb;
++	BTM_TRACE_DEBUG("%s", __func__);
++	if(p_cb->conn_pending_q)
++	{
++	    fixed_queue_free(p_cb->conn_pending_q,NULL);
++		p_cb->conn_pending_q = NULL;
++    }
++}
++
++
+ /*******************************************************************************
+ **
+ ** Function         btm_ble_topology_check
+diff -Nur bt_workspace-org/system/bt/stack/btm/btm_ble_int.h bt_workspace-new/system/bt/stack/btm/btm_ble_int.h
+--- bt_workspace-org/system/bt/stack/btm/btm_ble_int.h	2020-12-23 16:27:46.598893581 +0800
++++ bt_workspace-new/system/bt/stack/btm/btm_ble_int.h	2020-12-24 15:40:57.557798355 +0800
+@@ -384,6 +384,7 @@
+                                                  UINT8 scan_filter_policy);
+ extern void btm_ble_stop_inquiry(void);
+ extern void btm_ble_init (void);
++extern void btm_ble_free (void);
+ extern void btm_ble_connected (UINT8 *bda, UINT16 handle, UINT8 enc_mode, UINT8 role, tBLE_ADDR_TYPE addr_type, BOOLEAN addr_matched);
+ extern void btm_ble_read_remote_features_complete(UINT8 *p);
+ extern void btm_ble_write_adv_enable_complete(UINT8 * p);
+diff -Nur bt_workspace-org/system/bt/stack/btm/btm_main.c bt_workspace-new/system/bt/stack/btm/btm_main.c
+--- bt_workspace-org/system/bt/stack/btm/btm_main.c	2020-12-23 16:27:46.598893581 +0800
++++ bt_workspace-new/system/bt/stack/btm/btm_main.c	2020-12-24 15:41:14.225798934 +0800
+@@ -78,4 +78,17 @@
+     btm_dev_init();                     /* Device Manager Structures & HCI_Reset */
+ }
+ 
++void btm_free (void)
++{
++    if(btm_cb.page_queue)
++    {
++        fixed_queue_free(btm_cb.page_queue,NULL);
++        btm_cb.page_queue =  NULL;
++    }
++    if(btm_cb.sec_pending_q)
++    {
++        fixed_queue_free(btm_cb.sec_pending_q,NULL);
++        btm_cb.sec_pending_q =  NULL;
++    }
++}
+ 
+diff -Nur bt_workspace-org/system/bt/stack/btu/btu_init.c bt_workspace-new/system/bt/stack/btu/btu_init.c
+--- bt_workspace-org/system/bt/stack/btu/btu_init.c	2020-12-23 16:27:46.602893581 +0800
++++ bt_workspace-new/system/bt/stack/btu/btu_init.c	2020-12-24 15:41:36.181799697 +0800
+@@ -84,6 +84,7 @@
+ ******************************************************************************/
+ void btu_init_core(void)
+ {
++    LOG_INFO(LOG_TAG, "%s ", __func__);
+     /* Initialize the mandatory core stack components */
+     btm_init();
+ 
+@@ -112,11 +113,15 @@
+ ******************************************************************************/
+ void btu_free_core(void)
+ {
++    LOG_INFO(LOG_TAG, "%s ", __func__);
++	btm_free();
++
+       /* Free the mandatory core stack components */
+       l2c_free();
+ 
+ #if BLE_INCLUDED == TRUE
+       gatt_free();
++      btm_ble_free();
+ #ifndef ANDROID
+ #if (defined(SMP_INCLUDED) && SMP_INCLUDED == TRUE)
+     SMP_DeInit();
+diff -Nur bt_workspace-org/system/bt/stack/btu/btu_task.c bt_workspace-new/system/bt/stack/btu/btu_task.c
+--- bt_workspace-org/system/bt/stack/btu/btu_task.c	2020-12-23 16:27:46.602893581 +0800
++++ bt_workspace-new/system/bt/stack/btu/btu_task.c	2020-12-24 15:42:31.709801627 +0800
+@@ -182,11 +182,9 @@
+   /* Initialise platform trace levels at this point as BTE_InitStack() and bta_sys_init()
+    * reset the control blocks and preset the trace level with XXX_INITIAL_TRACE_LEVEL
+    */
+-#ifdef ANDROID
+ #if ( BT_USE_TRACES==TRUE )
+   module_init(get_module(BTE_LOGMSG_MODULE));
+ #endif
+-#endif
+ 
+   // Inform the bt jni thread initialization is ok.
+   btif_transfer_context(btif_init_ok, 0, NULL, 0, NULL);
+@@ -210,7 +208,7 @@
+   alarm_unregister_processing_queue(btu_general_alarm_queue);
+ 
+ #if ( BT_USE_TRACES==TRUE )
+-  //module_clean_up(get_module(BTE_LOGMSG_MODULE));
++  module_clean_up(get_module(BTE_LOGMSG_MODULE));
+ #endif
+ 
+   bta_sys_free();
+diff -Nur bt_workspace-org/system/bt/utils/src/bt_utils.c bt_workspace-new/system/bt/utils/src/bt_utils.c
+--- bt_workspace-org/system/bt/utils/src/bt_utils.c	2020-12-23 16:27:46.582893580 +0800
++++ bt_workspace-new/system/bt/utils/src/bt_utils.c	2020-12-24 15:43:22.757803401 +0800
+@@ -146,6 +146,7 @@
+       perror("connect");
+       exit(1);
+   }
++  ALOGD("bt_stack: init bt_prop_socket %d", bt_prop_socket);
+ #endif
+ 
+   for(i = 0; i < TASK_HIGH_MAX; i++) {
+@@ -165,6 +166,7 @@
+   pthread_mutex_destroy(&gIdxLock);
+   pthread_mutex_destroy(&iot_mutex_lock);
+ #ifndef ANDROID
++  ALOGD("bt_stack: cleanup bt_prop_socket %d", bt_prop_socket);
+   shutdown(bt_prop_socket, SHUT_RDWR);
+   close(bt_prop_socket);
+ #endif

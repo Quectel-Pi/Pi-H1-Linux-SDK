@@ -1,0 +1,65 @@
+From 8794abc69e7a3dcc9d63b259fcd6031e58b67993 Mon Sep 17 00:00:00 2001
+From: Carl Yin <carl.yin@quecte.com>
+Date: Tue, 31 Dec 2024 11:25:44 +0800
+Subject: [PATCH] support get phy interface and addrs from dts
+
+---
+ drivers/qps615/src/tc956x_pci.c     | 19 +++++++++++++++++++
+ drivers/qps615/src/tc956xmac_mdio.c |  4 ++++
+ 2 files changed, 23 insertions(+)
+
+diff --git a/drivers/qps615/src/tc956x_pci.c b/drivers/qps615/src/tc956x_pci.c
+index 06c777d..06c78fe 100644
+--- a/drivers/qps615/src/tc956x_pci.c
++++ b/drivers/qps615/src/tc956x_pci.c
+@@ -1172,6 +1172,25 @@ static int tc956xmac_xgmac3_default_data(struct pci_dev *pdev,
+ 	/* Set common default data first */
+ 	xgmac_default_data(plat);
+ 
++	if (of_property_read_u32(pdev->dev.of_node, "qcom,phy-port-interface", &plat->port_interface)) {
++		plat->port_interface = ENABLE_SGMII_INTERFACE;
++	}
++
++	int i, sz;
++	u8 phy_addrs[PHY_MAX_ADDR];
++	sz = of_property_read_variable_u8_array(pdev->dev.of_node, "qcom,phy-addrs", phy_addrs, 1, ARRAY_SIZE(phy_addrs));
++	if (sz > 0) {
++		plat->mdio_bus_data->phy_mask = 0xFFFFFFFF;
++		for (i = 0; i < sz; i++) {
++			if (phy_addrs[i] >= PHY_MAX_ADDR)
++				continue;
++			plat->mdio_bus_data->phy_mask &= ~BIT(phy_addrs[i]);
++		}
++	}
++	else {
++		plat->mdio_bus_data->phy_mask = 0;
++	}
++
+ 	plat->gate_mask = 1; /* 1: tc_to_txq gate mask enabled by default. Traffic control gate event mapped to respective queues in kernel and sent to Driver */
+ 	plat->bus_id = 1;
+ #ifdef TC956X
+diff --git a/drivers/qps615/src/tc956xmac_mdio.c b/drivers/qps615/src/tc956xmac_mdio.c
+index 9d8f8e5..da8c18c 100644
+--- a/drivers/qps615/src/tc956xmac_mdio.c
++++ b/drivers/qps615/src/tc956xmac_mdio.c
+@@ -690,6 +690,8 @@ int tc956xmac_mdio_register(struct net_device *ndev)
+ 	start_addr = priv->plat->start_phy_addr;
+ 
+ 	for (addr = start_addr; addr < PHY_MAX_ADDR; addr++) {
++		if (!mdiobus_is_registered_device(new_bus, addr))
++			continue;
+ 
+ #ifdef TC956X
+ 		int phy_reg_read;
+@@ -751,6 +753,8 @@ int tc956xmac_mdio_register(struct net_device *ndev)
+ 	/* If C22 PHY is not found, probe for C45 based PHY*/
+ 	if (!found) {
+ 		for (addr = start_addr; addr < PHY_MAX_ADDR; addr++) {
++			if (!mdiobus_is_registered_device(new_bus, addr))
++				continue;
+ 
+ #ifdef TC956X
+ 			int phy_reg_read1, phy_reg_read2, phy_id;
+-- 
+2.34.1
+

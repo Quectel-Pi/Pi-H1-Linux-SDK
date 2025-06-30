@@ -1,0 +1,13 @@
+diff -Nur bt_workspace-org/hardware/libhardware/include/hardware/bluetooth.h bt_workspace-new/hardware/libhardware/include/hardware/bluetooth.h
+--- bt_workspace-org/hardware/libhardware/include/hardware/bluetooth.h	2020-12-23 16:27:46.614893581 +0800
++++ bt_workspace-new/hardware/libhardware/include/hardware/bluetooth.h	2021-05-27 10:38:59.446696504 +0800
+@@ -615,6 +615,9 @@
+     void (*interop_database_add)(uint16_t feature, const bt_bdaddr_t *addr, size_t len);
+     /** BT stack Test interface */
+     const void* (*get_testapp_interface)(int test_app_profile);
++#ifdef UNIFIED_SLEEP_WAKEUP
++	int (*unified_wakeup_sleep_ind)(uint8_t isSleep);
++#endif
+ #ifdef ENABLE_AFH_API
+     int (*set_afh_channel_map)(bt_afh_channel_map_t *arguments);
+ #endif

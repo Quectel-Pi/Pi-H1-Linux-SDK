@@ -1,0 +1,28 @@
+diff -Nur bt_workspace-org/hardware/libhardware/include/hardware/bluetooth.h bt_workspace/hardware/libhardware/include/hardware/bluetooth.h
+--- bt_workspace-org/hardware/libhardware/include/hardware/bluetooth.h	2021-07-08 16:08:33.823247198 +0800
++++ bt_workspace/hardware/libhardware/include/hardware/bluetooth.h	2021-07-08 16:09:23.739248932 +0800
+@@ -615,12 +615,8 @@
+     void (*interop_database_add)(uint16_t feature, const bt_bdaddr_t *addr, size_t len);
+     /** BT stack Test interface */
+     const void* (*get_testapp_interface)(int test_app_profile);
+-#ifdef UNIFIED_SLEEP_WAKEUP
+ 	int (*unified_wakeup_sleep_ind)(uint8_t isSleep);
+-#endif
+-#ifdef ENABLE_AFH_API
+     int (*set_afh_channel_map)(bt_afh_channel_map_t *arguments);
+-#endif
+ } bt_interface_t;
+ 
+ /** TODO: Need to add APIs for Service Discovery, Service authorization and
+diff -Nur bt_workspace-org/system/bt/btif/src/bluetooth.c bt_workspace/system/bt/btif/src/bluetooth.c
+--- bt_workspace-org/system/bt/btif/src/bluetooth.c	2021-07-08 16:08:33.791247197 +0800
++++ bt_workspace/system/bt/btif/src/bluetooth.c	2021-07-08 16:11:25.019253147 +0800
+@@ -661,6 +661,8 @@
+ #endif
+ #ifdef ENABLE_AFH_API
+     set_afh_channel_map,
++#else
++    NULL,
+ #endif
+ };
+ 

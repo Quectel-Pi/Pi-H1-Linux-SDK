@@ -1,0 +1,511 @@
+# Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+#####################
+## <summary>
+## Allow allocation of buffer from qseecom heap
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed to rw /dev/dma_heap/qseecom*
+##  heaps
+##  </summary>
+## </param>
+#
+
+interface(`qcom_qseecom_alloc_buf_rw',`
+        gen_require(`
+                type qcom_qseecom_heap_dev_t;
+        ')
+
+        allow $1 qcom_qseecom_heap_dev_t:chr_file rw_chr_file_perms;
+')
+
+#####################
+## <summary>
+## Allow open/read/write from smcinvoke device
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed rw to smcinvoke device
+##  to communicate with trustzone
+##  </summary>
+## </param>
+#
+
+interface(`qcom_allow_smcinvoke_rw',`
+        gen_require(`
+                type qcom_smcinvoke_dev_t;
+        ')
+
+        allow $1 qcom_smcinvoke_dev_t:chr_file rw_chr_file_perms;
+')
+
+#####################
+## <summary>
+## Allow open/read/write from ufs-bsg device
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed rw to ufs-bsg0 device
+##  </summary>
+## </param>
+#
+
+interface(`qcom_allow_ufs_bsg_rw',`
+       gen_require(`
+               type qcom_ufs_bsg_dev_t;
+       ')
+
+       allow $1 qcom_ufs_bsg_dev_t:chr_file rw_chr_file_perms;
+')
+
+########################################
+## <summary>
+##      Read Write the audio devices.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_dev_audio_rw_device',`
+	gen_require(`
+		type device_t, qcom_audio_device_t;
+	')
+
+	rw_chr_files_pattern($1, device_t, qcom_audio_device_t)
+')
+
+########################################
+## <summary>
+##      Read Write the coresight devices.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_dev_coresight_rw_device',`
+        gen_require(`
+                type device_t, qcom_coresight_device_t;
+        ')
+
+        rw_chr_files_pattern($1, device_t, qcom_coresight_device_t)
+')
+
+########################################
+## <summary>
+##      Allow read/ioctl/open for adsp secure device.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+##
+interface(`qcom_adsp_secure_read_device',`
+   gen_require(`
+       type device_t, qcom_adsp_secure_device_t;
+   ')
+
+   read_chr_files_pattern($1, device_t, qcom_adsp_secure_device_t)
+')
+
+########################################
+## <summary>
+##      Allow read for dmaheap/qcom,audioml device.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_audioml_dmabuf_read_device',`
+   gen_require(`
+       type device_t, qcom_audioml_heap_device_t;
+   ')
+
+   read_chr_files_pattern($1, device_t, qcom_audioml_heap_device_t)
+')
+
+########################################
+## <summary>
+##       Add rules for pd_mapper interaction
+## </summary>
+## <desc>
+##    <p>
+##    Allow the pd_mapper domain to read sysfs_t dir, file and link file.
+##    </p>
+## </desc>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+## <param name="type">
+##      <summary>
+##      File type allowed to read
+##      </summary>
+## </param>
+#
+interface(`qcom_read_pd_mapper',`
+    gen_require(`
+        type sysfs_t;
+    ')
+    allow $1 sysfs_t:dir read;
+    allow $1 sysfs_t:file { read open };
+    allow $1 sysfs_t:lnk_file read;
+')
+
+#####################
+## <summary>
+## Allow open/read/write uhid device
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed rw to uhid device
+##  to communicate with uhid input node
+##  </summary>
+## </param>
+#
+interface(`uhid_device_rw',`
+	gen_require(`
+		type uhid_device_t;
+	')
+        allow $1 uhid_device_t:chr_file rw_chr_file_perms ;
+')
+
+#######################################
+## <summary>
+##      Allow read/ioctl/open for cdsp secure device.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+
+interface(`qcom_cdsp_secure_read_device',`
+	gen_require(`
+		type device_t, qcom_cdsp_secure_device_t;
+	')
+	read_chr_files_pattern($1, device_t, qcom_cdsp_secure_device_t)
+')
+
+########################################
+## <summary>
+##      Allow read/write/ioctl/open for rpmsg device.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+##
+interface(`qcom_rpmsg_device_rw',`
+   gen_require(`
+       type device_t, qcom_rpmsg_device_t;
+   ')
+    allow $1 qcom_rpmsg_device_t:chr_file rw_chr_file_perms;
+')
+
+####################
+## <summary>
+## Allow allocation of buffer from qcom,system heap
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed to rw /dev/dma_heap/qcom,system*
+##  heaps
+##  </summary>
+## </param>
+#
+interface(`qcom_system_alloc_buf_rw',`
+	gen_require(`
+		type qcom_system_heap_dev_t;
+	')
+
+	allow $1 qcom_system_heap_dev_t:chr_file rw_chr_file_perms;
+')
+
+####################
+## <summary>
+## Allow allocation of buffer from qcom,secure-pixel heap
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed to rw /dev/dma_heap/qcom,secure-pixel*
+##  heaps
+##  </summary>
+## </param>
+#
+interface(`qcom_secure_pixel_alloc_buf_rw',`
+	gen_require(`
+		type qcom_secure_pixel_heap_dev_t;
+		')
+
+	allow $1 qcom_secure_pixel_heap_dev_t:chr_file rw_chr_file_perms;
+')
+
+####################
+## <summary>
+## Allow allocation of buffer from qcom,secure-non-pixel heap
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed to rw /dev/dma_heap/qcom,secure-non-pixel*
+##  heaps
+##  </summary>
+## </param>
+#
+interface(`qcom_secure_non_pixel_alloc_buf_rw',`
+	gen_require(`
+		type qcom_secure_non_pixel_heap_dev_t;
+	')
+
+	allow $1 qcom_secure_non_pixel_heap_dev_t:chr_file rw_chr_file_perms;
+')
+
+#####################
+## <summary>
+## Allow rw access to membuf node
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed to rw /dev/membuf*
+##  heaps
+##  </summary>
+## </param>
+##
+interface(`qcom_membuf_rw',`
+	gen_require(`
+		type qcom_membuf_dev_t;
+		')
+
+	allow $1 qcom_membuf_dev_t:chr_file rw_chr_file_perms;
+')
+
+#####################
+## <summary>
+## Allow rw access to mem_buf_vm node
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed to rw /dev/mem_buf_vm*
+##  heaps
+##  </summary>
+## </param>
+##
+interface(`qcom_mem_buf_vm_rw',`
+	gen_require(`
+		type qcom_mem_buf_vm_dev_t;
+		')
+
+	allow $1 qcom_mem_buf_vm_dev_t:chr_file rw_chr_file_perms;
+')
+
+########################################
+## <summary>
+##      Search the device.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`search_dev',`
+    gen_require(`
+        type device_t;
+    ')
+
+    search_dirs_pattern($1,device_t,device_t)
+')
+
+#####################
+## <summary>
+##      Allow read/write camera device
+## </summary>
+## <param name="domain">
+##      <summary>
+##              Domain allowed rw to camera device
+##      </summary>
+## </param>
+#
+interface(`qcom_cam_server_device_rw',`
+    gen_require(`
+        type qcom_cam_server_dev_t;
+    ')
+        allow $1 qcom_cam_server_dev_t:chr_file { rw_chr_file_perms map } ;
+')
+
+########################################
+## <summary>
+##      Read Write the gpu device.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_dev_gpu_rw_device',`
+    gen_require(`
+        type device_t, qcom_gpu_device_t;
+    ')
+    rw_chr_files_pattern($1, device_t, qcom_gpu_device_t)
+    allow $1 qcom_gpu_device_t:chr_file map;
+')
+
+########################################
+## <summary>
+##      Add rule for display service to connect to socket
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_weston_dev_socket_connect',`
+        gen_require(`
+                type qcom_weston_socket_dev_t;
+        ')
+        rw_chr_files_pattern($1, device_t, qcom_weston_socket_dev_t)
+        allow $1 qcom_weston_socket_dev_t:chr_file map;
+        allow $1 qcom_weston_socket_dev_t:dir manage_dir_perms;
+        allow $1 qcom_weston_socket_dev_t:file { manage_file_perms map };
+        allow $1 qcom_weston_socket_dev_t:sock_file manage_sock_file_perms;
+')
+
+########################################
+## <summary>
+##      Read the system device.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_dev_read_write_system_dmabuf',`
+    gen_require(`
+        type device_t, system_dmabuf_device_t;
+    ')
+
+    rw_chr_files_pattern($1, device_t, system_dmabuf_device_t)
+')
+
+####################################
+## <summary>
+##  Allow read/Write on cdsp device
+## </summary>
+## <param name="domain">
+##    <summary>
+##    Domain allowed access.
+##    </summary>
+## </param>
+#
+interface(`qcom_cdsp_rw', `
+    gen_require(`
+        type qcom_cdsp_secure_device_t;
+    ')
+     allow $1 qcom_cdsp_secure_device_t:chr_file { rw_chr_file_perms };
+')
+
+########################################
+## <summary>
+##	Allow caller to modify coresight nodes.
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed access.
+##	</summary>
+## </param>
+#
+interface(`dev_rw_qcom_coresight',`
+	gen_require(`
+		type qcom_coresight_t;
+	')
+
+	rw_files_pattern($1, qcom_coresight_t, qcom_coresight_t)
+	read_lnk_files_pattern($1, qcom_coresight_t, qcom_coresight_t)
+
+	list_dirs_pattern($1, qcom_coresight_t, qcom_coresight_t)
+')
+
+########################################
+## <summary>
+##      Add rule to relabel /dev/socket/weston
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+
+interface(`qcom_weston_dev_socket_relabel',`
+        gen_require(`
+                type qcom_weston_socket_dev_t;
+        ')
+        allow $1 qcom_weston_socket_dev_t:dir relabelto;
+')
+
+########################################
+## <summary>
+##      Add allow rule for display service to create /dev/socket/weston
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+
+interface(`qcom_weston_dev_socket_create_dir',`
+        gen_require(`
+                type qcom_weston_socket_dev_t;
+        ')
+        allow $1 qcom_weston_socket_dev_t:dir manage_dir_perms;
+')
+
+########################################
+## <summary>
+##      Add allow rule for display service to read and getattr /dev/dri dir
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+
+interface(`qcom_dev_display_getattr_device',`
+        gen_require(`
+                type device_t;
+        ')
+        allow $1 device_t:dir { getattr search read };
+')
+
+########################################
+## <summary>
+##      Allow write on weston socket files
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+
+interface(`qcom_weston_dev_write',`
+        gen_require(`
+                type qcom_weston_socket_dev_t;
+        ')
+        allow $1 qcom_weston_socket_dev_t:sock_file write;
+')

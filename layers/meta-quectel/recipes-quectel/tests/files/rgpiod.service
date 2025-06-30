@@ -1,0 +1,9 @@
+[Unit]
+Description=rgpiod deamon
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/rgpiod
+
+[Install]
+WantedBy=multi-user.target

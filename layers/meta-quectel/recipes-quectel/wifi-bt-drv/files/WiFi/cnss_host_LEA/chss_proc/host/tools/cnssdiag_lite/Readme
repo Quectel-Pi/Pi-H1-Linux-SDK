@@ -1,0 +1,3 @@
+#How to build cnssdiag_lite
+make
+#binary is cnss_diag_lite

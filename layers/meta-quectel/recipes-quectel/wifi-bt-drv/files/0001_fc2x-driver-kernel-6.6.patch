@@ -1,0 +1,1017 @@
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/build/Makefile b/WiFi/cnss_host_LEA/chss_proc/host/AIO/build/Makefile
+index 0b020a3..0e51fa1 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/build/Makefile
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/build/Makefile
+@@ -106,7 +106,7 @@ drivers_firmware_transfer:
+ 
+ drivers_clean:
+ 	@echo Clean drivers
+-	cd ${WLAN_DRIVER_TOPDIR} && ${MAKEARCH} driver_clean
++	cd ${WLAN_DRIVER_TOPDIR} && ${MAKEARCH} qcacld_clean
+ 
+ common_patch: wpa_supplicant_patch
+ 	@echo Start Common Patches
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/build/scripts/te-f30/config.te-f30 b/WiFi/cnss_host_LEA/chss_proc/host/AIO/build/scripts/te-f30/config.te-f30
+index 9b20be6..1a2767e 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/build/scripts/te-f30/config.te-f30
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/build/scripts/te-f30/config.te-f30
+@@ -1,9 +1,9 @@
+ #
+ # Please modify KERNELPATH, KERNELARCH and TOOLPREFIX to meet your environment
+ #
+-export KERNELPATH=/lib/modules/${shell uname -r}/build
+-export KERNELARCH=i386
+-export TOOLPREFIX=
++export KERNELPATH=${KERNELPATH}
++export KERNELARCH=${ARCH}
++export TOOLPREFIX=${CROSS_COMPILE}
+ 
+ export CONFIG_NO_USE_BACKPORTS=y
+ export CONFIG_CFG80211_DEPEND_ON_KERNEL=y
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/EPPING/src/epping_rx.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/EPPING/src/epping_rx.c
+index 978ad46..e18a4da 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/EPPING/src/epping_rx.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/EPPING/src/epping_rx.c
+@@ -164,7 +164,11 @@ void epping_rx(void *ctx, HTC_PACKET *pPacket)
+                    sizeof(unsigned int));
+                epping_set_kperf_flag(pAdapter, eid, false);
+                adf_net_buf_debug_release_skb(pktSkb);
+-               netif_rx_ni(pktSkb);
++	       #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++	       __netif_rx(pktSkb);
++	       #else
++	       netif_rx_ni(pktSkb);
++	       #endif
+                break;
+             case 0: /* RXPERF hard code 0 in FW */
+                adf_nbuf_free(pktSkb);
+@@ -177,12 +181,20 @@ void epping_rx(void *ctx, HTC_PACKET *pPacket)
+             case EPPING_CMD_CAPTURE_RECV_CNT:
+                epping_set_kperf_flag(pAdapter, eid, false);
+                adf_net_buf_debug_release_skb(pktSkb);
++               #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++	       __netif_rx(pktSkb);
++	       #else
+                netif_rx_ni(pktSkb);
+-               break;
++	       #endif
++	       break;
+             default:
+                adf_net_buf_debug_release_skb(pktSkb);
+-               netif_rx_ni(pktSkb);
+-               pEpping_ctx->kperf_num_rx_recv[eid]++;
++               #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++	       __netif_rx(pktSkb);
++	       #else
++	       netif_rx_ni(pktSkb);
++	       #endif
++	       pEpping_ctx->kperf_num_rx_recv[eid]++;
+                if ((pAdapter->stats.rx_packets % EPPING_STATS_LOG_COUNT) == 0) {
+                    EPPING_LOG(VOS_TRACE_LEVEL_FATAL, "%s: total_rx_pkts = %lu",
+                               __func__, pAdapter->stats.rx_packets);
+@@ -191,8 +203,12 @@ void epping_rx(void *ctx, HTC_PACKET *pPacket)
+             }
+          } else {
+             adf_net_buf_debug_release_skb(pktSkb);
++	    #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++	    __netif_rx(pktSkb);
++            #else
+             netif_rx_ni(pktSkb);
+-            if ((pAdapter->stats.rx_packets % EPPING_STATS_LOG_COUNT) == 0) {
++	    #endif
++	    if ((pAdapter->stats.rx_packets % EPPING_STATS_LOG_COUNT) == 0) {
+                EPPING_LOG(VOS_TRACE_LEVEL_FATAL, "%s: total_rx_pkts = %lu",
+                   __func__, pAdapter->stats.rx_packets);
+             }
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_assoc.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_assoc.c
+index 869a966..27a7158 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_assoc.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_assoc.c
+@@ -80,6 +80,10 @@
+ #include "wlan_hdd_hostapd.h"
+ #endif//#ifdef WLAN_FEATURE_SAP_TO_FOLLOW_STA_CHAN
+ 
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
++#define		MINI_PROTOCAL_SIZE			14
++#endif
++
+ struct ether_addr
+ {
+     u_char  ether_addr_octet[6];
+@@ -6475,7 +6479,11 @@ static int __iw_get_ap_address(struct net_device *dev,
+     }
+     else
+     {
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
++        memset(wrqu->ap_addr.sa_data,0,MINI_PROTOCAL_SIZE);
++#else
+         memset(wrqu->ap_addr.sa_data,0,sizeof(wrqu->ap_addr.sa_data));
++#endif
+     }
+     EXIT();
+     return 0;
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_cfg80211.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_cfg80211.c
+index 5a2c5cc..fe9c062 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_cfg80211.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_cfg80211.c
+@@ -20360,10 +20360,12 @@ static int __wlan_hdd_cfg80211_change_iface(struct wiphy *wiphy,
+                 /* To meet Android requirements create a randomized
+                    MAC address of the form 02:1A:11:Fx:xx:xx */
+                 get_random_bytes(&ndev->dev_addr[3], 3);
+-                ndev->dev_addr[0] = 0x02;
++		#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0))
++		ndev->dev_addr[0] = 0x02;
+                 ndev->dev_addr[1] = 0x1A;
+                 ndev->dev_addr[2] = 0x11;
+                 ndev->dev_addr[3] |= 0xF0;
++		#endif
+                 memcpy(pAdapter->macAddressCurrent.bytes, ndev->dev_addr,
+                        VOS_MAC_ADDR_SIZE);
+                 pr_info("wlan: Generated HotSpot BSSID "MAC_ADDRESS_STR"\n",
+@@ -20976,6 +20978,7 @@ static int __wlan_hdd_change_station(struct wiphy *wiphy,
+                 vos_mem_copy(StaParams.extn_capability, params->ext_capab,
+                              params->ext_capab_len);
+ 
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
+             if (NULL != params->ht_capa) {
+                 StaParams.htcap_present = 1;
+                 vos_mem_copy(&StaParams.HTCap, params->ht_capa, sizeof(tSirHTCap));
+@@ -21010,7 +21013,7 @@ static int __wlan_hdd_change_station(struct wiphy *wiphy,
+                 StaParams.vhtcap_present = 1;
+                 vos_mem_copy(&StaParams.VHTCap, params->vht_capa, sizeof(tSirVHTCap));
+             }
+-
++#endif
+             if (0 != params->ext_capab_len ) {
+                 /*Define A Macro : TODO Sunil*/
+                 if ((1<<4) & StaParams.extn_capability[3]) {
+@@ -21021,7 +21024,7 @@ static int __wlan_hdd_change_station(struct wiphy *wiphy,
+                     isOffChannelSupported = 1;
+                 }
+             }
+-
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
+             if (pHddCtx->cfg_ini->fEnableTDLSWmmMode &&
+                 (params->ht_capa || params->vht_capa ||
+                 (params->sta_flags_set & BIT(NL80211_STA_FLAG_WME))))
+@@ -21030,7 +21033,7 @@ static int __wlan_hdd_change_station(struct wiphy *wiphy,
+             hddLog(VOS_TRACE_LEVEL_INFO,
+                    FL("%s: TDLS Peer is QOS capable is_qos_wmm_sta= %d HTcapPresent = %d"),
+                    __func__, is_qos_wmm_sta, StaParams.htcap_present);
+-
++#endif
+             status = wlan_hdd_tdls_set_peer_caps(pAdapter, mac,
+                                                   &StaParams, isBufSta,
+                                                   isOffChannelSupported,
+@@ -21446,9 +21449,11 @@ static int __wlan_hdd_cfg80211_add_key( struct wiphy *wiphy,
+     return 0;
+ }
+ 
++
++#ifdef CFG80211_SINGLE_NETDEV_MULTI_LINK_SUPPORT
+ static int wlan_hdd_cfg80211_add_key( struct wiphy *wiphy,
+                                       struct net_device *ndev,
+-                                      u8 key_index, bool pairwise,
++                                      int link_id,u8 key_index, bool pairwise,
+                                       const u8 *mac_addr,
+                                       struct key_params *params
+                                       )
+@@ -21461,7 +21466,23 @@ static int wlan_hdd_cfg80211_add_key( struct wiphy *wiphy,
+ 
+     return ret;
+ }
++#else
++static int wlan_hdd_cfg80211_add_key( struct wiphy *wiphy,
++                                      struct net_device *ndev,
++                                      u8 key_index, bool pairwise,
++                                      const u8 *mac_addr,
++                                      struct key_params *params
++                                      )
++{
++    int ret;
++    vos_ssr_protect(__func__);
++    ret = __wlan_hdd_cfg80211_add_key(wiphy, ndev, key_index, pairwise,
++                                      mac_addr, params);
++    vos_ssr_unprotect(__func__);
+ 
++    return ret;
++}
++#endif
+ /*
+  * FUNCTION: __wlan_hdd_cfg80211_get_key
+  * This function is used to get the key information
+@@ -21539,9 +21560,10 @@ static int __wlan_hdd_cfg80211_get_key(
+     return 0;
+ }
+ 
++#ifdef CFG80211_SINGLE_NETDEV_MULTI_LINK_SUPPORT 
+ static int wlan_hdd_cfg80211_get_key(
+                         struct wiphy *wiphy,
+-                        struct net_device *ndev,
++                        struct net_device *ndev,int link_id,
+                         u8 key_index, bool pairwise,
+                         const u8 *mac_addr, void *cookie,
+                         void (*callback)(void *cookie, struct key_params*)
+@@ -21556,7 +21578,25 @@ static int wlan_hdd_cfg80211_get_key(
+ 
+     return ret;
+ }
++#else
++static int wlan_hdd_cfg80211_get_key(
++                        struct wiphy *wiphy,
++                        struct net_device *ndev,
++                        u8 key_index, bool pairwise,
++                        const u8 *mac_addr, void *cookie,
++                        void (*callback)(void *cookie, struct key_params*)
++                        )
++{
++    int ret;
++
++    vos_ssr_protect(__func__);
++    ret = __wlan_hdd_cfg80211_get_key(wiphy, ndev, key_index, pairwise,
++                                    mac_addr, cookie, callback);
++    vos_ssr_unprotect(__func__);
+ 
++    return ret;
++}
++#endif
+ /**
+  * __wlan_hdd_cfg80211_del_key() - cfg80211 delete key
+  * @wiphy: Pointer to wiphy structure.
+@@ -21684,8 +21724,9 @@ static int __wlan_hdd_cfg80211_del_key(struct wiphy *wiphy,
+  *
+  * Return: 0 for success, error number on failure.
+  */
++#ifdef CFG80211_SINGLE_NETDEV_MULTI_LINK_SUPPORT
+ static int wlan_hdd_cfg80211_del_key(struct wiphy *wiphy,
+-					struct net_device *dev,
++					struct net_device *dev,int link_id,
+ 					u8 key_index,
+ 					bool pairwise, const u8 *mac_addr)
+ {
+@@ -21698,7 +21739,22 @@ static int wlan_hdd_cfg80211_del_key(struct wiphy *wiphy,
+ 
+ 	return ret;
+ }
++#else
++static int wlan_hdd_cfg80211_del_key(struct wiphy *wiphy,
++					struct net_device *dev,
++					u8 key_index,
++					bool pairwise, const u8 *mac_addr)
++{
++	int ret;
+ 
++	vos_ssr_protect(__func__);
++	ret = __wlan_hdd_cfg80211_del_key(wiphy, dev, key_index,
++					  pairwise, mac_addr);
++	vos_ssr_unprotect(__func__);
++
++	return ret;
++}
++#endif
+ /*
+  * FUNCTION: __wlan_hdd_cfg80211_set_default_key
+  * This function is used to set the default tx key index
+@@ -21818,7 +21874,21 @@ static int __wlan_hdd_cfg80211_set_default_key( struct wiphy *wiphy,
+     EXIT();
+     return status;
+ }
++#ifdef CFG80211_SINGLE_NETDEV_MULTI_LINK_SUPPORT
++static int wlan_hdd_cfg80211_set_default_key( struct wiphy *wiphy,
++                                              struct net_device *ndev,int link_id,
++                                              u8 key_index,
++                                              bool unicast, bool multicast)
++{
++    int ret;
++    vos_ssr_protect(__func__);
++    ret = __wlan_hdd_cfg80211_set_default_key(wiphy, ndev, key_index, unicast,
++                                              multicast);
++    vos_ssr_unprotect(__func__);
+ 
++    return ret;
++}
++#else
+ static int wlan_hdd_cfg80211_set_default_key( struct wiphy *wiphy,
+                                               struct net_device *ndev,
+                                               u8 key_index,
+@@ -21832,7 +21902,7 @@ static int wlan_hdd_cfg80211_set_default_key( struct wiphy *wiphy,
+ 
+     return ret;
+ }
+-
++#endif
+ /*
+  * wlan_hdd_cfg80211_update_bss_list :to inform nl80211
+  * interface that BSS might have been lost.
+@@ -25217,6 +25287,20 @@ static inline void wlan_hdd_check_ht20_ht40_ind(hdd_context_t *hdd_ctx,
+     roam_profile->force_24ghz_in_ht20 = false;
+ }
+ #endif
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
++void wlan_hdd_cfg80211_timeout(struct net_device *dev, struct cfg80211_bss *bss)
++{
++	        struct cfg80211_assoc_failure data;
++		        memcpy(data.bss,bss,sizeof(struct cfg80211_bss));
++			        cfg80211_assoc_failure(dev,&data);
++
++}
++#else
++void wlan_hdd_cfg80211_timeout(struct net_device *dev, struct cfg80211_bss *bss)
++{
++	        cfg80211_assoc_timeout(dev,bss);
++}
++#endif
+ 
+ /*
+  * FUNCTION: __wlan_hdd_cfg80211_connect
+@@ -25307,8 +25391,8 @@ static int __wlan_hdd_cfg80211_connect( struct wiphy *wiphy,
+                             req->bssid, req->ssid,
+                             req->ssid_len);
+                 if (bss) {
+-                    cfg80211_assoc_timeout(ndev, bss);
+-                    return -ETIMEDOUT;
++                    wlan_hdd_cfg80211_timeout(ndev,bss);
++		    return -ETIMEDOUT;
+                 }
+             }
+             return -EINVAL;
+@@ -28075,8 +28159,9 @@ static int __wlan_hdd_set_default_mgmt_key(struct wiphy *wiphy,
+  *
+  * Return: 0 on success, error number on failure
+  */
++#ifdef CFG80211_SINGLE_NETDEV_MULTI_LINK_SUPPORT
+ static int wlan_hdd_set_default_mgmt_key(struct wiphy *wiphy,
+-					   struct net_device *netdev,
++					   struct net_device *netdev,int link_id,
+ 					   u8 key_index)
+ {
+ 	int ret;
+@@ -28087,7 +28172,20 @@ static int wlan_hdd_set_default_mgmt_key(struct wiphy *wiphy,
+ 
+ 	return ret;
+ }
++#else
++static int wlan_hdd_set_default_mgmt_key(struct wiphy *wiphy,
++					   struct net_device *netdev,
++					   u8 key_index)
++{
++	int ret;
++
++	vos_ssr_protect(__func__);
++	ret = __wlan_hdd_set_default_mgmt_key(wiphy, netdev, key_index);
++	vos_ssr_unprotect(__func__);
+ 
++	return ret;
++}
++#endif
+ /**
+  * __wlan_hdd_set_txq_params() - set tx queue parameters
+  * @wiphy: pointer to wiphy
+@@ -29926,7 +30024,15 @@ static int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
+ 					u16 status_code, u32 peer_capability,
+ 					const u8 *buf, size_t len)
+ #else /* TDLS_MGMT_VERSION2 */
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0)) || defined(WITH_BACKPORTS)
++
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
++static int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
++					struct net_device *dev,
++					const u8 *peer, int link_id, u8 action_code,
++					u8 dialog_token, u16 status_code,
++					u32 peer_capability, bool initiator,
++					const u8 *buf, size_t len)
++#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0)) || defined(WITH_BACKPORTS)
+ static int wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
+ 					struct net_device *dev,
+ 					const u8 *peer, u8 action_code,
+@@ -30507,7 +30613,10 @@ int wlan_hdd_cfg80211_send_tdls_discover_req(struct wiphy *wiphy,
+     return wlan_hdd_cfg80211_tdls_mgmt(wiphy, dev, peer,
+                             WLAN_TDLS_DISCOVERY_REQUEST, 1, 0, 0, NULL, 0);
+ #else
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,17,0)) || defined(WITH_BACKPORTS)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0)) 
++    return wlan_hdd_cfg80211_tdls_mgmt(wiphy, dev, peer, 0, 
++                            WLAN_TDLS_DISCOVERY_REQUEST, 1, 0, 0, 0, NULL, 0);
++#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3,17,0)) || defined(WITH_BACKPORTS)
+     return wlan_hdd_cfg80211_tdls_mgmt(wiphy, dev, peer,
+                             WLAN_TDLS_DISCOVERY_REQUEST, 1, 0, 0, 0, NULL, 0);
+ #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3,16,0))
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_hostapd.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_hostapd.c
+index 3f885d9..b597c70 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_hostapd.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_hostapd.c
+@@ -1502,7 +1502,12 @@ void wlan_cfg80211_ch_switch_notify(struct net_device *dev,
+ 				    struct cfg80211_chan_def *chandef,
+ 				    unsigned int link_id)
+ {
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,6,0))
++	u16 punct_bitmap= 0xffff;
++	cfg80211_ch_switch_notify(dev, chandef, link_id, punct_bitmap);
++#else
+ 	cfg80211_ch_switch_notify(dev, chandef, link_id);
++#endif
+ }
+ #else
+ static inline
+@@ -8773,7 +8773,6 @@ struct net_device_ops net_ops_struct  = {
+     .ndo_start_xmit = hdd_softap_hard_start_xmit,
+     .ndo_tx_timeout = hdd_softap_tx_timeout,
+     .ndo_get_stats = hdd_softap_stats,
+-    .ndo_set_mac_address = hdd_hostapd_set_mac_address,
+ #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
+     .ndo_siocdevprivate = hdd_hostapd_dev_private_ioctl,
+ #else
+@@ -9030,7 +9030,10 @@ hdd_adapter_t* hdd_wlan_create_ap_dev(hdd_context_t *pHddCtx,
+         pWlanHostapdDev->tx_queue_len = HDD_NETDEV_TX_QUEUE_LEN;
+ 
+         vos_mem_copy(pWlanHostapdDev->dev_addr, (void *)macAddr,sizeof(tSirMacAddr));
+-        vos_mem_copy(pHostapdAdapter->macAddressCurrent.bytes, (void *)macAddr, sizeof(tSirMacAddr));
++	#if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 0, 0))
++	vos_mem_copy(pWlanHostapdDev->dev_addr_shadow, (void *)macAddr, sizeof(tSirMacAddr));
++	#endif
++	vos_mem_copy(pHostapdAdapter->macAddressCurrent.bytes, (void *)macAddr, sizeof(tSirMacAddr));
+ 
+         pHostapdAdapter->offloads_configured = FALSE;
+         hdd_dev_setup_destructor(pWlanHostapdDev);
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_ipa.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_ipa.c
+index 4e3daec..bc1b0d3 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_ipa.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_ipa.c
+@@ -3064,22 +3064,39 @@ static void hdd_ipa_send_skb_to_network(adf_nbuf_t skb, hdd_adapter_t *adapter)
+ 
+ 	++adapter->hdd_stats.hddTxRxStats.rxPackets[cpu_index];
+ #ifdef QCA_CONFIG_SMP
++	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++	result = __netif_rx(skb);
++	#else
+ 	result = netif_rx_ni(skb);
++	#endif
+ #else
+ 	ip_h = (struct iphdr*)((uint8_t*)skb->data);
+ 	if ((skb->protocol == htons(ETH_P_IP)) &&
+ 		(ip_h->protocol == IPPROTO_ICMP)) {
+-		result = netif_rx_ni(skb);
++		#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++		result = __netif_rx(skb);
++                #else
++	        result = netif_rx_ni(skb);
++                #endif
+ 	} else {
+ 		/* Call netif_rx_ni for every IPA_WLAN_RX_SOFTIRQ_THRESH packets
+ 		 * to avoid excessive softirq's.
+ 		 */
+ 		if (atomic_dec_and_test(&softirq_mitigation_cntr)){
+-			result = netif_rx_ni(skb);
++			 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++			 result = __netif_rx(skb);
++			 #else
++			 result = netif_rx_ni(skb);
++			 #endif
++
+ 			atomic_set(&softirq_mitigation_cntr,
+ 					IPA_WLAN_RX_SOFTIRQ_THRESH);
+ 		} else {
+-			result = netif_rx(skb);
++   			#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++			result = __netif_rx(skb);
++			#else
++			result = netif_rx_ni(skb);
++			#endif
+ 		}
+ 	}
+ #endif
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_memdump.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_memdump.c
+index 53a5474..423f09d 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_memdump.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_memdump.c
+@@ -64,7 +64,15 @@ static struct proc_dir_entry *proc_file_driver, *proc_dir_driver;
+  *
+  * Return: void pointer to hdd_context
+  */
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)) || defined(WITH_BACKPORTS)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)) || defined(WITH_BACKPORTS)
++static void *memdump_get_file_data(struct file *file)
++{
++	void *hdd_ctx;
++
++	hdd_ctx = pde_data(file_inode(file));
++	return hdd_ctx;
++}
++#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)) || defined(WITH_BACKPORTS)
+ static void *memdump_get_file_data(struct file *file)
+ {
+ 	void *hdd_ctx;
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_softap_tx_rx.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_softap_tx_rx.c
+index 7eae356..8952983 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_softap_tx_rx.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_softap_tx_rx.c
+@@ -1000,7 +1000,11 @@ VOS_STATUS hdd_softap_rx_packet_cbk(v_VOID_t *vosContext,
+           * This is the last packet on the chain
+           * Scheduling rx sirq
+           */
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++	 rxstat = __netif_rx(skb);
++#else
+          rxstat = netif_rx_ni(skb);
++#endif
+       }
+ 
+       if (NET_RX_SUCCESS == rxstat)
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_tx_rx.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_tx_rx.c
+index 6388ff8..ec7fe0d 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_tx_rx.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/HDD/src/wlan_hdd_tx_rx.c
+@@ -1279,7 +1279,11 @@ VOS_STATUS hdd_mon_rx_packet_cbk(v_VOID_t *vos_ctx, adf_nbuf_t rx_buf,
+ 			 * This is the last packet on the chain
+ 			 * Scheduling rx sirq
+ 			 */
++			#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++			rxstat = __netif_rx(skb);
++			#else
+ 			rxstat = netif_rx_ni(skb);
++			#endif
+ 		}
+ 
+ 		if (NET_RX_SUCCESS == rxstat)
+@@ -1344,7 +1348,11 @@ VOS_STATUS hdd_vir_mon_rx_cbk(v_VOID_t *vos_ctx, adf_nbuf_t rx_buf,
+ 			 * This is the last packet on the chain
+ 			 * Scheduling rx sirq
+ 			 */
++			#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++			rxstat = __netif_rx(skb);
++			#else
+ 			rxstat = netif_rx_ni(skb);
++			#endif
+ 		}
+ 
+ 		skb = skb_next;
+@@ -1600,7 +1608,11 @@ VOS_STATUS hdd_rx_packet_cbk(v_VOID_t *vosContext,
+            * This is the last packet on the chain
+            * Scheduling rx sirq
+            */
+-          rxstat = netif_rx_ni(skb);
++       	   #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,1,0))
++	   rxstat = __netif_rx(skb);
++           #else
++	   rxstat = netif_rx_ni(skb);
++	   #endif
+       }
+ 
+       if (NET_RX_SUCCESS == rxstat)
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/BMI/ol_fw.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/BMI/ol_fw.c
+index 8bca3b8..f4e084b 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/BMI/ol_fw.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/BMI/ol_fw.c
+@@ -375,7 +375,15 @@ static struct proc_dir_entry *crash_file, *crash_dir;
+  *
+  * Return: void pointer to ol_softc
+  */
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)) || defined(WITH_BACKPORTS)
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)) || defined(WITH_BACKPORTS)
++static void *crash_dump_get_file_data(struct file *file)
++{
++	void *scn;
++
++	scn = pde_data(file_inode(file));
++	return scn;
++}
++#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 10, 0)) || defined(WITH_BACKPORTS)
+ static void *crash_dump_get_file_data(struct file *file)
+ {
+ 	void *scn;
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/COMMON/osapi_linux.h b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/COMMON/osapi_linux.h
+index cb7b3ac..f91c552 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/COMMON/osapi_linux.h
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/COMMON/osapi_linux.h
+@@ -102,7 +102,13 @@ void a_meminfo_report(int clear);
+ #define A_MALLOC_NOWAIT(size)           a_mem_alloc((size), GFP_ATOMIC, __func__, __LINE__)
+ #define A_FREE(addr)                    a_mem_free(addr)
+ #define A_NETIF_RX(skb)                 do { a_meminfo_del(skb);  netif_rx(skb); } while (0)
++
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
+ #define A_NETIF_RX_NI(skb)              do { a_meminfo_del(skb);  netif_rx_ni(skb); } while (0)
++#else
++#define A_NETIF_RX_NI(skb)              do { a_meminfo_del(skb);  __netif_rx(skb); } while (0)
++#endif
++
+ #else
+ #define a_meminfo_report(_c)
+ #define A_MALLOC(size)                  adf_os_mem_alloc(NULL, size)
+@@ -110,7 +116,13 @@ void a_meminfo_report(int clear);
+ #define a_mem_trace(ptr)
+ #define A_FREE(addr)                    adf_os_mem_free(addr)
+ #define A_NETIF_RX(skb)                 netif_rx(skb)
+-#define A_NETIF_RX_NI(skb)              netif_rx_ni(skb)
++
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
++#define A_NETIF_RX_NI(skb)              netif_rx_ni(skb) 
++#else
++#define A_NETIF_RX_NI(skb)              __netif_rx(skb) 
++#endif
++
+ #endif
+ 
+ #define OS_DMA_MALLOC(size)             kmalloc((size), GFP_ATOMIC)
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/USB/hif_usb.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/USB/hif_usb.c
+index a491399..8884688 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/USB/hif_usb.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/USB/hif_usb.c
+@@ -99,7 +99,12 @@ int notifyDeviceInsertedHandler(void *hHIF)
+ 	AR_DEBUG_PRINTF(ATH_DEBUG_TRC, ("+%s\n", __func__));
+ 	osDrvcallback.deviceInsertedHandler(osDrvcallback.context, hHIF);
+ 	AR_DEBUG_PRINTF(ATH_DEBUG_TRC, ("-%s\n", __func__));
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
+ 	complete_and_exit(NULL, 0);
++#else
++	kthread_complete_and_exit(NULL, 0);
++#endif
++
+ 	return 0;
+ }
+ 
+@@ -110,7 +115,11 @@ int notifyDeviceSurprisedRemovedHandler(void *context)
+ 	AR_DEBUG_PRINTF(ATH_DEBUG_TRC, ("+%s\n", __func__));
+ 	osDrvcallback.deviceRemovedHandler(device->claimed_context, device);
+ 	AR_DEBUG_PRINTF(ATH_DEBUG_TRC, ("-%s\n", __func__));
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
+ 	complete_and_exit(NULL, 0);
++#else
++	kthread_complete_and_exit(NULL, 0);
++#endif
+ 	return 0;
+ }
+ 
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/ath_procfs.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/ath_procfs.c
+index f7b51a9..8957b8e 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/ath_procfs.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/ath_procfs.c
+@@ -64,7 +64,16 @@ static void *get_hif_hdl_from_file(struct file *file)
+ #elif defined(HIF_SDIO)
+ 	struct ath_hif_sdio_softc *scn;
+ #endif
+-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0))
++
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0))
++#if defined(HIF_PCI)
++	scn = (struct hif_pci_softc *)pde_data(file_inode(file));
++#elif defined(HIF_USB)
++	scn = (struct hif_usb_softc *)pde_data(file_inode(file));
++#elif defined(HIF_SDIO)
++	scn = (struct ath_hif_sdio_softc *)pde_data(file_inode(file));
++#endif
++#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0))
+ #if defined(HIF_PCI)
+ 	scn = (struct hif_pci_softc *)PDE_DATA(file_inode(file));
+ #elif defined(HIF_USB)
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/hif_oob.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/hif_oob.c
+index 03319ff..077638e 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/hif_oob.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/hif_oob.c
+@@ -82,7 +82,11 @@ static int oob_task(void *pm_oob)
+ 		}
+ 	}
+ 
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
+ 	complete_and_exit(&hif_oob->oob_completion, 0);
++#else
++	kthread_complete_and_exit(&hif_oob->oob_completion, 0);
++#endif
+ 
+ 	return 0;
+ }
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/sdio/hif_sdio_recv.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/sdio/hif_sdio_recv.c
+index d67b2c7..1ad3a0e 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/sdio/hif_sdio_recv.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/sdio/hif_sdio_recv.c
+@@ -1028,7 +1028,12 @@ int rx_completion_task(void *param)
+         }
+         adf_os_spin_unlock_irqrestore(&device->pRecvTask->rx_alloc_lock);
+     }
+-    complete_and_exit(&device->pRecvTask->rx_completion_exit, 0);
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
++     complete_and_exit(&device->pRecvTask->rx_completion_exit, 0);
++#else
++     kthread_complete_and_exit(&device->pRecvTask->rx_completion_exit, 0);
++#endif
++
+     return 0;
+ }
+ #endif
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/sdio/linux/native_sdio/src/hif.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/sdio/linux/native_sdio/src/hif.c
+index 923c536..c969d6c 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/sdio/linux/native_sdio/src/hif.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SERVICES/HIF/sdio/linux/native_sdio/src/hif.c
+@@ -832,7 +832,12 @@ static int tx_completion_task(void *param)
+ 	while (device->tx_completion_req != NULL)
+ 		tx_clean_completion_list(device);
+ 
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
+ 	complete_and_exit(&device->tx_completion_exit, 0);
++#else
++	kthread_complete_and_exit(&device->tx_completion_exit, 0);
++#endif
++
+ 	return 0;
+ }
+ 
+@@ -1064,7 +1069,12 @@ static int async_task(void *param)
+         sdio_release_host(device->func);
+     }
+ 
+-    complete_and_exit(&device->async_completion, 0);
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
++        complete_and_exit(&device->async_completion, 0);
++#else
++	kthread_complete_and_exit(&device->async_completion, 0);
++#endif
++
+     return 0;
+ }
+ #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32))
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SVC/src/logging/wlan_logging_sock_svc.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SVC/src/logging/wlan_logging_sock_svc.c
+index 439eac9..6ad7f64 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SVC/src/logging/wlan_logging_sock_svc.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/SVC/src/logging/wlan_logging_sock_svc.c
+@@ -798,9 +798,11 @@ static int wlan_logging_thread(void *Arg)
+ 		}
+ 	}
+ 
+-
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 0, 0))
+ 	complete_and_exit(&gwlan_logging.shutdown_comp, 0);
+-
++#else
++	kthread_complete_and_exit(&gwlan_logging.shutdown_comp, 0);
++#endif
+ 	return 0;
+ }
+ 
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/UTILS/PKTLOG/linux_ac.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/UTILS/PKTLOG/linux_ac.c
+index 6dcd0de..9a7bd86 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/UTILS/PKTLOG/linux_ac.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/UTILS/PKTLOG/linux_ac.c
+@@ -368,6 +368,74 @@ static int pktlog_sysctl_register(struct ol_softc *scn)
+ 	 * /proc/sys/PKTLOG_PROC_DIR/<adapter>/size for changing the buffer size
+ 	 */
+ 	memset(pl_info_lnx->sysctls, 0, sizeof(pl_info_lnx->sysctls));
++
++
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,6,0))
++	set_ctl_name(0, CTL_AUTO);
++	pl_info_lnx->sysctls[0].procname = "enable";
++	pl_info_lnx->sysctls[0].mode = PKTLOG_PROCSYS_PERM;
++	pl_info_lnx->sysctls[0].proc_handler = ath_sysctl_pktlog_enable;
++	pl_info_lnx->sysctls[0].extra1 = scn;
++
++	set_ctl_name(1, CTL_AUTO);
++	pl_info_lnx->sysctls[1].procname = "size";
++	pl_info_lnx->sysctls[1].mode = PKTLOG_PROCSYS_PERM;
++	pl_info_lnx->sysctls[1].proc_handler = ath_sysctl_pktlog_size;
++	pl_info_lnx->sysctls[1].extra1 = scn;
++
++	set_ctl_name(2, CTL_AUTO);
++	pl_info_lnx->sysctls[2].procname = "options";
++	pl_info_lnx->sysctls[2].mode = PKTLOG_PROCSYS_PERM;
++	pl_info_lnx->sysctls[2].proc_handler = proc_dointvec;
++	pl_info_lnx->sysctls[2].data = &pl_info_lnx->info.options;
++	pl_info_lnx->sysctls[2].maxlen = sizeof(pl_info_lnx->info.options);
++
++	set_ctl_name(3, CTL_AUTO);
++	pl_info_lnx->sysctls[3].procname = "sack_thr";
++	pl_info_lnx->sysctls[3].mode = PKTLOG_PROCSYS_PERM;
++	pl_info_lnx->sysctls[3].proc_handler = proc_dointvec;
++	pl_info_lnx->sysctls[3].data = &pl_info_lnx->info.sack_thr;
++	pl_info_lnx->sysctls[3].maxlen = sizeof(pl_info_lnx->info.sack_thr);
++
++	set_ctl_name(4, CTL_AUTO);
++	pl_info_lnx->sysctls[4].procname = "tail_length";
++	pl_info_lnx->sysctls[4].mode = PKTLOG_PROCSYS_PERM;
++	pl_info_lnx->sysctls[4].proc_handler = proc_dointvec;
++	pl_info_lnx->sysctls[4].data = &pl_info_lnx->info.tail_length;
++	pl_info_lnx->sysctls[4].maxlen = sizeof(pl_info_lnx->info.tail_length);
++
++	set_ctl_name(5, CTL_AUTO);
++	pl_info_lnx->sysctls[5].procname = "thruput_thresh";
++	pl_info_lnx->sysctls[5].mode = PKTLOG_PROCSYS_PERM;
++	pl_info_lnx->sysctls[5].proc_handler = proc_dointvec;
++	pl_info_lnx->sysctls[5].data = &pl_info_lnx->info.thruput_thresh;
++	pl_info_lnx->sysctls[5].maxlen =
++				sizeof(pl_info_lnx->info.thruput_thresh);
++
++	set_ctl_name(6, CTL_AUTO);
++	pl_info_lnx->sysctls[6].procname = "phyerr_thresh";
++	pl_info_lnx->sysctls[6].mode = PKTLOG_PROCSYS_PERM;
++	pl_info_lnx->sysctls[6].proc_handler = proc_dointvec;
++	pl_info_lnx->sysctls[6].data = &pl_info_lnx->info.phyerr_thresh;
++	pl_info_lnx->sysctls[6].maxlen =
++				sizeof(pl_info_lnx->info.phyerr_thresh);
++
++	set_ctl_name(7, CTL_AUTO);
++	pl_info_lnx->sysctls[7].procname = "per_thresh";
++	pl_info_lnx->sysctls[7].mode = PKTLOG_PROCSYS_PERM;
++	pl_info_lnx->sysctls[7].proc_handler = proc_dointvec;
++	pl_info_lnx->sysctls[7].data = &pl_info_lnx->info.per_thresh;
++	pl_info_lnx->sysctls[7].maxlen = sizeof(pl_info_lnx->info.per_thresh);
++
++	set_ctl_name(8, CTL_AUTO);
++	pl_info_lnx->sysctls[8].procname = "trigger_interval";
++	pl_info_lnx->sysctls[8].mode = PKTLOG_PROCSYS_PERM;
++	pl_info_lnx->sysctls[8].proc_handler = proc_dointvec;
++	pl_info_lnx->sysctls[8].data = &pl_info_lnx->info.trigger_interval;
++	pl_info_lnx->sysctls[8].maxlen =
++				sizeof(pl_info_lnx->info.trigger_interval);
++
++#else
+ 	set_ctl_name(0, CTL_AUTO);
+ 	pl_info_lnx->sysctls[0].procname = PKTLOG_PROC_DIR;
+ 	pl_info_lnx->sysctls[0].mode = PKTLOG_PROCSYS_DIR_PERM;
+@@ -441,11 +509,15 @@ static int pktlog_sysctl_register(struct ol_softc *scn)
+ 	pl_info_lnx->sysctls[12].data = &pl_info_lnx->info.trigger_interval;
+ 	pl_info_lnx->sysctls[12].maxlen =
+ 				sizeof(pl_info_lnx->info.trigger_interval);
++#endif
+ 	/* [13] is NULL terminator */
+ 
+ 	/* and register everything */
+ 	/* register_sysctl_table changed from 2.6.21 onwards */
+-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,20))
++
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,6,0))
++	pl_info_lnx->sysctl_header = register_sysctl("ath_pktlog/cld",pl_info_lnx->sysctls);
++#elif (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,20))
+ 	pl_info_lnx->sysctl_header =
+ 			register_sysctl_table(pl_info_lnx->sysctls);
+ #else
+@@ -775,7 +847,9 @@ __pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
+ 	int rem_len;
+ 	int start_offset, end_offset;
+ 	int fold_offset, ppos_data, cur_rd_offset;
+-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0)
++	struct ath_pktlog_info *pl_info = (struct ath_pktlog_info *)pde_data(file->f_path.dentry->d_inode);
++#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
+ 	struct ath_pktlog_info *pl_info = (struct ath_pktlog_info *)
+ 					  PDE_DATA(file->f_path.dentry->d_inode);
+ #else
+@@ -910,7 +984,9 @@ static ssize_t
+ pktlog_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
+ {
+ 	size_t ret_val = 0;
+-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0)
++	struct ath_pktlog_info *pl_info = (struct ath_pktlog_info *)pde_data(file->f_path.dentry->d_inode);
++#elif LINUX_VERSION_CODE >= KERNEL_VERSION(3,10,0)
+ 	struct ath_pktlog_info *pl_info = (struct ath_pktlog_info *)
+ 					  PDE_DATA(file->f_path.dentry->d_inode);
+ #else
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/VOSS/src/vos_sched.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/VOSS/src/vos_sched.c
+index dc89f52..d35ebec 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/VOSS/src/vos_sched.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/VOSS/src/vos_sched.c
+@@ -972,7 +972,12 @@ VosMCThread
+   // If we get here the MC thread must exit
+   VOS_TRACE( VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+       "%s: MC Thread exiting!!!!", __func__);
+-  complete_and_exit(&pSchedContext->McShutdown, 0);
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))  
++    complete_and_exit(&pSchedContext->McShutdown, 0);
++#else
++      kthread_complete_and_exit(&pSchedContext->McShutdown, 0);
++#endif
++
+ } /* VosMCThread() */
+ 
+ v_BOOL_t isWDresetInProgress(void)
+@@ -1264,7 +1269,12 @@ VosWDThread
+   // If we get here the Watchdog thread must exit
+   VOS_TRACE( VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_INFO,
+       "%s: Watchdog Thread exiting !!!!", __func__);
+-  complete_and_exit(&pWdContext->WdShutdown, 0);
++
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
++    complete_and_exit(&pWdContext->WdShutdown, 0);
++#else
++      kthread_complete_and_exit(&pWdContext->WdShutdown, 0);
++#endif
+ 
+ err_reset:
+     VOS_TRACE( VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_FATAL,
+@@ -1554,7 +1564,12 @@ static int VosTlshimRxThread(void *arg)
+ 
+    VOS_TRACE(VOS_MODULE_ID_VOSS, VOS_TRACE_LEVEL_ERROR,
+              "%s: Exiting VOSS Tlshim rx thread", __func__);
++
++#if (LINUX_VERSION_CODE < KERNEL_VERSION(6,0,0))
+    complete_and_exit(&pSchedContext->TlshimRxShutdown, 0);
++#else
++   kthread_complete_and_exit(&pSchedContext->TlshimRxShutdown, 0);
++#endif
+ }
+ #endif
+ 
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/VOSS/src/vos_utils.c b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/VOSS/src/vos_utils.c
+index a8b49c4..0595489 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/VOSS/src/vos_utils.c
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/CORE/VOSS/src/vos_utils.c
+@@ -650,6 +650,17 @@ struct hmac_sha1_result {
+     int err;
+ };
+ 
++
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,6,0))
++static void hmac_sha1_complete(void *req, int err)
++{
++    struct hmac_sha1_result *r = req;
++    if (err == -EINPROGRESS)
++        return;
++    r->err = err;
++    complete(&r->completion);
++}
++#else
+ static void hmac_sha1_complete(struct crypto_async_request *req, int err)
+ {
+     struct hmac_sha1_result *r = req->data;
+@@ -658,6 +669,7 @@ static void hmac_sha1_complete(struct crypto_async_request *req, int err)
+     r->err = err;
+     complete(&r->completion);
+ }
++#endif
+ 
+ int hmac_sha1(v_U8_t *key, v_U8_t ksize, char *plaintext, v_U8_t psize,
+               v_U8_t *output, v_U8_t outlen)
+@@ -823,6 +835,16 @@ struct hmac_md5_result {
+     int err;
+ };
+ 
++#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6,6,0))
++static void hmac_md5_complete(void *req, int err)
++{
++    struct hmac_md5_result *r = req;
++    if (err == -EINPROGRESS)
++            return;
++    r->err = err;
++    complete(&r->completion);
++}
++#else
+ static void hmac_md5_complete(struct crypto_async_request *req, int err)
+ {
+     struct hmac_md5_result *r = req->data;
+@@ -831,6 +853,7 @@ static void hmac_md5_complete(struct crypto_async_request *req, int err)
+     r->err = err;
+     complete(&r->completion);
+ }
++#endif
+ 
+ int hmac_md5(v_U8_t *key, v_U8_t ksize, char *plaintext, v_U8_t psize,
+                 v_U8_t *output, v_U8_t outlen)
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/Kbuild b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/Kbuild
+index b8c930d..42f6ce1 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/Kbuild
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/Kbuild
+@@ -1,5 +1,8 @@
+ # We can build either as part of a standalone Kernel build or as
+ # an external module.  Determine which mechanism is being used
++
++KERNEL_SRC=${KERNELPATH}
++
+ ifeq ($(MODNAME),)
+ 	KERNEL_BUILD := 1
+ else
+@@ -983,7 +986,8 @@ WDI_INC :=	$(WDI_CP_INC) \
+ 
+ WCNSS_INC :=	-I$(WLAN_ROOT)/wcnss/inc
+ 
+-LINUX_INC :=	-Iinclude/linux
++
++LINUX_INC :=	-I$(KERNEL_SRC)/include/linux
+ 
+ INCS :=		$(HDD_INC) \
+ 		$(EPPING_INC) \
+@@ -1015,6 +1019,8 @@ INCS +=		$(WMA_INC) \
+ INCS +=		$(HIF_INC) \
+ 		$(BMI_INC)
+ 
++INCS += $(LINUX_INC)
++
+ ifeq ($(CONFIG_REMOVE_PKT_LOG), 0)
+ INCS +=		$(PKTLOG_INC)
+ endif
+@@ -1858,6 +1864,8 @@ ifeq ($(CONFIG_WLAN_WAPI_MODE_11AC_DISABLE), y)
+ CDEFINES += -DWLAN_WAPI_MODE_11AC_DISABLE
+ endif
+ 
++CDEFINES += -D__ANDROID_COMMON_KERNEL__
++
+ KBUILD_CPPFLAGS += $(CDEFINES)
+ KBUILD_CFLAGS += -Wframe-larger-than=2048
+ 
+diff --git a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/Makefile b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/Makefile
+index f78d774..0a34fcb 100644
+--- a/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/Makefile
++++ b/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/Makefile
+@@ -1,4 +1,4 @@
+-KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
++KERNEL_SRC ?= ${KERNELPATH}
+ 
+ KBUILD_OPTIONS := WLAN_ROOT=$(PWD)
+ KBUILD_OPTIONS += MODNAME?=wlan

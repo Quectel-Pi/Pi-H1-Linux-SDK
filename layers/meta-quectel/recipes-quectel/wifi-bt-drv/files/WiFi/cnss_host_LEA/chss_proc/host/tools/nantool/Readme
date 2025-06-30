@@ -1,0 +1,6 @@
+#how to build nantool
+cd lib
+make
+cd ../
+make
+#binary is lib/libwifi-hal-qcom.so and Nandemotool

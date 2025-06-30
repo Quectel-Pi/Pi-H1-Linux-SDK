@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ */
+
+#include "dsi-panel-ext-bridge-1080p-gen3.dtsi"
+
+&soc {
+	dsi_dp1: qcom,dsi-display@1 {
+		compatible = "qcom,dsi-display";
+		label = "primary";
+
+		qcom,dsi-ctrl = <&mdss_dsi0 &mdss_dsi1>;
+		qcom,dsi-phy = <&mdss_dsi_phy0 &mdss_dsi_phy1>;
+
+		clocks = <&mdss_dsi_phy0 0>,
+			<&mdss_dsi_phy0 1>,
+			<&mdss_dsi_phy1 2>,
+			<&mdss_dsi_phy1 3>;
+		clock-names = "pll_byte_clk0", "pll_dsi_clk0",
+			"pll_byte_clk1", "pll_dsi_clk1";
+
+		qcom,mdp = <&mdss_mdp0>;
+		qcom,dsi-default-panel = <&dsi_ext_bridge_1080p>;
+		qcom,panel-te-source = <0>;
+	};
+
+	dsi_dp2: qcom,dsi-display@2 {
+		compatible = "qcom,dsi-display";
+		label = "secondary";
+
+		qcom,dsi-ctrl = <&mdss_dsi0 &mdss_dsi1>;
+		qcom,dsi-phy = <&mdss_dsi_phy0 &mdss_dsi_phy1>;
+
+		clocks = <&mdss_dsi_phy0 0>,
+			<&mdss_dsi_phy0 1>,
+			<&mdss_dsi_phy1 2>,
+			<&mdss_dsi_phy1 3>;
+		clock-names = "pll_byte_clk0", "pll_dsi_clk0",
+			"pll_byte_clk1", "pll_dsi_clk1";
+
+		qcom,mdp = <&mdss_mdp0>;
+		qcom,dsi-default-panel = <&dsi_ext_bridge_1080p>;
+		qcom,panel-te-source = <1>;
+	};
+};
+
+&mdss_mdp0 {
+	connectors = <&smmu_sde_unsec &dsi_dp1 &dsi_dp2 &sde_edp0 &sde_edp1>;
+};

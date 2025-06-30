@@ -1,0 +1,13 @@
+[Unit]
+Description=Aktualizr SOTA Client
+After=network-online.target nss-lookup.target boot-complete.target
+Requires=boot-complete.target
+Wants=network-online.target
+
+[Service]
+RestartSec=10
+Restart=always
+ExecStart=/usr/bin/aktualizr $AKTUALIZR_CMDLINE_PARAMETERS
+
+[Install]
+WantedBy=multi-user.target

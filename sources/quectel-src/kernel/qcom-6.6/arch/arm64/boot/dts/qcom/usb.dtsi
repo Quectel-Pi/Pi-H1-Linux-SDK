@@ -1,0 +1,61 @@
+/delete-node/ &usb_2_dwc3;
+/delete-node/ &eud;
+
+/*
+&tlmm {
+	usbhub_vbus_boost_default: usbhub_vbus_boost_default {
+		pins = "gpio63";
+		function = "gpio";
+		output-high;
+	};
+	usb2_vbus_boost_default: usb2_vbus_boost_default {
+		pins = "gpio8";
+		function = "gpio";
+		output-high;
+	};
+	usb20_mux_default: usb20_mux_default {
+		pins = "gpio46";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+};
+*/
+
+&usb_2 {
+	//pinctrl-names = "default";
+	//pinctrl-0 = <&usbhub_vbus_boost_default>;
+
+	reg = <0x0 0x08c00000 0x0 0x100000>;
+
+	interrupts-extended = <&intc GIC_SPI 242 IRQ_TYPE_LEVEL_HIGH>,
+			      <&intc GIC_SPI 240 IRQ_TYPE_LEVEL_HIGH>,
+                              <&pdc 12 IRQ_TYPE_LEVEL_HIGH>,
+                              <&pdc 13 IRQ_TYPE_EDGE_BOTH>;
+        interrupt-names = "dwc_usb2",
+                          "hs_phy_irq",
+                          "dp_hs_phy_irq",
+                          "dm_hs_phy_irq";
+
+	iommus = <&apps_smmu 0xa0 0x0>;
+	snps,dis_u2_susphy_quirk;
+	snps,dis_enblslpm_quirk;
+	phys = <&usb_2_hsphy>;
+	phy-names = "usb2-phy";
+	maximum-speed = "high-speed";
+	snps,dis-u2-entry-quirk;
+	snps,dis-u1-entry-quirk;
+	qcom,enable-rt;
+	wakeup-source;
+	dr_mode = "host";
+
+	status = "okay";
+};
+
+&usb_2_hsphy {
+	vdda-pll-supply = <&vreg_l10c_0p88>;
+	vdda18-supply = <&vreg_l1c_1p8>;
+	vdda33-supply = <&vreg_l2b_3p072>;
+
+	status = "okay";
+};

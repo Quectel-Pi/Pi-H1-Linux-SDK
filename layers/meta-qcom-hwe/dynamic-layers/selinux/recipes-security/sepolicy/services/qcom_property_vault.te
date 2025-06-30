@@ -1,0 +1,43 @@
+# Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+policy_module(qcom_property_vault, 1.0)
+
+type qcom_property_vault_t;
+type qcom_property_vault_exec_t;
+
+init_daemon_domain(qcom_property_vault_t, qcom_property_vault_exec_t)
+
+allow qcom_property_vault_t self:unix_dgram_socket { create connect write };
+allow qcom_property_vault_t self:unix_stream_socket { accept listen };
+allow qcom_property_vault_t self:process { signal getsched };
+qcom_allow_property_vault_sock_manage(qcom_property_vault_t)
+
+#########################
+#### label for syslog
+type qcom_property_vault_log_t;
+logging_log_file(qcom_property_vault_log_t)
+
+logging_log_filetrans(qcom_property_vault_t, qcom_property_vault_log_t, { file dir })
+allow qcom_property_vault_t qcom_property_vault_log_t:file manage_file_perms;
+
+#########################
+#### label for /tmp/property-vault socket
+#### property_vault creates this socket at runtime.
+type qcom_property_vault_sock_t;
+fs_associate_tmpfs(qcom_property_vault_sock_t)
+
+#########################
+#### label for /etc/build.prop file.
+#### property-vault is only reading this file at runtime.
+init_read_runtime_files(qcom_property_vault_t)
+files_read_etc_files(qcom_property_vault_t)
+
+qcom_search_property_vault_tmp(qcom_property_vault_t)
+
+##########################
+#### label for /etc/build.prop file.
+#### property-vault is using this file for persisting properties
+type qcom_property_vault_etc_t;
+fs_associate(qcom_property_vault_etc_t)
+qcom_connect_property_vault_to_etc(qcom_property_vault_t)

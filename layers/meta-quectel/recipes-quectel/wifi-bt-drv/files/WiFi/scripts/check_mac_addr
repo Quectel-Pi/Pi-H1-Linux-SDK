@@ -1,0 +1,56 @@
+#!/bin/sh
+
+TARGET_FILE="/lib/firmware/wlan/wlan_mac.bin"
+SOURCE_FILE="/var/persist/wlan_mac.bin"
+OUTPUT_FILE="/etc/bluetooth/.bt_nv.bin"
+
+MAC_LINE=$(grep "^Intf0MacAddress=" "$SOURCE_FILE")
+MAC=${MAC_LINE#Intf0MacAddress=}
+
+if [ ${#MAC} -ne 12 ]; then
+    echo "Invalid MAC address length: $MAC"
+    exit 1
+fi
+
+{
+    printf "\x00\x00\x06"
+
+    printf "\\x${MAC:0:2}\\x${MAC:2:2}\\x${MAC:4:2}\\x${MAC:6:2}\\x${MAC:8:2}\\x${MAC:10:2}"
+} > "$OUTPUT_FILE"
+
+if [ $? -eq 0 ]; then
+    echo "BT MAC written to $OUTPUT_FILE"
+else
+    echo "Failed to write BT MAC"
+    exit 1
+fi
+
+
+if [ ! -f "$SOURCE_FILE" ]; then
+    echo "wlan_mac.bin is not set maybe not set by fct mode"
+    exit 0
+fi
+
+if [ ! -f "$TARGET_FILE" ] || ! cmp -s <(md5sum "$TARGET_FILE" | cut -d ' ' -f 1) <(md5sum "$SOURCE_FILE" | cut -d ' ' -f 1); then
+    echo "wlan_mac.bin file is different..."
+
+    mount -o remount,rw /usr
+    if [ $? -ne 0 ]; then
+        echo "failed to remount /usr "
+        exit 1
+    fi
+
+    cp "$SOURCE_FILE" "$TARGET_FILE"
+    if [ $? -eq 0 ]; then
+        echo "copy file successs $TARGET_FILE"
+    else
+        echo "failed to copy Macfile"
+        mount -o remount,ro /usr
+        exit 1
+    fi
+
+    mount -o remount,ro /usr
+    echo "/usr has changed to RO"
+else
+    echo "Mac.bin is not change"
+fi

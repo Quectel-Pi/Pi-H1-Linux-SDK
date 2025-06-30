@@ -1,0 +1,996 @@
+From dd3d1344d02522219ee25f0d025bcb5790d30721 Mon Sep 17 00:00:00 2001
+From: Jayachandran Sreekumaran <jsreekum@codeaurora.org>
+Date: Mon, 29 Jan 2018 10:55:40 -0800
+Subject: [PATCH] P2P: Use weighted preferred channel list for channel
+ selection
+
+During P2P negotiation process, the driver may provide a weighted
+preferred channel list indicating the channel preferrence and how
+a channel should be used. Based on this information wpa_supplicant
+can select a proper channel.
+
+Signed-off-by: Jouni Malinen <jouni@codeaurora.org>
+---
+ src/drivers/driver.h            | 25 +++++++++++-
+ src/drivers/driver_nl80211.c    | 59 +++++++++++++++++++++++++++-
+ src/p2p/p2p.c                   |  8 ++--
+ src/p2p/p2p.h                   |  8 ++--
+ src/p2p/p2p_build.c             | 21 +++++++---
+ src/p2p/p2p_go_neg.c            | 87 ++++++++++++++++++++++++++++++-----------
+ src/p2p/p2p_i.h                 | 10 ++++-
+ src/p2p/p2p_invitation.c        |  2 +-
+ src/p2p/p2p_utils.c             | 77 +++++++++++++++++++++++++++++++++---
+ wpa_supplicant/ctrl_iface.c     |  7 ++--
+ wpa_supplicant/driver_i.h       |  4 +-
+ wpa_supplicant/p2p_supplicant.c | 86 +++++++++++++++++++++++++---------------
+ 12 files changed, 310 insertions(+), 84 deletions(-)
+
+diff --git a/src/drivers/driver.h b/src/drivers/driver.h
+index 4148ab0..066785d 100644
+--- a/src/drivers/driver.h
++++ b/src/drivers/driver.h
+@@ -2532,6 +2532,22 @@ enum nested_attr {
+ 	NESTED_ATTR_UNSPECIFIED = 2,
+ };
+ 
++#define WEIGHTED_PCL_GO BIT(0)
++#define WEIGHTED_PCL_CLI BIT(1)
++#define WEIGHTED_PCL_MUST_CONSIDER BIT(2)
++#define WEIGHTED_PCL_EXCLUDE BIT(3)
++
++/* Preferred channel list with weight */
++struct weighted_pcl {
++	u32 freq; /* MHz */
++	u8 weight;
++	/* bit 0: GO role
++	 * bit 1: P2P Client role
++	 * bit 2: must be considered for operating channel
++	 * bit 3: should be excluded in GO negotiation */
++	u32 flag; /* bitmap fo WEIGHTED_PCL_* */
++};
++
+ /**
+  * struct wpa_driver_ops - Driver interface API definition
+  *
+@@ -4366,13 +4382,18 @@ struct wpa_driver_ops {
+ 	 * @if_type: Interface type
+ 	 * @num: Number of channels
+ 	 * @freq_list: Preferred channel frequency list encoded in MHz values
++	 * @w_freq_list: Weighted frequency list, if available
+ 	 * Returns 0 on success, -1 on failure
+ 	 *
+ 	 * This command can be used to query the preferred frequency list from
+-	 * the driver specific to a particular interface type.
++	 * the driver specific to a particular interface type. Both the
++	 * freq_list and w_freq_list arrays need to have room for *num entries.
++	 * *num will be updated to indicate the number of entries fetched from
++	 * the driver.
+ 	 */
+ 	int (*get_pref_freq_list)(void *priv, enum wpa_driver_if_type if_type,
+-				  unsigned int *num, unsigned int *freq_list);
++				  unsigned int *num,
++				  struct weighted_pcl *w_freq_list);
+ 
+ 	/**
+ 	 * set_prob_oper_freq - Indicate probable P2P operating channel
+diff --git a/src/drivers/driver_nl80211.c b/src/drivers/driver_nl80211.c
+index 49b2f86..c1ef493 100644
+--- a/src/drivers/driver_nl80211.c
++++ b/src/drivers/driver_nl80211.c
+@@ -11115,8 +11115,20 @@ static int nl80211_set_band(void *priv, u32 band_mask)
+ struct nl80211_pcl {
+ 	unsigned int num;
+ 	unsigned int *freq_list;
++	struct weighted_pcl *w_freq_list;
+ };
+ 
++static void get_pcl_attr_values(struct weighted_pcl *wpcl, struct nlattr *nl[])
++{
++	if (nl[QCA_WLAN_VENDOR_ATTR_PCL_FREQ])
++		wpcl->freq = nla_get_u32(nl[QCA_WLAN_VENDOR_ATTR_PCL_FREQ]);
++	if (nl[QCA_WLAN_VENDOR_ATTR_PCL_WEIGHT])
++		wpcl->weight = nla_get_u8(nl[QCA_WLAN_VENDOR_ATTR_PCL_WEIGHT]);
++	if (nl[QCA_WLAN_VENDOR_ATTR_PCL_FLAG])
++		wpcl->flag = nla_get_u32(nl[QCA_WLAN_VENDOR_ATTR_PCL_FLAG]);
++}
++
++
+ static int preferred_freq_info_handler(struct nl_msg *msg, void *arg)
+ {
+ 	struct nlattr *tb[NL80211_ATTR_MAX + 1];
+@@ -11125,8 +11137,11 @@ static int preferred_freq_info_handler(struct nl_msg *msg, void *arg)
+ 	struct nlattr *nl_vend, *attr;
+ 	enum qca_iface_type iface_type;
+ 	struct nlattr *tb_vendor[QCA_WLAN_VENDOR_ATTR_MAX + 1];
++#define _QCA_WLAN_VENDOR_ATTR_PCL_MAX QCA_WLAN_VENDOR_ATTR_PCL_FLAG
++	struct nlattr *nl_pcl[_QCA_WLAN_VENDOR_ATTR_PCL_MAX + 1], *wpcl;
+ 	unsigned int num, max_num;
+ 	u32 *freqs;
++	int rem;
+ 
+ 	nla_parse(tb, NL80211_ATTR_MAX, genlmsg_attrdata(gnlh, 0),
+ 		  genlmsg_attrlen(gnlh, 0), NULL);
+@@ -11170,6 +11185,35 @@ static int preferred_freq_info_handler(struct nl_msg *msg, void *arg)
+ 		param->freq_list[num] = freqs[num];
+ 	param->num = num;
+ 
++	if (!param->w_freq_list) {
++		wpa_printf(MSG_DEBUG,
++			   "nl80211: No intend to receive weighted PCL");
++		return NL_SKIP;
++	}
++
++	attr = tb_vendor[
++		QCA_WLAN_VENDOR_ATTR_GET_PREFERRED_FREQ_LIST_WEIGHED_PCL];
++	if (!attr) {
++		wpa_printf(MSG_DEBUG,
++			   "nl80211: Driver does not provide weighted PCL");
++		return NL_SKIP;
++	}
++
++	num = 0;
++	wpcl = tb_vendor[
++		QCA_WLAN_VENDOR_ATTR_GET_PREFERRED_FREQ_LIST_WEIGHED_PCL];
++	nla_for_each_nested(attr, wpcl, rem) {
++		if (nla_parse(nl_pcl, _QCA_WLAN_VENDOR_ATTR_PCL_MAX,
++			      nla_data(attr), nla_len(attr), NULL)) {
++			wpa_printf(MSG_ERROR,
++				   "nl80211: Failed to parse PCL info");
++			return NL_SKIP;
++		}
++		get_pcl_attr_values(&param->w_freq_list[num], nl_pcl);
++		num++;
++	}
++
++	param->num = num;
+ 	return NL_SKIP;
+ }
+ 
+@@ -11177,7 +11221,7 @@ static int preferred_freq_info_handler(struct nl_msg *msg, void *arg)
+ static int nl80211_get_pref_freq_list(void *priv,
+ 				      enum wpa_driver_if_type if_type,
+ 				      unsigned int *num,
+-				      unsigned int *freq_list)
++				      struct weighted_pcl *w_freq_list)
+ {
+ 	struct i802_bss *bss = priv;
+ 	struct wpa_driver_nl80211_data *drv = bss->drv;
+@@ -11187,6 +11231,7 @@ static int nl80211_get_pref_freq_list(void *priv,
+ 	struct nlattr *params;
+ 	struct nl80211_pcl param;
+ 	enum qca_iface_type iface_type;
++	unsigned int freq_list[*num];
+ 
+ 	if (!drv->get_pref_freq_list)
+ 		return -1;
+@@ -11216,6 +11261,7 @@ static int nl80211_get_pref_freq_list(void *priv,
+ 
+ 	param.num = *num;
+ 	param.freq_list = freq_list;
++	param.w_freq_list = w_freq_list;
+ 
+ 	if (!(msg = nl80211_drv_msg(drv, 0, NL80211_CMD_VENDOR)) ||
+ 	    nla_put_u32(msg, NL80211_ATTR_IFINDEX, drv->ifindex) ||
+@@ -11235,6 +11281,8 @@ static int nl80211_get_pref_freq_list(void *priv,
+ 	nla_nest_end(msg, params);
+ 
+ 	os_memset(freq_list, 0, *num * sizeof(freq_list[0]));
++	if (w_freq_list)
++		os_memset(w_freq_list, 0, *num * sizeof(struct weighted_pcl));
+ 	ret = send_and_recv_msgs(drv, msg, preferred_freq_info_handler, &param,
+ 				 NULL, NULL);
+ 	if (ret) {
+@@ -11245,9 +11293,16 @@ static int nl80211_get_pref_freq_list(void *priv,
+ 
+ 	*num = param.num;
+ 
++	if (*num && w_freq_list[0].freq == 0) {
++		wpa_printf(MSG_DEBUG, "nl80211: Empty weighted preferred freq list");
++		for (i = 0; i < *num; i++) {
++			w_freq_list[i].freq = freq_list[i];
++		}
++	}
++
+ 	for (i = 0; i < *num; i++) {
+ 		wpa_printf(MSG_DEBUG, "nl80211: preferred_channel_list[%d]=%d",
+-			   i, freq_list[i]);
++			   i, w_freq_list[i].freq);
+ 	}
+ 
+ 	return 0;
+diff --git a/src/p2p/p2p.c b/src/p2p/p2p.c
+index 598a449..b59cfed 100644
+--- a/src/p2p/p2p.c
++++ b/src/p2p/p2p.c
+@@ -5532,7 +5532,7 @@ void p2p_go_neg_wait_timeout(void *eloop_ctx, void *timeout_ctx)
+ 
+ 
+ void p2p_set_own_pref_freq_list(struct p2p_data *p2p,
+-				const unsigned int *pref_freq_list,
++				const struct weighted_pcl *w_pref_freq_list,
+ 				unsigned int size)
+ {
+ 	unsigned int i;
+@@ -5541,9 +5541,11 @@ void p2p_set_own_pref_freq_list(struct p2p_data *p2p,
+ 		size = P2P_MAX_PREF_CHANNELS;
+ 	p2p->num_pref_freq = size;
+ 	for (i = 0; i < size; i++) {
+-		p2p->pref_freq_list[i] = pref_freq_list[i];
++		p2p->w_pref_freq_list[i].freq = w_pref_freq_list[i].freq;
++		p2p->w_pref_freq_list[i].weight = w_pref_freq_list[i].weight;
++		p2p->w_pref_freq_list[i].flag = w_pref_freq_list[i].flag;
+ 		p2p_dbg(p2p, "Own preferred frequency list[%u]=%u MHz",
+-			i, p2p->pref_freq_list[i]);
++			i, p2p->w_pref_freq_list[i].freq);
+ 	}
+ }
+ 
+diff --git a/src/p2p/p2p.h b/src/p2p/p2p.h
+index f606fbb..3bff754 100644
+--- a/src/p2p/p2p.h
++++ b/src/p2p/p2p.h
+@@ -11,6 +11,7 @@
+ 
+ #include "common/ieee802_11_defs.h"
+ #include "wps/wps.h"
++#include "drivers/driver.h"
+ 
+ /* P2P ASP Setup Capability */
+ #define P2PS_SETUP_NONE 0
+@@ -1132,7 +1133,8 @@ struct p2p_config {
+ 	 * the driver specific to a particular interface type.
+ 	 */
+ 	int (*get_pref_freq_list)(void *ctx, int go,
+-				  unsigned int *len, unsigned int *freq_list);
++				  unsigned int *len,
++				  struct weighted_pcl *w_freq_list);
+ };
+ 
+ 
+@@ -2397,7 +2399,7 @@ struct p2ps_advertisement * p2p_get_p2ps_adv_list(struct p2p_data *p2p);
+ void p2p_expire_peers(struct p2p_data *p2p);
+ 
+ void p2p_set_own_pref_freq_list(struct p2p_data *p2p,
+-				const unsigned int *pref_freq_list,
++				const struct weighted_pcl *w_pref_freq_list,
+ 				unsigned int size);
+ void p2p_set_override_pref_op_chan(struct p2p_data *p2p, u8 op_class,
+ 				   u8 chan);
+@@ -2422,6 +2424,6 @@ bool p2p_peer_wfd_enabled(struct p2p_data *p2p, const u8 *peer_addr);
+ bool p2p_wfd_enabled(struct p2p_data *p2p);
+ bool is_p2p_allow_6ghz(struct p2p_data *p2p);
+ void set_p2p_allow_6ghz(struct p2p_data *p2p, bool value);
+-int p2p_remove_6ghz_channels(unsigned int *pref_freq_list, int size);
++int p2p_remove_6ghz_channels(struct weighted_pcl  *w_freq_list, int size);
+ 
+ #endif /* P2P_H */
+diff --git a/src/p2p/p2p_build.c b/src/p2p/p2p_build.c
+index 63eb2e8..542b567 100644
+--- a/src/p2p/p2p_build.c
++++ b/src/p2p/p2p_build.c
+@@ -111,23 +111,30 @@ void p2p_buf_add_operating_channel(struct wpabuf *buf, const char *country,
+ 
+ 
+ void p2p_buf_add_pref_channel_list(struct wpabuf *buf,
+-				   const u32 *preferred_freq_list,
++				   const struct weighted_pcl *pref_freq_list,
+ 				   unsigned int size)
+ {
+ 	unsigned int i, count = 0;
+ 	u8 op_class, op_channel;
++	unsigned int weighed_pcl = 0;
+ 
+ 	if (!size)
+ 		return;
+ 
++	if (pref_freq_list[0].weight)
++	/* Driver supports weighed pcl */
++		weighed_pcl = 1;
++
+ 	/*
+ 	 * First, determine the number of P2P supported channels in the
+ 	 * pref_freq_list returned from driver. This is needed for calculations
+ 	 * of the vendor IE size.
+ 	 */
+ 	for (i = 0; i < size; i++) {
+-		if (p2p_freq_to_channel(preferred_freq_list[i], &op_class,
+-					&op_channel) == 0)
++		if ((p2p_freq_to_channel(pref_freq_list[i].freq, &op_class,
++					&op_channel) == 0) &&
++		    (!weighed_pcl || !(pref_freq_list[i].flag &
++				      WEIGHTED_PCL_EXCLUDE)))
+ 			count++;
+ 	}
+ 
+@@ -136,10 +143,12 @@ void p2p_buf_add_pref_channel_list(struct wpabuf *buf,
+ 	wpabuf_put_be24(buf, OUI_QCA);
+ 	wpabuf_put_u8(buf, QCA_VENDOR_ELEM_P2P_PREF_CHAN_LIST);
+ 	for (i = 0; i < size; i++) {
+-		if (p2p_freq_to_channel(preferred_freq_list[i], &op_class,
+-					&op_channel) < 0) {
++		if (p2p_freq_to_channel(pref_freq_list[i].freq, &op_class,
++					&op_channel) < 0 ||
++		    (weighed_pcl && (pref_freq_list[i].flag &
++				     WEIGHTED_PCL_EXCLUDE))) {
+ 			wpa_printf(MSG_DEBUG, "Unsupported frequency %u MHz",
+-				   preferred_freq_list[i]);
++				   pref_freq_list[i].freq);
+ 			continue;
+ 		}
+ 		wpabuf_put_u8(buf, op_class);
+diff --git a/src/p2p/p2p_go_neg.c b/src/p2p/p2p_go_neg.c
+index 1133461..1634cb0 100644
+--- a/src/p2p/p2p_go_neg.c
++++ b/src/p2p/p2p_go_neg.c
+@@ -142,6 +142,7 @@ static struct wpabuf * p2p_build_go_neg_req(struct p2p_data *p2p,
+ 	u8 group_capab;
+ 	size_t extra = 0;
+ 	u16 pw_id;
++	struct p2p_channels pref_chanlist;
+ 
+ #ifdef CONFIG_WIFI_DISPLAY
+ 	if (p2p->wfd_ie_go_neg)
+@@ -179,13 +180,16 @@ static struct wpabuf * p2p_build_go_neg_req(struct p2p_data *p2p,
+ 		p2p_buf_add_ext_listen_timing(buf, p2p->ext_listen_period,
+ 					      p2p->ext_listen_interval);
+ 	p2p_buf_add_intended_addr(buf, p2p->intended_addr);
+-	p2p_buf_add_channel_list(buf, p2p->cfg->country, &p2p->channels);
++	p2p_pref_channel_filter(&p2p->channels, p2p->w_pref_freq_list,
++				p2p->num_pref_freq, p2p->go_intent,
++				&pref_chanlist);
++	p2p_buf_add_channel_list(buf, p2p->cfg->country, &pref_chanlist);
+ 	p2p_buf_add_device_info(buf, p2p, peer);
+ 	p2p_buf_add_operating_channel(buf, p2p->cfg->country,
+ 				      p2p->op_reg_class, p2p->op_channel);
+ 	p2p_buf_update_ie_hdr(buf, len);
+ 
+-	p2p_buf_add_pref_channel_list(buf, p2p->pref_freq_list,
++	p2p_buf_add_pref_channel_list(buf, p2p->w_pref_freq_list,
+ 				      p2p->num_pref_freq);
+ 
+ 	/* WPS IE with Device Password ID attribute */
+@@ -278,6 +282,7 @@ static struct wpabuf * p2p_build_go_neg_resp(struct p2p_data *p2p,
+ 	u8 group_capab;
+ 	size_t extra = 0;
+ 	u16 pw_id;
++	struct p2p_channels pref_chanlist;
+ 
+ 	p2p_dbg(p2p, "Building GO Negotiation Response");
+ 
+@@ -328,15 +333,18 @@ static struct wpabuf * p2p_build_go_neg_resp(struct p2p_data *p2p,
+ 					      p2p->op_channel);
+ 	}
+ 	p2p_buf_add_intended_addr(buf, p2p->intended_addr);
++	p2p_pref_channel_filter(&p2p->channels, p2p->w_pref_freq_list,
++				p2p->num_pref_freq, p2p->go_intent,
++				&pref_chanlist);
+ 	if (status || peer == NULL) {
+ 		p2p_buf_add_channel_list(buf, p2p->cfg->country,
+-					 &p2p->channels);
++					 &pref_chanlist);
+ 	} else if (peer->go_state == REMOTE_GO) {
+ 		p2p_buf_add_channel_list(buf, p2p->cfg->country,
+-					 &p2p->channels);
++					 &pref_chanlist);
+ 	} else {
+ 		struct p2p_channels res;
+-		p2p_channels_intersect(&p2p->channels, &peer->channels,
++		p2p_channels_intersect(&pref_chanlist, &peer->channels,
+ 				       &res);
+ 		p2p_buf_add_channel_list(buf, p2p->cfg->country, &res);
+ 	}
+@@ -558,29 +566,47 @@ int p2p_go_select_channel(struct p2p_data *p2p, struct p2p_device *dev,
+ 	return 0;
+ }
+ 
++unsigned int p2p_group_suitable_channel(int go, struct weighted_pcl *w_pcl)
++{
++	if (w_pcl->flag & WEIGHTED_PCL_EXCLUDE)
++		return 0;
++	else if (go && (w_pcl->flag & WEIGHTED_PCL_GO))
++		return 1;
++	else if (!go && (w_pcl->flag & WEIGHTED_PCL_CLI))
++		return 1;
++
++	return 0;
++}
++
+ 
+ static void p2p_check_pref_chan_no_recv(struct p2p_data *p2p, int go,
+ 					struct p2p_device *dev,
+ 					struct p2p_message *msg,
+-					unsigned freq_list[], unsigned int size)
++					struct weighted_pcl w_freq_list[],
++					unsigned int size)
+ {
+ 	u8 op_class, op_channel;
+ 	unsigned int oper_freq = 0, i, j;
+ 	int found = 0;
++	unsigned int weighed_pcl = 0;
+ 
+ 	p2p_dbg(p2p,
+ 		"Peer didn't provide a preferred frequency list, see if any of our preferred channels are supported by peer device");
+-
++	if (w_freq_list[0].weight)
++	/* Driver supports weighted pcl list */
++		weighed_pcl = 1;
+ 	/*
+ 	 * Search for a common channel in our preferred frequency list which is
+ 	 * also supported by the peer device.
+ 	 */
+ 	for (i = 0; i < size && !found; i++) {
+ 		/* Make sure that the common frequency is supported by peer. */
+-		oper_freq = freq_list[i];
++		oper_freq = w_freq_list[i].freq;
+ 		if (p2p_freq_to_channel(oper_freq, &op_class,
+-					&op_channel) < 0)
+-			continue; /* cannot happen due to earlier check */
++					&op_channel) < 0 ||
++		    (weighed_pcl &&
++		     !p2p_group_suitable_channel(go, &w_freq_list[i])))
++			continue;
+ 		for (j = 0; j < msg->channel_list_len; j++) {
+ 
+ 			if (op_channel != msg->channel_list[j])
+@@ -609,12 +635,17 @@ static void p2p_check_pref_chan_no_recv(struct p2p_data *p2p, int go,
+ static void p2p_check_pref_chan_recv(struct p2p_data *p2p, int go,
+ 				     struct p2p_device *dev,
+ 				     struct p2p_message *msg,
+-				     unsigned freq_list[], unsigned int size)
++				     struct weighted_pcl w_freq_list[],
++				     unsigned int size)
+ {
+ 	u8 op_class, op_channel;
+ 	unsigned int oper_freq = 0, i, j;
+ 	int found = 0;
++	unsigned int weighed_pcl = 0;
+ 
++	if (w_freq_list[0].weight)
++	/* Driver supports weighed pcl */
++		weighed_pcl = 1;
+ 	/*
+ 	 * Peer device supports a Preferred Frequency List.
+ 	 * Search for a common channel in the preferred frequency lists
+@@ -625,11 +656,14 @@ static void p2p_check_pref_chan_recv(struct p2p_data *p2p, int go,
+ 			oper_freq = p2p_channel_to_freq(
+ 				msg->pref_freq_list[2 * j],
+ 				msg->pref_freq_list[2 * j + 1]);
+-			if (freq_list[i] != oper_freq)
++			if (w_freq_list[i].freq != oper_freq)
+ 				continue;
+ 			if (p2p_freq_to_channel(oper_freq, &op_class,
+ 						&op_channel) < 0)
+ 				continue; /* cannot happen */
++			if (weighed_pcl &&
++			    !p2p_group_suitable_channel(go, &w_freq_list[i]))
++				break;
+ 			p2p->op_reg_class = op_class;
+ 			p2p->op_channel = op_channel;
+ 			os_memcpy(&p2p->channels, &p2p->cfg->channels,
+@@ -648,15 +682,16 @@ static void p2p_check_pref_chan_recv(struct p2p_data *p2p, int go,
+ 	}
+ }
+ 
+-
+ void p2p_check_pref_chan(struct p2p_data *p2p, int go,
+ 			 struct p2p_device *dev, struct p2p_message *msg)
+ {
+-	unsigned int freq_list[P2P_MAX_PREF_CHANNELS], size;
++	unsigned int size;
+ 	unsigned int i;
+ 	u8 op_class, op_channel;
+ 	char txt[100], *pos, *end;
+ 	int res;
++	struct weighted_pcl w_freq_list[P2P_MAX_PREF_CHANNELS];
++	unsigned int  weighed_pcl = 0;
+ 
+ 	/*
+ 	 * Use the preferred channel list from the driver only if there is no
+@@ -670,12 +705,17 @@ void p2p_check_pref_chan(struct p2p_data *p2p, int go,
+ 	/* Obtain our preferred frequency list from driver based on P2P role. */
+ 	size = P2P_MAX_PREF_CHANNELS;
+ 	if (p2p->cfg->get_pref_freq_list(p2p->cfg->cb_ctx, go, &size,
+-					 freq_list))
++					 w_freq_list))
++		return;
++	if (!size)
+ 		return;
++	if (w_freq_list[0].weight)
++	/* Driver supports weighted pcl */
++		weighed_pcl = 1;
+ 	/* Filter out frequencies that are not acceptable for P2P use */
+ 	i = 0;
+ 	while (i < size) {
+-		if (p2p_freq_to_channel(freq_list[i], &op_class,
++		if (p2p_freq_to_channel(w_freq_list[i].freq, &op_class,
+ 					&op_channel) < 0 ||
+ 		    (!p2p_channels_includes(&p2p->cfg->channels,
+ 					    op_class, op_channel) &&
+@@ -683,9 +723,9 @@ void p2p_check_pref_chan(struct p2p_data *p2p, int go,
+ 						   op_class, op_channel)))) {
+ 			p2p_dbg(p2p,
+ 				"Ignore local driver frequency preference %u MHz since it is not acceptable for P2P use (go=%d)",
+-				freq_list[i], go);
++				w_freq_list[i].freq, go);
+ 			if (size - i - 1 > 0)
+-				os_memmove(&freq_list[i], &freq_list[i + 1],
++				os_memmove(&w_freq_list[i], &w_freq_list[i + 1],
+ 					   (size - i - 1) *
+ 					   sizeof(unsigned int));
+ 			size--;
+@@ -699,7 +739,7 @@ void p2p_check_pref_chan(struct p2p_data *p2p, int go,
+ 	pos = txt;
+ 	end = pos + sizeof(txt);
+ 	for (i = 0; i < size; i++) {
+-		res = os_snprintf(pos, end - pos, " %u", freq_list[i]);
++		res = os_snprintf(pos, end - pos, " %u", w_freq_list[i].freq);
+ 		if (os_snprintf_error(end - pos, res))
+ 			break;
+ 		pos += res;
+@@ -713,11 +753,12 @@ void p2p_check_pref_chan(struct p2p_data *p2p, int go,
+ 	 * our preferred channel list.
+ 	 */
+ 	for (i = 0; i < size; i++) {
+-		if (freq_list[i] == (unsigned int) dev->oper_freq)
++		if ((w_freq_list[i].freq == (unsigned int) dev->oper_freq) &&
++		    (!weighed_pcl || p2p_group_suitable_channel(go, &w_freq_list[i])))
+ 			break;
+ 	}
+ 	if (i != size &&
+-	    p2p_freq_to_channel(freq_list[i], &op_class, &op_channel) == 0) {
++	    p2p_freq_to_channel(w_freq_list[i].freq, &op_class, &op_channel) == 0) {
+ 		/* Peer operating channel preference matches our preference */
+ 		p2p->op_reg_class = op_class;
+ 		p2p->op_channel = op_channel;
+@@ -735,9 +776,9 @@ void p2p_check_pref_chan(struct p2p_data *p2p, int go,
+ 	  * _not_ included in the GO Negotiation Request or Invitation Request.
+ 	  */
+ 	if (msg->pref_freq_list_len == 0)
+-		p2p_check_pref_chan_no_recv(p2p, go, dev, msg, freq_list, size);
++		p2p_check_pref_chan_no_recv(p2p, go, dev, msg, w_freq_list, size);
+ 	else
+-		p2p_check_pref_chan_recv(p2p, go, dev, msg, freq_list, size);
++		p2p_check_pref_chan_recv(p2p, go, dev, msg, w_freq_list, size);
+ }
+ 
+ 
+diff --git a/src/p2p/p2p_i.h b/src/p2p/p2p_i.h
+index 8220e85..64b94b2 100644
+--- a/src/p2p/p2p_i.h
++++ b/src/p2p/p2p_i.h
+@@ -10,6 +10,7 @@
+ #define P2P_I_H
+ 
+ #include "utils/list.h"
++#include "drivers/driver.h"
+ #include "p2p.h"
+ 
+ #define P2P_GO_NEG_CNF_MAX_RETRY_COUNT 1
+@@ -542,8 +543,8 @@ struct p2p_data {
+ 
+ 	struct wpabuf **vendor_elem;
+ 
+-	unsigned int pref_freq_list[P2P_MAX_PREF_CHANNELS];
+ 	unsigned int num_pref_freq;
++	struct weighted_pcl w_pref_freq_list[P2P_MAX_PREF_CHANNELS];
+ 
+ 	/* Override option for preferred operating channel in GO Negotiation */
+ 	u8 override_pref_op_class;
+@@ -789,7 +790,8 @@ void p2p_buf_add_persistent_group_info(struct wpabuf *buf, const u8 *dev_addr,
+ int p2p_build_wps_ie(struct p2p_data *p2p, struct wpabuf *buf, int pw_id,
+ 		     int all_attr);
+ void p2p_buf_add_pref_channel_list(struct wpabuf *buf,
+-				   const u32 *preferred_freq_list, u32 size);
++				   const struct weighted_pcl *pref_freq_list,
++				   u32 size);
+ 
+ /* p2p_sd.c */
+ struct p2p_sd_query * p2p_pending_sd_req(struct p2p_data *p2p,
+@@ -890,6 +892,10 @@ int p2p_prepare_channel(struct p2p_data *p2p, struct p2p_device *dev,
+ void p2p_go_neg_wait_timeout(void *eloop_ctx, void *timeout_ctx);
+ int p2p_go_select_channel(struct p2p_data *p2p, struct p2p_device *dev,
+ 			  u8 *status);
++void p2p_pref_channel_filter(const struct p2p_channels *a,
++			     const struct weighted_pcl *freq_list,
++			     unsigned int num_channels, int intent,
++			     struct p2p_channels *res);
+ void p2p_dbg(struct p2p_data *p2p, const char *fmt, ...)
+ PRINTF_FORMAT(2, 3);
+ void p2p_info(struct p2p_data *p2p, const char *fmt, ...)
+diff --git a/src/p2p/p2p_invitation.c b/src/p2p/p2p_invitation.c
+index ab00722..25f139a 100644
+--- a/src/p2p/p2p_invitation.c
++++ b/src/p2p/p2p_invitation.c
+@@ -85,7 +85,7 @@ static struct wpabuf * p2p_build_invitation_req(struct p2p_data *p2p,
+ 	p2p_buf_add_device_info(buf, p2p, peer);
+ 	p2p_buf_update_ie_hdr(buf, len);
+ 
+-	p2p_buf_add_pref_channel_list(buf, p2p->pref_freq_list,
++	p2p_buf_add_pref_channel_list(buf, p2p->w_pref_freq_list,
+ 				      p2p->num_pref_freq);
+ 
+ #ifdef CONFIG_WIFI_DISPLAY
+diff --git a/src/p2p/p2p_utils.c b/src/p2p/p2p_utils.c
+index 7d21f68..28524f5 100644
+--- a/src/p2p/p2p_utils.c
++++ b/src/p2p/p2p_utils.c
+@@ -519,19 +519,86 @@ void p2p_copy_channels(struct p2p_channels *dst,
+ }
+ 
+ 
+-int p2p_remove_6ghz_channels(unsigned int *pref_freq_list, int size)
++int p2p_remove_6ghz_channels(struct weighted_pcl *w_freq_list, int size)
+ {
+ 	int i;
+ 
+ 	for (i = 0; i < size; i++) {
+-		if (is_6ghz_freq(pref_freq_list[i])) {
++		if (is_6ghz_freq(w_freq_list[i].freq)) {
+ 			wpa_printf(MSG_DEBUG, "P2P: Remove 6 GHz channel %d",
+-				   pref_freq_list[i]);
++				   w_freq_list[i].freq);
+ 			size--;
+-			os_memmove(&pref_freq_list[i], &pref_freq_list[i + 1],
+-				   (size - i) * sizeof(pref_freq_list[0]));
++			os_memmove(&w_freq_list[i], &w_freq_list[i + 1],
++				   (size - i) * sizeof(w_freq_list[0]));
+ 			i--;
+ 		}
+ 	}
+ 	return i;
+ }
++
++
++static int p2p_check_pref_channel(int channel, u8 op_class,
++				  const struct weighted_pcl *freq_list,
++				  unsigned int num_channels, int intent)
++{
++	unsigned int i;
++	unsigned int weighed_pcl = 0;
++
++	if (freq_list[0].weight)
++	/* Driver supports weighed pcl */
++		weighed_pcl = 1;
++
++	for (i = 0; i < num_channels; i++) {
++		if (p2p_channel_to_freq(op_class, channel) !=
++					(int) freq_list[i].freq)
++			continue;
++
++		if (!weighed_pcl)
++			break;
++
++		if (freq_list[i].flag & WEIGHTED_PCL_EXCLUDE)
++			return -1;
++
++		if (!(freq_list[i].flag & WEIGHTED_PCL_CLI) && intent == 0)
++			return -1;
++
++		if (!(freq_list[i].flag & WEIGHTED_PCL_GO) && intent == 15)
++			return -1;
++		break;
++	}
++	if (i == num_channels)
++		return -1;
++
++	return 0;
++}
++
++
++void p2p_pref_channel_filter(const struct p2p_channels *a,
++			     const struct weighted_pcl *freq_list,
++			     unsigned int num_channels, int intent,
++			     struct p2p_channels *res)
++{
++	size_t i, j;
++
++	os_memset(res, 0, sizeof(*res));
++
++	for (i = 0; i < a->reg_classes; i++) {
++		const struct p2p_reg_class *a_reg = &a->reg_class[i];
++
++		for (j = 0; j < a_reg->channels; j++) {
++			if (num_channels &&
++			    p2p_check_pref_channel(a_reg->channel[j],
++						   a_reg->reg_class,
++						   freq_list, num_channels,
++						   intent) < 0)
++				continue;
++
++			res->reg_class[i].channel[res->reg_class[i].channels] =
++				a_reg->channel[j];
++			res->reg_class[i].channels++;
++		}
++
++		res->reg_classes++;
++		res->reg_class[i].reg_class = a->reg_class[i].reg_class;
++	}
++}
+diff --git a/wpa_supplicant/ctrl_iface.c b/wpa_supplicant/ctrl_iface.c
+index 08b19a3..590595c 100644
+--- a/wpa_supplicant/ctrl_iface.c
++++ b/wpa_supplicant/ctrl_iface.c
+@@ -8181,10 +8181,11 @@ int wpas_ctrl_iface_get_pref_freq_list_override(struct wpa_supplicant *wpa_s,
+ static int wpas_ctrl_iface_get_pref_freq_list(
+ 	struct wpa_supplicant *wpa_s, char *cmd, char *buf, size_t buflen)
+ {
+-	unsigned int freq_list[100], num = 100, i;
++	unsigned int num = 100, i;
+ 	int ret;
+ 	enum wpa_driver_if_type iface_type;
+ 	char *pos, *end;
++	struct weighted_pcl w_freq_list[100];
+ 
+ 	pos = buf;
+ 	end = buf + buflen;
+@@ -8209,13 +8210,13 @@ static int wpas_ctrl_iface_get_pref_freq_list(
+ 		   "CTRL_IFACE: GET_PREF_FREQ_LIST iface_type=%d (%s)",
+ 		   iface_type, cmd);
+ 
+-	ret = wpa_drv_get_pref_freq_list(wpa_s, iface_type, &num, freq_list);
++	ret = wpa_drv_get_pref_freq_list(wpa_s, iface_type, &num, w_freq_list);
+ 	if (ret)
+ 		return -1;
+ 
+ 	for (i = 0; i < num; i++) {
+ 		ret = os_snprintf(pos, end - pos, "%s%u",
+-				  i > 0 ? "," : "", freq_list[i]);
++				  i > 0 ? "," : "", w_freq_list[i].freq);
+ 		if (os_snprintf_error(end - pos, ret))
+ 			return -1;
+ 		pos += ret;
+diff --git a/wpa_supplicant/driver_i.h b/wpa_supplicant/driver_i.h
+index 237f4e0..c6cfd82 100644
+--- a/wpa_supplicant/driver_i.h
++++ b/wpa_supplicant/driver_i.h
+@@ -964,7 +964,7 @@ static inline int wpa_drv_setband(struct wpa_supplicant *wpa_s,
+ static inline int wpa_drv_get_pref_freq_list(struct wpa_supplicant *wpa_s,
+ 					     enum wpa_driver_if_type if_type,
+ 					     unsigned int *num,
+-					     unsigned int *freq_list)
++					     struct weighted_pcl *w_freq_list)
+ {
+ #ifdef CONFIG_TESTING_OPTIONS
+ 	if (wpa_s->get_pref_freq_list_override)
+@@ -974,7 +974,7 @@ static inline int wpa_drv_get_pref_freq_list(struct wpa_supplicant *wpa_s,
+ 	if (!wpa_s->driver->get_pref_freq_list)
+ 		return -1;
+ 	return wpa_s->driver->get_pref_freq_list(wpa_s->drv_priv, if_type,
+-						 num, freq_list);
++						 num, w_freq_list);
+ }
+ 
+ static inline int wpa_drv_set_prob_oper_freq(struct wpa_supplicant *wpa_s,
+diff --git a/wpa_supplicant/p2p_supplicant.c b/wpa_supplicant/p2p_supplicant.c
+index 2e50686..3e8547a 100644
+--- a/wpa_supplicant/p2p_supplicant.c
++++ b/wpa_supplicant/p2p_supplicant.c
+@@ -15,7 +15,6 @@
+ #include "common/ieee802_11_defs.h"
+ #include "common/wpa_ctrl.h"
+ #include "wps/wps_i.h"
+-#include "p2p/p2p.h"
+ #include "ap/hostapd.h"
+ #include "ap/ap_config.h"
+ #include "ap/sta_info.h"
+@@ -126,7 +125,7 @@ static int wpas_p2p_join_start(struct wpa_supplicant *wpa_s, int freq,
+ 			       const u8 *ssid, size_t ssid_len);
+ static int wpas_p2p_setup_freqs(struct wpa_supplicant *wpa_s, int freq,
+ 				int *force_freq, int *pref_freq, int go,
+-				unsigned int *pref_freq_list,
++				struct weighted_pcl *w_pref_freq_list,
+ 				unsigned int *num_pref_freq);
+ static void wpas_p2p_join_scan_req(struct wpa_supplicant *wpa_s, int freq,
+ 				   const u8 *ssid, size_t ssid_len);
+@@ -691,7 +690,8 @@ static u8 p2ps_group_capability(void *ctx, u8 incoming, u8 role,
+ 	struct wpa_supplicant *go_wpa_s, *cli_wpa_s;
+ 	struct wpa_ssid *persistent_go;
+ 	int p2p_no_group_iface;
+-	unsigned int pref_freq_list[P2P_MAX_PREF_CHANNELS], size;
++	struct weighted_pcl w_pref_freq_list[P2P_MAX_PREF_CHANNELS];
++	unsigned int size;
+ 
+ 	wpa_printf(MSG_DEBUG, "P2P: Conncap - in:%d role:%d", incoming, role);
+ 
+@@ -703,7 +703,7 @@ static u8 p2ps_group_capability(void *ctx, u8 incoming, u8 role,
+ 	size = P2P_MAX_PREF_CHANNELS;
+ 	if (force_freq && pref_freq &&
+ 	    !wpas_p2p_setup_freqs(wpa_s, 0, (int *) force_freq,
+-				  (int *) pref_freq, 0, pref_freq_list, &size))
++				  (int *) pref_freq, 0, w_pref_freq_list, &size))
+ 		wpas_p2p_set_own_freq_preference(wpa_s,
+ 						 *force_freq ? *force_freq :
+ 						 *pref_freq);
+@@ -4635,12 +4635,12 @@ static int wpas_prov_disc_resp_cb(void *ctx)
+ 
+ static int wpas_p2p_get_pref_freq_list(void *ctx, int go,
+ 				       unsigned int *len,
+-				       unsigned int *freq_list)
++				       struct weighted_pcl *w_freq_list)
+ {
+ 	struct wpa_supplicant *wpa_s = ctx;
+ 
+ 	return wpa_drv_get_pref_freq_list(wpa_s, go ? WPA_IF_P2P_GO :
+-					  WPA_IF_P2P_CLIENT, len, freq_list);
++					  WPA_IF_P2P_CLIENT, len, w_freq_list);
+ }
+ 
+ 
+@@ -5611,9 +5611,32 @@ static int wpas_p2p_join_start(struct wpa_supplicant *wpa_s, int freq,
+ }
+ 
+ 
++static int wpas_pref_freq_allowed(struct wpa_supplicant *wpa_s, int go,
++				  struct weighted_pcl *w_freq,
++				  unsigned int index)
++{
++	unsigned int freq = w_freq[index].freq;
++
++	if (!p2p_supported_freq(wpa_s->global->p2p, freq) ||
++	    wpas_p2p_disallowed_freq(wpa_s->global, freq))
++		return 0;
++
++	if (!w_freq[0].weight)
++		return 1; /* weighted preference list not available */
++
++	if (w_freq[index].flag & WEIGHTED_PCL_EXCLUDE)
++		return 0;
++	if (go && !(w_freq[index].flag & WEIGHTED_PCL_GO))
++		return 0;
++	if (!go && !(w_freq[index].flag & WEIGHTED_PCL_CLI))
++		return 0;
++
++	return 1;
++}
++
+ static int wpas_p2p_setup_freqs(struct wpa_supplicant *wpa_s, int freq,
+ 				int *force_freq, int *pref_freq, int go,
+-				unsigned int *pref_freq_list,
++				struct weighted_pcl *w_freq_list,
+ 				unsigned int *num_pref_freq)
+ {
+ 	struct wpa_used_freq_data *freqs;
+@@ -5700,26 +5723,24 @@ static int wpas_p2p_setup_freqs(struct wpa_supplicant *wpa_s, int freq,
+ 
+ 		res = wpa_drv_get_pref_freq_list(wpa_s, iface_type,
+ 						 &max_pref_freq,
+-						 pref_freq_list);
++						 w_freq_list);
+ 		if (!is_p2p_allow_6ghz(wpa_s->global->p2p))
+-			max_pref_freq = p2p_remove_6ghz_channels(pref_freq_list,
++			max_pref_freq = p2p_remove_6ghz_channels(w_freq_list,
+ 								 max_pref_freq);
+ 
+ 		if (!res && max_pref_freq > 0) {
+ 			*num_pref_freq = max_pref_freq;
+ 			i = 0;
+ 			while (i < *num_pref_freq &&
+-			       (!p2p_supported_freq(wpa_s->global->p2p,
+-						    pref_freq_list[i]) ||
+-				wpas_p2p_disallowed_freq(wpa_s->global,
+-							 pref_freq_list[i]))) {
++			       (!wpas_pref_freq_allowed(wpa_s, go,
++							w_freq_list, i))) {
+ 				wpa_printf(MSG_DEBUG,
+ 					   "P2P: preferred_freq_list[%d]=%d is disallowed",
+-					   i, pref_freq_list[i]);
++					   i, w_freq_list[i].freq);
+ 				i++;
+ 			}
+ 			if (i != *num_pref_freq) {
+-				best_freq = pref_freq_list[i];
++				best_freq = w_freq_list[i].freq;
+ 				wpa_printf(MSG_DEBUG,
+ 					   "P2P: Using preferred_freq_list[%d]=%d",
+ 					   i, best_freq);
+@@ -5841,7 +5862,8 @@ int wpas_p2p_connect(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
+ 	enum wpa_driver_if_type iftype;
+ 	const u8 *if_addr;
+ 	struct wpa_ssid *ssid = NULL;
+-	unsigned int pref_freq_list[P2P_MAX_PREF_CHANNELS], size;
++	struct weighted_pcl w_pref_freq_list[P2P_MAX_PREF_CHANNELS];
++	unsigned int size;
+ 
+ 	if (wpa_s->global->p2p_disabled || wpa_s->global->p2p == NULL)
+ 		return -1;
+@@ -5934,13 +5956,13 @@ int wpas_p2p_connect(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
+ 
+ 	size = P2P_MAX_PREF_CHANNELS;
+ 	res = wpas_p2p_setup_freqs(wpa_s, freq, &force_freq, &pref_freq,
+-				   go_intent == 15, pref_freq_list, &size);
++				   go_intent == 15, w_pref_freq_list, &size);
+ 	if (res)
+ 		return res;
+ 	wpas_p2p_set_own_freq_preference(wpa_s,
+ 					 force_freq ? force_freq : pref_freq);
+ 
+-	p2p_set_own_pref_freq_list(wpa_s->global->p2p, pref_freq_list, size);
++	p2p_set_own_pref_freq_list(wpa_s->global->p2p, w_pref_freq_list, size);
+ 
+ 	wpa_s->create_p2p_iface = wpas_p2p_create_iface(wpa_s);
+ 
+@@ -6126,28 +6148,26 @@ static int wpas_p2p_select_go_freq(struct wpa_supplicant *wpa_s, int freq)
+ 
+ 	if (!wpa_s->conf->num_p2p_pref_chan && !freq) {
+ 		unsigned int i, size = P2P_MAX_PREF_CHANNELS;
+-		unsigned int pref_freq_list[P2P_MAX_PREF_CHANNELS];
++		struct weighted_pcl w_pref_freq_list[P2P_MAX_PREF_CHANNELS];
+ 		int res;
+ 
+ 		res = wpa_drv_get_pref_freq_list(wpa_s, WPA_IF_P2P_GO,
+-						 &size, pref_freq_list);
++						 &size, w_pref_freq_list);
+ 		if (!is_p2p_allow_6ghz(wpa_s->global->p2p))
+-			size = p2p_remove_6ghz_channels(pref_freq_list, size);
++			size = p2p_remove_6ghz_channels(w_pref_freq_list, size);
+ 
+ 		if (!res && size > 0) {
+ 			i = 0;
+ 			while (i < size &&
+-			       (!p2p_supported_freq(wpa_s->global->p2p,
+-						    pref_freq_list[i]) ||
+-				wpas_p2p_disallowed_freq(wpa_s->global,
+-							 pref_freq_list[i]))) {
++			       !wpas_pref_freq_allowed(wpa_s, 1,
++						       w_pref_freq_list, i)) {
+ 				wpa_printf(MSG_DEBUG,
+ 					   "P2P: preferred_freq_list[%d]=%d is disallowed",
+-					   i, pref_freq_list[i]);
++					   i, w_pref_freq_list[i].freq);
+ 				i++;
+ 			}
+ 			if (i != size) {
+-				freq = pref_freq_list[i];
++				freq = w_pref_freq_list[i].freq;
+ 				wpa_printf(MSG_DEBUG,
+ 					   "P2P: Using preferred_freq_list[%d]=%d",
+ 					   i, freq);
+@@ -7499,7 +7519,8 @@ int wpas_p2p_invite(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
+ 	int force_freq = 0;
+ 	int res;
+ 	int no_pref_freq_given = pref_freq == 0;
+-	unsigned int pref_freq_list[P2P_MAX_PREF_CHANNELS], size;
++	struct weighted_pcl w_pref_freq_list[P2P_MAX_PREF_CHANNELS];
++	unsigned int size;
+ 
+ 	if (wpas_p2p_check_6ghz(wpa_s, NULL, allow_6ghz, freq))
+ 		return -1;
+@@ -7546,14 +7567,14 @@ int wpas_p2p_invite(struct wpa_supplicant *wpa_s, const u8 *peer_addr,
+ 	size = P2P_MAX_PREF_CHANNELS;
+ 	res = wpas_p2p_setup_freqs(wpa_s, freq, &force_freq, &pref_freq,
+ 				   role == P2P_INVITE_ROLE_GO,
+-				   pref_freq_list, &size);
++				   w_pref_freq_list, &size);
+ 	if (res)
+ 		return res;
+ 
+ 	if (wpa_s->global->p2p_disabled || wpa_s->global->p2p == NULL)
+ 		return -1;
+ 
+-	p2p_set_own_pref_freq_list(wpa_s->global->p2p, pref_freq_list, size);
++	p2p_set_own_pref_freq_list(wpa_s->global->p2p, w_pref_freq_list, size);
+ 
+ 	if (wpa_s->parent->conf->p2p_ignore_shared_freq &&
+ 	    no_pref_freq_given && pref_freq > 0 &&
+@@ -7588,7 +7609,8 @@ int wpas_p2p_invite_group(struct wpa_supplicant *wpa_s, const char *ifname,
+ 	int persistent;
+ 	int freq = 0, force_freq = 0, pref_freq = 0;
+ 	int res;
+-	unsigned int pref_freq_list[P2P_MAX_PREF_CHANNELS], size;
++	struct weighted_pcl w_pref_freq_list[P2P_MAX_PREF_CHANNELS];
++	unsigned int size;
+ 
+ 	wpa_s->p2p_persistent_go_freq = 0;
+ 	wpa_s->p2p_go_ht40 = 0;
+@@ -7648,7 +7670,7 @@ int wpas_p2p_invite_group(struct wpa_supplicant *wpa_s, const char *ifname,
+ 	size = P2P_MAX_PREF_CHANNELS;
+ 	res = wpas_p2p_setup_freqs(wpa_s, freq, &force_freq, &pref_freq,
+ 				   role == P2P_INVITE_ROLE_ACTIVE_GO,
+-				   pref_freq_list, &size);
++				   w_pref_freq_list, &size);
+ 	if (res)
+ 		return res;
+ 	wpas_p2p_set_own_freq_preference(wpa_s, force_freq);
+-- 
+2.7.4
+

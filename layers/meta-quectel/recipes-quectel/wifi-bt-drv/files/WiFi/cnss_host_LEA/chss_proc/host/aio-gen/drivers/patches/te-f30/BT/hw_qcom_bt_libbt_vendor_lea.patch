@@ -1,0 +1,2424 @@
+diff --git a/Android.mk b/Android.mk
+index cd2c3ae..5867996 100644
+--- a/Android.mk
++++ b/Android.mk
+@@ -1,3 +1,3 @@
+-ifeq ($(call is-vendor-board-platform,QCOM),true)
++#ifeq ($(call is-vendor-board-platform,QCOM),true)
+ include $(call all-named-subdir-makefiles,libbt-vendor)
+-endif # is-vendor-board-platform
++#endif # is-vendor-board-platform
+diff --git a/libbt-vendor/Android.mk b/libbt-vendor/Android.mk
+index 8d3f9d4..7a3e0ba 100644
+--- a/libbt-vendor/Android.mk
++++ b/libbt-vendor/Android.mk
+@@ -16,7 +16,7 @@
+ 
+ LOCAL_PATH := $(call my-dir)
+ 
+-ifeq ($(BOARD_HAVE_BLUETOOTH_QCOM),true)
++#ifeq ($(BOARD_HAVE_BLUETOOTH_QCOM),true)
+ 
+ include $(CLEAR_VARS)
+ 
+@@ -31,10 +31,14 @@ LOCAL_SRC_FILES := \
+         src/bt_vendor_persist.cpp
+ 
+ #Disable this flag in case if FM over UART support not needed
+-LOCAL_CFLAGS := -DFM_OVER_UART
++#LOCAL_CFLAGS := -DFM_OVER_UART
++
++ifeq ($(BOARD_HAS_QCA_BT_ROME),true)
++LOCAL_CFLAGS += -DBT_SOC_TYPE_ROME
++endif
+ 
+ ifneq (,$(filter userdebug eng,$(TARGET_BUILD_VARIANT)))
+-LOCAL_CFLAGS += -DPANIC_ON_SOC_CRASH
++#LOCAL_CFLAGS += -DPANIC_ON_SOC_CRASH
+ LOCAL_CFLAGS += -DENABLE_DBG_FLAGS
+ endif
+ 
+@@ -45,8 +49,8 @@ LOCAL_C_INCLUDES += \
+         $(TARGET_OUT_HEADERS)/bt/hci_qcomm_init \
+         $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+ 
+-LOCAL_ADDITIONAL_DEPENDENCIES += \
+-$(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
++#LOCAL_ADDITIONAL_DEPENDENCIES += \
++#$(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+ 
+ ifeq ($(BOARD_HAS_QCA_BT_AR3002), true)
+ LOCAL_C_FLAGS := \
+@@ -59,8 +63,8 @@ endif #WIFI_BT_STATUS_SYNC
+ 
+ LOCAL_SHARED_LIBRARIES := \
+         libcutils \
+-        liblog \
+-        libbtnv
++        liblog 
++#        libbtnv
+ 
+ LOCAL_MODULE := libbt-vendor
+ LOCAL_MODULE_TAGS := optional
+@@ -74,15 +78,15 @@ else
+ LOCAL_MODULE_PATH := $(TARGET_OUT_VENDOR_SHARED_LIBRARIES)
+ endif
+ 
+-LOCAL_CFLAGS += -DBT_NV_SUPPORT
++#LOCAL_CFLAGS += -DBT_NV_SUPPORT
+ 
+ ifneq ($(BOARD_ANT_WIRELESS_DEVICE),)
+ LOCAL_CFLAGS += -DENABLE_ANT
+ endif
+ #LOCAL_CFLAGS += -DREAD_BT_ADDR_FROM_PROP
+ 
+-#include $(LOCAL_PATH)/vnd_buildcfg.mk
++include $(LOCAL_PATH)/vnd_buildcfg.mk
+ 
+ include $(BUILD_SHARED_LIBRARY)
+ 
+-endif # BOARD_HAVE_BLUETOOTH_QCOM
++#endif # BOARD_HAVE_BLUETOOTH_QCOM
+diff --git a/libbt-vendor/Makefile.am b/libbt-vendor/Makefile.am
+new file mode 100644
+index 0000000..bb9f789
+--- /dev/null
++++ b/libbt-vendor/Makefile.am
+@@ -0,0 +1,57 @@
++# sources and intermediate files are separated
++
++AM_CFLAGS = -Wall \
++        -Wundef \
++        -Wstrict-prototypes \
++        -Wno-trigraphs \
++        -std=c99 
++#         -DANDROID
++#        -DBT_NV_SUPPORT
++
++AM_CPPFLAGS = -Iinclude \
++        -I../../../../system/bt/hci/include 
++#         -DANDROID
++#        -DBT_NV_SUPPORT
++
++
++if MDM_ROME
++AM_CFLAGS += -DBT_SOC_TYPE_ROME
++AM_CPPFLAGS += -DBT_SOC_TYPE_ROME
++else
++if MDM_PRONTO
++AM_CFLAGS += -DHCI_USE_MCT
++AM_CPPFLAGS += -DHCI_USE_MCT
++endif
++endif
++
++if MDM_CHEROKEE
++AM_CFLAGS += -DBT_SOC_TYPE_CHEROKEE
++AM_CPPFLAGS += -DBT_SOC_TYPE_CHEROKEE
++endif
++
++c_sources = \
++        src/bt_vendor_qcom.c \
++        src/hardware.c \
++        src/hci_uart.c \
++        src/hci_smd.c \
++        src/hw_rome.c \
++        src/hw_ar3k.c \
++        src/bt_vendor_persist.cpp
++
++if USE_GLIB
++ libbt_vendor_la_CFLAGS = $(AM_CFLAGS) -fPIC -D_GNU_SOURCE -D__KERNEL__ -DUSE_GLIB @GLIB_CFLAGS@
++ libbt_vendor_la_LDFLAGS = -shared @GLIB_LIBS@
++else
++ libbt_vendor_la_CFLAGS = $(AM_CFLAGS) -fPIC -D_GNU_SOURCE -D__KERNEL__
++ libbt_vendor_la_LDFLAGS = -shared
++endif
++
++requiredlibs = -lpthread #$(SYS_LIB)/libbtnv.la
++
++library_includedir = $(pkgincludedir)\
++library_include_HEADERS = $(h_sources)
++lib_LTLIBRARIES = libbt-vendor.la
++libbt_vendor_la_CC = @CC@
++libbt_vendor_la_SOURCES = $(c_sources)
++libbt_vendor_la_CPPFLAGS =$(AM_CPPFLAGS)
++libbt_vendor_la_LIBADD = $(requiredlibs)
+diff --git a/libbt-vendor/configure.ac b/libbt-vendor/configure.ac
+new file mode 100644
+index 0000000..1a4122c
+--- /dev/null
++++ b/libbt-vendor/configure.ac
+@@ -0,0 +1,121 @@
++#                                               -*- Autoconf -*-
++
++# configure.ac -- Autoconf script for diag
++#
++
++# Process this file with autoconf to produce a configure script.
++
++AC_PREREQ([2.68])
++AC_INIT([libbt-vendor], [1.0.0])
++AM_INIT_AUTOMAKE([foreign subdir-objects])
++AM_MAINTAINER_MODE
++AC_CONFIG_SRCDIR([src/bt_vendor_qcom.c])
++AC_CONFIG_HEADER([config.h])
++AC_CONFIG_MACRO_DIR([m4])
++
++AM_PROG_LIBTOOL
++# Checks for programs.
++AC_PROG_CC
++AM_PROG_CC_C_O
++AC_PROG_LIBTOOL
++AC_PROG_AWK
++AC_PROG_CPP
++AC_PROG_CXX
++AC_PROG_INSTALL
++AC_PROG_LN_S
++AC_PROG_MAKE_SET
++PKG_PROG_PKG_CONFIG
++
++# Library configs
++AC_ARG_WITH([common_includes],
++      AC_HELP_STRING([--with-common-includes=@<:@dir@:>@],
++         [Specify the location of the common headers]),
++      [common_incdir=$withval],
++      with_common_includes=no)
++
++if test "x$with_common_includes" != "xno"; then
++   CFLAGS="${CFLAGS} -I${common_incdir}"
++fi
++
++AC_ARG_WITH([glib],
++     AC_HELP_STRING([--with-glib],
++        [enable glib, building HLOS systems which use glib]))
++
++if (test "x${with_glib}" = "xyes"); then
++       PKG_CHECK_MODULES(GTHREAD, gthread-2.0 >= 2.16, dummy=yes,
++                               AC_MSG_ERROR(GThread >= 2.16 is required))
++       PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.16, dummy=yes,
++                               AC_MSG_ERROR(GLib >= 2.16 is required))
++       GLIB_CFLAGS="$GLIB_CFLAGS $GTHREAD_CFLAGS"
++       GLIB_LIBS="$GLIB_LIBS $GTHREAD_LIBS"
++
++       AC_SUBST(GLIB_CFLAGS)
++       AC_SUBST(GLIB_LIBS)
++fi
++
++AM_CONDITIONAL(USE_GLIB, test "x${with_glib}" = "xyes")
++
++AC_SUBST([CFLAGS])
++AC_SUBST([CPPFLAGS])
++AC_SUBST([CC])
++
++AC_ARG_ENABLE(target,
++  [AS_HELP_STRING([--enable-target=TARGET], [Specify the target product to build])],
++  [TARGET=$enableval],
++  [TARGET=none]
++)
++
++AC_ARG_ENABLE(rome,
++  [AS_HELP_STRING([--enable-rome=ROME], [Specify the rome product to build])],
++  [ROME=$enableval],
++  [ROME=none]
++)
++
++AM_CONDITIONAL([MDM_ROME], [test "x$TARGET" = "xmdm9607" -o "x$TARGET" = "xmdm9635" -o "x$TARGET" = "xmdm9640" -o "x$TARGET" = "xmdm9650" -o "x$TARGET" = "xapq8096" -o "x$TARGET" = "xsdx20" -o "x$ROME" = "xqsap" -o "x$ROME" = "xrobot-rome"])
++AM_CONDITIONAL([MDM_PRONTO], [test "x$TARGET" = "xapq8009" -o "x$TARGET" = "xapq8017" -o "x$TARGET" = "xapq8053" -o "x$TARGET" = "xapq8016"])
++
++AM_CONDITIONAL([MDM_CHEROKEE], [test "x$TARGET" = "xapq8098"])
++
++# Checks for header files.
++AC_CHECK_HEADERS([fcntl.h stdlib.h string.h sys/socket.h sys/time.h termios.h unistd.h])
++
++AC_ARG_WITH([lib_path],
++      AC_HELP_STRING([--with-lib-path=@<:@dir@:>@],
++         [Specify the location of the libraries]),
++      [std_libdir=$withval],
++      with_lib_path=no)
++
++if test "x$with_lib_path" != "xno"; then
++   SYS_LIB=${std_libdir}
++fi
++
++AC_SUBST(SYS_LIB)
++
++AC_CHECK_FUNC(signalfd, dummy=yes,
++      AC_MSG_ERROR(signalfd support is required))
++
++AC_CHECK_LIB(rt, clock_gettime, dummy=yes,
++      AC_MSG_ERROR(realtime clock support is required))
++
++AC_CHECK_LIB(pthread, pthread_create, dummy=yes,
++      AC_MSG_ERROR(posix thread support is required))
++
++AC_CHECK_LIB(dl, dlopen, dummy=yes,
++      AC_MSG_ERROR(dynamic linking loader is required))
++
++# Checks for typedefs, structures, and compiler characteristics.
++AC_HEADER_STDBOOL
++AC_TYPE_OFF_T
++AC_TYPE_SIZE_T
++AC_TYPE_UINT32_T
++AC_TYPE_UINT8_T
++
++# Checks for library functions.
++AC_FUNC_MALLOC
++AC_CHECK_FUNCS([gettimeofday memset select socket strerror])
++
++AC_CONFIG_FILES([ \
++         Makefile \
++         ])
++
++AC_OUTPUT
+diff --git a/libbt-vendor/gen-buildcfg.sh b/libbt-vendor/gen-buildcfg.sh
+new file mode 100755
+index 0000000..40c01f4
+--- /dev/null
++++ b/libbt-vendor/gen-buildcfg.sh
+@@ -0,0 +1,25 @@
++#!/usr/bin/env bash
++
++if [[ "" == "$2" ]]
++then
++    echo "Usage: $0 <in-file> <out-file>"
++    exit 1
++fi
++
++if [ ! -f "$1" ]
++then
++    echo "Error: Can't find input file $1..."
++    exit 2
++fi
++
++DATE=`/usr/bin/env date`
++BASE=`basename $2`
++BASE=`echo ${BASE} | tr "[:lower:]" "[:upper:]"`
++BASE=`echo ${BASE} | sed -e "s/\\./_/"`
++PROTECT="_${BASE}"
++
++echo "/* Auto-generated from $1 on ${DATE} */" > $2
++echo "#ifndef ${PROTECT}" >> $2
++echo "#define ${PROTECT}" >> $2
++sed -e '/^#/d' -e '/^$$/d' -e '/# Makefile only$$/d' -e 's/^/#define /' -e 's/=/ /' $1 >> $2
++echo "#endif" >> $2
+diff --git a/libbt-vendor/include/bt_vendor_persist.h b/libbt-vendor/include/bt_vendor_persist.h
+index 4f2e8ee..a938b70 100644
+--- a/libbt-vendor/include/bt_vendor_persist.h
++++ b/libbt-vendor/include/bt_vendor_persist.h
+@@ -33,6 +33,14 @@ extern "C"
+ #endif
+ 
+ #include <stdio.h>
++#ifndef ANDROID
++#include <sys/types.h>
++#include <stdint.h>
++
++#ifdef BT_NV_SUPPORT
++#undef BT_NV_SUPPORT
++#endif
++#endif //ifndef ANDROID
+ 
+ #ifdef BT_NV_SUPPORT
+ 
+diff --git a/libbt-vendor/include/bt_vendor_qcom.h b/libbt-vendor/include/bt_vendor_qcom.h
+index 526fc18..e3dede5 100644
+--- a/libbt-vendor/include/bt_vendor_qcom.h
++++ b/libbt-vendor/include/bt_vendor_qcom.h
+@@ -1,4 +1,12 @@
+ /*
++ * Copyright (c) 2017 Qualcomm Technologies, Inc.
++ * All Rights Reserved.
++ * Confidential and Proprietary - Qualcomm Technologies, Inc.
++ *
++ * NOT A CONTRIBUTION
++ * Apache license notifications and license are retained
++ * for attribution purposes only.
++ *
+  * Copyright 2012 The Android Open Source Project
+  *
+  * Licensed under the Apache License, Version 2.0 (the "License");
+@@ -19,6 +27,46 @@
+ 
+ #include <stdbool.h>
+ #include "bt_vendor_lib.h"
++/*Block For Android Porting*/
++#ifndef ANDROID
++#ifdef USE_GLIB
++#include <glib.h>
++#define strlcpy g_strlcpy
++#endif
++
++#define strlcpy strncpy
++
++#ifndef ANDROID
++#include <stdio.h>
++#include <sys/ioctl.h>
++#define property_get_bt prop_get
++#define property_set_bt prop_set
++
++#define LOG_TAG "libbt-vendor : "
++#endif
++
++#ifdef USE_ANDROID_LOGGING
++#include <utils/Log.h>
++#define LOG_DEBUG(fmt, arg...) ALOGD(__VA_ARGS__)
++#define LOG_ERROR(fmt, arg...) ALOGE(__VA_ARGS__)
++#else
++#include <syslog.h>
++#define ALOGV(fmt, arg...) syslog (LOG_WARNING, LOG_TAG fmt, ##arg)
++#define ALOGD(fmt, arg...) syslog (LOG_NOTICE, LOG_TAG fmt, ##arg)
++#define ALOGI(fmt, arg...) syslog (LOG_INFO, LOG_TAG fmt, ##arg)
++#define ALOGW(fmt, arg...) syslog (LOG_WARNING, LOG_TAG  fmt, ##arg)
++#define ALOGE(fmt, arg...) syslog (LOG_ERR, LOG_TAG fmt, ##arg)
++
++#define LOG_DEBUG(fmt, arg...) syslog (LOG_NOTICE, LOG_TAG fmt, ##arg)
++#define LOG_ERROR(fmt, arg...) syslog (LOG_ERR, LOG_TAG fmt, ##arg)
++#endif
++#endif
++
++#ifndef ANDROID
++#define BT_PWR_CNTRL_DEVICE    "/dev/btpower"
++#define BT_CMD_PWR_CTRL         0xbfad
++#endif
++
+ 
+ #ifndef FALSE
+ #define FALSE  0
+@@ -38,6 +86,7 @@ typedef enum {
+     BT_SOC_AR3K,
+     BT_SOC_ROME,
+     BT_SOC_CHEROKEE,
++    BT_SOC_ROME_USB,
+     /* Add chipset type here */
+     BT_SOC_RESERVED
+ }bt_soc_type;
+diff --git a/libbt-vendor/include/hci_uart.h b/libbt-vendor/include/hci_uart.h
+index 21e9689..0d08088 100644
+--- a/libbt-vendor/include/hci_uart.h
++++ b/libbt-vendor/include/hci_uart.h
+@@ -1,4 +1,12 @@
+ /*
++ *  Copyright (c) 2017 Qualcomm Technologies, Inc.
++ *  All Rights Reserved.
++ *  Confidential and Proprietary - Qualcomm Technologies, Inc.
++ *
++ *  NOT A CONTRIBUTION
++ *  Apache license notifications and license are retained
++ *  for attribution purposes only.
++ *
+  *  Copyright (c) 2013, The Linux Foundation. All rights reserved.
+  *  Not a Contribution.
+  *  Copyright (C) 2009-2012 Broadcom Corporation
+@@ -21,9 +29,15 @@
+ 
+ #include <asm-generic/ioctls.h>
+ 
++#ifndef TIOCPMGET
++#define TIOCPMGET   0x5441  /* PM get */
++#define TIOCPMPUT   0x5442  /* PM put */
++#define TIOCPMACT   0x5443  /* PM is active */
++#endif
+ /* Variables to identify the platform */
+ /*BT HS UART TTY DEVICE */
+-#define BT_HS_UART_DEVICE "/dev/ttyHS0"
++//#define BT_HS_UART_DEVICE "/dev/ttyHS0"
++#define BT_HS_UART_DEVICE "/dev/ttyUSB0"
+ 
+ /**** baud rates ****/
+ #define USERIAL_BAUD_300        0
+diff --git a/libbt-vendor/include/hw_ar3k.h b/libbt-vendor/include/hw_ar3k.h
+index 2129548..c6953f2 100644
+--- a/libbt-vendor/include/hw_ar3k.h
++++ b/libbt-vendor/include/hw_ar3k.h
+@@ -17,7 +17,9 @@
+  */
+ #ifndef HW_AR3K_H
+ #define HW_AR3K_H
+-
++#ifndef ANDROID
++#include <sys/ioctl.h>
++#endif
+ /******************************************************************************
+ **  Constants & Macros
+ ******************************************************************************/
+diff --git a/libbt-vendor/include/hw_rome.h b/libbt-vendor/include/hw_rome.h
+index 08efb39..9443f58 100644
+--- a/libbt-vendor/include/hw_rome.h
++++ b/libbt-vendor/include/hw_rome.h
+@@ -1,4 +1,12 @@
+ /*
++ * Copyright (c) 2017 Qualcomm Technologies, Inc.
++ * All Rights Reserved.
++ * Confidential and Proprietary - Qualcomm Technologies, Inc.
++ *
++ * NOT A CONTRIBUTION
++ * Apache license notifications and license are retained
++ * for attribution purposes only.
++ *
+  * Copyright 2012 The Android Open Source Project
+  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
+  * Not a Contribution.
+@@ -156,12 +164,22 @@
+ #define ROME_NVM_TLV_PATH                 "/system/etc/firmware/nvm_tlv.bin"
+ #define ROME_RAMPATCH_TLV_1_0_3_PATH      "/system/etc/firmware/rampatch_tlv_1.3.tlv"
+ #define ROME_NVM_TLV_1_0_3_PATH           "/system/etc/firmware/nvm_tlv_1.3.bin"
++#define NAPLES_RAMPATCH_TLV_UART_1_0_PATH    "/lib/firmware/ar3k/rampatch_tlv_uart_npl_1.0.tlv"
++#define NAPLES_NVM_TLV_UART_1_0_PATH         "/lib/firmware/ar3k/nvm_tlv_uart_npl_1.0.bin"
+ #define ROME_RAMPATCH_TLV_2_0_1_PATH      "/system/etc/firmware/rampatch_tlv_2.1.tlv"
+ #define ROME_NVM_TLV_2_0_1_PATH           "/system/etc/firmware/nvm_tlv_2.1.bin"
+-#define ROME_RAMPATCH_TLV_3_0_0_PATH      "/bt_firmware/image/btfw30.tlv"
+-#define ROME_NVM_TLV_3_0_0_PATH           "/bt_firmware/image/btnv30.bin"
+-#define ROME_RAMPATCH_TLV_3_0_2_PATH      "/bt_firmware/image/btfw32.tlv"
+-#define ROME_NVM_TLV_3_0_2_PATH           "/bt_firmware/image/btnv32.bin"
++#define ROME_RAMPATCH_TLV_3_0_0_PATH      "/lib/firmware/ar3k/btfw30.tlv"
++#define ROME_NVM_TLV_3_0_0_PATH           "/lib/firmware/ar3k/btnv30.bin"
++#define ROME_RAMPATCH_TLV_3_0_2_PATH      "/lib/firmware/ar3k/btfw32.tlv"
++#define ROME_NVM_TLV_3_0_2_PATH           "/lib/firmware/ar3k/btnv32.bin"
++#define TF_RAMPATCH_TLV_1_0_0_PATH        "/lib/firmware/ar3k/rampatch_tlv_tf_1.0.tlv"
++#define TF_NVM_TLV_1_0_0_PATH             "/lib/firmware/ar3k/nvm_tlv_tf_1.0.bin"
++//#define TF_RAMPATCH_TLV_1_0_1_PATH        "/lib/firmware/ar3k/tfbtfw11.tlv"
++//#define TF_RAMPATCH_TLV_1_0_1_PATH        "/lib/firmware/ar3k/rampatch_tlv_tf_1.1.tlv"
++#define TF_RAMPATCH_TLV_1_0_1_PATH        "/lib/firmware/ar3k/rampatch_tlv_3.2.tlv"
++//#define TF_NVM_TLV_1_0_1_PATH             "/lib/firmware/ar3k/tfbtnv11.bin"
++//#define TF_NVM_TLV_1_0_1_PATH             "/lib/firmware/ar3k/nvm_tlv_tf_1.1.bin"
++#define TF_NVM_TLV_1_0_1_PATH             "/lib/firmware/ar3k/nvm_tlv_3.2.bin"
+ 
+ #define ROME_3_1_FW_SU  "bprm.cnss.3.1"
+ #define ROME_3_2_FW_SU  "btfwp.cnss.3.2"
+@@ -257,6 +275,7 @@ enum{
+ };
+ 
+ enum{
++    NAPLES_PATCH_VER_0100 = 0x0100,
+     ROME_PATCH_VER_0100 = 0x0100,
+     ROME_PATCH_VER_0101 = 0x0101,
+     ROME_PATCH_VER_0200 = 0x0200,
+@@ -267,8 +286,11 @@ enum{
+ enum{
+     ROME_SOC_ID_00 = 0x00000000,
+     ROME_SOC_ID_11 = 0x00000011,
++    ROME_SOC_ID_13 = 0x00000013,
+     ROME_SOC_ID_22 = 0x00000022,
+-    ROME_SOC_ID_44 = 0x00000044
++    ROME_SOC_ID_23 = 0x00000023,
++    ROME_SOC_ID_44 = 0x00000044,
++    NAPLES_SOC_ID_15 = 0x00000015,
+ };
+ 
+ enum{
+@@ -278,7 +300,10 @@ enum{
+     ROME_VER_1_3 = ((ROME_PATCH_VER_0200 << 16 ) | ROME_SOC_ID_00 ),
+     ROME_VER_2_1 = ((ROME_PATCH_VER_0200 << 16 ) | ROME_SOC_ID_11 ),
+     ROME_VER_3_0 = ((ROME_PATCH_VER_0300 << 16 ) | ROME_SOC_ID_22 ),
+-    ROME_VER_3_2 = ((ROME_PATCH_VER_0302 << 16 ) | ROME_SOC_ID_44 )
++    ROME_VER_3_2 = ((ROME_PATCH_VER_0302 << 16 ) | ROME_SOC_ID_44 ),
++    TUFELLO_VER_1_0 = ((ROME_PATCH_VER_0300 << 16 ) | ROME_SOC_ID_13 ),
++    TUFELLO_VER_1_1 = ((ROME_PATCH_VER_0302 << 16 ) | ROME_SOC_ID_23 ),
++    NAPLES_VER_1_0 = ((NAPLES_PATCH_VER_0100 << 16 ) | NAPLES_SOC_ID_15 ),
+ };
+ 
+ //declarations
+diff --git a/libbt-vendor/include/vnd_generic.txt b/libbt-vendor/include/vnd_generic.txt
+index 43e790c..6a7d7ba 100644
+--- a/libbt-vendor/include/vnd_generic.txt
++++ b/libbt-vendor/include/vnd_generic.txt
+@@ -1,4 +1,4 @@
+-BLUETOOTH_UART_DEVICE_PORT = "/dev/ttyO1"
++BLUETOOTH_UART_DEVICE_PORT = "/dev/ttyUSB0"
+ FW_PATCHFILE_LOCATION = "/vendor/firmware/"
+ BT_WAKE_VIA_USERIAL_IOCTL = TRUE
+ LPM_IDLE_TIMEOUT_MULTIPLE = 5
+diff --git a/libbt-vendor/src/bt_vendor_persist.cpp b/libbt-vendor/src/bt_vendor_persist.cpp
+index 519e826..08d9a93 100644
+--- a/libbt-vendor/src/bt_vendor_persist.cpp
++++ b/libbt-vendor/src/bt_vendor_persist.cpp
+@@ -28,8 +28,11 @@
+ 
+ #ifdef BT_NV_SUPPORT
+ #include "bt_nv.h"
++#ifdef ANDROID
+ #include <utils/Log.h>
+-
++#else
++#include "bt_vendor_qcom.h"
++#endif
+ /*===========================================================================
+ FUNCTION   bt_vendor_nv_read
+ 
+diff --git a/libbt-vendor/src/bt_vendor_qcom.c b/libbt-vendor/src/bt_vendor_qcom.c
+index 3948f93..4e4b20d 100644
+--- a/libbt-vendor/src/bt_vendor_qcom.c
++++ b/libbt-vendor/src/bt_vendor_qcom.c
+@@ -1,4 +1,12 @@
+ /*
++ * Copyright (c) 2017 Qualcomm Technologies, Inc.
++ * All Rights Reserved.
++ * Confidential and Proprietary - Qualcomm Technologies, Inc.
++ *
++ * NOT A CONTRIBUTION
++ * Apache license notifications and license are retained
++ * for attribution purposes only.
++ *
+  * Copyright 2012 The Android Open Source Project
+  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
+  * Not a Contribution.
+@@ -26,8 +34,23 @@
+ #define LOG_TAG "bt_vendor"
+ #define BLUETOOTH_MAC_ADDR_BOOT_PROPERTY "ro.boot.btmacaddr"
+ 
++#ifdef ANDROID
+ #include <utils/Log.h>
++#else
++#include <sys/types.h>
++#include <stdio.h>
++#include <stdint.h>
++#include <stdbool.h>
++#include <sys/socket.h>
++#include <string.h>
++#include <sys/time.h>
++#include <fcntl.h>
++#endif
++
++#ifdef ANDROID
+ #include <cutils/properties.h>
++#endif
++
+ #include <fcntl.h>
+ #include <termios.h>
+ #include "bt_vendor_qcom.h"
+@@ -35,23 +58,66 @@
+ #include "hci_smd.h"
+ #include <sys/ioctl.h>
+ #include <sys/socket.h>
++#include <poll.h>
++#ifdef ANDROID
+ #include <cutils/sockets.h>
++#endif 
+ #include <linux/un.h>
+ #include "bt_vendor_persist.h"
+ #include "hw_rome.h"
+ #include "bt_vendor_lib.h"
++#ifndef ANDROID
++#include <sys/ioctl.h>
++#include <pthread.h>
++#ifndef WIFI_BT_STATUS_SYNC
++#include <errno.h>
++#endif
++#endif
++
+ #define WAIT_TIMEOUT 200000
+ #define BT_VND_OP_GET_LINESPEED 30
++#define PROPERTY_VALUE_MAX 92
++#define STOP_WCNSS_FILTER 0xDD
++#define STOP_WAIT_TIMEOUT   1000
++
++#define SOC_INIT_PROPERTY "wc_transport.soc_initialized"
+ 
+ #define STOP_WCNSS_FILTER 0xDD
+ #define STOP_WAIT_TIMEOUT   1000
+ 
+ #define SOC_INIT_PROPERTY "wc_transport.soc_initialized"
+ 
++#ifdef PANIC_ON_SOC_CRASH
++#define BT_VND_FILTER_START "wc_transport.start_root"
++#else
+ #define BT_VND_FILTER_START "wc_transport.start_hci"
++#endif
+ 
+ #define CMD_TIMEOUT  0x22
+ 
++#define BTPROTO_HCI 1
++#define HCI_DEV_NONE 0xffff
++#define HCI_CHANNEL_CONTROL 3
++#define MGMT_OP_INDEX_LIST 0x0003
++#define MGMT_EV_POLL_TIMEOUT 3000
++#define MGMT_EV_INDEX_ADDED 0x0004
++#define MGMT_EV_COMMAND_COMP 0x0001
++#define MGMT_OP_INDEX_LIST 0x0003
++#define HCI_CHANNEL_USER 1
++
++#ifdef ANDROID
++#define ANT_SOCK "ant_sock"
++#define BT_SOCK "bt_sock"
++#define CTRL_SOCK "wcnssfilter_ctrl"
++#define FM_SOCK "fm_sock"
++#else
++#define ANT_SOCK "/data/misc/bluetooth/ant_sock"
++#define CTRL_SOCK "/etc/bluetooth/wcnssfilter_ctrl"
++#define BT_SOCK "/etc/bluetooth/bt_sock"
++#define FM_SOCK "/data/misc/bluetooth/fm_sock"
++#define SOCKETNAME  "/etc/bluetooth/btprop"
++#endif
++
+ static void wait_for_patch_download(bool is_ant_req);
+ static bool is_debug_force_special_bytes(void);
+ int connect_to_local_socket(char* name);
+@@ -67,6 +133,12 @@ extern int chipset_ver;
+ ******************************************************************************/
+ struct bt_qcom_struct q;
+ pthread_mutex_t q_lock = PTHREAD_MUTEX_INITIALIZER;
++static int hci_interface;
++
++#ifndef ANDROID
++static int bt_prop_socket;      /* This end of connection*/
++static int bt_socket;      /* This end of connection*/
++#endif
+ 
+ int userial_clock_operation(int fd, int cmd);
+ int ath3k_init(int fd, int speed, int init_speed, char *bdaddr, struct termios *ti);
+@@ -81,6 +153,27 @@ static const tUSERIAL_CFG userial_init_cfg =
+     USERIAL_BAUD_115200
+ };
+ 
++#define OSI_NO_INTR(fn)  do {} while ((fn) == -1 && errno == EINTR)
++struct sockaddr_hci {
++  sa_family_t    hci_family;
++  unsigned short hci_dev;
++  unsigned short hci_channel;
++};
++
++struct mgmt_pkt {
++  uint16_t opcode;
++  uint16_t index;
++  uint16_t len;
++  uint8_t data[1024];
++} __attribute__((packed));
++
++struct mgmt_event_read_index {
++  uint16_t cc_opcode;
++  uint8_t status;
++  uint16_t num_intf;
++  uint16_t index[0];
++} __attribute__((packed));
++
+ #if (HW_NEED_END_WITH_HCI_RESET == TRUE)
+ void __hw_epilog_process(void);
+ #endif
+@@ -170,7 +263,11 @@ int bt_wait_for_service_done(void)
+ 
+     /* wait for service done */
+     while (count-- > 0) {
++#ifdef ANDROID
+         property_get(WIFI_SERVICE_PROP, service_status, NULL);
++#else
++        property_get_bt(WIFI_SERVICE_PROP, service_status, NULL);
++#endif
+ 
+         if (strcmp(service_status, "") != 0) {
+             usleep(200000);
+@@ -191,10 +288,13 @@ static int get_bt_soc_type()
+     char bt_soc_type[PROPERTY_VALUE_MAX];
+ 
+     ALOGI("bt-vendor : get_bt_soc_type");
+-
++#ifdef ANDROID
+     ret = property_get("qcom.bluetooth.soc", bt_soc_type, NULL);
++#else
++    ret = property_get_bt("qcom.bluetooth.soc", bt_soc_type, NULL);
++#endif
+     if (ret != 0) {
+-        ALOGI("qcom.bluetooth.soc set to %s\n", bt_soc_type);
++        ALOGE("qcom.bluetooth.soc set to %s\n", bt_soc_type);
+         if (!strncasecmp(bt_soc_type, "rome", sizeof("rome"))) {
+             return BT_SOC_ROME;
+         }
+@@ -207,14 +307,28 @@ static int get_bt_soc_type()
+         else if (!strncasecmp(bt_soc_type, "cherokee", sizeof("cherokee"))) {
+             return BT_SOC_CHEROKEE;
+         }
++        else if (!strncasecmp(bt_soc_type, "rome_usb", sizeof("rome_usb"))) {
++            return BT_SOC_ROME_USB;
++        }
+         else {
+             ALOGI("qcom.bluetooth.soc not set, so using default.\n");
+-            return BT_SOC_DEFAULT;
++            return BT_SOC_ROME_USB;
+         }
+     }
+     else {
++
++#ifndef ANDOID
++        ALOGE("%s: LE to get soc type from MakeFile", __FUNCTION__);
++  #ifdef BT_SOC_TYPE_ROME
++        ret = BT_SOC_ROME; /*UART LE*/
++  #else
++        ret = BT_SOC_ROME_USB;/*USB LE*/
++  #endif
++#else
+         ALOGE("%s: Failed to get soc type", __FUNCTION__);
+-        ret = BT_SOC_DEFAULT;
++        ret = BT_SOC_ROME_USB;/*ANDROID*/
++#endif
++
+     }
+ 
+     return ret;
+@@ -225,9 +339,11 @@ bool can_perform_action(char action) {
+     char ref_count[PROPERTY_VALUE_MAX];
+     char inProgress[PROPERTY_VALUE_MAX] = {'\0'};
+     int value, ret;
+-
++#ifdef ANDROID
+     property_get("wc_transport.ref_count", ref_count, "0");
+-
++#else
++    property_get_bt("wc_transport.ref_count", ref_count, "0");
++#endif
+     value = atoi(ref_count);
+     ALOGV("%s: ref_count: %s\n",__func__,  ref_count);
+ 
+@@ -264,8 +380,11 @@ bool can_perform_action(char action) {
+ 
+     snprintf(ref_count, 3, "%d", value);
+     ALOGV("%s: updated ref_count is: %s", __func__, ref_count);
+-
++#ifdef ANDROID
+     ret  = property_set("wc_transport.ref_count", ref_count);
++#else
++	ret  = property_set_bt("wc_transport.ref_count", ref_count);
++#endif
+     if (ret < 0) {
+         ALOGE("%s: Error while updating property: %d\n", __func__, ret);
+         return false;
+@@ -278,27 +397,44 @@ void kill_hci_filter() {
+     char value[PROPERTY_VALUE_MAX] = {'\0'};
+     char ref_count[PROPERTY_VALUE_MAX];
+     int count, ret;
+-
++#ifdef ANDROID
+     property_get("wc_transport.ref_count", ref_count, "0");
++#else 
++    property_get_bt("wc_transport.ref_count", ref_count, "0");
++#endif
+     count = atoi(ref_count);
+     if (count > 0) {
+         ALOGI("%s: there are active clients, not killing", __func__);
+         return;
+     }
+-
++#ifdef ANDROID
+     property_get(BT_VND_FILTER_START, value, "false");
++#else
++    property_get_bt(BT_VND_FILTER_START, value, "false");
++#endif
+     if (strcmp(value, "true") == 0) {
+         ALOGE("%s: hci_filter is still running, killing it", __func__);
+         /* Setting properties to correct values */
++#ifdef ANDROID
+         ret = property_set("wc_transport.hci_filter_status", "0");
++#else
++        ret = property_set_bt("wc_transport.hci_filter_status", "0");
++#endif
+         if (ret < 0)
+             ALOGE("%s: Error while updating hci_filter_status property: %d\n", __func__, ret);
+-
++#ifdef ANDROID
+         ret = property_set("wc_transport.ref_count", 0);
++#else
++        ret = property_set_bt("wc_transport.ref_count", 0);
++#endif
++
+         if (ret < 0)
+             ALOGE("%s: Error while updating ref_count property: %d\n", __func__, ret);
+-
++#ifdef ANDROID
+         ret = property_set(BT_VND_FILTER_START, "false");
++#else
++        ret = property_set_bt(BT_VND_FILTER_START, "false");
++#endif
+         if (ret < 0)
+             ALOGE("%s: Error while updating start_hci property: %d\n", __func__, ret);
+         else {
+@@ -316,12 +452,21 @@ void stop_hci_filter() {
+ 
+        ALOGV("%s: Entry ", __func__);
+ 
+-       property_get("wc_transport.hci_filter_status", value, "0");
++       if ((soc_type = get_bt_soc_type()) == BT_SOC_CHEROKEE) {
++#ifdef ANDROID
++           property_get("wc_transport.hci_filter_status", value, "0");
++#else
++			property_get_bt("wc_transport.hci_filter_status", value, "0");
++#endif
+        if (strcmp(value, "0") == 0) {
+            ALOGI("%s: hci_filter has been stopped already", __func__);
+        }
+        else {
+-           filter_ctrl = connect_to_local_socket("wcnssfilter_ctrl");
++#ifndef ANDROID
++               filter_ctrl = connect_to_local_socket(CTRL_SOCK);
++#else
++               filter_ctrl = connect_to_local_socket("wcnssfilter_ctrl");
++#endif
+            if (filter_ctrl < 0) {
+                ALOGI("%s: Error while connecting to CTRL_SOCK, filter should stopped: %d",
+                      __func__, filter_ctrl);
+@@ -341,7 +486,11 @@ void stop_hci_filter() {
+           RFKILL 0 operation. this should ideally comeout very
+           quick */
+        for(i=0; i<500; i++) {
++#ifdef ANDROID
+            property_get(BT_VND_FILTER_START, value, "false");
++#else
++           property_get_bt(BT_VND_FILTER_START, value, "false");
++ #endif
+            if (strcmp(value, "false") == 0) {
+                ALOGI("%s: WCNSS_FILTER stopped", __func__);
+                usleep(STOP_WAIT_TIMEOUT * 10);
+@@ -354,6 +503,23 @@ void stop_hci_filter() {
+        }
+        kill_hci_filter();
+ 
++           /*Never use SIGKILL to stop the filter*/
++           /* Filter will be stopped by below two conditions
++            - by Itself, When it realizes there are no CONNECTED clients
++            - Or through STOP_WCNSS_FILTER byte on Control socket
++            both of these ensure clean shutdown of chip
++           */
++           //property_set(BT_VND_FILTER_START, "false");
++       } else if (soc_type == BT_SOC_ROME) {
++ #ifdef ANDROID
++           property_set(BT_VND_FILTER_START, "false");
++ #else
++           property_set_bt(BT_VND_FILTER_START, "false");
++ #endif
++       } else {
++           ALOGI("%s: Unknown soc type %d, Unexpected!", __func__, soc_type);
++       }
++
+        ALOGV("%s: Exit ", __func__);
+ }
+ 
+@@ -363,16 +529,26 @@ int start_hci_filter() {
+        char value[PROPERTY_VALUE_MAX] = {'\0'};
+ 
+        for(i=0; i<45; i++) {
++#ifdef ANDROID
+           property_get(BT_VND_FILTER_START, value, false);
++#else
++          property_get_bt(BT_VND_FILTER_START, value, false);
++#endif
+ 
+           if (strcmp(value, "true") == 0) {
+               ALOGI("%s: hci_filter has been started already", __func__);
+               //Filter should have been started OR in the process of initializing
+               //Make sure of hci_filter_status and return the state based on it
+           } else {
++#ifdef ANDROID
+               property_set("wc_transport.clean_up","0");
+               property_set("wc_transport.hci_filter_status", "0");
+               property_set(BT_VND_FILTER_START, "true");
++#else
++              property_set_bt("wc_transport.clean_up","0");
++              property_set_bt("wc_transport.hci_filter_status", "0");
++              property_set_bt(BT_VND_FILTER_START, "true");
++#endif
+               ALOGV("%s: %s set to true ", __func__, BT_VND_FILTER_START );
+           }
+ 
+@@ -380,7 +556,11 @@ int start_hci_filter() {
+             All client should come and stuck in this while loop till FILTER
+             comesup and ready to accept the connections */
+           //sched_yield();
++#ifdef ANDROID
+           property_get("wc_transport.hci_filter_status", value, "0");
++#else
++          property_get_bt("wc_transport.hci_filter_status", value, "0");
++#endif
+           if (strcmp(value, "1") == 0) {
+                init_success = 1;
+                break;
+@@ -398,6 +578,62 @@ int start_hci_filter() {
+  * Bluetooth Controller power up or shutdown, this function is called with
+  * q_lock held and q is non-NULL
+  */
++#ifdef BT_SOC_TYPE_ROME
++/*
++ * For Android X86 UART devices, we don't need rfkill host code, since rfkill Ids are actually getting created by
++ * native Bluetooth device in the test laptops which is not appropriate to use in this case.
++ */
++static int bt_powerup(int en )
++{
++    char rfkill_type[64], *enable_ldo_path = NULL;
++    char type[16], enable_ldo[6];
++    int fd = 0, size, i, ret, fd_ldo, fd_btpower;
++
++    char disable[PROPERTY_VALUE_MAX];
++    char state;
++    char on = (en)?'1':'0';
++
++#ifdef WIFI_BT_STATUS_SYNC
++    char wifi_status[PROPERTY_VALUE_MAX];
++    int lock_fd;
++#endif /*WIFI_BT_STATUS_SYNC*/
++
++    ALOGI("bt_powerup: %c", on);
++
++    if (q.soc_type < BT_SOC_CHEROKEE) {
++       /* Check if rfkill has been disabled */
++#ifdef ANDROID
++       ret = property_get("ro.rfkilldisabled", disable, "0");
++#else
++       ret = property_get_bt("ro.rfkilldisabled", disable, "0");
++#endif
++       if (!ret ){
++          ALOGE("Couldn't get ro.rfkilldisabled (%d)", ret);
++          return -1;
++       }
++       /* In case rfkill disabled, then no control power*/
++       if (strcmp(disable, "1") == 0) {
++          ALOGI("ro.rfkilldisabled : %s", disable);
++          return -1;
++       }
++    }
++
++    if(on == '0'){
++        ALOGE("Stopping HCI filter as part of CTRL:OFF");
++        stop_hci_filter();
++#ifdef ANDROID
++        property_set("wc_transport.soc_initialized", "0");
++#else
++        property_set_bt("wc_transport.soc_initialized", "0");
++#endif
++    }
++    return 1;
++}
++#else
++/*
++ * Bluetooth Controller power up or shutdown, this function is called with
++ * q_lock held and q is non-NULL
++ */
+ static int bt_powerup(int en )
+ {
+     char rfkill_type[64], *enable_ldo_path = NULL;
+@@ -417,7 +653,12 @@ static int bt_powerup(int en )
+ 
+     if (q.soc_type < BT_SOC_CHEROKEE) {
+        /* Check if rfkill has been disabled */
++#ifdef ANDROID
+        ret = property_get("ro.rfkilldisabled", disable, "0");
++#else
++       ret = property_get_bt("ro.rfkilldisabled", disable, "0");
++#endif
++
+        if (!ret ){
+           ALOGE("Couldn't get ro.rfkilldisabled (%d)", ret);
+           return -1;
+@@ -503,7 +744,11 @@ static int bt_powerup(int en )
+         }
+         if (!memcmp(enable_ldo, "true", 4)) {
+             ALOGI("External LDO has been configured");
++#ifdef ANDROID
+             ret = property_set("wc_transport.extldo", "enabled");
++#else
++            ret = property_set_bt("wc_transport.extldo", "enabled");
++#endif
+             if (ret < 0) {
+                 ALOGI("%s: Not able to set property wc_transport.extldo\n", __func__);
+             }
+@@ -514,7 +759,11 @@ static int bt_powerup(int en )
+     if(on == '0'){
+         ALOGE("Stopping HCI filter as part of CTRL:OFF");
+         stop_hci_filter();
++#ifdef ANDROID
+         property_set("wc_transport.soc_initialized", "0");
++#else
++        property_set_bt("wc_transport.soc_initialized", "0");
++#endif
+     }
+ 
+     if (q.soc_type >= BT_SOC_CHEROKEE && q.soc_type < BT_SOC_RESERVED) {
+@@ -537,7 +786,8 @@ static int bt_powerup(int en )
+        ALOGI("Write %c to rfkill\n", on);
+        /* Write value to control rfkill */
+        if(fd >= 0) {
+-           if ((size = write(fd, &on, 1)) < 0) {
++            if ((size = write(fd, &on, 1)) < 0) //lea: TODO: RFKILL is not working currently. Need to check
++            {
+                ALOGE("write(%s) failed: %s (%d)", q.rfkill_state, strerror(errno), errno);
+ #ifdef WIFI_BT_STATUS_SYNC
+                bt_semaphore_release(lock_fd);
+@@ -549,7 +799,11 @@ static int bt_powerup(int en )
+    }
+ #ifdef WIFI_BT_STATUS_SYNC
+     /* query wifi status */
++#ifdef ANDROID
+     property_get(WIFI_PROP_NAME, wifi_status, "");
++#else
++    property_get_bt(WIFI_PROP_NAME, wifi_status, "");
++#endif
+ 
+     ALOGE("bt get wifi status: %s, isInit: %d\n",  wifi_status, isInit);
+ 
+@@ -557,7 +811,11 @@ static int bt_powerup(int en )
+     if (strncmp(wifi_status, "unloaded", strlen("unloaded")) == 0 || strlen(wifi_status) == 0) {
+         if (on == '1') {
+             ALOGI("%s: BT_VND_PWR_ON\n", __func__);
++#ifdef ANDROID
+             if(property_set(SERVICE_PROP_NAME, "load_wlan") < 0) {
++#else
++            if(property_set_bt(SERVICE_PROP_NAME, "load_wlan") < 0) {
++#endif
+                 ALOGE("%s Property setting failed", SERVICE_PROP_NAME);
+                 close(fd);
+                 bt_semaphore_release(lock_fd);
+@@ -567,7 +825,11 @@ static int bt_powerup(int en )
+         }
+         else if (isInit == 0 && on == '0') {
+             ALOGI("%s: BT_VND_PWR_OFF\n", __func__);
++#ifdef ANDROID
+             if(property_set(SERVICE_PROP_NAME, "unbind_hsic") < 0) {
++#else
++            if(property_set_bt(SERVICE_PROP_NAME, "unbind_hsic") < 0) {
++#endif
+                 ALOGE("%s Property setting failed", SERVICE_PROP_NAME);
+                 close(fd);
+                 bt_semaphore_release(lock_fd);
+@@ -578,9 +840,17 @@ static int bt_powerup(int en )
+     }
+ 
+     if (isInit == 0 && on == '0')
++#ifdef ANDROID
+         property_set(BT_STATUS_NAME, "false");
++#else
++        property_set_bt(BT_STATUS_NAME, "false");
++#endif
+     else if (on == '1')
++#ifdef ANDROID
+         property_set(BT_STATUS_NAME, "true");
++#else
++        property_set_bt(BT_STATUS_NAME, "true");
++#endif
+ 
+     bt_semaphore_release(lock_fd);
+     bt_semaphore_destroy(lock_fd);
+@@ -591,14 +861,16 @@ done:
+         close(fd);
+     return 0;
+ }
+-
++#endif
+ static inline void soc_init(int soc_type)
+ {
++    ALOGI("bt-vendor soc_init :%d", soc_type);
+     switch (soc_type)
+     {
+     case BT_SOC_CHEROKEE:
+     case BT_SOC_ROME:
+     case BT_SOC_AR3K:
++    case BT_SOC_ROME_USB:
+         ALOGI("bt-vendor : Initializing UART transport layer");
+         userial_vendor_init();
+         break;
+@@ -637,12 +909,48 @@ static int init(const bt_vendor_callbacks_t *cb, unsigned char *bdaddr)
+ 
+     ALOGI("++%s", __FUNCTION__);
+ 
++//TBD for LEA.1.0 shall be configurable during build time
++
+     if (!cb || !bdaddr) {
+         ALOGE("Invalid input args cb %p bdaddr %p", cb, bdaddr);
+         ret = -BT_STATUS_INVAL;
+         goto out;
+     }
+ 
++#ifndef ANDROID
++    int len;    /* length of sockaddr */
++    struct sockaddr_un name;
++    if( (bt_prop_socket = socket(AF_UNIX, SOCK_STREAM, 0) ) < 0) {
++      perror("socket");
++      exit(1);
++    }
++    /*Create the address of the server.*/
++    memset(&name, 0, sizeof(struct sockaddr_un));
++    name.sun_family = AF_UNIX;
++    strlcpy(name.sun_path, SOCKETNAME, sizeof(name.sun_path));
++    ALOGE("connecting to %s, fd = %d", SOCKETNAME, bt_prop_socket);
++    len = sizeof(name.sun_family) + strlen(name.sun_path);
++    /*Connect to the server.*/
++    if (connect(bt_prop_socket, (struct sockaddr *) &name, len) < 0){
++        perror("connect");
++        exit(1);
++    }
++#ifdef BT_SOC_TYPE_ROME  // Shall be for UART transport
++    property_set_bt("qcom.bluetooth.soc", "rome");
++#elif BT_SOC_TYPE_ROME_USB
++    property_set_bt("qcom.bluetooth.soc", "rome_usb");
++#elif BT_SOC_TYPE_TUFELLO
++    property_set_bt("qcom.bluetooth.soc", "tufello");
++#endif
++#else
++#ifdef BT_SOC_TYPE_ROME  // Shall be for UART transport
++    property_set("qcom.bluetooth.soc", "rome");
++#elif BT_SOC_TYPE_ROME_USB
++    property_set("qcom.bluetooth.soc", "rome_usb");
++#elif BT_SOC_TYPE_TUFELLO
++    property_set("qcom.bluetooth.soc", "tufello");
++#endif
++#endif
+     q.rfkill_id = -1;
+     q.enable_extldo = FALSE;
+     q.cb = cb;
+@@ -655,7 +963,11 @@ static int init(const bt_vendor_callbacks_t *cb, unsigned char *bdaddr)
+     snprintf(prop, sizeof(prop), "%02x:%02x:%02x:%02x:%02x:%02x",
+              q.bdaddr[0], q.bdaddr[1], q.bdaddr[2],
+              q.bdaddr[3], q.bdaddr[4], q.bdaddr[5]);
++#ifdef ANDROID
+     ret = property_set("wc_transport.stack_bdaddr", prop);
++#else
++    ret = property_set_bt("wc_transport.stack_bdaddr", prop);
++#endif
+     if (ret < 0) {
+         ALOGE("Failed to set wc_transport.stack_bdaddr prop, ret = %d", ret);
+         ret = -BT_STATUS_PROP_FAILURE;
+@@ -704,6 +1016,9 @@ static bool validate_tok(char* bdaddr_tok) {
+ 
+ int connect_to_local_socket(char* name) {
+        socklen_t len; int sk = -1;
++#ifndef ANDROID
++       struct sockaddr_un addr;
++#endif
+ 
+        ALOGE("%s: ACCEPT ", __func__);
+        sk  = socket(AF_LOCAL, SOCK_STREAM, 0);
+@@ -711,9 +1026,16 @@ int connect_to_local_socket(char* name) {
+            ALOGE("Socket creation failure");
+            return -1;
+        }
+-
++#ifdef ANDROID
+         if(socket_local_client_connect(sk, name,
+             ANDROID_SOCKET_NAMESPACE_ABSTRACT, SOCK_STREAM) < 0)
++#else
++       memset(&addr, 0, sizeof(addr));
++       addr.sun_family = AF_UNIX;
++       memcpy(addr.sun_path, name, strlen(name));
++       ALOGE("connect_to_local_socket: addr.sun_path = %s", addr.sun_path);
++       if (connect(sk, (struct sockaddr *) &addr, sizeof(addr)) < 0)
++#endif
+         {
+              ALOGE("failed to connect (%s)", strerror(errno));
+              close(sk);
+@@ -730,9 +1052,16 @@ bool is_soc_initialized() {
+     int ret;
+ 
+     ALOGI("bt-vendor : is_soc_initialized");
+-
++#ifdef ANDROID
+     ret = property_get(SOC_INIT_PROPERTY, init_value, NULL);
++#else
++	ret = property_get_bt(SOC_INIT_PROPERTY, init_value, NULL);
++#endif
++#ifdef ANDROID
+     if (ret != 0) {
++#else
++	if (!ret) {
++#endif
+         ALOGI("%s set to %s\n", SOC_INIT_PROPERTY, init_value);
+         if (!strncasecmp(init_value, "1", sizeof("1"))) {
+             init = true;
+@@ -745,6 +1074,236 @@ bool is_soc_initialized() {
+     return init;
+ }
+ 
++#ifndef ANDROID
++static int bt_onoff_script(int n_state)
++{
++   int prop_ret = 0;
++   int ret = -1;
++   char hciattach_value[PROPERTY_VALUE_MAX];
++
++   /* "bluetooth.status" and "bluetooth.hciattach" properties remain unchanged
++    * ("on" and "true" respectively) while bluetooth is turning off in Android.
++    * We preserved the same behavior in LE for compatibility and to avoid
++    * confusion.
++    */
++   if (n_state == BT_VND_PWR_OFF)
++        return 0;
++   prop_ret = property_get_bt("bluetooth.hciattach", hciattach_value, NULL);
++
++   if (!prop_ret) {
++        ALOGI("bluetooth.hciattach value is %s", hciattach_value);
++
++        if (!strncasecmp(hciattach_value, "true", sizeof("true"))) {
++            ret = system("/bin/sh /data/misc/bluetooth/init.msm.bt.sh");
++
++            if (ret != 0) {
++               ALOGI("/data/misc/bluetooth/init.msm.bt.sh returned with error value: %d", ret);
++               property_set_bt("bluetooth.status", "off");
++               return -1;
++            }
++            ALOGI("/data/misc/bluetooth/init.msm.bt.sh executed successfully");
++            property_set_bt("bluetooth.status", "on");
++        }
++        else if (!strncasecmp(hciattach_value, "false", sizeof("false"))) {
++           if (property_set_bt("bluetooth.status", "off") < 0) {
++               ALOGI("Failed to set bluetooth.status to off");
++               return -1;
++           }
++        }
++    }
++    else {
++        ALOGE("Failed to get bluetooth.hciattach");
++        return -1;
++    }
++    return 0;
++}
++#endif
++#ifndef BT_NV_SUPPORT
++
++uint8_t bt_vendor_nv_read
++(
++  uint8_t nv_item,
++  uint8_t * rsp_buf
++)
++{
++  boolean result = FALSE;
++
++  {
++      //cmd_result = (nv_persist_stat_enum_type)bt_nv_cmd(NV_READ_F,  NV_BD_ADDR_I, &my_nv_item);
++      {
++        /* copy bytes */
++        /*
++        rsp_buf[0] = 0x11;
++        rsp_buf[1] = 0x11;
++        rsp_buf[2] = 0x11;
++        rsp_buf[3] = 0x11;
++        rsp_buf[4] = 0x11;
++        rsp_buf[5] = 0x11;
++        */
++        ALOGI("BD address read for NV_BD_ADDR_I: %.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
++                (unsigned int) rsp_buf[0],(unsigned int) rsp_buf[1],
++                (unsigned int) rsp_buf[2],(unsigned int) rsp_buf[3],
++                (unsigned int) rsp_buf[4],(unsigned int) rsp_buf[5]);
++        result = TRUE;
++      }
++  }
++  return result;
++}
++#endif
++
++static int bt_get_hci_interface()
++{
++  char prop_value[PROPERTY_VALUE_MAX];
++
++  ALOGI("bt-vendor :%s", __func__);
++
++#ifdef ANDROID
++  property_get("bluetooth.interface", prop_value, "0");
++#else
++  property_get_bt("bluetooth.interface", prop_value, "0");
++#endif
++
++  errno = 0;
++  if (memcmp(prop_value, "hci", 3))
++    hci_interface = strtol(prop_value, NULL, 10);
++  else
++    hci_interface = strtol(prop_value + 3, NULL, 10);
++
++  if (errno)
++    hci_interface = 0;
++
++  ALOGI("bt-vendor :hci_interface is = %d",hci_interface);
++  return 0;
++}
++
++
++static int bt_vendor_wait_hcidev(void)
++{
++  struct sockaddr_hci addr;
++  struct pollfd fds[1];
++  struct mgmt_pkt ev;
++  int fd;
++  int ret = 0;
++
++  fd = socket(PF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI);
++  if (fd < 0) {
++    ALOGE("bt-vendor :Bluetooth socket error: %s", strerror(errno));
++    return -1;
++  }
++
++  memset(&addr, 0, sizeof(addr));
++  addr.hci_family = AF_BLUETOOTH;
++  addr.hci_dev = HCI_DEV_NONE;
++  addr.hci_channel = HCI_CHANNEL_CONTROL;
++
++  if (bind(fd, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
++    ALOGE("bt-vendor :HCI Channel Control: %s", strerror(errno));
++    close(fd);
++    return -1;
++  }
++
++  fds[0].fd = fd;
++  fds[0].events = POLLIN;
++
++  /* Read Controller Index List Command */
++  ev.opcode = MGMT_OP_INDEX_LIST;
++  ev.index = HCI_DEV_NONE;
++  ev.len = 0;
++
++  ssize_t wrote;
++  OSI_NO_INTR(wrote = write(fd, &ev, 6));
++  if (wrote != 6) {
++    ALOGE("bt-vendor :Unable to write mgmt command: %s", strerror(errno));
++    ret = -1;
++    goto end;
++  }
++
++  while (1) {
++    int n;
++    OSI_NO_INTR(n = poll(fds, 1, MGMT_EV_POLL_TIMEOUT));
++    if (n == -1) {
++      ALOGE("bt-vendor :Poll error: %s", strerror(errno));
++      ret = -1;
++      break;
++    } else if (n == 0) {
++      ALOGE("bt-vendor :Timeout, no HCI device detected");
++      ret = -1;
++      break;
++    }
++
++    if (fds[0].revents & POLLIN) {
++      OSI_NO_INTR(n = read(fd, &ev, sizeof(struct mgmt_pkt)));
++      if (n < 0) {
++        ALOGE("bt-vendor :Error reading control channel: %s",
++                  strerror(errno));
++        ret = -1;
++        break;
++      }
++
++      if (ev.opcode == MGMT_EV_INDEX_ADDED && ev.index ==  hci_interface) {
++        goto end;
++      } else if (ev.opcode == MGMT_EV_COMMAND_COMP) {
++        struct mgmt_event_read_index *cc;
++        int i;
++
++        cc = (struct mgmt_event_read_index *)ev.data;
++
++        if (cc->cc_opcode != MGMT_OP_INDEX_LIST || cc->status != 0)
++          continue;
++
++        for (i = 0; i < cc->num_intf; i++) {
++          if (cc->index[i] == hci_interface)
++            goto end;
++        }
++      }
++    }
++  }
++
++end:
++  close(fd);
++  return ret;
++}
++
++
++int config_rome_usb()
++{
++  struct sockaddr_hci addr;
++  int fd = vnd_userial.fd;
++  int ret = 1;
++
++  if (fd == -1) {
++    ALOGE( "bt_vendor: %s", strerror(EBADF));
++    goto failure;
++  }
++
++  memset(&addr, 0, sizeof(addr));
++  addr.hci_family = AF_BLUETOOTH;
++  addr.hci_dev =  hci_interface;
++  addr.hci_channel = HCI_CHANNEL_USER;
++
++  if (bt_vendor_wait_hcidev()) {
++    ALOGE( "bt_vendor:HCI interface %d not found",hci_interface);
++    goto failure;
++  }
++
++  ret = bind(fd, (struct sockaddr *) &addr, sizeof(addr));
++  if (ret < 0) {
++    ALOGE( "bt_vendor1:socket bind error:%s", strerror(errno));
++    goto failure;
++  }
++
++  ALOGI( "bt_vendor: HCI device ready=%d",fd);
++
++  q.cb->fwcfg_cb(BT_VND_OP_RESULT_SUCCESS);
++
++  return 0;
++
++failure:
++  ALOGI( "bt_vendor:Hardware Config Error");
++  q.cb->fwcfg_cb(BT_VND_OP_RESULT_FAIL);
++  return 1;
++}
++
+ /* flavor of op without locks */
+ static int op(bt_vendor_opcode_t opcode, void *param)
+ {
+@@ -795,6 +1354,11 @@ static int op(bt_vendor_opcode_t opcode, void *param)
+                            hw_config(BT_VND_PWR_OFF);
+                         }
+                         retval = hw_config(nState);
++#ifndef ANDROID
++                        if (bt_onoff_script(nState) < 0)
++                            retval = -1;
++#endif
++
+                         if(nState == BT_VND_PWR_ON
+                            && retval == 0
+                            && is_hw_ready() == TRUE){
+@@ -828,6 +1392,8 @@ static int op(bt_vendor_opcode_t opcode, void *param)
+                         ALOGE("Error : hci, smd initialization Error");
+                         retval = -1;
+                     }
++                } else if (q.soc_type == BT_SOC_ROME_USB) {
++                    config_rome_usb();
+                 } else {
+                     ALOGI("Bluetooth FW and transport layer are initialized");
+                     q.cb->fwcfg_cb(BT_VND_OP_RESULT_SUCCESS);
+@@ -903,10 +1469,18 @@ userial_open:
+                     case BT_SOC_ROME:
+                         {
+                             wait_for_patch_download(is_ant_req);
++#ifdef ANDROID
+                             property_get("ro.bluetooth.emb_wp_mode", emb_wp_mode, false);
++#else
++ 							property_get_bt("ro.bluetooth.emb_wp_mode", emb_wp_mode, false);
++#endif
+                             if (!is_soc_initialized()) {
+                                 char* dlnd_inprog = is_ant_req ? "ant" : "bt";
++#ifdef ANDROID
+                                 if (property_set("wc_transport.patch_dnld_inprog", dlnd_inprog) < 0) {
++#else
++ 								if (property_set_bt("wc_transport.patch_dnld_inprog", dlnd_inprog) < 0) {
++#endif
+                                     ALOGE("%s: Failed to set dnld_inprog %s", __FUNCTION__, dlnd_inprog);
+                                 }
+ 
+@@ -921,7 +1495,11 @@ userial_open:
+                                 userial_clock_operation(fd, USERIAL_OP_CLK_ON);
+ 
+                                 if(strcmp(emb_wp_mode, "true") == 0) {
++#ifdef ANDROID
+                                     property_get("ro.bluetooth.wipower", wipower_status, false);
++#else
++ 									property_get_bt("ro.bluetooth.wipower", wipower_status, false);
++#endif
+                                     if(strcmp(wipower_status, "true") == 0) {
+                                         check_embedded_mode(fd);
+                                     } else {
+@@ -929,11 +1507,19 @@ userial_open:
+                                     }
+                                 }
+                                 ALOGV("rome_soc_init is started");
++#ifdef ANDROID
+                                 property_set("wc_transport.soc_initialized", "0");
++#else
++								property_set_bt("wc_transport.soc_initialized", "0");
++#endif
+ #ifdef READ_BT_ADDR_FROM_PROP
+                                 /*Give priority to read BD address from boot property*/
+                                 ignore_boot_prop = FALSE;
++#ifdef ANDROID
+                                 if (property_get(BLUETOOTH_MAC_ADDR_BOOT_PROPERTY, bd_addr, NULL)) {
++#else
++								if (property_get_bt(BLUETOOTH_MAC_ADDR_BOOT_PROPERTY, bd_addr, NULL)) {
++#endif
+                                     ALOGV("BD address read from Boot property: %s\n", bd_addr);
+                                     tok =  strtok(bd_addr, ":");
+                                     while (tok != NULL) {
+@@ -979,32 +1565,55 @@ userial_open:
+                                 if(rome_soc_init(fd, (char*)q.bdaddr)<0) {
+                                     retval = -1;
+                                 } else {
+-                                    ALOGV("rome_soc_init is completed");
++                                    ALOGI("rome_soc_init is completed");
++#ifdef ANDROID
+                                     property_set("wc_transport.soc_initialized", "1");
++#else
++                                    property_set_bt("wc_transport.soc_initialized", "1");
++#endif
+                                     skip_init = false;
+                                 }
+                             }
++#ifdef ANDROID
+                             if (property_set("wc_transport.patch_dnld_inprog", "null") < 0) {
++#else
++							if (property_set_bt("wc_transport.patch_dnld_inprog", "null") < 0) {
++#endif
+                                 ALOGE("%s: Failed to set property", __FUNCTION__);
+                             }
+-
++#ifdef ANDROID
+                             property_set("wc_transport.clean_up","0");
++#else
++							property_set_bt("wc_transport.clean_up","0");
++#endif
+                             if (retval != -1) {
+-
++#ifdef ANDROID
+                                 retval = start_hci_filter();
++#else
++                                ALOGI("%s: wcnssfilter started!!!!!!!!!!!@@@@@@@@@@ ", __func__);
++                                system("wcnssfilter &");
++                                ALOGI("%s:wcnssfilter GOOD State!!!!!!@@@@@@@@@@@@", __func__);
++                                property_set_bt("wc_transport.soc_initialized", "1");
++                                usleep(10 * 1000);
++                                property_set_bt("wc_transport.hci_filter_status", "1");
++                                retval = 1;
++#endif
+                                 if (retval < 0) {
+                                     ALOGE("%s: WCNSS_FILTER wouldn't have started in time\n", __func__);
+                                 } else {
+ #ifdef ENABLE_ANT
+                                     if (is_ant_req) {
+                                         ALOGI("%s: connect to ant channel", __func__);
+-                                        q.ant_fd = fd_filter = connect_to_local_socket("ant_sock");
++                                         q.ant_fd = fd_filter = connect_to_local_socket(ANT_SOCK);
+                                     }
+                                     else
+ #endif
+                                     {
+                                         ALOGI("%s: connect to bt channel", __func__);
+-                                        vnd_userial.fd = fd_filter = connect_to_local_socket("bt_sock");
++                                        vnd_userial.fd = fd_filter = connect_to_local_socket(BT_SOCK);
++#ifndef ANDROID
++                                        bt_socket = fd_filter;
++#endif
+                                     }
+ 
+                                     if (fd_filter != -1) {
+@@ -1046,9 +1655,30 @@ userial_open:
+                             }
+                         }
+                         break;
++                        case BT_SOC_ROME_USB:
++                        ALOGI("bt-vendor : SOC type is ROME-USB");
++                        bt_get_hci_interface();
++
++                        vnd_userial.fd = socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI);
++                        if (vnd_userial.fd < 0) {
++                            ALOGE("bt-vendor : socket create error %s", strerror(errno));
++                            return -1;
++                          }
++                        ALOGI("bt-vendor :Succesfully opened handle to USB Driver.vnd_userial.fd value = %d", vnd_userial.fd);
++
++                        fd = vnd_userial.fd;
++                        for (idx=0; idx < CH_MAX; idx++)
++                            (*fd_array)[idx] = fd;
++
++                        retval = 1;
++                        break;
+                     case BT_SOC_CHEROKEE:
+                         {
++#ifdef ANDROID
+                             property_get("ro.bluetooth.emb_wp_mode", emb_wp_mode, false);
++#else
++     						property_get_bt("ro.bluetooth.emb_wp_mode", emb_wp_mode, false);
++#endif
+                             retval = start_hci_filter();
+                             if (retval < 0) {
+                                 ALOGE("WCNSS_FILTER wouldn't have started in time\n");
+@@ -1056,25 +1686,29 @@ userial_open:
+                                  Set the following property to -1 so that the SSR cleanup routine
+                                  can reset SOC.
+                                  */
++#ifdef ANDROID
+                                 property_set("wc_transport.hci_filter_status", "-1");
++#else
++								property_set_bt("wc_transport.hci_filter_status", "-1");
++#endif
+                             } else {
+ #ifdef ENABLE_ANT
+                                 if (is_ant_req) {
+                                     ALOGI("%s: connect to ant channel", __func__);
+-                                    q.ant_fd = fd_filter = connect_to_local_socket("ant_sock");
++                                    q.ant_fd = fd_filter = connect_to_local_socket(ANT_SOCK);
+                                 }
+                                 else
+ #endif
+ #ifdef FM_OVER_UART
+                                 if (is_fm_req && (q.soc_type >=BT_SOC_ROME && q.soc_type < BT_SOC_RESERVED)) {
+                                     ALOGI("%s: connect to fm channel", __func__);
+-                                    q.fm_fd = fd_filter = connect_to_local_socket("fm_sock");
++                                    q.fm_fd = fd_filter = connect_to_local_socket(FM_SOCK);
+                                 }
+                                 else
+ #endif
+                                 {
+                                     ALOGI("%s: connect to bt channel", __func__);
+-                                    vnd_userial.fd = fd_filter = connect_to_local_socket("bt_sock");
++                                    vnd_userial.fd = fd_filter = connect_to_local_socket(BT_SOCK);
+ 
+                                 }
+                                 if (fd_filter != -1) {
+@@ -1113,7 +1747,11 @@ userial_open:
+             {
+                 pthread_mutex_lock(&q_lock);
+                 ALOGI("bt-vendor : BT_VND_OP_ANT_USERIAL_CLOSE");
++#ifdef ANDROID
+                 property_set("wc_transport.clean_up","1");
++#else
++				property_set_bt("wc_transport.clean_up","1");
++#endif
+                 if (q.ant_fd != -1) {
+                     ALOGE("closing ant_fd");
+                     close(q.ant_fd);
+@@ -1127,7 +1765,11 @@ userial_open:
+         case BT_VND_OP_FM_USERIAL_CLOSE:
+             {
+                 ALOGI("bt-vendor : BT_VND_OP_FM_USERIAL_CLOSE");
++#ifdef ANDROID
+                 property_set("wc_transport.clean_up","1");
++#else
++                property_set_bt("wc_transport.clean_up","1");
++#endif
+                 if (q.fm_fd != -1) {
+                     ALOGE("closing fm_fd");
+                     close(q.fm_fd);
+@@ -1138,6 +1780,23 @@ userial_open:
+ #endif
+         case BT_VND_OP_USERIAL_CLOSE:
+             {
++#ifdef BT_SOC_TYPE_ROME
++                {
++                   int ret = 0;
++                   /* VS command to WARM reset */
++                   //unsigned char cmd[6] = {0x01, 0x47, 0xFC, 0x00}; //warm reset
++                   unsigned char cmd[6] = {0x01, 0x00, 0xFC, 0x01, 0x05}; //EDL reset
++                   unsigned char rsp[HCI_MAX_EVENT_SIZE];
++
++                    ALOGI("++%s LEA sending EDL reset", __FUNCTION__);
++
++                    ret = do_write(vnd_userial.fd, cmd, 5);
++                    if (ret != 5) {
++                        ALOGE("%s: Send failed with ret value: %d", __FUNCTION__, ret);
++                    }
++                     usleep(100 * 1000); /* 100 ms delay */
++                }
++#endif
+                 ALOGI("bt-vendor : BT_VND_OP_USERIAL_CLOSE soc_type: %d", q.soc_type);
+                 switch(q.soc_type)
+                 {
+@@ -1149,11 +1808,24 @@ userial_open:
+                     case BT_SOC_CHEROKEE:
+                     {
+                         pthread_mutex_lock(&q_lock);
++#ifdef ANDROID
+                         property_set("wc_transport.clean_up","1");
++#else
++						 property_set_bt("wc_transport.clean_up","1");
++#endif
+                         userial_vendor_close();
+                         pthread_mutex_unlock(&q_lock);
+                         break;
+                     }
++                    case BT_SOC_ROME_USB:
++                        if (vnd_userial.fd == -1)
++                            ALOGE("%s: FD is already released", __func__);
++                        else {
++                            ALOGE("%s: Releasing the file handle to the BT USB driver", __func__);
++                            close(vnd_userial.fd);
++                            vnd_userial.fd = -1;
++                        }
++                        break;
+                     default:
+                         ALOGE("Unknown soc_type: 0x%x", q.soc_type);
+                         break;
+@@ -1190,8 +1862,11 @@ userial_open:
+                 q.cb->lpm_cb(BT_VND_OP_RESULT_SUCCESS);
+             } else {
+                 int lpm_result = BT_VND_OP_RESULT_SUCCESS;
+-
++#ifdef ANDROID
+                 property_get("persist.service.bdroid.lpmcfg", lpm_config, "all");
++#else
++				property_get_bt("persist.service.bdroid.lpmcfg", lpm_config, "all");
++#endif
+                 ALOGI("%s: property_get: persist.service.bdroid.lpmcfg: %s",
+                             __func__, lpm_config);
+ 
+@@ -1258,7 +1933,11 @@ userial_open:
+                   case BT_SOC_ROME:
+                        {
+                            char value[PROPERTY_VALUE_MAX] = {'\0'};
++#ifdef ANDROID
+                            property_get("wc_transport.hci_filter_status", value, "0");
++#else
++						   property_get_bt("wc_transport.hci_filter_status", value, "0");
++#endif
+                            if(is_soc_initialized()&& (strcmp(value,"1") == 0))
+                            {
+                               __hw_epilog_process();
+@@ -1314,7 +1993,11 @@ static void ssr_cleanup(int reason)
+ 
+     ALOGI("++%s", __FUNCTION__);
+ 
++#ifdef ANDROID
+     if (property_set("wc_transport.patch_dnld_inprog", "null") < 0) {
++#else
++    if (property_set_bt("wc_transport.patch_dnld_inprog", "null") < 0) {
++#endif
+         ALOGE("Failed to set property");
+     }
+ 
+@@ -1367,6 +2050,11 @@ static void cleanup(void)
+     q.cb = NULL;
+     pthread_mutex_unlock(&q_lock);
+ 
++#ifndef ANDROID
++    ALOGI("cleanup : calling shutdown of bt_sock fd = %d", bt_socket);
++    shutdown(bt_socket, SHUT_RDWR);
++    close(bt_socket);
++#endif
+ #ifdef WIFI_BT_STATUS_SYNC
+     isInit = 0;
+ #endif /* WIFI_BT_STATUS_SYNC */
+@@ -1379,7 +2067,11 @@ void wait_for_patch_download(bool is_ant_req) {
+     ALOGV("%s:", __FUNCTION__);
+     char inProgress[PROPERTY_VALUE_MAX] = {'\0'};
+     while (1) {
++#ifdef ANDROID
+         property_get("wc_transport.patch_dnld_inprog", inProgress, "null");
++#else
++	    property_get_bt("wc_transport.patch_dnld_inprog", inProgress, "null");
++#endif
+ 
+         if(is_ant_req && !(strcmp(inProgress,"bt"))) {
+            //ANT request, wait for BT to finish
+@@ -1411,7 +2103,11 @@ bool is_download_progress () {
+     {
+         case BT_SOC_ROME:
+             ALOGI("%s: ROME case", __func__);
++#ifdef ANDROID
+             property_get("wc_transport.patch_dnld_inprog", inProgress, "null");
++#else
++			property_get_bt("wc_transport.patch_dnld_inprog", inProgress, "null");
++#endif
+             if(strcmp(inProgress,"null") == 0) {
+                 retval = false;
+             } else {
+@@ -1438,7 +2134,11 @@ static bool is_debug_force_special_bytes() {
+     enabled = true;
+ #endif
+ 
++#ifdef ANDROID
+     ret = property_get("wc_transport.force_special_byte", value, NULL);
++#else
++	ret = property_get_bt("wc_transport.force_special_byte", value, NULL);
++#endif
+ 
+     if (ret) {
+         enabled = (strcmp(value, "false") ==0) ? false : true;
+@@ -1457,3 +2157,44 @@ const bt_vendor_interface_t BLUETOOTH_VENDOR_LIB_INTERFACE = {
+     cleanup,
+     ssr_cleanup
+ };
++#ifndef ANDROID
++int property_get_bt(const char *key, char *value, const char *default_value)
++{
++    char prop_string[200] = {'\0'};
++    int ret, bytes_read = 0, i = 0;
++    snprintf(prop_string, sizeof(prop_string),"get_property %s,", key);
++    ret = send(bt_prop_socket, prop_string, strlen(prop_string), 0);
++    memset(value, 0, sizeof(value));
++    do
++    {
++        bytes_read = recv(bt_prop_socket, &value[i], 1, 0);
++        if (bytes_read == 1)
++        {
++            if (value[i] == ',')
++            {
++                value[i] = '\0';
++                break;
++            }
++            i++;
++        }
++    } while(1);
++    ALOGD("property_get_bt: key(%s) has value: %s", key, value);
++    if (bytes_read) {
++        return 0;
++    } else {
++        strlcpy(value, default_value, (strlen(default_value) + 1));
++        return 1;
++    }
++}
++
++int property_set_bt(const char *key, const char *value)
++{
++    char prop_string[200] = {'\0'};
++    int ret;
++    snprintf(prop_string, sizeof(prop_string), "set_property %s %s,", key, value);
++    ALOGD("property_set_bt: setting key(%s) to value: %s\n", key, value);
++    ret = send(bt_prop_socket, prop_string, strlen(prop_string), 0);
++    return 0;
++}
++#endif
++
+diff --git a/libbt-vendor/src/hardware.c b/libbt-vendor/src/hardware.c
+index 6984ff0..67a6d76 100644
+--- a/libbt-vendor/src/hardware.c
++++ b/libbt-vendor/src/hardware.c
+@@ -26,7 +26,12 @@
+ 
+ #define LOG_TAG "bt_vendor"
+ 
++#ifdef ANDROID
+ #include <utils/Log.h>
++#else
++#include <sys/types.h>
++#include <stdint.h>
++#endif
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <signal.h>
+@@ -35,13 +40,17 @@
+ #include <fcntl.h>
+ #include <dirent.h>
+ #include <ctype.h>
++#ifdef ANDROID
+ #include <cutils/properties.h>
++#endif
+ #include <stdlib.h>
+ #include "bt_hci_bdroid.h"
+ #include "bt_vendor_qcom.h"
+ #include <string.h>
+ #define MAX_CNT_RETRY 100
+-
++#ifndef ANDROID
++#define PROPERTY_VALUE_MAX 92
++#endif
+ int hw_config(int nState)
+ {
+     char *szState[] = {"true", "false"};
+@@ -52,12 +61,19 @@ int hw_config(int nState)
+         szReqSt = szState[1];
+     else
+         szReqSt = szState[0];
+-
++#ifdef ANDROID
+     if((property_get("bluetooth.status", szBtSocStatus, "") <= 0))
++#else
++    if((property_get_bt("bluetooth.status", szBtSocStatus, "") <= 0))
++#endif
+     {
+        if(nState == BT_VND_PWR_ON ) {
+           ALOGW("Hw_config: First Time BT on after boot.Starting hciattach daemon BTStatus=%s",szBtSocStatus);
++#ifdef ANDROID
+           if (property_set("bluetooth.hciattach", szReqSt) < 0)
++#else
++	      if (property_set_bt("bluetooth.hciattach", szReqSt) < 0)
++#endif
+           {
+               ALOGE("Hw_config: Property Setting fail");
+               return -1;
+@@ -68,7 +84,11 @@ int hw_config(int nState)
+           ALOGW("Hw_config: nState = %d", nState);
+     } else {
+           ALOGW("Hw_config: trigerring hciattach");
++#ifdef ANDROID
+           if (property_set("bluetooth.hciattach", szReqSt) < 0)
++#else
++		  if (property_set_bt("bluetooth.hciattach", szReqSt) < 0)
++#endif
+           {
+               ALOGE("Hw_config: Property Setting fail");
+               return -1;
+@@ -81,7 +101,11 @@ int hw_config(int nState)
+ int readTrpState()
+ {
+     char szBtStatus[PROPERTY_VALUE_MAX] = {0, };
++#ifdef ANDROID
+     if(property_get("bluetooth.status", szBtStatus, "") < 0){
++#else
++	if(property_get_bt("bluetooth.status", szBtStatus, "") < 0){
++#endif
+         ALOGE("Fail to get bluetooth status");
+         return FALSE;
+     }
+diff --git a/libbt-vendor/src/hci_smd.c b/libbt-vendor/src/hci_smd.c
+index 7e5b16d..1a308ba 100644
+--- a/libbt-vendor/src/hci_smd.c
++++ b/libbt-vendor/src/hci_smd.c
+@@ -24,7 +24,9 @@
+ 
+ #define LOG_TAG "bt_vendor"
+ 
++#ifdef ANDROID
+ #include <utils/Log.h>
++#endif
+ #include <termios.h>
+ #include <fcntl.h>
+ #include <errno.h>
+@@ -32,8 +34,9 @@
+ #include "bt_vendor_qcom.h"
+ #include "hci_smd.h"
+ #include <string.h>
++#ifdef ANDROID
+ #include <cutils/properties.h>
+-
++#endif
+ /*****************************************************************************
+ **   Macros & Constants
+ *****************************************************************************/
+@@ -86,15 +89,21 @@ int bt_hci_init_transport_id (int chId )
+      ensure the smd port is successfully opened.
+      TODO: Following sleep to be removed once SMD port is successfully
+      opened immediately on return from the aforementioned open call */
+-
++#ifdef ANDROID
+   property_get("bluetooth.isSSR", ssrvalue, "");
+-
++#else
++  property_get_bt("bluetooth.isSSR", ssrvalue, "");
++#endif
+   if(ssrvalue[0] == '1')
+   {
+       /*reset the SSR flag */
+       if(chId == 1)
+       {
++#ifdef ANDROID
+           if(property_set("bluetooth.isSSR", "0") < 0)
++#else
++          if(property_set_bt("bluetooth.isSSR", "0") < 0)
++#endif
+           {
+               ALOGE("SSR: hci_smd.c:SSR case : error in setting up property new\n ");
+           }
+diff --git a/libbt-vendor/src/hci_uart.c b/libbt-vendor/src/hci_uart.c
+index 2aeace8..259ac8e 100644
+--- a/libbt-vendor/src/hci_uart.c
++++ b/libbt-vendor/src/hci_uart.c
+@@ -26,7 +26,9 @@
+ 
+ #define LOG_TAG "bt_vendor"
+ 
++#ifdef ANDROID
+ #include <utils/Log.h>
++#endif
+ #include <termios.h>
+ #include <fcntl.h>
+ #include <errno.h>
+diff --git a/libbt-vendor/src/hw_ar3k.c b/libbt-vendor/src/hw_ar3k.c
+index b1d50ab..2429812 100644
+--- a/libbt-vendor/src/hw_ar3k.c
++++ b/libbt-vendor/src/hw_ar3k.c
+@@ -1,4 +1,11 @@
+ /*
++ *  Copyright (c) 2017 Qualcomm Technologies, Inc.
++ *  All Rights Reserved.
++ *  Confidential and Proprietary - Qualcomm Technologies, Inc.
++ *
++ *  NOT A CONTRIBUTION
++ *  Apache license notifications and license are retained
++ *  for attribution purposes only.
+  *
+  *  Copyright (c) 2013, The Linux Foundation. All rights reserved.
+  *  Not a Contribution.
+@@ -33,9 +40,14 @@ extern "C" {
+ #endif
+ 
+ #define LOG_TAG "bt_vendor"
+-
+ #include <sys/socket.h>
++#ifdef ANDROID
+ #include <utils/Log.h>
++#else
++#include <stdio.h>
++#include "bt_vendor_qcom.h"
++#include <stdint.h>
++#endif
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <signal.h>
+@@ -44,7 +56,9 @@ extern "C" {
+ #include <fcntl.h>
+ #include <dirent.h>
+ #include <ctype.h>
++#ifdef ANDROID
+ #include <cutils/properties.h>
++#endif
+ #include <stdlib.h>
+ #include <termios.h>
+ #include <string.h>
+@@ -57,6 +71,9 @@ extern "C" {
+ **  Variables
+ ******************************************************************************/
+ int cbstat = 0;
++#ifndef ANDROID
++#define PROPERTY_VALUE_MAX 92
++#endif
+ #define PATCH_LOC_STRING_LEN   8
+ char ARbyte[3];
+ char ARptr[MAX_PATCH_CMD + 1];
+@@ -105,7 +122,11 @@ struct ps_cfg_entry ps_list[MAX_TAGS];
+ int is_bt_soc_ath() {
+     int ret = 0;
+     char bt_soc_type[PROPERTY_VALUE_MAX];
++#ifdef ANDROID
+     ret = property_get("qcom.bluetooth.soc", bt_soc_type, NULL);
++#else
++	ret = property_get_bt("qcom.bluetooth.soc", bt_soc_type, NULL);
++#endif
+     if (ret != 0) {
+         ALOGI("qcom.bluetooth.soc set to %s\n", bt_soc_type);
+         if (!strncasecmp(bt_soc_type, "ath3k", sizeof("ath3k")))
+@@ -1383,6 +1404,7 @@ int hw_config_ath3k(char *port_name)
+     return n;
+ }
+ 
++
+ void lpm_set_ar3k(uint8_t pio, uint8_t action, uint8_t polarity)
+ {
+     int rc;
+diff --git a/libbt-vendor/src/hw_rome.c b/libbt-vendor/src/hw_rome.c
+index 9a69460..5bc33ea 100644
+--- a/libbt-vendor/src/hw_rome.c
++++ b/libbt-vendor/src/hw_rome.c
+@@ -1,4 +1,11 @@
+ /*
++ *  Copyright (c) 2017 Qualcomm Technologies, Inc.
++ *  All Rights Reserved.
++ *  Confidential and Proprietary - Qualcomm Technologies, Inc.
++ *
++ *  NOT A CONTRIBUTION
++ *  Apache license notifications and license are retained
++ *  for attribution purposes only.
+  *
+  *  Copyright (c) 2013, The Linux Foundation. All rights reserved.
+  *  Not a Contribution.
+@@ -35,7 +42,12 @@ extern "C" {
+ #define LOG_TAG "bt_vendor"
+ 
+ #include <sys/socket.h>
++#ifdef ANDROID
+ #include <utils/Log.h>
++#else
++#include <stdio.h>
++#include <stdint.h>
++#endif
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <signal.h>
+@@ -44,7 +56,9 @@ extern "C" {
+ #include <fcntl.h>
+ #include <dirent.h>
+ #include <ctype.h>
++#ifdef ANDROID
+ #include <cutils/properties.h>
++#endif
+ #include <stdlib.h>
+ #include <termios.h>
+ #include <string.h>
+@@ -54,14 +68,20 @@ extern "C" {
+ #include "hci_uart.h"
+ #include "hw_rome.h"
+ 
++#ifdef ANDROID
+ #define BT_VERSION_FILEPATH "/data/misc/bluedroid/bt_fw_version.txt"
++#else
++#define BT_VERSION_FILEPATH "/etc/data/misc/bluedroid/bt_fw_version.txt"
++#endif
+ 
+ #ifdef __cplusplus
+ }
+ #endif
+ 
+ #define RESERVED(p)  if(p) ALOGI( "%s: reserved param", __FUNCTION__);
+-
++#ifndef ANDROID
++#define PROPERTY_VALUE_MAX 92
++#endif
+ int read_vs_hci_event(int fd, unsigned char* buf, int size);
+ 
+ /******************************************************************************
+@@ -72,6 +92,10 @@ unsigned char *phdr_buffer;
+ unsigned char *pdata_buffer = NULL;
+ patch_info rampatch_patch_info;
+ int chipset_ver = 0;
++//lea ++
++unsigned int productid = 0;
++unsigned short patchversion = 0;
++//lea --
+ unsigned char gTlv_type;
+ unsigned char gTlv_dwndCfg;
+ static unsigned int wipower_flag = 0;
+@@ -128,8 +152,10 @@ int get_vs_hci_event(unsigned char *rsp)
+     unsigned char EMBEDDED_MODE_CHECK = 0x02;
+     FILE *btversionfile = 0;
+     unsigned int soc_id = 0;
+-    unsigned int productid = 0;
+-    unsigned short patchversion = 0;
++    //lea ++
++    //unsigned int productid = 0;
++    //unsigned short patchversion = 0;
++    //lea --
+     char build_label[255];
+     int build_lbl_len;
+     unsigned short buildversion = 0;
+@@ -141,8 +167,9 @@ int get_vs_hci_event(unsigned char *rsp)
+         err = -EIO;
+         goto failed;
+     }
+-
+-    ALOGI("%s: Parameter Length: 0x%x", __FUNCTION__, paramlen = rsp[EVT_PLEN]);
++    paramlen = rsp[EVT_PLEN];
++    ALOGI("%s: Event Opcode: 0x%x", __FUNCTION__, rsp[EVENTCODE_OFFSET]);
++    ALOGI("%s: Parameter Length: 0x%x", __FUNCTION__, rsp[EVT_PLEN]);
+     ALOGI("%s: Command response: 0x%x", __FUNCTION__, rsp[CMD_RSP_OFFSET]);
+     ALOGI("%s: Response type   : 0x%x", __FUNCTION__, rsp[RSP_TYPE_OFFSET]);
+ 
+@@ -281,7 +308,11 @@ int get_vs_hci_event(unsigned char *rsp)
+             if ((rsp[4] & ADDON_FEATURES_EVT_WIPOWER_MASK))
+             {
+                ALOGD("%s: WiPower feature supported!!", __FUNCTION__);
++#ifdef ANDROID
+                property_set("persist.bluetooth.a4wp", "true");
++#else
++			   property_set_bt("persist.bluetooth.a4wp", "true");
++#endif
+             }
+             break;
+         case HCI_VS_STRAY_EVT:
+@@ -865,17 +896,17 @@ int rome_get_tlv_file(char *file_path)
+     gTlv_dwndCfg = ptlv_header->tlv.patch.dwnd_cfg;
+ 
+     if(ptlv_header->tlv_type == TLV_TYPE_PATCH){
+-        ALOGI("====================================================");
+-        ALOGI("TLV Type\t\t\t : 0x%x", ptlv_header->tlv_type);
+-        ALOGI("Length\t\t\t : %d bytes", (ptlv_header->tlv_length1) |
++        ALOGI("====================================================\n");
++        ALOGI("TLV Type\t\t\t : 0x%x\n", ptlv_header->tlv_type);
++        ALOGI("Length\t\t\t : %d bytes\n", (ptlv_header->tlv_length1) |
+                                                     (ptlv_header->tlv_length2 << 8) |
+                                                     (ptlv_header->tlv_length3 << 16));
+-        ALOGI("Total Length\t\t\t : %d bytes", ptlv_header->tlv.patch.tlv_data_len);
+-        ALOGI("Patch Data Length\t\t\t : %d bytes",ptlv_header->tlv.patch.tlv_patch_data_len);
+-        ALOGI("Signing Format Version\t : 0x%x", ptlv_header->tlv.patch.sign_ver);
+-        ALOGI("Signature Algorithm\t\t : 0x%x", ptlv_header->tlv.patch.sign_algorithm);
+-        ALOGI("Event Handling\t\t\t : 0x%x", ptlv_header->tlv.patch.dwnd_cfg);
+-        ALOGI("Reserved\t\t\t : 0x%x", ptlv_header->tlv.patch.reserved1);
++        ALOGI("Total Length\t\t\t : %d bytes\n", ptlv_header->tlv.patch.tlv_data_len);
++        ALOGI("Patch Data Length\t\t\t : %d bytes\n",ptlv_header->tlv.patch.tlv_patch_data_len);
++        ALOGI("Signing Format Version\t : 0x%x\n", ptlv_header->tlv.patch.sign_ver);
++        ALOGI("Signature Algorithm\t\t : 0x%x\n", ptlv_header->tlv.patch.sign_algorithm);
++        ALOGI("Event Handling\t\t\t : 0x%x\n", ptlv_header->tlv.patch.dwnd_cfg);
++        ALOGI("Reserved\t\t\t : 0x%x\n", ptlv_header->tlv.patch.reserved1);
+         ALOGI("Product ID\t\t\t : 0x%04x\n", ptlv_header->tlv.patch.prod_id);
+         ALOGI("Rom Build Version\t\t : 0x%04x\n", ptlv_header->tlv.patch.build_ver);
+         ALOGI("Patch Version\t\t : 0x%04x\n", ptlv_header->tlv.patch.patch_ver);
+@@ -884,11 +915,12 @@ int rome_get_tlv_file(char *file_path)
+         ALOGI("====================================================");
+ 
+     } else if(ptlv_header->tlv_type == TLV_TYPE_NVM) {
+-        ALOGI("====================================================");
+-        ALOGI("TLV Type\t\t\t : 0x%x", ptlv_header->tlv_type);
+-        ALOGI("Length\t\t\t : %d bytes",  nvm_length = (ptlv_header->tlv_length1) |
++        ALOGI("====================================================\n");
++        ALOGI("TLV Type\t\t\t : 0x%x\n", ptlv_header->tlv_type);
++        nvm_length = ((ptlv_header->tlv_length1) |
+                                                     (ptlv_header->tlv_length2 << 8) |
+                                                     (ptlv_header->tlv_length3 << 16));
++        ALOGI("Length\t\t\t : %d bytes\n", nvm_length);
+ 
+         if(nvm_length <= 0)
+             return readSize;
+@@ -897,7 +929,8 @@ int rome_get_tlv_file(char *file_path)
+              nvm_index < nvm_length ; nvm_ptr = (tlv_nvm_hdr *) nvm_byte_ptr)
+        {
+             ALOGI("TAG ID\t\t\t : %d", nvm_ptr->tag_id);
+-            ALOGI("TAG Length\t\t\t : %d", nvm_tag_len = nvm_ptr->tag_len);
++            nvm_tag_len = nvm_ptr->tag_len;
++            ALOGI("TAG Length\t\t\t : %d", nvm_tag_len);
+             ALOGI("TAG Pointer\t\t\t : %d", nvm_ptr->tag_ptr);
+             ALOGI("TAG Extended Flag\t\t : %d", nvm_ptr->tag_ex_flag);
+ 
+@@ -960,6 +993,8 @@ int rome_tlv_dnld_segment(int fd, int index, int seg_size, unsigned char wait_cc
+     }
+ 
+     if(wait_cc_evt) {
++        /* Initialize the RSP packet everytime to 0 */
++        memset(rsp, 0x0, HCI_MAX_EVENT_SIZE);
+         err = read_hci_event(fd, rsp, HCI_MAX_EVENT_SIZE);
+         if ( err < 0) {
+             ALOGE("%s: Failed to downlaod patch segment: %d!",  __FUNCTION__, index);
+@@ -975,6 +1010,7 @@ int rome_tlv_dnld_req(int fd, int tlv_size)
+ {
+     int  total_segment, remain_size, i, err = -1;
+     unsigned char wait_cc_evt = TRUE;
++    unsigned int rom = chipset_ver >> 16;
+ 
+     total_segment = tlv_size/MAX_SIZE_PER_TLV_SEGMENT;
+     remain_size = (tlv_size < MAX_SIZE_PER_TLV_SEGMENT)?\
+@@ -1014,13 +1050,19 @@ int rome_tlv_dnld_req(int fd, int tlv_size)
+ 
+     for(i=0;i<total_segment ;i++){
+         if ((i+1) == total_segment) {
+-             if ((chipset_ver >= ROME_VER_1_1) && (chipset_ver < ROME_VER_3_2) && (gTlv_type == TLV_TYPE_PATCH)) {
++            if ((chipset_ver == TUFELLO_VER_1_1) && (gTlv_type == TLV_TYPE_PATCH)) {
++                if (gTlv_dwndCfg == ROME_SKIP_EVT_NONE) {
++                    wait_cc_evt = !remain_size ? FALSE: TRUE;
++                } else if (gTlv_dwndCfg == ROME_SKIP_EVT_VSE_CC) {
++                    wait_vsc_evt = !remain_size ? TRUE: FALSE;
++                 }
++            } else if ((rom >= ROME_PATCH_VER_0100) && (rom < ROME_PATCH_VER_0302) && (gTlv_type == TLV_TYPE_PATCH)) {
+                /* If the Rome version is from 1.1 to 3.1
+                 * 1. No CCE for the last command segment but all other segment
+                 * 2. All the command segments get VSE including the last one
+                 */
+                 wait_cc_evt = !remain_size ? FALSE: TRUE;
+-             } else if ((chipset_ver >= ROME_VER_3_2) && (gTlv_type == TLV_TYPE_PATCH)) {
++             } else if ((rom == ROME_PATCH_VER_0302) && (gTlv_type == TLV_TYPE_PATCH)) {
+                 /* If the Rome version is 3.2
+                  * 1. None of the command segments receive CCE
+                  * 2. No command segments receive VSE except the last one
+@@ -1036,12 +1078,23 @@ int rome_tlv_dnld_req(int fd, int tlv_size)
+         }
+ 
+         patch_dnld_pending = TRUE;
++        if((chipset_ver == ROME_VER_3_2) && (gTlv_type == TLV_TYPE_NVM))
++        {
++            wait_cc_evt = TRUE;
++            ALOGI("Setting wait_cc_evt TRUE\n");
++        }
+         if((err = rome_tlv_dnld_segment(fd, i, MAX_SIZE_PER_TLV_SEGMENT, wait_cc_evt )) < 0)
+             goto error;
+         patch_dnld_pending = FALSE;
+     }
+ 
+-    if ((chipset_ver >= ROME_VER_1_1) && (chipset_ver < ROME_VER_3_2) && (gTlv_type == TLV_TYPE_PATCH)) {
++    if ((chipset_ver == TUFELLO_VER_1_1) && (gTlv_type == TLV_TYPE_PATCH)) {
++        if (gTlv_dwndCfg == ROME_SKIP_EVT_NONE) {
++            wait_cc_evt = remain_size ? FALSE: TRUE;
++        } else if (gTlv_dwndCfg == ROME_SKIP_EVT_VSE_CC) {
++            wait_vsc_evt = remain_size ? TRUE: FALSE;
++        }
++    } else if ((chipset_ver >= ROME_VER_1_1) && (chipset_ver < ROME_VER_3_2) && (gTlv_type == TLV_TYPE_PATCH)) {
+        /* If the Rome version is from 1.1 to 3.1
+         * 1. No CCE for the last command segment but all other segment
+         * 2. All the command segments get VSE including the last one
+@@ -1071,14 +1124,38 @@ error:
+ int rome_download_tlv_file(int fd)
+ {
+     int tlv_size, err = -1;
++    bool is_tlv_download_needed = FALSE;
+ 
+     /* Rampatch TLV file Downloading */
+     pdata_buffer = NULL;
+-    if((tlv_size = rome_get_tlv_file(rampatch_file_path)) < 0)
+-        goto error;
+ 
+-    if((err =rome_tlv_dnld_req(fd, tlv_size)) <0 )
+-        goto error;
++    //lea++
++    ALOGI("%s: Chipset Version: (0x%08x) Product ID: (0x%08x) Patch Version: (0x%04x) ", __FUNCTION__, chipset_ver, productid, patchversion);
++
++    if((productid == 0x0000000c) && (patchversion<=0x0193) ) //FOR NAPLES UART
++    {
++        is_tlv_download_needed = TRUE;
++    }
++    else if ((chipset_ver == TUFELLO_VER_1_1) && (patchversion<=0x0111) ) //FOR TUFELLO UART
++    {
++        is_tlv_download_needed = TRUE;
++    }
++    else if ((chipset_ver == ROME_VER_3_2) && (patchversion<=0x0111) ) //FOR ROME UART
++    {
++        is_tlv_download_needed = TRUE;
++    }
++
++    if(is_tlv_download_needed == TRUE)
++    {
++        if((tlv_size = rome_get_tlv_file(rampatch_file_path)) < 0)
++            goto error;
++
++        if((err =rome_tlv_dnld_req(fd, tlv_size)) <0 )
++            goto error;
++    }
++    else
++        ALOGI("%s: Skip Download TLV file!!", __FUNCTION__);
++    //lea--
+ 
+     if (pdata_buffer != NULL){
+         free (pdata_buffer);
+@@ -1469,6 +1546,9 @@ int rome_set_baudrate_req(int fd)
+         ALOGE("%s: Send failed with ret value: %d", __FUNCTION__, err);
+         goto error;
+     }
++#ifdef BT_SOC_TYPE_ROME
++     usleep(100 * 1000); /* 100 ms delay */
++#endif
+ 
+     /* Change Local UART baudrate to high speed UART */
+     userial_vendor_set_baud(USERIAL_BAUD_3M);
+@@ -1754,12 +1834,20 @@ void enable_controller_log (int fd, unsigned char wait_for_evt)
+    unsigned char cmd[6] = {0x01, 0x17, 0xFC, 0x02, 0x00, 0x00};
+    unsigned char rsp[HCI_MAX_EVENT_SIZE];
+    char value[PROPERTY_VALUE_MAX] = {'\0'};
+-
++#ifdef ANDROID
+    property_get("persist.service.bdroid.soclog", value, "false");
++#else
++   property_get_bt("persist.service.bdroid.soclog", value, "false");
++#endif
+ 
+    // value at cmd[5]: 1 - to enable, 0 - to disable
+-   ret = (strcmp(value, "true") == 0) ? cmd[5] = 0x01: 0;
++   //lea++
++   //ret = (strcmp(value, "true") == 0) ? cmd[5] = 0x01: 0;
++   cmd[5]=0;
++   //lea--
++   
+    ALOGI("%s: %d", __func__, ret);
++   ALOGI("%s: lea wait_for_evt %d", __func__, wait_for_evt);
+    /* Ignore vsc evt if wait_for_evt is true */
+    if (wait_for_evt) wait_vsc_evt = FALSE;
+ 
+@@ -1875,6 +1963,14 @@ int rome_soc_init(int fd, char *bdaddr)
+                 ALOGI("HCI Reset is done\n");
+             }
+             break;
++            //lea++
++            case NAPLES_VER_1_0:
++            ALOGI("NAPLES_VER_1_0\n");
++            rampatch_file_path = NAPLES_RAMPATCH_TLV_UART_1_0_PATH;
++            nvm_file_path = NAPLES_NVM_TLV_UART_1_0_PATH;
++            chipset_ver = ROME_VER_3_2;
++            //lea--
++            goto download;
+         case ROME_VER_1_1:
+             rampatch_file_path = ROME_RAMPATCH_TLV_PATH;
+             nvm_file_path = ROME_NVM_TLV_PATH;
+@@ -1894,10 +1990,20 @@ int rome_soc_init(int fd, char *bdaddr)
+             fw_su_offset = ROME_3_1_FW_SW_OFFSET;
+             goto download;
+         case ROME_VER_3_2:
++            ALOGI("ROME_VER_3_2\n");
+             rampatch_file_path = ROME_RAMPATCH_TLV_3_0_2_PATH;
+             nvm_file_path = ROME_NVM_TLV_3_0_2_PATH;
+             fw_su_info = ROME_3_2_FW_SU;
+             fw_su_offset =  ROME_3_2_FW_SW_OFFSET;
++            goto download;
++        case TUFELLO_VER_1_0:
++            rampatch_file_path = TF_RAMPATCH_TLV_1_0_0_PATH;
++            nvm_file_path = TF_NVM_TLV_1_0_0_PATH;
++            goto download;
++        case TUFELLO_VER_1_1:
++            ALOGI("TUFELLO_VER_1_1\n");
++            rampatch_file_path = TF_RAMPATCH_TLV_1_0_1_PATH;
++            nvm_file_path = TF_NVM_TLV_1_0_1_PATH;
+ 
+ download:
+             /* Change baud rate 115.2 kbps to 3Mbps*/
+diff --git a/libbt-vendor/vnd_buildcfg.mk b/libbt-vendor/vnd_buildcfg.mk
+index d18e121..729a177 100644
+--- a/libbt-vendor/vnd_buildcfg.mk
++++ b/libbt-vendor/vnd_buildcfg.mk
+@@ -22,8 +22,8 @@ ifeq (,$(wildcard $(SRC)))
+ SRC := $(call my-dir)/include/vnd_generic.txt
+ endif
+ GEN := $(intermediates)/vnd_buildcfg.h
+-TOOL := $(TOP_DIR)external/bluetooth/bluedroid/tools/gen-buildcfg.sh
+-
++#TOOL := $(TOP_DIR)external/bluetooth/bluedroid/tools/gen-buildcfg.sh
++TOOL := $(LOCAL_PATH)/gen-buildcfg.sh
+ $(GEN): PRIVATE_PATH := $(call my-dir)
+ $(GEN): PRIVATE_CUSTOM_TOOL = $(TOOL) $< $@
+ $(GEN): $(SRC)  $(TOOL)
