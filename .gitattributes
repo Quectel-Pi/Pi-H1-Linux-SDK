@@ -1,2 +1,5 @@
+quectel_build/alpha/output/pack/efi.bin filter=lfs diff=lfs merge=lfs -text
+quectel_build/prebuilt_bpfw/QCM6490_fw.zip filter=lfs diff=lfs merge=lfs -text
+quectel_build/alpha/tools/pack/efi.bin filter=lfs diff=lfs merge=lfs -text
 *.bin filter=lfs diff=lfs merge=lfs -text
 *.zip filter=lfs diff=lfs merge=lfs -text
