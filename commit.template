@@ -1,0 +1,53 @@
+< Submission Type > (< Functional Scope >): < Brief Description of Modification Points >
+
+"Detailed Modification Points" (Optional)
+
+Firmware version: N/A
+
+Do you need copywriting translation? Yes/No
+
+########################################################################################
+#                                                                                      #
+# example:                                                                               #
+#                                                                                      #
+# fix (network): After repeatedly creating and closing a socket a certain number of times, 
+#  it is impossible to create a socket again.                                           #
+#                                                                                      #
+# 1. When the select interface is called and socket.close() is called in another thread, 
+# the socket reference count does not decrement,                                         #
+# Due to the upper limit of the total number of sockets (i.e., the reference count), 
+# it is impossible to create another socket after creating a certain number of sockets. #
+#                                                                                      #
+# 2. When calling socket.close() to release resources, 
+# the reference count is automatically decremented to promptly release the occupied resources and fix this issue#
+#                                                                                      #
+# Firmware version:                                                                    #
+#                                                                                      #
+# Do you need a copy translator? Yes                                                   #
+#                                                                                      #
+########################################################################################
+#                                                                                      #
+# note:                                                                               #
+#                                                                                      #
+# < Submission Type > is used to describe the type of submission, and generally there are the following types:  #
+#   - feat: New feature added.                                                              #
+#   - fix: fix bug.                                                                   #
+#   - docs: Only the document was modified, such as readme.md.                       #
+#   - style: It's just a matter of modifying the format, such as commas, indentations, Spaces, etc. Do not change the code logic.   #
+#   - refactor: Code refactoring, no new features added or bugs fixed.               #
+#   - perf: Optimize related aspects, such as enhancing performance and user experience, etc. #
+#   - test: Test cases, including unit tests and integration tests.                 #
+#   - chore: Change the build process or add dependent libraries, tools, etc.          #
+#   - revert: Version rollback.                                                        #
+#                                                                                      #
+# The "Function Scope" is used to describe the function scope affected by the submission.  #
+#                                                                                      #
+# < Brief Description of Modification Points > A brief description of the submission purpose. #
+#                                                                                      #
+# "Detailed Description of Modification Points" is used to describe the modification points in detail and is optional. #
+# If not filled in, please delete this row. If filled in, please describe the following content:：  #
+#   - Why make the modification?                                                       #
+#   - How was the problem solved                                                       #
+#   - Are there any side effects (if necessary)?                                       #
+#                                                                                      #
+########################################################################################
