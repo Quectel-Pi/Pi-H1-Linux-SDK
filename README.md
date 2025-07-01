@@ -70,17 +70,3 @@ QuecAlpha doc website
     ```bash
     git push
     ```
-
-* Create pull-request
-
-Create pull-request according to pictures below:
-
-![](./static/image/pr-button.png)
-
-![](./static/image/create-pr.png)
-
-## Note
-
-* If you use `git commit -m` to commit accidentally, and havn't do a new committing, you can use `git commit --amend` to re-edit your committing message, and SAVE it before closing.
-
-    > If you want to modify committing message that behind the newest one, please contact Chavis, because it is a bit complicated, you may don't know how to do it.
