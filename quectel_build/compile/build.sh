@@ -103,6 +103,20 @@ function do_kernel_images() {
     $TOPDIR/quectel_build/do_image_package.sh
 }
 
+
+if [ ! -f  $TOPDIR/quectel_build/alpha/output/pack/efi.bin ]; then 
+#before strat compile, download BP file first.
+mkdir -p  $TOPDIR/quectel_build/alpha/output/pack
+wget -c -P $TOPDIR/quectel_build/prebuilt_bpfw  http://quecpi.oss-ap-southeast-1.aliyuncs.com/QCM6490_fw.zip
+wget -c -P $TOPDIR/quectel_build/alpha/output/pack http://quecpi.oss-ap-southeast-1.aliyuncs.com/out_efi.zip
+wget -c -P $TOPDIR/quectel_build/alpha/tools/pack  http://quecpi.oss-ap-southeast-1.aliyuncs.com/tools_efi.zip
+
+unzip  $TOPDIR/quectel_build/alpha/output/pack/out_efi.zip -d $TOPDIR/quectel_build/alpha/output/pack/
+unzip $TOPDIR/quectel_build/alpha/tools/pack/tools_efi.zip -d $TOPDIR/quectel_build/alpha/output/tools/pack/
+fi
+
+
+
 if [ ! -f downloads/downloads.done ]; then
    cat downloads/downloads.tar.* | tar -xvf -
    touch downloads/downloads.done
