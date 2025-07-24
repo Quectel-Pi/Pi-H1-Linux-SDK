@@ -112,7 +112,7 @@ wget -c -P $TOPDIR/quectel_build/alpha/output/pack http://quecpi.oss-ap-southeas
 wget -c -P $TOPDIR/quectel_build/alpha/tools/pack  http://quecpi.oss-ap-southeast-1.aliyuncs.com/tools_efi.zip
 
 unzip  $TOPDIR/quectel_build/alpha/output/pack/out_efi.zip -d $TOPDIR/quectel_build/alpha/output/pack/
-unzip $TOPDIR/quectel_build/alpha/tools/pack/tools_efi.zip -d $TOPDIR/quectel_build/alpha/output/tools/pack/
+unzip  $TOPDIR/quectel_build/alpha/tools/pack/tools_efi.zip -d $TOPDIR/quectel_build/alpha/tools/pack/
 fi
 
 
