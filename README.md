@@ -1,72 +1,37 @@
-QuecAlpha doc website
+Quectel PI H1 build
 =====
 
-## Build locally
+## Host Requirements
 
-* Environment setup
+| Component           | Recommended Configuration                           |
+| ------------------ | -------------------------------------------------- |
+| CPU                | **Intel i7-8700**, or **AMD Ryzen 5 3600 / 5600X** |
+| Disk Space         | **300 GB** free (Swap > **32 GB**)                 |
+| RAM                | **16 GB** (recommended **32 GB**)                  |
+| Operating System   | **Ubuntu 22.04**                                   |
 
+## Get SDK
 
-    # Set up the development environment according to the link.
-    https://developer.quectel.com/doc/quecpi/QuecPi-Alpha/zh/development-guide/develop-environment.html
-  
+    git clone https://github.com/QuecPi/QuecPi-Alpha-Linux-SDK.git
 
-## Commit and push
+## Environment Setup
 
-* Configure committing template
+    cd your/path/to/QuecPi-Alpha-Linux-SDK/
 
-    ```bash
-    # The configuration only takes effect in the current repository.
-    # The command below should be executed everytime you clone this repository.
-    git config commit.template ./commit.template
+    ./setup-enviroment
 
-    # The configuration takes effect globally.
-    # The command can ONLY be executed once (remember to copy commit.template file to a fixed path)
-    git config --global commit.template path/to/commit.template
-    ```
+## Build
 
-* Configure git editor
+    cd your/path/to/QuecPi-Alpha-Linux-SDK/
 
-    ```bash
-     # Configure VSCode as git editor
-    git config --global core.editor "code --wait"
+    source quectel_build/compile/build.sh  
 
-    # Configure vim as git editor
-    git config --global core.editor vim
-    ```
+    buildconfig QSM565DWF <Your Project ID> STD
+    
+    buildall
 
-    > Choose one you are familiar with.
+    buildpackage
 
-* Configure user.name & user.email
+## Get your firmware
 
-    ```bash
-    # Use your full English name to replace <name>
-    git config --global user.name <name>
-    git config --global user.email <name>@quectel.com
-    ```
-
-* Check the status of project repository
-
-    ```bash
-    git status
-    ```
-
-* Add necessary files or directories those to be committed
-
-    ```bash
-    git add <files | dirs>
-    ```
-
-* Commit your modification
-
-    ```bash
-    # MUST NOT use '-m' option to append message directly!
-    git commit
-    ```
-
-    > After this action, write your committing message in a pop-up editor window, and SAVE it before closing.
-
-* Push your committing
-
-    ```bash
-    git push
-    ```
+    quectel_build/<Your Project ID>
