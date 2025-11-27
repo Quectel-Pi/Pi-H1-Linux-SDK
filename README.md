@@ -18,7 +18,7 @@ Quectel PI H1 build
 
     cd your/path/to/QuecPi-Alpha-Linux-SDK/
 
-    ./setup-enviroment
+    ./install_build_env.sh
 
 ## Build
 
