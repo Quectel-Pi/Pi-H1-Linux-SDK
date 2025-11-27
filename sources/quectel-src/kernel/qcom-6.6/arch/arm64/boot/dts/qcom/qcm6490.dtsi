@@ -17,6 +17,7 @@
 	firmware {
 		scm {
 			qcom,dload-mode = <&tcsr_2 0x13000>;
+            download_mode = <0>;
 		};
 	};
 

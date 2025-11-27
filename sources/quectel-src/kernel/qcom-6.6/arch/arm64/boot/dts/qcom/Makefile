@@ -85,6 +85,7 @@ dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-addons-idp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-addons-idp-amoled.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcm6490-idp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-idp-pi.dtb
+dtb-$(CONFIG_ARCH_QCOM)	+= qcs6490-idp-560d.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs5430-fp1-addons-rb3gen2.dtb
 dtb-$(CONFIG_ARCH_QCOM) += qcs5430-fp1-addons-rb3gen2-hsp.dtb
 dtb-$(CONFIG_ARCH_QCOM)	+= qcs5430-fp1-addons-rb3gen2-vision-mezz.dtb

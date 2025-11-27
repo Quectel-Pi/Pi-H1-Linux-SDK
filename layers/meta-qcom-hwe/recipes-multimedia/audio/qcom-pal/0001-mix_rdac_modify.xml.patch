@@ -1,0 +1,25 @@
+From 0ece2e023c7b48833b9a2c8b53a41f16b000f79a Mon Sep 17 00:00:00 2001
+From: "crown.yu" <crown.yu@quectel.com>
+Date: Tue, 21 Oct 2025 15:13:43 +0800
+Subject: [PATCH] mix_rdac_modify.xml
+
+---
+ configs/qcm6490/mixer_paths_qcm6490_idp.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configs/qcm6490/mixer_paths_qcm6490_idp.xml b/configs/qcm6490/mixer_paths_qcm6490_idp.xml
+index 73831449c..a77bbd991 100644
+--- a/configs/qcm6490/mixer_paths_qcm6490_idp.xml
++++ b/configs/qcm6490/mixer_paths_qcm6490_idp.xml
+@@ -97,7 +97,7 @@
+     <ctl name="EAR_RDAC Switch" value="0" />
+     <ctl name="HPHL_RDAC Switch" value="0" />
+     <ctl name="HPHR_RDAC Switch" value="0" />
+-    <ctl name="AUX_RDAC Switch" value="0" />
++    <ctl name="AUX_RDAC Switch" value="1" />
+     <ctl name="RX_FIR Filter" value="OFF" />
+     <ctl name="RX_EAR Mode" value="OFF" />
+ 
+-- 
+2.34.1
+

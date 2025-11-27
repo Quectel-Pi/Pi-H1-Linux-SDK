@@ -1,7 +1,7 @@
 require qt5.inc
 require qt5-git.inc
 
-LICENSE = "LGPL-3.0 | GPL-2.0 | The-Qt-Company-Commercial"
+LICENSE = "LGPL-3.0-only | GPL-2.0-only | The-Qt-Company-Commercial"
 LIC_FILES_CHKSUM = " \
     file://LICENSE.LGPLv3;md5=8211fde12cc8a4e2477602f5953f5b71 \
     file://LICENSE.GPLv3;md5=88e2b9117e6be406b5ed6ee4ca99a705 \
@@ -13,7 +13,6 @@ DEPENDS:class-target += "qtdeclarative qt3d-native"
 
 # Patches from https://github.com/meta-qt5/qt3d/commits/b5.15
 # 5.15.meta-qt5.2
-SRC_URI = "git://gitee.com/windowhero/qt3d.git;name=qt3d;branch=5.15.2;protocol=https"
 SRC_URI += " \
     file://0001-Allow-a-tools-only-build.patch \
 "
@@ -39,6 +38,6 @@ do_configure:prepend() {
          ${S}/src/quick3d/imports/input/importsinput.pro
 }
 
-SRCREV = "34171b1d99f55fde1627df3c57eed50480ab2ae7"
+SRCREV = "bf79d391c0ca24b5787cdc82dc95df71c53c2d02"
 
 BBCLASSEXTEND += "native nativesdk"

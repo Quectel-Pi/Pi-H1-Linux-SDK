@@ -1,0 +1,126 @@
+From e9ef3613b79b531ff93cf93a1f319e0739322d4a Mon Sep 17 00:00:00 2001
+From: "crown.yu" <crown.yu@quectel.com>
+Date: Tue, 16 Sep 2025 15:39:37 +0800
+Subject: [PATCH] qcm6490/
+
+---
+ configs/qcm6490/mixer_paths_qcm6490_idp.xml   | 44 +++++++++----------
+ .../qcm6490/resourcemanager_qcm6490_idp.xml   | 12 ++---
+ 2 files changed, 26 insertions(+), 30 deletions(-)
+
+diff --git a/configs/qcm6490/mixer_paths_qcm6490_idp.xml b/configs/qcm6490/mixer_paths_qcm6490_idp.xml
+index bf5e4e755..cb59ace4c 100644
+--- a/configs/qcm6490/mixer_paths_qcm6490_idp.xml
++++ b/configs/qcm6490/mixer_paths_qcm6490_idp.xml
+@@ -283,20 +283,12 @@
+     </path>
+ 
+     <path name="speaker">
+-        <ctl name="SpkrLeft PA Volume" value="20" />
+-        <ctl name="WSA RX0 MUX" value="AIF1_PB" />
+-        <ctl name="WSA_RX0 INP0" value="RX0" />
+-        <ctl name="WSA_COMP1 Switch" value="1" />
+-        <ctl name="SpkrLeft COMP Switch" value="1" />
+-        <ctl name="SpkrLeft BOOST Switch" value="1" />
+-        <ctl name="SpkrLeft DAC Switch" value="1" />
+-	<ctl name="SpkrRight PA Volume" value="20" />
+-        <ctl name="WSA RX1 MUX" value="AIF1_PB" />
+-        <ctl name="WSA_RX1 INP0" value="RX1" />
+-        <ctl name="WSA_COMP2 Switch" value="1" />
+-        <ctl name="SpkrRight COMP Switch" value="1" />
+-        <ctl name="SpkrRight BOOST Switch" value="1" />
+-        <ctl name="SpkrRight DAC Switch" value="1" />
++        <ctl name="RX_MACRO RX0 MUX" value="AIF1_PB" />
++        <ctl name="RX INT0_1 MIX1 INP0" value="RX0" />
++        <ctl name="RX INT0 DEM MUX" value="CLSH_DSM_OUT" />
++        <ctl name="EAR_RDAC Switch" value="1" />
++        <ctl name="RDAC3_MUX" value="RX1" />
++        <ctl name="RX_EAR Mode Switch" value="ON" />
+ 
+     </path>
+ 
+@@ -377,7 +369,14 @@
+     </path>
+ 
+     <path name="speaker-mic">
+-        <path name="dmic3" />
++       <ctl name="TX DEC0 MUX" value="SWR_MIC" />
++		<ctl name="TX SMIC MUX0" value="ADC1" />
++		<ctl name="TX_AIF1_CAP Mixer DEC0" value="1" />
++		<ctl name="ADC2 MUX" value="INP2" />
++		<ctl name="ADC2 Switch" value="1" />
++		<ctl name="ADC2_MIXER Switch" value="1" />
++		<ctl name="TX_DEC0 Volume" value="80" />
++		<ctl name="ADC2 Volume" value="20" />
+     </path>
+ 
+ 
+@@ -444,15 +443,12 @@
+     </path>
+ 
+     <path name="handset">
+-        <ctl name="WSA RX0 MUX" value="AIF1_PB" />
+-        <ctl name="WSA_RX0 INP0" value="RX0" />
+-        <ctl name="WSA_COMP1 Switch" value="1" />
+-        <ctl name="Idle Detect" value="1" />
+-        <ctl name="SpkrLeft COMP Switch" value="1" />
+-        <ctl name="SpkrLeft VISENSE Switch" value="1" />
+-        <ctl name="SpkrLeft SWR DAC_Port Switch" value="1" />
+-        <ctl name="WSA_RX0 Digital Volume" value="70" />
+-        <ctl name="SpkrLeft WSA MODE" value="1" />
++        <ctl name="RX_MACRO RX0 MUX" value="AIF1_PB" />
++        <ctl name="RX INT0_1 MIX1 INP0" value="RX0" />
++        <ctl name="RX INT0 DEM MUX" value="CLSH_DSM_OUT" />
++        <ctl name="EAR_RDAC Switch" value="1" />
++        <ctl name="RDAC3_MUX" value="RX0" />
++        <ctl name="RX_EAR Mode Switch" value="ON" />
+     </path>
+ 
+     <path name="handset-mic">
+diff --git a/configs/qcm6490/resourcemanager_qcm6490_idp.xml b/configs/qcm6490/resourcemanager_qcm6490_idp.xml
+index c9c0e50bc..28e0b579e 100644
+--- a/configs/qcm6490/resourcemanager_qcm6490_idp.xml
++++ b/configs/qcm6490/resourcemanager_qcm6490_idp.xml
+@@ -244,7 +244,7 @@
+         </in-device>
+         <in-device>
+             <id>PAL_DEVICE_IN_SPEAKER_MIC</id>
+-            <back_end_name>CODEC_DMA-LPAIF_VA-TX-0</back_end_name>
++            <back_end_name>CODEC_DMA-LPAIF_RXTX-TX-3</back_end_name>
+             <max_channels>4</max_channels>
+             <samplerate>48000</samplerate>
+             <channels>1</channels>
+@@ -643,17 +643,17 @@
+         </out-device>
+         <out-device>
+             <id>PAL_DEVICE_OUT_SPEAKER</id>
+-            <back_end_name>CODEC_DMA-LPAIF_WSA-RX-0</back_end_name>
++            <back_end_name>CODEC_DMA-LPAIF_RXTX-RX-0</back_end_name>
+             <max_channels>4</max_channels>
+-            <channels>2</channels>
++            <channels>1</channels>
+             <samplerate>48000</samplerate>
+             <snd_device_name>speaker</snd_device_name>
+             <speaker_protection_enabled>0</speaker_protection_enabled>
+             <fractional_sr>0</fractional_sr>
+             <!-- To enable external EC reference the flag extec_ref_enabled must be added as 1 -->
+             <ext_ec_ref_enabled>0</ext_ec_ref_enabled>
+-            <cps_mode>2	</cps_mode>
+-            <vbat_enabled>1</vbat_enabled>
++            <cps_mode>0	</cps_mode>
++            <vbat_enabled>0</vbat_enabled>
+             <!--specify the supported bit format on speaker end point -->
+             <!--this should be in the form of pal_audio_fmt_id-->
+             <!--e.g <supported_bit_format >PAL_AUDIO_FMT_PCM_S24_LE</supported_bit_format>-->
+@@ -687,7 +687,7 @@
+         </out-device>
+         <out-device>
+             <id>PAL_DEVICE_OUT_HANDSET</id>
+-            <back_end_name>CODEC_DMA-LPAIF_WSA-RX-0</back_end_name>
++            <back_end_name>CODEC_DMA-LPAIF_RXTX-RX-0</back_end_name>
+             <max_channels>2</max_channels>
+             <channels>1</channels>
+             <!-- To enable external EC reference the flag extec_ref_enabled must be added as 1 -->
+-- 
+2.34.1
+

@@ -1,7 +1,7 @@
 DESCRIPTION = "Plugins for a virtual keyboard for touch-screen based user interfaces"
 HOMEPAGE = "https://wiki.maliit.org/Main_Page"
 
-LICENSE = "BSD"
+LICENSE = "BSD-3-Clause"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=f29b21caa8e460097bfad9c026a33621"
 
 inherit qmake5
@@ -27,8 +27,8 @@ EXTRA_QMAKEVARS_PRE = "\
     CONFIG+=nodoc \
 "
 
-# tests fail to build with clang
-EXTRA_QMAKEVARS_PRE:append:toolchain-clang = " CONFIG+=notests"
+# tests fail to build with gcc12/clang
+EXTRA_QMAKEVARS_PRE:append = " CONFIG+=notests"
 
 FILES:${PN} += "\
     ${libdir}/maliit \

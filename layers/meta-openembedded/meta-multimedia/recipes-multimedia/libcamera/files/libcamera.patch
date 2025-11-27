@@ -1,0 +1,28 @@
+diff --git a/src/libcamera/device_enumerator_sysfs.cpp b/src/libcamera/device_enumerator_sysfs.cpp
+index 686bb809..e7985809 100644
+--- a/src/libcamera/device_enumerator_sysfs.cpp
++++ b/src/libcamera/device_enumerator_sysfs.cpp
+@@ -33,7 +33,7 @@ int DeviceEnumeratorSysfs::init()
+ int DeviceEnumeratorSysfs::enumerate()
+ {
+ 	struct dirent *ent;
+-	DIR *dir;
++	DIR *dir = nullptr;
+ 
+ 	static const char * const sysfs_dirs[] = {
+ 		"/sys/subsystem/media/devices",
+@@ -87,9 +87,11 @@ int DeviceEnumeratorSysfs::enumerate()
+ 
+ 		addDevice(std::move(media));
+ 	}
+-
+-	closedir(dir);
+-
++	
++	if (dir) {
++		closedir(dir);
++	}
++	
+ 	return 0;
+ }
+ 

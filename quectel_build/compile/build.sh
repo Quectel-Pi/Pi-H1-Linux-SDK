@@ -53,6 +53,11 @@ function buildenv()
 
 function buildconfig()
 {
+    if [ "x$3" = "xDBG" ]; then
+        echo 'INHIBIT_PACKAGE_STRIP = "1"'         >> ${BUILDDIR}/conf/local.conf
+        echo 'INHIBIT_PACKAGE_DEBUG_STRIP = "1"'   >> ${BUILDDIR}/conf/local.conf
+        echo 'INHIBIT_SYSROOT_STRIP = "1"'         >> ${BUILDDIR}/conf/local.conf
+    fi
     env_check
     if [ ! -f ${TOPDIR}//config/linker/versions ]
     then
@@ -74,7 +79,6 @@ function buildconfig()
     export QUECTEL_CUSTOM_NAME
     export QUECTEL_FEATURE_OPENLINUX
     
-    cp -rf ${PRJECT_GEN_FILE} ${TOPDIR}/layers/meta-quectel/recipes-quectel/atcid/files/atci/quectel/inc/quectel-buildconfig-gen.h
 }
 
 export QUECTEL_DIR=${TOPDIR}
@@ -96,26 +100,20 @@ function buildall() {
 }
 
 function buildsdk() {
+    bitbake qcom-multimedia-image -c populate_sdk
     $TOPDIR/quectel_build/compile/export_sdk.sh $@
+    $TOPDIR/quectel_build/do_image_package.sh
 }
 
 function do_kernel_images() {
     $TOPDIR/quectel_build/do_image_package.sh
 }
 
-
-if [ ! -f  $TOPDIR/quectel_build/alpha/output/pack/efi.bin ]; then 
-#before strat compile, download BP file first.
-mkdir -p  $TOPDIR/quectel_build/alpha/output/pack
-wget -c -P $TOPDIR/quectel_build/prebuilt_bpfw  http://quecpi.oss-ap-southeast-1.aliyuncs.com/QCM6490_fw.zip
-wget -c -P $TOPDIR/quectel_build/alpha/output/pack http://quecpi.oss-ap-southeast-1.aliyuncs.com/out_efi.zip
-wget -c -P $TOPDIR/quectel_build/alpha/tools/pack  http://quecpi.oss-ap-southeast-1.aliyuncs.com/tools_efi.zip
-
-unzip  $TOPDIR/quectel_build/alpha/output/pack/out_efi.zip -d $TOPDIR/quectel_build/alpha/output/pack/
-unzip  $TOPDIR/quectel_build/alpha/tools/pack/tools_efi.zip -d $TOPDIR/quectel_build/alpha/tools/pack/
-fi
-
-
+function buildesdk() {
+    # bitbake qcom-multimedia-crossesdk-image
+    bitbake qcom-multimedia-image -c populate_sdk
+    bitbake qcom-multimedia-image -c populate_sdk_ext
+}
 
 if [ ! -f downloads/downloads.done ]; then
    cat downloads/downloads.tar.* | tar -xvf -

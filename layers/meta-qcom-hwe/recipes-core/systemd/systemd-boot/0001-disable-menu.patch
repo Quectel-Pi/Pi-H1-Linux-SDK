@@ -1,0 +1,47 @@
+From dafae65bbd27fd0236958d995cf60479541c9627 Mon Sep 17 00:00:00 2001
+From: "Igni.Li" <igni.li@quectel.com>
+Date: Thu, 10 Jul 2025 16:20:27 +0800
+Subject: [PATCH] disable menu in systemd-boot
+
+Upstream-Status: Inappropriate [embedded customization]
+
+Disable menu and vendor display logic in systemd-boot
+for minimal embedded use.
+
+---
+ src/boot/efi/boot.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/boot/efi/boot.c b/src/boot/efi/boot.c
+index 8caa600..d11b3b4 100644
+--- a/src/boot/efi/boot.c
++++ b/src/boot/efi/boot.c
+@@ -946,7 +946,7 @@ static bool menu_run(
+ 
+                 case KEYPRESS(0, 0, 'v'):
+                         status = xasprintf(
+-                                        "systemd-boot " GIT_VERSION " (" EFI_MACHINE_TYPE_NAME "), "
++                                        "systemd-boot disabled" GIT_VERSION " (" EFI_MACHINE_TYPE_NAME "), "
+                                         "UEFI Specification %u.%02u, Vendor %ls %u.%02u",
+                                         ST->Hdr.Revision >> 16,
+                                         ST->Hdr.Revision & 0xffff,
+@@ -2689,7 +2689,7 @@ static EFI_STATUS run(EFI_HANDLE image) {
+                 menu = true;
+         else {
+                 uint64_t key;
+-
++#if 0
+                 /* Block up to 100ms to give firmware time to get input working. */
+                 err = console_key_read(&key, 100 * 1000);
+                 if (err == EFI_SUCCESS) {
+@@ -2700,6 +2700,7 @@ static EFI_STATUS run(EFI_HANDLE image) {
+                         else
+                                 menu = true;
+                 }
++#endif
+         }
+ 
+         for (;;) {
+-- 
+2.34.1
+

@@ -2,6 +2,10 @@ inherit systemd externalsrc
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 SRC_URI:append:qcom = " \
+    file://cam2file.sh \
+    file://cam2file.service \
+    file://automountucard.sh \
+    file://automountucard.service \
     file://automountsdcard.rules \
     file://automountsdcard.sh \
     file://sdcard-mount.service \
@@ -48,12 +52,23 @@ do_install:append:qcom() {
     install -m 0755 ${WORKDIR}/coresight_reset_source_sink.sh ${D}${sysconfdir}/initscripts/coresight_reset_source_sink.sh
     ln -sf ${systemd_unitdir}/system/debug-config.service ${D}${systemd_unitdir}/system/multi-user.target.wants/debug-config.service
 
+    # cam2file
+    install -m 0755 ${WORKDIR}/cam2file.sh -D ${D}${sysconfdir}/initscripts/cam2file.sh
+    install -m 0755 ${WORKDIR}/cam2file.service -D ${D}${systemd_unitdir}/system/cam2file.service
+    ln -sf ${systemd_unitdir}/system/cam2file.service ${D}${systemd_unitdir}/system/multi-user.target.wants/cam2file.service
+
     # automount sdcard
     install -d ${D}${libdir}/udev/rules.d
     install -m 0644 ${WORKDIR}/automountsdcard.rules ${D}${libdir}/udev/rules.d/automountsdcard.rules
     install -d ${D}${bindir}
     install -m 0755 ${WORKDIR}/automountsdcard.sh ${D}${bindir}/automountsdcard.sh
     install -m 0755 ${WORKDIR}/sdcard-mount.service ${D}${systemd_unitdir}/system/sdcard-mount.service
+
+    # automount ucard
+    install -d ${D}${bindir}
+    install -m 0755 ${WORKDIR}/automountucard.sh ${D}${bindir}/automountucard.sh
+    install -m 0755 ${WORKDIR}/automountucard.service ${D}${systemd_unitdir}/system/automountucard.service
+    ln -sf ${systemd_unitdir}/system/automountucard.service ${D}${systemd_unitdir}/system/multi-user.target.wants/automountucard.service
 }
 
 S = "${WORKDIR}"
@@ -85,5 +100,14 @@ INITSCRIPT_NAME:${PN}-debug-config = "debug_config.sh"
 PACKAGES =+ "${PN}-debug-config"
 FILES:${PN}-debug-config += "${systemd_unitdir}/system/debug-config.service ${systemd_unitdir}/system/multi-user.target.wants/debug-config.service ${sysconfdir}/initscripts/debug_config_qcm6490.sh ${sysconfdir}/initscripts/debug_config_qcs9100.sh ${sysconfdir}/initscripts/debug_config.sh ${sysconfdir}/initscripts/coresight_reset_source_sink.sh"
 
+INITSCRIPT_PACKAGES =+ "${PN}-cam2file"
+INITSCRIPT_NAME:${PN}-cam2file = "cam2file.sh"
+
+PACKAGES =+ "${PN}-cam2file"
+FILES:${PN}-cam2file =+ "${systemd_unitdir}/system/cam2file.service ${systemd_unitdir}/system/multi-user.target.wants/cam2file.service ${sysconfdir}/initscripts/cam2file.sh"
+
 PACKAGES =+ "${PN}-automount-sdcard"
 FILES:${PN}-automount-sdcard =+ "${libdir}/udev/rules.d/automountsdcard.rules ${bindir}/automountsdcard.sh ${systemd_unitdir}/system/sdcard-mount.service"
+
+PACKAGES =+ "${PN}-automount-ucard"
+FILES:${PN}-automount-ucard =+ "${bindir}/automountucard.sh ${systemd_unitdir}/system/automountucard.service ${systemd_unitdir}/system/multi-user.target.wants/automountucard.service"

@@ -11,7 +11,7 @@ PROVIDES = "${PACKAGES}"
 PACKAGES = "${PN}"
 
 #qcm6490 is a common SOC_FAMILY name for all Kodiak board
-RDEPENDS:${PN}:qcom-custom-bsp:qcm6490= "camx-kt camxlib-kt chicdk-kt"
+#RDEPENDS:${PN}:qcom-custom-bsp:qcm6490= "camx-kt camxlib-kt chicdk-kt"
 
 #qcs9100 is a common SOC_FAMILY name for all Lemans board
 RDEPENDS:${PN}:qcom-custom-bsp:qcs9100 = "camxcommon camxlib camx chicdk cameradlkm"

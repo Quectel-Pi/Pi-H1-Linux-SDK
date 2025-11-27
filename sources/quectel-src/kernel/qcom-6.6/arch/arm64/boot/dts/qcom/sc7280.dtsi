@@ -1876,7 +1876,8 @@
 				clocks = <&gcc GCC_QUPV3_WRAP1_S4_CLK>;
 				clock-names = "se";
 				pinctrl-names = "default";
-				pinctrl-0 = <&qup_uart12_cts>, <&qup_uart12_rts>, <&qup_uart12_tx>, <&qup_uart12_rx>;
+				/*pinctrl-0 = <&qup_uart12_cts>, <&qup_uart12_rts>, <&qup_uart12_tx>, <&qup_uart12_rx>;*/
+				pinctrl-0 = <&qup_uart12_tx>, <&qup_uart12_rx>;
 				interrupts = <GIC_SPI 357 IRQ_TYPE_LEVEL_HIGH>;
 				power-domains = <&rpmhpd SC7280_CX>;
 				operating-points-v2 = <&qup_opp_table>;
@@ -2532,7 +2533,7 @@
 			reset-names = "swr_audio_cgcr";
 
 			qcom,ports-word-length =	/bits/ 8 <0x01 0x07 0x04 0xff 0xff>;
-			qcom,ports-sinterval-low =	/bits/ 8 <0x03 0x3f 0x1f 0x03 0x03>;
+			qcom,ports-sinterval-low =	/bits/ 8 <0x03 0x3f 0x1f 0x07 0x03>;
 			qcom,ports-offset1 =		/bits/ 8 <0x00 0x00 0x0b 0x01 0x01>;
 			qcom,ports-offset2 =		/bits/ 8 <0x00 0x00 0x0b 0x00 0x00>;
 			qcom,ports-lane-control =	/bits/ 8 <0x01 0x00 0x00 0x00 0x00>;
@@ -7215,7 +7216,7 @@
 				pins = "gpio47";
 				function = "qup13";
 			};
-
+/*
 			qup_uart12_cts: qup-uart12-cts-state {
 				pins = "gpio48";
 				function = "qup14";
@@ -7225,7 +7226,7 @@
 				pins = "gpio49";
 				function = "qup14";
 			};
-
+*/
 			qup_uart12_tx: qup-uart12-tx-state {
 				pins = "gpio50";
 				function = "qup14";

@@ -437,17 +437,24 @@ static int __qcom_scm_set_dload_mode(struct device *dev, bool enable)
 	return qcom_scm_call_atomic(__scm->dev, &desc, NULL);
 }
 
-static void qcom_scm_set_download_mode(bool enable)
+void qcom_scm_set_download_mode(bool enable)
 {
 	bool avail;
 	int ret = 0;
 
+    if (__scm == NULL) {
+        printk("set download_mode %d [__scm is null, bug, fix me]\n", enable);
+    } else {
+        printk("set download_mode %d [__scm %p]\n", enable, __scm);
+    }
 	avail = __qcom_scm_is_call_available(__scm->dev,
 					     QCOM_SCM_SVC_BOOT,
 					     QCOM_SCM_BOOT_SET_DLOAD_MODE);
 	if (avail) {
+        printk("debug: run to %s %s %d\n", __FILE__, __func__, __LINE__);
 		ret = __qcom_scm_set_dload_mode(__scm->dev, enable);
 	} else if (__scm->dload_mode_addr) {
+        printk("debug: run to %s %s %d\n", __FILE__, __func__, __LINE__);
 		ret = qcom_scm_io_writel(__scm->dload_mode_addr,
 				enable ? QCOM_SCM_BOOT_SET_DLOAD_MODE : 0);
 	} else {
@@ -458,6 +465,7 @@ static void qcom_scm_set_download_mode(bool enable)
 	if (ret)
 		dev_err(__scm->dev, "failed to set download mode: %d\n", ret);
 }
+EXPORT_SYMBOL_GPL(qcom_scm_set_download_mode);
 
 /**
  * qcom_scm_pas_init_image() - Initialize peripheral authentication service
@@ -1910,6 +1918,13 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	if (!scm)
 		return -ENOMEM;
 
+    printk("download_mode = %d\n", download_mode);
+    unsigned int result = download_mode;
+    ret = of_property_read_u32(pdev->dev.of_node, "download_mode", &result);
+    if (ret == 0) {
+        download_mode = !!result;
+        printk("update download_mode = %d\n", download_mode);
+    }
 	scm->dev = &pdev->dev;
 	ret = qcom_scm_find_dload_address(&pdev->dev, &scm->dload_mode_addr);
 	if (ret < 0)

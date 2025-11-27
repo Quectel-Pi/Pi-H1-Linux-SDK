@@ -8,7 +8,7 @@
 #include <string.h>
 #include <errno.h>
 
-#define DEVICE_PATH "/dev/input/event2"
+#define DEVICE_PATH "/dev/input/by-path/platform-c440000.spmi-platform-c440000.spmi:pmic@0:pon@1300:pwrkey-event"
 #define KEY_POWER 116
 #define HOLD_SECONDS 3
 

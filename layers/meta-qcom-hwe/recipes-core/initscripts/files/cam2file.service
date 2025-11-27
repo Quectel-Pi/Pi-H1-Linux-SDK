@@ -1,0 +1,12 @@
+[Unit]
+Description=CSI Camera → NV12 → file (stop after 1 MB)
+After=cam-server.service
+
+[Service]
+Type=simple
+ExecStart=/etc/initscripts/cam2file.sh
+Restart=no
+User=root
+
+[Install]
+WantedBy=multi-user.target

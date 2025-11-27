@@ -248,7 +248,7 @@ QUECTEL_CUSTOM_NAME = "${QUECTEL_CUSTOM_NAME}"
 BB_DANGLINGAPPENDS_WARNONLY_forcevariable = "false"
 
 # Extra options that can be changed by the user
-#INHERIT += "rm_work"
+INHERIT += "rm_work"
 
 EOF
 

@@ -314,7 +314,7 @@ int main(int argc , char *argv[])
 	int clientaddr_size, read_size;
     char message[1000] , server_reply[2000];
     char ipAddress[255] = "localhost";
-    int portNumber = 2390;            //default: 2390
+    int portNumber = 2391;            //default: 2391
     char IOTypeString[10] = "";      
     char baudrate[10] = "115200";    //default: 115200
 	char QDARTIOTypeString[10] = "";

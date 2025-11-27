@@ -40,3 +40,4 @@ obj-y				+= qcom/
 obj-y				+= smccc/
 obj-y				+= tegra/
 obj-y				+= xilinx/
+obj-m				+= qcom_scm2.o

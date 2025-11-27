@@ -588,13 +588,30 @@
                compatible = "waveshare,8.0inch-panel";
                vddio_i2c-supply = <&vreg_l18b_1p8>;
                switch-gpio = <&tlmm 6 0>;
+			   power-gpio = <&tlmm 54 0>;
+			   status = "okay";
        };
 
        touch_gt: goodix-ts@14 {
-               reg = <0x14>;
-               compatible = "goodix,gt911";
-               VDDIO-supply = <&vreg_l18b_1p8>;
+            reg = <0x14>;
+            compatible = "goodix,gt911";
+            VDDIO-supply = <&vreg_l18b_1p8>;
+			status = "okay";
        };
+		touch_ii: ilitek@41 {
+			compatible = "ilitek,ili251x";
+			reg = <0x41>;
+			status = "okay";
+			phandle = <0x05>;
+		};
+		touch_gt2:	gt911@5d {
+			compatible = "goodix,gt911";
+			reg = <0x5d>;
+			VDDIO-supply = <&vreg_l18b_1p8>;
+			touchscreen-swapped-x-y;
+			touchscreen-inverted-y; 
+			status = "okay";
+		};
 };
 
 
@@ -724,9 +741,13 @@
 &pmk8350_adc_tm {
 	status = "okay";
 
+	 io-channels = <&pmk8350_vadc PM7325_ADC7_AMUX_THM3>,
+	 		<&pmk8350_vadc PM7325_ADC7_AMUX_THM4>,
+	 		<&pmk8350_vadc PM7325_ADC7_AMUX_THM5>;
+
 	xo-therm@0 {
 		reg = <0>;
-		io-channels = <&pmk8350_vadc PMK8350_ADC7_AMUX_THM1_100K_PU>;
+		io-channels  = <&pmk8350_vadc PMK8350_ADC7_AMUX_THM1_100K_PU>;
 		qcom,ratiometric;
 		qcom,hw-settle-time-us = <200>;
 	};
@@ -738,13 +759,13 @@
 		qcom,hw-settle-time-us = <200>;
 	};
 
-	sdm-skin-therm@3 {
-		reg = <3>;
-		io-channels = <&pmk8350_vadc PM7325_ADC7_AMUX_THM3_100K_PU>;
-		qcom,ratiometric;
-		qcom,hw-settle-time-us = <200>;
-	};
 };
+
+&pm7325_temp_alarm {
+	io-channels = <&pmk8350_vadc PM7325_ADC7_DIE_TEMP>;
+	io-channel-names = "thermal";
+};
+
 
 &pmk8350_pon {
 	status = "okay";
@@ -777,12 +798,28 @@
 		label = "pm7325_quiet_therm";
 	};
 
-	channel@146 {
-		reg = <PM7325_ADC7_AMUX_THM3_100K_PU>;
+	channel@106 {
 		qcom,ratiometric;
+		reg = <PM7325_ADC7_AMUX_THM3>;
 		qcom,hw-settle-time = <200>;
 		qcom,pre-scaling = <1 1>;
-		label = "pm7325_sdm_skin_therm";
+		label = "pm7325_adc0";
+	};
+
+	channel@107 {
+		qcom,ratiometric;
+		reg = <PM7325_ADC7_AMUX_THM4>;
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
+		label = "pm7325_adc1";
+	};
+
+	channel@108 {
+		qcom,ratiometric;
+		reg = <PM7325_ADC7_AMUX_THM5>;
+		qcom,hw-settle-time = <200>;
+		qcom,pre-scaling = <1 1>;
+		label = "pm7325_adc2";
 	};
 
 	pmk8350-die-temp@3 {
@@ -1540,7 +1577,7 @@
 		compatible = "pwm-leds";
 		pinctrl-names = "default";
 		pinctrl-0 = <&fanfan_pwm_ctrl_default>;
-		status = "disabled";
+		status = "okay";
 		fanfan {
 			label = "fanfan";
 			pwms = <&pm8350c_pwm 3 65535 PWM_POLARITY_INVERTED>;

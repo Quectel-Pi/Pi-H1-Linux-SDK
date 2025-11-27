@@ -1,16 +1,8 @@
 require qt5.inc
-#require qt5-git.inc
+require qt5-git.inc
 require qt5-ptest.inc
 
-SRC_URI = " \
-        file://git.tar.gz \
-"
-
-CVE_PRODUCT = "qt"
-S = "${WORKDIR}/git"
-PV = "5.15.2+gitAUTOINC+40143c189b"
-
-LICENSE = "GFDL-1.3 & BSD & ( GPL-3.0 & The-Qt-Company-GPL-Exception-1.0 | The-Qt-Company-Commercial ) & ( GPL-2.0+ | LGPL-3.0 | The-Qt-Company-Commercial )"
+LICENSE = "GFDL-1.3 & BSD-3-Clause & ( GPL-3.0-only & The-Qt-Company-GPL-Exception-1.0 | The-Qt-Company-Commercial ) & ( GPL-2.0-or-later | LGPL-3.0-only | The-Qt-Company-Commercial )"
 LIC_FILES_CHKSUM = " \
     file://LICENSE.LGPL3;md5=e6a600fd5e1d9cbde2d983680233ad02 \
     file://LICENSE.GPL2;md5=b234ee4d69f5fce4486a80fdaf4a4263 \
@@ -20,10 +12,9 @@ LIC_FILES_CHKSUM = " \
     file://LICENSE.QT-LICENSE-AGREEMENT;md5=c8b6dd132d52c6e5a545df07a4e3e283 \
 "
 
-SRC_URI = "git://gitee.com/windowhero/qtbase.git;name=qtbase;branch=5.15.2;protocol=https"
 # common for qtbase-native, qtbase-nativesdk and qtbase
 # Patches from https://github.com/meta-qt5/qtbase/commits/b5.15-shared
-# 5.15.meta-qt5-shared.2
+# 5.15.meta-qt5-shared.4
 SRC_URI += "\
     file://0001-Add-linux-oe-g-platform.patch \
     file://0002-cmake-Use-OE_QMAKE_PATH_EXTERNAL_HOST_BINS.patch \
@@ -36,16 +27,18 @@ SRC_URI += "\
     file://0009-Add-OE-specific-specs-for-clang-compiler.patch \
     file://0010-linux-clang-Invert-conditional-for-defining-QT_SOCKL.patch \
     file://0011-tst_qlocale-Enable-QT_USE_FENV-only-on-glibc.patch \
-    file://0013-Disable-ltcg-for-host_build.patch \
-    file://0014-Qt5GuiConfigExtras.cmake.in-cope-with-variable-path-.patch \
-    file://0015-corelib-Include-sys-types.h-for-uint32_t.patch \
-    file://0016-Define-QMAKE_CXX.COMPILER_MACROS-for-clang-on-linux.patch \
-    file://0018-tst_qpainter-FE_-macros-are-not-defined-for-every-pl.patch \
-    file://0019-Define-__NR_futex-if-it-does-not-exist.patch \
-    file://0020-Revert-Fix-workaround-in-pthread-destructor.patch \
-    file://0021-qfloat16-Include-limits-header.patch \
-    file://0022-fix_timezone_dst.patch \
-    file://0023-fix-eglfs-compilation-error.patch \
+    file://0012-Disable-ltcg-for-host_build.patch \
+    file://0013-Qt5GuiConfigExtras.cmake.in-cope-with-variable-path-.patch \
+    file://0014-corelib-Include-sys-types.h-for-uint32_t.patch \
+    file://0015-Define-QMAKE_CXX.COMPILER_MACROS-for-clang-on-linux.patch \
+    file://0016-tst_qpainter-FE_-macros-are-not-defined-for-every-pl.patch \
+    file://0017-Define-__NR_futex-if-it-does-not-exist.patch \
+    file://0018-Revert-Fix-workaround-in-pthread-destructor.patch \
+    file://0019-tst_QPluginLoader-Simplify-creating-a-fake-pointer-i.patch \
+    file://0021-rcc-Just-dcument-file-name-without-full-path-to-redu.patch \
+    file://0022-testlib-don-t-track-the-build-or-source-directories.patch \
+    file://0023-zlib-Do-not-undefine-_FILE_OFFSET_BITS.patch \
+    file://0026-QSslSocket-make-it-work-with-OpenSSL-v3.patch \
 "
 
 # Disable LTO for now, QT5 patches are being worked upstream, perhaps revisit with
@@ -69,7 +62,7 @@ PACKAGECONFIG_DISTRO ?= ""
 PACKAGECONFIG_RELEASE ?= "release"
 # This is in qt5.inc, because qtwebkit-examples are using it to enable ca-certificates dependency
 # PACKAGECONFIG_OPENSSL ?= "openssl"
-PACKAGECONFIG_DEFAULT ?= "accessibility dbus udev evdev widgets tools libs freetype pcre examples eglfs kms gbm xkbcommon \
+PACKAGECONFIG_DEFAULT ?= "accessibility dbus udev evdev widgets tools libs freetype pcre \
     ${@bb.utils.contains('SELECTED_OPTIMIZATION', '-Os', 'optimize-size ltcg', '', d)} \
     ${@bb.utils.contains('DISTRO_FEATURES', 'ptest', 'tests', '', d)} \
     ${@bb.utils.contains('DISTRO_FEATURES', 'qt5-static', 'static', '', d)} \
@@ -125,11 +118,11 @@ PACKAGECONFIG[no-opengl] = "-no-opengl"
 PACKAGECONFIG[tslib] = "-tslib,-no-tslib,tslib"
 PACKAGECONFIG[cups] = "-cups,-no-cups,cups"
 PACKAGECONFIG[dbus] = "-dbus,-no-dbus,dbus"
-PACKAGECONFIG[xcb] = "-xcb -xcb-xlib -no-bundled-xcb-xinput,-no-xcb,libxcb xcb-util-wm xcb-util-image xcb-util-keysyms xcb-util-renderutil libxext"
+PACKAGECONFIG[xcb] = "-xcb -xcb-xlib -no-bundled-xcb-xinput -DUSE_X11=ON,-no-xcb,libxcb xcb-util-wm xcb-util-image xcb-util-keysyms xcb-util-renderutil libxext"
 PACKAGECONFIG[sql-ibase] = "-sql-ibase,-no-sql-ibase"
 PACKAGECONFIG[sql-mysql] = "-sql-mysql -mysql_config ${STAGING_BINDIR_CROSS}/mysql_config,-no-sql-mysql,mysql5"
 PACKAGECONFIG[sql-psql] = "-sql-psql,-no-sql-psql,postgresql"
-PACKAGECONFIG[sql-odbc] = "-sql-odbc,-no-sql-odbc"
+PACKAGECONFIG[sql-odbc] = "-sql-odbc,-no-sql-odbc,unixodbc"
 PACKAGECONFIG[sql-oci] = "-sql-oci,-no-sql-oci"
 PACKAGECONFIG[sql-tds] = "-sql-tds,-no-sql-tds"
 PACKAGECONFIG[sql-db2] = "-sql-db2,-no-sql-db2"
@@ -318,4 +311,4 @@ sed -i \
     $D${OE_QMAKE_PATH_ARCHDATA}/mkspecs/qmodule.pri
 }
 
-SRCREV = "40143c189b7c1bf3c2058b77d00ea5c4e3be8b28"
+SRCREV = "358aebba7280d6d2b59b1f740747a4a3d1b7a54a"

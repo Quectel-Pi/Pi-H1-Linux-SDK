@@ -2,7 +2,7 @@ require qt5.inc
 require qt5-git.inc
 
 HOMEPAGE = "http://www.qt.io"
-LICENSE = "GFDL-1.3 & BSD & ( GPL-3.0 & The-Qt-Company-GPL-Exception-1.0 | The-Qt-Company-Commercial ) & ( GPL-2.0+ | LGPL-3.0 | The-Qt-Company-Commercial )"
+LICENSE = "GFDL-1.3 & BSD-3-Clause & ( GPL-3.0-only & The-Qt-Company-GPL-Exception-1.0 | The-Qt-Company-Commercial ) & ( GPL-2.0-or-later | LGPL-3.0-only | The-Qt-Company-Commercial )"
 LIC_FILES_CHKSUM = " \
     file://LICENSE.LGPLv21;md5=4bfd28363f541b10d9f024181b8df516 \
     file://LICENSE.LGPLv3;md5=e0459b45c5c4840b353141a8bbed91f0 \
@@ -12,7 +12,4 @@ LIC_FILES_CHKSUM = " \
 
 DEPENDS += "qtbase"
 
-SRC_URI = "git://gitee.com/windowhero/qtsvg.git;name=qtsvg;branch=5.15.2;protocol=https"
-SRC_URI:append = " file://CVE-2021-3481.patch"
-
-SRCREV = "52d3788c7b0116ea3db232dccca5f1e3f1e229ac"
+SRCREV = "a5d2402512775c78bde93a800ec833dae9e2ffbe"

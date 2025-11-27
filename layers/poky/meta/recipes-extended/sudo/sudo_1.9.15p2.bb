@@ -44,6 +44,10 @@ do_install:append () {
 	rmdir -p --ignore-fail-on-non-empty ${D}/run/sudo
 }
 
+do_install:append () {
+    echo "%sudo ALL=(ALL:ALL) ALL" >> ${D}${sysconfdir}/sudoers
+}
+
 FILES:${PN}-dev += "${libdir}/${BPN}/lib*${SOLIBSDEV} ${libdir}/${BPN}/*.la \
                     ${libdir}/lib*${SOLIBSDEV} ${libdir}/*.la"
 

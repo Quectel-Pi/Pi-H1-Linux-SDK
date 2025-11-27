@@ -7,17 +7,17 @@ SUMMARY = "Qt Creator is a new cross-platform Qt IDE"
 # 'System GDB at /usr/bin/gdb.
 
 HOMEPAGE = "https://qt-project.org/"
-LICENSE = "GPLv3"
+LICENSE = "GPL-3.0-only"
 LIC_FILES_CHKSUM = " \
     file://LICENSE.GPL3-EXCEPT;md5=763d8c535a234d9a3fb682c7ecb6c073 \
 "
 
-inherit qmake5 mime-xdg
+inherit qmake5 pkgconfig mime-xdg
 
 DEPENDS += "qtbase qtscript qtxmlpatterns qtx11extras qtdeclarative qttools qttools-native qtsvg chrpath-replacement-native zlib"
 DEPENDS:append:libc-musl = " libexecinfo"
 
-SRCREV = "94d227cd434d09717de95529e5210ec530451e1c"
+SRCREV = "39ac7b1bf6add473026687003311b702742b6b21"
 PV = "4.15.2+git${SRCPV}"
 # Patches from https://github.com/meta-qt5/qtcreator/commits/b4.9.2
 # 4.9.2.meta-qt5.1

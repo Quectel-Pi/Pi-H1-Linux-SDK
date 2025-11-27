@@ -1,0 +1,16 @@
+Upstream-Status: Inappropriate [local configuration change]
+diff --git a/etc/login.defs b/etc/login.defs
+index 33622c29..c0700067 100644
+--- a/etc/login.defs
++++ b/etc/login.defs
+@@ -67,8 +67,8 @@ QUOTAS_ENAB		yes
+ # Enable "syslog" logging of su(1) activity - in addition to sulog file logging.
+ # SYSLOG_SG_ENAB does the same for newgrp(1) and sg(1).
+ #
+-SYSLOG_SU_ENAB		yes
+-SYSLOG_SG_ENAB		yes
++#SYSLOG_SU_ENAB		yes
++#SYSLOG_SG_ENAB		yes
+ 
+ #
+ # If defined, either full pathname of a file containing device names or

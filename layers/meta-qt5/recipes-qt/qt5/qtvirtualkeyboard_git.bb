@@ -1,12 +1,13 @@
 require qt5.inc
 require qt5-git.inc
 
-LICENSE = "GPL-3.0 | The-Qt-Company-Commercial"
+LICENSE = "GPL-3.0-only | The-Qt-Company-Commercial"
 LIC_FILES_CHKSUM = " \
     file://LICENSE.GPL3;md5=d32239bcb673463ab874e80d47fae504 \
 "
 
-SRC_URI = "git://gitee.com/windowhero/qtvirtualkeyboard.git;name=qtvirtualkeyboard;branch=5.15.2;protocol=https"
+SRC_URI += "file://0001-replace-deprecated-std-auto_ptr-with-std-unique_ptr.patch"
+
 # To enabled Nuance T9 Write support, you need to provide the licensed components
 # and enable "t9write" in PACKAGECONFIG. This can be done in a separate .bbappend file.
 # for example:
@@ -72,4 +73,4 @@ FILES:${PN} += "${OE_QMAKE_PATH_DATA}/qtvirtualkeyboard/lipi_toolkit"
 
 DEPENDS += "qtbase qtdeclarative qtmultimedia qtquickcontrols qtsvg qtxmlpatterns qtdeclarative-native"
 
-SRCREV = "7b90415c58dd02c682a9ba317f273d7b3398ff88"
+SRCREV = "d8b87cbb28561654121d44b5d7dedb361e6f773c"

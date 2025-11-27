@@ -1,18 +1,9 @@
 require qt5.inc
-#require qt5-git.inc
+require qt5-git.inc
 require qt5-ptest.inc
 
-SRC_URI = " \
-        file://git.tar.gz \
-"
-
-CVE_PRODUCT = "qt"
-
-S = "${WORKDIR}/git"
-PV = "5.15.2+gitAUTOINC+104eae5b17"
-
 HOMEPAGE = "http://www.qt.io"
-LICENSE = "GFDL-1.3 & BSD & ( GPL-3.0 & The-Qt-Company-GPL-Exception-1.0 | The-Qt-Company-Commercial ) & ( GPL-2.0+ | LGPL-3.0 | The-Qt-Company-Commercial )"
+LICENSE = "GFDL-1.3 & BSD-3-Clause & ( GPL-3.0-only & The-Qt-Company-GPL-Exception-1.0 | The-Qt-Company-Commercial ) & ( GPL-2.0-or-later | LGPL-3.0-only | The-Qt-Company-Commercial )"
 LIC_FILES_CHKSUM = " \
     file://LICENSE.LGPL3;md5=e6a600fd5e1d9cbde2d983680233ad02 \
     file://LICENSE.GPL2;md5=b234ee4d69f5fce4486a80fdaf4a4263 \
@@ -25,8 +16,6 @@ LIC_FILES_CHKSUM = " \
 # 5.15.meta-qt5.1
 SRC_URI += " \
     file://0001-Use-OE_QMAKE_PATH_EXTERNAL_HOST_BINS-to-locate-qmlca.patch \
-    file://0001-yarr-Include-limits-for-numeric_limits.patch \
-    file://0001-qmldebug-Include-limits-header.patch \
 "
 
 LDFLAGS:append:riscv64 = " -pthread"
@@ -64,6 +53,6 @@ do_install:append:class-nativesdk() {
     rm -rf ${D}${OE_QMAKE_PATH_QML}
 }
 
-SRCREV = "104eae5b17b0ec700391e9539ee3a4f638588194"
+SRCREV = "0d60f81bf61a69bc859a269ae562b2610d224e02"
 
 BBCLASSEXTEND =+ "native nativesdk"

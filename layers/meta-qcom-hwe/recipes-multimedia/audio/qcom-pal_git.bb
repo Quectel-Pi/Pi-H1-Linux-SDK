@@ -12,7 +12,12 @@ SRCBRANCH  = "audio-core.lnx.1.0.r1-rel"
 SRCREV     = "9254849d3dc20f1c84dbc1af99ba5c37bd9188e3"
 
 SRC_URI  = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=audio/opensource/arpal-lx \
-            file://adsprpcd_audiopd.service"
+            file://adsprpcd_audiopd.service \
+            file://0001-modify-mix-path.patch \
+            file://0001-modify-mix-speaker-path.patch \
+            file://0002-modify-dmic-path-config.patch \
+            file://0001-mix_rdac_modify.xml.patch \
+            file://0003-modify_qcm6490_headphones_rdac.xml.patch"
 
 S = "${WORKDIR}/audio/opensource/arpal-lx"
 

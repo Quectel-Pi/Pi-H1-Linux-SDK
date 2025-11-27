@@ -1,15 +1,7 @@
 require qt5.inc
-#require qt5-git.inc
+require qt5-git.inc
 
-SRC_URI = " \
-        file://git.tar.gz \
-"
-
-CVE_PRODUCT = "qt"
-S = "${WORKDIR}/git"
-PV = "5.15.2+gitAUTOINC+cb1857418b"
-
-LICENSE = "GPL-3.0 & The-Qt-Company-GPL-Exception-1.0 | The-Qt-Company-Commercial"
+LICENSE = "GPL-3.0-only & The-Qt-Company-GPL-Exception-1.0 | The-Qt-Company-Commercial"
 LIC_FILES_CHKSUM = " \
     file://LICENSE.GPL3-EXCEPT;md5=763d8c535a234d9a3fb682c7ecb6c073 \
 "
@@ -106,4 +98,4 @@ FILES:${PN}-qthelp = " \
     ${OE_QMAKE_PATH_TRANSLATIONS}/qt_help_*.qm \
 "
 
-SRCREV = "cb1857418b36780b0444333f3aa6250ca3780f19"
+SRCREV = "1ec28c4aa6b0f9772e99bd8d556bb4552aafcf72"

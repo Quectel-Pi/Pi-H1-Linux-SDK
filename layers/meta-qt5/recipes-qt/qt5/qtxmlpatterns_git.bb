@@ -1,17 +1,9 @@
 require qt5.inc
-#require qt5-git.inc
+require qt5-git.inc
 require qt5-ptest.inc
 
-SRC_URI = " \
-        file://git.tar.gz \
-"
-
-CVE_PRODUCT = "qt"
-S = "${WORKDIR}/git"
-PV = "5.15.2+gitAUTOINC+50421402f0"
-
 HOMEPAGE = "http://www.qt.io"
-LICENSE = "GFDL-1.3 & BSD & ( GPL-3.0 & The-Qt-Company-GPL-Exception-1.0 | The-Qt-Company-Commercial ) & ( GPL-2.0+ | LGPL-3.0 | The-Qt-Company-Commercial )"
+LICENSE = "GFDL-1.3 & BSD-3-Clause & ( GPL-3.0-only & The-Qt-Company-GPL-Exception-1.0 | The-Qt-Company-Commercial ) & ( GPL-2.0-or-later | LGPL-3.0-only | The-Qt-Company-Commercial )"
 LIC_FILES_CHKSUM = " \
     file://LICENSE.LGPL3;md5=e6a600fd5e1d9cbde2d983680233ad02 \
     file://LICENSE.GPL2;md5=b234ee4d69f5fce4486a80fdaf4a4263 \
@@ -33,6 +25,6 @@ do_configure:prepend() {
 
 EXTRA_QMAKEVARS_PRE += "${@bb.utils.contains('PACKAGECONFIG', 'qtdeclarative', 'CONFIG+=OE_QTDECLARATIVE_ENABLED', '', d)}"
 
-SRCREV = "50421402f05b3ee3c76c6cff455a69efaf576b6d"
+SRCREV = "97209f5679a72cc926d14ba689b801db3af4f96b"
 
 BBCLASSEXTEND =+ "native nativesdk"

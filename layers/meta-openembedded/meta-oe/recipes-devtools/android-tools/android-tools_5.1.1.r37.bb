@@ -53,6 +53,7 @@ SRC_URI = " \
     file://ext4_utils.mk;subdir=${BPN} \
     file://fastboot.mk;subdir=${BPN} \
     file://mkbootimg.mk;subdir=${BPN} \
+    file://0001-f.patch;patchdir=system/core \
 "
 
 

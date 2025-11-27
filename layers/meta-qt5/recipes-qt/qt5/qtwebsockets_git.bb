@@ -1,7 +1,7 @@
 require qt5.inc
 require qt5-git.inc
 
-LICENSE = "GFDL-1.3 & (GPL-3 | LGPL-3.0) | The-Qt-Company-Commercial"
+LICENSE = "GFDL-1.3 & (GPL-3.0-only | LGPL-3.0-only) | The-Qt-Company-Commercial"
 LIC_FILES_CHKSUM = " \
     file://LICENSE.GPL2;md5=b234ee4d69f5fce4486a80fdaf4a4263 \
     file://LICENSE.GPL3;md5=d32239bcb673463ab874e80d47fae504 \
@@ -11,5 +11,4 @@ LIC_FILES_CHKSUM = " \
 
 DEPENDS += "qtbase qtdeclarative"
 
-SRC_URI = "git://gitee.com/windowhero/qtwebsockets.git;name=qtwebsockets;branch=5.15.2;protocol=https"
-SRCREV = "f73735911b2124ef16aa39228bf8f89ee900ba5d"
+SRCREV = "4fe33a26f24770069b264771e89361eeecc646f3"

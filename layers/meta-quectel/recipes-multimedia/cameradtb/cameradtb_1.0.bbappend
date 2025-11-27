@@ -1,4 +1,4 @@
-FILESPATH:prepend =  "${WORKSPACE}/src/devicetree:"
+FILESPATH:prepend =  "${WORKSPACE}/sources/quectel-src:"
 SRC_URI = "file://camera-devicetree"
 S = "${WORKDIR}/camera-devicetree"
 

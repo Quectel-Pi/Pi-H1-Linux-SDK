@@ -1,4 +1,4 @@
-LICENSE = "GFDL-1.3 & BSD & ( GPL-2.0+ | LGPL-3.0 ) | The-Qt-Company-Commercial"
+LICENSE = "GFDL-1.3 & BSD-3-Clause & ( GPL-2.0-or-later | LGPL-3.0-only ) | The-Qt-Company-Commercial"
 LIC_FILES_CHKSUM = " \
     file://LICENSE.FDL;md5=6d9f2a9af4c8b8c3c769f6cc1b6aaf7e \
     file://LICENSE.GPLv2;md5=c96076271561b0e3785dad260634eaa8 \
@@ -23,4 +23,4 @@ python() {
     if 'meta-python2' not in d.getVar('BBFILE_COLLECTIONS').split():
         raise bb.parse.SkipRecipe('Requires meta-python2 to be present.')
 }
-SRCREV = "800926cc4e0ecfdb37a3b34486403354b66a37a4"
+SRCREV = "575089ad2fd15568ab73aded0b7ef3bb92e72e88"

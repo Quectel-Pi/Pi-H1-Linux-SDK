@@ -1,0 +1,25 @@
+From 27e6974e14beda2ca5e07d5a75ad9c9f7bc8eec9 Mon Sep 17 00:00:00 2001
+From: "crown.yu" <crown.yu@quectel.com>
+Date: Tue, 16 Sep 2025 15:12:27 +0800
+Subject: [PATCH] mod backend.xml
+
+---
+ plugins/tinyalsa/test/backend_conf.xml | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/plugins/tinyalsa/test/backend_conf.xml b/plugins/tinyalsa/test/backend_conf.xml
+index a2f09ef9..4520163c 100644
+--- a/plugins/tinyalsa/test/backend_conf.xml
++++ b/plugins/tinyalsa/test/backend_conf.xml
+@@ -38,7 +38,7 @@
+     <!-- bitwidth will be overwritten based on format.                                             -->
+     <device name="CODEC_DMA-LPAIF_WSA-RX-0" rate="48000" ch="2" bits="16" format="PCM_FORMAT_S16_LE"/>
+     <device name="CODEC_DMA-LPAIF_WSA-RX-1" rate="48000" ch="1" bits="16" />
+-    <device name="CODEC_DMA-LPAIF_RXTX-RX-0" rate="48000" ch="2" bits="16" />
++    <device name="CODEC_DMA-LPAIF_RXTX-RX-0" rate="48000" ch="1" bits="16" />
+     <device name="TDM-LPAIF_AXI-RX-PRIMARY" rate="48000" ch="2" bits="16" />
+     <device name="SLIM-DEV1-RX-0" rate="48000" ch="2" bits="16" />
+     <device name="DISPLAY_PORT-RX" rate="48000" ch="2" bits="16" />
+-- 
+2.34.1
+

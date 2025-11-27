@@ -17,5 +17,6 @@ extern int ws_panel_i2c_read(u8 reg);
 extern int ws_panel_i2c_write(u8 reg, u8 val);
 extern int ws_panel_set_backlight(unsigned int value);
 extern void ws_panel_switch_mipi(bool switch_ws);
+extern void ws_panel_poweron_mipi(void);
 
 #endif

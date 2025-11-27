@@ -6,7 +6,7 @@ inherit cmake pkgconfig
 DEPENDS += "libdrm"
 RDEPENDS:${PN} += "python3-pyserial"
 
-FILESPATH =+ "${WORKSPACE}/src/files:"
+FILESPATH:prepend =  "${WORKSPACE}/sources/quectel-src:"
 SRC_URI = "file://tests \
           "
 S = "${WORKDIR}/tests"

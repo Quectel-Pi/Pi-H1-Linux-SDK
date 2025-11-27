@@ -1,0 +1,24 @@
+From 0e03f19499b570cbb0f808e77857365f1793472a Mon Sep 17 00:00:00 2001
+From: "kyson.wang" <kyson.wang@quectel.com>
+Date: Thu, 30 Oct 2025 14:57:31 +0800
+Subject: [PATCH 3/3] modify_qcm6490_headphones_rdac.xml
+
+---
+ configs/qcm6490/mixer_paths_qcm6490_idp.xml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/configs/qcm6490/mixer_paths_qcm6490_idp.xml b/configs/qcm6490/mixer_paths_qcm6490_idp.xml
+index a77bbd99..b604ace6 100644
+--- a/configs/qcm6490/mixer_paths_qcm6490_idp.xml
++++ b/configs/qcm6490/mixer_paths_qcm6490_idp.xml
+@@ -448,6 +448,7 @@
+     </path>
+ 
+     <path name="headphones">
++        <ctl name="AUX_RDAC Switch" value="0" />
+         <ctl name="HPHL_RDAC Switch" value="1" />
+         <ctl name="HPHR_RDAC Switch" value="1" />
+         <ctl name="HPHL Switch" value="1" />
+-- 
+2.34.1
+

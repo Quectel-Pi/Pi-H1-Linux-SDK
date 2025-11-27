@@ -17,8 +17,6 @@ RDEPENDS:${PN} = "\
     packagegroup-qcom-opencv \
     python3-docker-compose \
     packagegroup-qcom-display \
-    packagegroup-qt5 \
-    packagegroup-qt5-app \
     "
 
 RDEPENDS:${PN}:append:qcom-custom-distro = "\

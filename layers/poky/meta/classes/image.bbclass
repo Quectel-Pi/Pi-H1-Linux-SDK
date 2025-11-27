@@ -131,6 +131,7 @@ def rootfs_variables(d):
     return " ".join(variables)
 
 do_rootfs[vardeps] += "${@rootfs_variables(d)}"
+do_rootfs[vardepsexclude] += "BB_TASKDEPDATA"
 
 # This is needed to have kernel image in DEPLOY_DIR.
 # This follows many common usecases and user expectations.

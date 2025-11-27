@@ -10,7 +10,8 @@ SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/vendor/qcom/opensource/ag
 SRCBRANCH  = "audio-core.lnx.1.0.r1-rel"
 SRCREV     = "2a57e93284279c513307b2d547ad088788b4005c"
 
-SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=audio/opensource/agm"
+SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=audio/opensource/agm \
+                    file://0001-mod-backend-xml.patch"
 
 S = "${WORKDIR}/audio/opensource/agm"
 

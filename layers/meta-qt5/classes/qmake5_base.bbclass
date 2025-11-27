@@ -46,7 +46,7 @@ export OE_QMAKE_STRIP = "echo"
 # qmake reads if from shell environment
 export OE_QMAKE_QTCONF_PATH = "${WORKDIR}/qt.conf"
 
-inherit qmake5_paths remove-libtool
+inherit qmake5_paths
 
 generate_target_qt_config_file() {
     qtconf="$1"
@@ -246,7 +246,8 @@ qmake5_base_do_install() {
     # Replace host paths with qmake built-in properties
     find ${D} \( -name "*.pri" -or -name "*.prl" \) -exec \
         sed -i -e 's|${STAGING_DIR_NATIVE}|$$[QT_HOST_PREFIX/get]|g' \
-            -e 's|${STAGING_DIR_HOST}|$$[QT_SYSROOT]|g' {} \;
+            -e 's|${STAGING_DIR_HOST}|$$[QT_SYSROOT]|g' {} \
+            -e '/QMAKE_PRL_BUILD_DIR/d' {} \;
 
     # Replace host paths with pkg-config built-in variable
     find ${D} -name "*.pc" -exec \

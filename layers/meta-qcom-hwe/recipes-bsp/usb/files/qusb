@@ -93,13 +93,6 @@ run_901D() {
 	echo "DIAG_ADB" > configs/c.1/strings/0x409/configuration
 	ln -s functions/ffs.diag configs/c.1/f1
 	ln -s functions/ffs.usb0 configs/c.1/f2
-	if [ -f /var/persist/fct_done_flag ]; then
-		echo "FCT done Flag exists. Skip USB UART"
-	else
-		echo "FCT done Flag does not exist."
-		ln -s functions/acm.usb0 configs/c.1/f3
-	fi
-	sleep 10
 	# android-tools-adbd.service will set UDC, too early here if diag-router android-tools-adbd not open ep0
 	usb_bind
 	cd /
@@ -180,6 +173,13 @@ run_902D() {
 	ln -s functions/rndis.rndis configs/c.1/f1
 	ln -s functions/ffs.diag configs/c.1/f2
 	ln -s functions/ffs.usb0 configs/c.1/f3
+	if [ -f /var/persist/fct_done_flag ]; then
+		echo "FCT done Flag exists. Skip USB UART"
+	else
+		echo "FCT done Flag does not exist."
+		ln -s functions/acm.usb0 configs/c.1/f4
+	fi
+	sleep 10
 	usb_bind
 	cd /
 }
@@ -658,9 +658,9 @@ usb_init() {
 			mkdir /etc/usb/
 		fi
 
-		# Set 901D as the default composition
-		echo 901D > /etc/usb/usb_pid
-		init_run_pid 901D &
+		# Set 902D as the default composition
+		echo 902D > /etc/usb/usb_pid
+		init_run_pid 902D &
 	fi
 }
 

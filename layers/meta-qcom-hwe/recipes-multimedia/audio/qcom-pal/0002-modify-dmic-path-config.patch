@@ -1,0 +1,57 @@
+From 6eae75b18f3c39a5c315ce917304ae173b7e4e38 Mon Sep 17 00:00:00 2001
+From: "crown.yu" <crown.yu@quectel.com>
+Date: Mon, 22 Sep 2025 10:34:55 +0800
+Subject: [PATCH 2/2] modify dmic-path-config
+
+---
+ configs/qcm6490/mixer_paths_qcm6490_idp.xml     | 13 ++++---------
+ configs/qcm6490/resourcemanager_qcm6490_idp.xml |  2 +-
+ 2 files changed, 5 insertions(+), 10 deletions(-)
+
+diff --git a/configs/qcm6490/mixer_paths_qcm6490_idp.xml b/configs/qcm6490/mixer_paths_qcm6490_idp.xml
+index 987ed2fe8..73831449c 100644
+--- a/configs/qcm6490/mixer_paths_qcm6490_idp.xml
++++ b/configs/qcm6490/mixer_paths_qcm6490_idp.xml
+@@ -366,14 +366,9 @@
+     </path>
+ 
+     <path name="speaker-mic">
+-       <ctl name="TX DEC0 MUX" value="SWR_MIC" />
+-		<ctl name="TX SMIC MUX0" value="ADC1" />
+-		<ctl name="TX_AIF1_CAP Mixer DEC0" value="1" />
+-		<ctl name="ADC2 MUX" value="INP2" />
+-		<ctl name="ADC2 Switch" value="1" />
+-		<ctl name="ADC2_MIXER Switch" value="1" />
+-		<ctl name="TX_DEC0 Volume" value="80" />
+-		<ctl name="ADC2 Volume" value="20" />
++       <ctl name="VA DMIC MUX0" value="DMIC0" />
++        <ctl name="VA_AIF1_CAP Mixer DEC0" value="1" />
++        <ctl name="VA_DEC0 Volume" value="100" />
+     </path>
+ 
+ 
+@@ -449,7 +444,7 @@
+     </path>
+ 
+     <path name="handset-mic">
+-        <path name="dmic0" />
++        <path name="dmic3" />
+     </path>
+ 
+     <path name="headphones">
+diff --git a/configs/qcm6490/resourcemanager_qcm6490_idp.xml b/configs/qcm6490/resourcemanager_qcm6490_idp.xml
+index 28e0b579e..b1e83ccb2 100644
+--- a/configs/qcm6490/resourcemanager_qcm6490_idp.xml
++++ b/configs/qcm6490/resourcemanager_qcm6490_idp.xml
+@@ -244,7 +244,7 @@
+         </in-device>
+         <in-device>
+             <id>PAL_DEVICE_IN_SPEAKER_MIC</id>
+-            <back_end_name>CODEC_DMA-LPAIF_RXTX-TX-3</back_end_name>
++            <back_end_name>CODEC_DMA-LPAIF_VA-TX-0</back_end_name>
+             <max_channels>4</max_channels>
+             <samplerate>48000</samplerate>
+             <channels>1</channels>
+-- 
+2.34.1
+

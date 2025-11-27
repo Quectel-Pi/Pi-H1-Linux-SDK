@@ -70,3 +70,4 @@ python () {
     if ('qcom-base-bsp' in mach_overrides):
         raise bb.parse.SkipRecipe("linux-kernel-qcom-headers not compatible with qcom-base-bsp")
 }
+RDEPENDS:${PN}-dev = ""

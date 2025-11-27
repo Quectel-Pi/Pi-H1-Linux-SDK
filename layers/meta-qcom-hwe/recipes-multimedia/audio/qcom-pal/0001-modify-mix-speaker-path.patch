@@ -1,0 +1,33 @@
+From c165e550fd75ce5ce6e4cf3ed8e9072a3283e70b Mon Sep 17 00:00:00 2001
+From: "crown.yu" <crown.yu@quectel.com>
+Date: Wed, 17 Sep 2025 15:09:01 +0800
+Subject: [PATCH] modify-mix-speaker-path
+
+---
+ configs/qcm6490/mixer_paths_qcm6490_idp.xml | 9 +++------
+ 1 file changed, 3 insertions(+), 6 deletions(-)
+
+diff --git a/configs/qcm6490/mixer_paths_qcm6490_idp.xml b/configs/qcm6490/mixer_paths_qcm6490_idp.xml
+index cb59ace4c..987ed2fe8 100644
+--- a/configs/qcm6490/mixer_paths_qcm6490_idp.xml
++++ b/configs/qcm6490/mixer_paths_qcm6490_idp.xml
+@@ -283,13 +283,10 @@
+     </path>
+ 
+     <path name="speaker">
++        <ctl name="AUX_RDAC Switch" value="1" />
+         <ctl name="RX_MACRO RX0 MUX" value="AIF1_PB" />
+-        <ctl name="RX INT0_1 MIX1 INP0" value="RX0" />
+-        <ctl name="RX INT0 DEM MUX" value="CLSH_DSM_OUT" />
+-        <ctl name="EAR_RDAC Switch" value="1" />
+-        <ctl name="RDAC3_MUX" value="RX1" />
+-        <ctl name="RX_EAR Mode Switch" value="ON" />
+-
++        <ctl name="RX INT2_1 MIX1 INP0" value="RX0" />
++        <ctl name="LO Switch" value="1" />
+     </path>
+ 
+     <path name="speaker-prot">
+-- 
+2.34.1
+

@@ -86,6 +86,7 @@
 			//"SpkrRight IN", "WSA_SPK2 OUT",
 			"IN1_HPHL", "HPHL_OUT",
 			"IN2_HPHR", "HPHR_OUT",
+			"IN3_AUX", "AUX_OUT",
 			"AMIC2", "MIC BIAS2",
 			"TX DMIC0", "MIC BIAS1",
 			"TX DMIC1", "MIC BIAS2",

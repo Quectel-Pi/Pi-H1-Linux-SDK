@@ -1,0 +1,150 @@
+
+/ {
+	/delete-node/ regulator-lcd-disp-bias;
+
+	hdmi-connector {
+		compatible = "hdmi-connector";
+		type = "a";
+
+		port {
+			hdmi_con: endpoint {
+				remote-endpoint = <&lt9611_out>;
+			};
+		};
+	};
+};
+
+&soc {
+        lt9611_1v2_vreg: lt9611-1v2-vreg {
+                compatible = "regulator-fixed";
+		regulator-name = "lt9611_1v2_vreg";
+                gpio = <&tlmm 121 0>;
+                regulator-min-microvolt = <1200000>;
+                regulator-max-microvolt = <1200000>;
+                enable-active-high;
+		vin-supply = <&vreg_l17b_1p7>; //need by U1902 SGM4568YTQG20G
+        };
+
+        lt9611_3v3_vreg: lt9611-3v3-vreg {
+                compatible = "regulator-fixed";
+		regulator-name = "lt9611_3v3_vreg";
+                gpio = <&tlmm 46 0>;
+                regulator-min-microvolt = <3300000>;
+                regulator-max-microvolt = <3300000>;
+                enable-active-high;
+        };
+};
+
+
+&apps_rsc {
+	regulators-0 {
+		vreg_l6b_1p2: ldo6 {
+			regulator-min-microvolt = <1140000>;
+			regulator-max-microvolt = <1260000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+
+	regulators-1 {
+		vreg_l10c_0p88: ldo10 {
+			regulator-min-microvolt = <880000>;
+			regulator-max-microvolt = <1050000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+	};
+};
+
+&pm7250b_gpios {
+	///delete-node/ lcd-disp-bias-en-state;
+};
+
+&tlmm {
+	lt9611_rst_pin: lt9611-rst-state {
+		pins = "gpio158";
+		function = "gpio";
+
+		output-high;
+	};
+
+	lt9611_irq_pin: lt9611-irq {
+		pins = "gpio44";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
+
+	lt9611_en_pin: lt9611-en-state {
+		pins = "gpio7";
+		function = "gpio";
+		output-high;
+	};
+};
+
+
+&i2c0 {
+	status = "okay";
+
+	lt9611_codec: hdmi-bridge@2b {
+		compatible = "lontium,lt9611uxc";
+		reg = <0x2b>;
+
+		interrupts-extended = <&tlmm 44 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&tlmm 158 0>;
+		enable-gpios = <&tlmm 7 0>; //LT9611_5V_EN GPIO_ACTIVE_HIGH
+
+		vcc-supply = <&lt9611_3v3_vreg>;
+		vdd-supply = <&lt9611_1v2_vreg>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&lt9611_irq_pin &lt9611_rst_pin &lt9611_en_pin>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				lt9611_a: endpoint {
+					remote-endpoint = <&mdss_dsi0_out>;
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+
+				lt9611_out: endpoint {
+					remote-endpoint = <&hdmi_con>;
+				};
+			};
+		};
+	};
+};
+
+&mdss {
+	status = "okay";
+};
+
+&mdss_dsi {
+	vdda-supply = <&vreg_l6b_1p2>;
+	status = "okay";
+};
+
+&mdss_dsi0_out {
+	remote-endpoint = <&lt9611_a>;
+	data-lanes = <0 1 2 3>;
+};
+
+&mdss_dsi_phy {
+	vdds-supply = <&vreg_l10c_0p88>;
+	status = "okay";
+};
+
+&mdss_dp {
+	status = "okay";
+};
+
+&mdss_mdp {
+	status = "okay";
+	/delete-node/ port@1;
+};

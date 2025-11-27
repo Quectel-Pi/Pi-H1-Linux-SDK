@@ -1,0 +1,25 @@
+[Unit]
+# 服务描述
+Description=USB Multi-Device Auto Mount Service
+# 依赖：等待文件系统和USB服务就绪后再启动
+After=local-fs.target usb.target
+# 防止与其他USB服务冲突
+Conflicts=udev-configure-printer.service
+
+[Service]
+# 运行类型：简单后台运行
+Type=simple
+# 执行脚本的绝对路径（确保脚本路径正确）
+ExecStart=/usr/bin/automountucard.sh
+# 脚本异常退出时自动重启（增强稳定性）
+Restart=always
+# 重启间隔（避免频繁重启）
+RestartSec=3
+# 运行用户（root权限确保挂载/卸载权限）
+User=root
+# 环境变量（确保脚本能访问系统命令）
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin"
+
+[Install]
+# 开机自启的目标：多用户模式下启动
+WantedBy=multi-user.target

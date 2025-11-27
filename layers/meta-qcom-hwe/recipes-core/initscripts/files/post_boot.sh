@@ -13,5 +13,12 @@ echo 100 > /proc/sys/vm/swappiness
 # Disable periodic kcompactd wakeups. We do not use THP, so having many
 # huge pages is not as necessary.
 echo 0 > /proc/sys/vm/compaction_proactiveness
-echo heartbeat > /sys/class/leds/green/trigger
-echo disk-activity > /sys/class/leds/blue/trigger
+
+. /etc/quecpi_config/quecpi_config.ini
+
+echo $led_red_trigger > /sys/class/leds/red/trigger
+echo $led_blue_trigger > /sys/class/leds/blue/trigger
+echo $led_green_trigger > /sys/class/leds/green/trigger
+echo $led_red_brightness > /sys/class/leds/red/brightness
+echo $led_blue_brightness > /sys/class/leds/blue/brightness
+echo $led_green_brightness > /sys/class/leds/green/brightness
