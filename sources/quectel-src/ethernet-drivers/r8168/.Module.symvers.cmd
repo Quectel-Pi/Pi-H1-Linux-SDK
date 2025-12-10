@@ -1,0 +1,1 @@
+savedcmd_/opt/1.3/build-qcom-wayland/tmp-glibc/work/qcm6490_idp-qcom-linux/r8168/1.0-r0/r8168/Module.symvers :=  scripts/mod/modpost -M        -o /opt/1.3/build-qcom-wayland/tmp-glibc/work/qcm6490_idp-qcom-linux/r8168/1.0-r0/r8168/Module.symvers -T /opt/1.3/build-qcom-wayland/tmp-glibc/work/qcm6490_idp-qcom-linux/r8168/1.0-r0/r8168/modules.order -i Module.symvers -e 

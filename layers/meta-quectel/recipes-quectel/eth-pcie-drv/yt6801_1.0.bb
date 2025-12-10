@@ -3,8 +3,9 @@ LICENSE = "CLOSED"
 
 inherit module
 
-SRC_URI = "file://yt6801.tgz"
-S = "${WORKDIR}/yt6801"
+FILESPATH:prepend =  "${WORKSPACE}/sources/quectel-src:"
+SRC_URI = "file://ethernet-drivers/yt6801"
+S = "${WORKDIR}/ethernet-drivers/yt6801"
 
 EXTRA_OEMAKE += "KDIR=${STAGING_KERNEL_DIR}"
 

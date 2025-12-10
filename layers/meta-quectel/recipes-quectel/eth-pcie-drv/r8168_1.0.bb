@@ -3,8 +3,9 @@ LICENSE = "CLOSED"
 
 inherit module
 
-SRC_URI = "file://r8168.tgz"
-S = "${WORKDIR}/r8168"
+FILESPATH:prepend =  "${WORKSPACE}/sources/quectel-src:"
+SRC_URI = "file://ethernet-drivers/r8168"
+S = "${WORKDIR}/ethernet-drivers/r8168"
 
 MAKE_TARGETS = "modules"
 EXTRA_OEMAKE += "KERNELDIR=${STAGING_KERNEL_DIR}"

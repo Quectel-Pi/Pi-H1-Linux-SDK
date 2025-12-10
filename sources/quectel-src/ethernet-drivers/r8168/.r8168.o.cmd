@@ -1,0 +1,1 @@
+savedcmd_/opt/1.3/build-qcom-wayland/tmp-glibc/work/qcm6490_idp-qcom-linux/r8168/1.0-r0/r8168/r8168.o := aarch64-qcom-linux-ld.bfd   -EL  -maarch64elf -z noexecstack   -r -o /opt/1.3/build-qcom-wayland/tmp-glibc/work/qcm6490_idp-qcom-linux/r8168/1.0-r0/r8168/r8168.o @/opt/1.3/build-qcom-wayland/tmp-glibc/work/qcm6490_idp-qcom-linux/r8168/1.0-r0/r8168/r8168.mod 
