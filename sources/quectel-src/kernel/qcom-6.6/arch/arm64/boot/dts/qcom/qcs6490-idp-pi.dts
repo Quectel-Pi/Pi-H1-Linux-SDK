@@ -1042,10 +1042,11 @@
 	vmmc-supply = <&wifi_3v3_vreg>;
 	vqmmc-supply = <&wifi_1v8_vreg>;
 
-        //quec,wifi-pwr-gpio = <&tlmm 132 0x00>;
-        //quec,wifi-io-pwr-gpio = <&tlmm 130 0x00>;
-        quec,wifi-en-gpio = <&tlmm 84 GPIO_ACTIVE_HIGH>;
+    //quec,wifi-pwr-gpio = <&tlmm 132 0x00>;
+    //quec,wifi-io-pwr-gpio = <&tlmm 130 0x00>;
+    quec,wifi-en-gpio = <&tlmm 84 GPIO_ACTIVE_HIGH>;
 
+	keep-power-in-suspend;
 	status = "ok";
 };
 
@@ -1352,6 +1353,7 @@
 &pcie0 {
 	status = "okay";
 	vdda-supply = <&rtl8111h_3v3_vreg>;
+	perst-gpios = <&tlmm 87 GPIO_ACTIVE_LOW>;
 };
 
 &pcie0_phy {

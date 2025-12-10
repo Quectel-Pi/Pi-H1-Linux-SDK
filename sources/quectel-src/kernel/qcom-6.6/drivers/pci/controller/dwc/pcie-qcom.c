@@ -341,7 +341,7 @@ static int qcom_pcie_stop_link(struct dw_pcie *pci)
 				     val & PM_ENTER_L23, 10000, 100000);
 	if (ret_l23) {
 		dev_err(pci->dev, "Failed to enter L2/L3\n");
-		return -ETIMEDOUT;
+		//return -ETIMEDOUT;			//Igni modify this this couse out of suspend
 	}
 
 	return 0;
@@ -1302,7 +1302,9 @@ static void qcom_pcie_host_deinit(struct dw_pcie_rp *pp)
 	struct qcom_pcie *pcie = to_qcom_pcie(pci);
 
 	printk("Enter qcom_pcie_host_deinit\n");
-	qcom_ep_reset_assert(pcie);
+	gpiod_set_value_cansleep(pcie->reset, 1);
+	if (pcie->pwkey)
+		gpiod_set_value_cansleep(pcie->pwkey, 0);		//power off 5G modules
 	phy_power_off(pcie->phy);
 	pcie->cfg->ops->deinit(pcie);
 	printk("Quit qcom_pcie_host_deinit\n");
