@@ -22,6 +22,8 @@
 #include "pm8350c.dtsi"
 #include "pmk8350.dtsi"
 
+#include <dt-bindings/camera/quec-cam-select.h>
+
 /delete-node/ &usb_2_dwc3;
 
 / {
@@ -1589,52 +1591,48 @@
 };
 
 //add for imx219
-/*
+#if USE_CAMX_ENABLE == 0
 &camcc {
-	status = "okay";
+        status = "okay";
 };
-
 &camss {
-	vdda-phy-supply = <&vreg_l10c_0p88>;
- 	vdda-pll-supply = <&vreg_l6b_1p2>;
-	status = "okay";
-	ports {
-		#address-cells = <1>;
-		#size-cells = <0>;
-
-		port@0 {
-			reg = <0>;
-			csiphy0_ep: endpoint {
-				clock-lanes = <0>;
-				data-lanes = <0 1>;
-				remote-endpoint = <&imx219_ep>;
-			};
-		};
+    vdda-phy-supply = <&vreg_l10c_0p88>;
+    vdda-pll-supply = <&vreg_l6b_1p2>;
+    status = "okay";
+    ports {
+        #address-cells = <1>;
+        #size-cells = <0>;
+        port@0 {
+             reg = <0>;
+             csiphy0_ep: endpoint {
+                clock-lanes = <0>;
+                data-lanes = <0 1>;
+                remote-endpoint = <&imx219_ep>;
+               };
+        };
 	};
 };
-*/
 
-/*
-&cci0 {			//cci0  csiphy0
-	status = "disabled";
+
+&cci0 {                        //cci0  csiphy0
+    status = "okay";
 };
-
 &cci0_i2c0 {
     imx219: camera@10 {
         compatible = "sony,imx219";
-        reg = <0x10>;  // I2C ��ַ
-		power-gpios = <&tlmm 61 0>;
-        reset-gpios = <&tlmm 20 0>;
-		pinctrl-names = "default", "suspend";
-		pinctrl-0 = <&cam2_default>;
-		pinctrl-1 = <&cam2_suspend>;
-		clock-names = "xclk";
-		clocks = <&camcc CAM_CC_MCLK0_CLK>;
-		assigned-clocks = <&camcc CAM_CC_MCLK0_CLK>;
-		assigned-clock-rates = <24000000>;
+        reg = <0x10>;  // I2C 
+                power-gpios = <&tlmm 61 0>;
+        		reset-gpios = <&tlmm 20 0>;
+                pinctrl-names = "default", "suspend";
+                pinctrl-0 = <&cam2_default>;
+                pinctrl-1 = <&cam2_suspend>;
+                clock-names = "xclk";
+                clocks = <&camcc CAM_CC_MCLK0_CLK>;
+                assigned-clocks = <&camcc CAM_CC_MCLK0_CLK>;
+                assigned-clock-rates = <24000000>;
         port {
             imx219_ep: endpoint {
-				clock-lanes = <0>;
+                                clock-lanes = <0>;
                 remote-endpoint = <&csiphy0_ep>;
                 data-lanes = <1 2>;
                 link-frequencies = /bits/ 64 <456000000>;
@@ -1642,6 +1640,6 @@
         };
     };
 };
-*/
+#endif
 
 #include "qcm6490-addons.dtsi"

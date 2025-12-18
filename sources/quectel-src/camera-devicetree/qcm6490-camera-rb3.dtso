@@ -4,7 +4,9 @@
  */
 /dts-v1/;
 /plugin/;
+#include <dt-bindings/camera/quec-cam-select.h>
 
+#if USE_CAMX_ENABLE == 1
 #include <dt-bindings/clock/qcom,gcc-sc7280.h>
 #include <dt-bindings/clock/qcom,camcc-sc7280.h>
 #include <dt-bindings/interconnect/qcom,sc7280.h>
@@ -13,3 +15,12 @@
 
 #include "qcm6490-camera-rb3.dtsi"
 #include "qcm6490-camera-sensor-rb3.dtsi"
+#else
+
+&soc {
+	qcom,cam-res-mgr {
+		compatible = "qcom,cam-res-mgr";
+		status = "disabled";
+	};
+};
+#endif

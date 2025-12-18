@@ -1,0 +1,6 @@
+#ifndef __DT_BINDINGS_QUEC_CAM_SEL_H
+#define __DT_BINDINGS_QUEC_CAM_SEL_H
+
+#define USE_CAMX_ENABLE 1
+
+#endif
