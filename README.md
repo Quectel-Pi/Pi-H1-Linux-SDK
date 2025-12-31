@@ -12,17 +12,17 @@ Quectel PI H1 build
 
 ## Get SDK
 
-    git clone https://github.com/QuecPi/QuecPi-Alpha-Linux-SDK.git
+    git clone https://github.com/Quectel-Pi/Pi-H1-Linux-SDK.git
 
 ## Environment Setup
 
-    cd your/path/to/QuecPi-Alpha-Linux-SDK/
+    cd your/path/to/Pi-H1-Linux-SDK/
 
     ./install_build_env.sh
 
 ## Build
 
-    cd your/path/to/QuecPi-Alpha-Linux-SDK/
+    cd your/path/to/Pi-H1-Linux-SDK/
 
     source quectel_build/compile/build.sh  
 

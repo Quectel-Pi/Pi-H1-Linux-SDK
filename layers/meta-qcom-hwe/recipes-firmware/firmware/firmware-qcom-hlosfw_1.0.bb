@@ -9,7 +9,7 @@ SRC_URI ="https://${FW_ARTIFACTORY}/${FW_BUILD_ID}/${FW_BIN_PATH}/${HLOSFIRMWARE
 #SRC_URI[qcm6490.sha256sum] = "5d511a815c4c34d890e3bd81270e66648982e6b4d5a31dc1a5095f5bf6de9460"
 #qcm6490
 
-SRC_URI = "https://github.com/QuecPi/QuecPi-Alpha-Linux-SDK/releases/download/1.0/${HLOSFIRMWARE}.zip" 
+SRC_URI = "https://github.com/Quectel-Pi/Pi-H1-Linux-SDK/releases/download/1.0/${HLOSFIRMWARE}.zip" 
 SRC_URI[sha256sum] = "9f6d608b671ff08feee63a951e991fb91e3d69b16b69168064b8cc46923dc37b"
 
 SRC_URI[qcs9100.sha256sum] = "c4978685d9898bff4dd8c75a7c9df157af2d7b2474f73020f6ae444cdcac550c"
