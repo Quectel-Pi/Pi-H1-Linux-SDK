@@ -27,6 +27,8 @@ Quectel PI H1 build
     source quectel_build/compile/build.sh  
 
     buildconfig QSM565DWF <Your Project ID> STD
+
+    setostreekernel
     
     buildall
 
@@ -35,3 +37,27 @@ Quectel PI H1 build
 ## Get your firmware
 
     quectel_build/<Your Project ID>
+
+
+
+## Build kernel & dtb for debian
+
+    cd your/path/to/Pi-H1-Linux-SDK/
+
+    source quectel_build/compile/build.sh  
+
+    buildconfig QSM565DWF <Your Project ID> STD
+
+    setopenkernel
+
+    buildkernel                 (build kernel in efi.bin if you need)
+
+    builddtb                    (build kernel in dtb.bin if you need)
+
+    buildpackage
+
+## Get your kernel && dtb and replace into debian package
+
+    quectel_build/output/dtb.bin    
+
+    quectel_build/output/efi.bin
