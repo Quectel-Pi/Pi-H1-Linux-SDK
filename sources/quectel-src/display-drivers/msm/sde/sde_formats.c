@@ -9,6 +9,7 @@
 #include <drm/drm_fourcc.h>
 #include <media/mmm_color_fmt.h>
 #include <linux/sort.h>
+#include <linux/seq_file.h>
 
 #include "sde_kms.h"
 #include "sde_formats.h"
@@ -1274,6 +1275,34 @@ const struct sde_format *sde_get_sde_format_ext(
 
 	return fmt;
 }
+
+
+static int sde_debugfs_format_modifiers_show(struct seq_file *s, void *v)
+{
+    int i;
+
+    seq_printf(s, "Modifier list:\n");
+
+    for (i = 0; i < ARRAY_SIZE(sde_format_map_ubwc); i++) {
+        seq_printf(s, "0x%llx: fmt=0x%x\n",
+                   DRM_FORMAT_MOD_QCOM_COMPRESSED,
+                   sde_format_map_ubwc[i].base.pixel_format);
+    }
+
+    for (i = 0; i < ARRAY_SIZE(sde_format_map_tile); i++) {
+        seq_printf(s, "0x%llx: fmt=0x%x\n",
+                   DRM_FORMAT_MOD_QCOM_TILE,
+                   sde_format_map_tile[i].base.pixel_format);
+    }
+
+    return 0;
+}
+
+int sde_debugfs_format_modifiers_open(struct inode *inode, struct file *file)
+{
+    return single_open(file, sde_debugfs_format_modifiers_show, inode->i_private);
+}
+
 
 const struct msm_format *sde_get_msm_format(
 		struct msm_kms *kms,

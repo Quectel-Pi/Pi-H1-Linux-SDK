@@ -99,6 +99,27 @@ function buildall() {
     bitbake qcom-multimedia-image
 }
 
+function buildkernel() {
+    bitbake -c cleanall virtual/kernel && bitbake esp-qcom-image
+}
+
+function builddtb() {
+    bitbake -c cleanall virtual/kernel && bitbake dtb-qcom-image
+}
+
+function setopenkernel() {
+    cp $TOPDIR/quectel_build/config/bb/non-ostree/linux-qcom-uki.bb  $TOPDIR/layers/meta-qcom-hwe/recipes-kernel/images/linux-qcom-uki.bb
+    cp $TOPDIR/quectel_build/config/bb/non-ostree/qcom-base.inc $TOPDIR/layers/meta-qcom-distro/conf/distro/include/qcom-base.inc
+    bitbake -c cleanall linux-qcom-uki virtual/kernel
+}
+
+function setostreekernel() {
+    cp $TOPDIR/quectel_build/config/bb/ostree/linux-qcom-uki.bb  $TOPDIR/layers/meta-qcom-hwe/recipes-kernel/images/linux-qcom-uki.bb
+    cp $TOPDIR/quectel_build/config/bb/ostree/qcom-base.inc $TOPDIR/layers/meta-qcom-distro/conf/distro/include/qcom-base.inc
+    bitbake -c cleanall linux-qcom-uki virtual/kernel
+}
+
+
 function buildsdk() {
     bitbake qcom-multimedia-image -c populate_sdk
     $TOPDIR/quectel_build/compile/export_sdk.sh $@

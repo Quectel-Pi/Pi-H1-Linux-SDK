@@ -135,4 +135,7 @@ int sde_format_validate_fmt(struct msm_kms *kms,
 	const struct sde_format *sde_fmt,
 	const struct sde_format_extended *fmt_list);
 
+int sde_debugfs_format_modifiers_open(struct inode *inode, struct file *file);
+
+
 #endif /*_SDE_FORMATS_H */

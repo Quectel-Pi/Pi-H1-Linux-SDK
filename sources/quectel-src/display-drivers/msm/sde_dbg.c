@@ -22,6 +22,7 @@
 #include "sde/sde_hw_catalog.h"
 #include "sde/sde_kms.h"
 #include "sde/sde_hw_util.h"
+#include "sde/sde_formats.h"
 
 #define SDE_DBG_BASE_MAX		10
 
@@ -2498,6 +2499,15 @@ static const struct file_operations sde_reg_fops = {
 #endif
 };
 
+static const struct file_operations sde_debugfs_format_modifiers_fops = {
+    .owner = THIS_MODULE,
+    .open = sde_debugfs_format_modifiers_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = single_release,
+};
+
+
 int sde_dbg_debugfs_register(struct device *dev)
 {
 	static struct sde_dbg_base *dbg = &sde_dbg_base;
@@ -2526,6 +2536,10 @@ int sde_dbg_debugfs_register(struct device *dev)
 	debugfs_create_file("dbg_ctrl", 0600, debugfs_root, NULL, &sde_dbg_ctrl_fops);
 	debugfs_create_file("dump", 0600, debugfs_root, NULL, &sde_evtlog_fops);
 	debugfs_create_file("recovery_reg", 0400, debugfs_root, NULL, &sde_recovery_reg_fops);
+
+    /* Add UBWC/TILED format modifiers debugfs */
+    debugfs_create_file("format_modifiers", 0444, debugfs_root,
+		priv, &sde_debugfs_format_modifiers_fops);
 
 	debugfs_create_u32("enable", 0600, debugfs_root, &(sde_dbg_base.evtlog->enable));
 	debugfs_create_u32("reglog_enable", 0600, debugfs_root, &(sde_dbg_base.reglog->enable));

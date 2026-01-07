@@ -101,6 +101,9 @@ struct wcd937x_priv {
 	int ear_rx_path;
 	u32 chipid;
 	int reset_gpio;
+	int pa_gpio;
+	int headset1_gpio;
+	int headset2_gpio;
 	u32 micb1_mv;
 	u32 micb2_mv;
 	u32 micb3_mv;
@@ -253,6 +256,32 @@ static void wcd937x_reset(struct wcd937x_priv *wcd937x)
 	gpio_set_value(wcd937x->reset_gpio, 1);
 	usleep_range(20, 30);
 }
+
+static void wcd937x_set_pa(struct wcd937x_priv *wcd937x)
+{
+	gpio_direction_output(wcd937x->pa_gpio, 0);
+	usleep_range(20, 30);
+
+	gpio_set_value(wcd937x->pa_gpio, 1);
+	usleep_range(20, 30);
+}
+static void wcd937x_set_headset1(struct wcd937x_priv *wcd937x)
+{
+	gpio_direction_output(wcd937x->headset1_gpio, 0);
+	usleep_range(20, 30);
+
+	gpio_set_value(wcd937x->headset1_gpio, 1);
+	usleep_range(20, 30);
+}
+static void wcd937x_set_headset2(struct wcd937x_priv *wcd937x)
+{
+	gpio_direction_output(wcd937x->headset2_gpio, 0);
+	usleep_range(20, 30);
+
+	gpio_set_value(wcd937x->headset2_gpio, 1);
+	usleep_range(20, 30);
+}
+
 
 static void wcd937x_io_init(struct regmap *regmap)
 {
@@ -2992,6 +3021,28 @@ static int wcd937x_probe(struct platform_device *pdev)
 	if (IS_ERR(wcd937x->us_euro_gpio))
 		return dev_err_probe(dev, PTR_ERR(wcd937x->us_euro_gpio),
 				"us-euro swap Control GPIO not found\n");
+
+	wcd937x->pa_gpio = of_get_named_gpio(dev->of_node, "pa-gpios", 0); 
+	if (wcd937x->pa_gpio >= 0)
+	{
+		wcd937x_set_pa(wcd937x);
+	}else{
+		dev_err(dev, "No find pa gpio");
+	} 
+	wcd937x->headset1_gpio = of_get_named_gpio(dev->of_node, "headset1-gpios", 0); 
+	if (wcd937x->headset1_gpio >= 0)
+	{
+		wcd937x_set_headset1(wcd937x);
+	}else{
+		dev_err(dev, "No find headset1 gpio");
+	}
+	wcd937x->headset2_gpio = of_get_named_gpio(dev->of_node, "headset2-gpios", 0); 
+	if (wcd937x->headset2_gpio >= 0)
+	{
+		wcd937x_set_headset2(wcd937x);
+	}else{
+		dev_err(dev, "No find headset2 gpio");
+	}
 
 	cfg = &wcd937x->mbhc_cfg;
 	cfg->swap_gnd_mic = wcd937x_swap_gnd_mic;

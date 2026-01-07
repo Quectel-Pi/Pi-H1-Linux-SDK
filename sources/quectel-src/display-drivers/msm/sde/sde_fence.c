@@ -802,7 +802,7 @@ signed long sde_sync_wait(void *fnc, long timeout_ms, int *error_status)
 	else if (dma_fence_is_signaled(fence))
 		return timeout_ms ? msecs_to_jiffies(timeout_ms) : 1;
 
-	rc = dma_fence_wait_timeout(fence, true,
+	rc = dma_fence_wait_timeout(fence, false,
 				msecs_to_jiffies(timeout_ms));
 	if (!rc || (rc == -EINVAL) || fence->error) {
 		status = dma_fence_get_status(fence);

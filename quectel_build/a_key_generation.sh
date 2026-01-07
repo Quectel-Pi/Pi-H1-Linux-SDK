@@ -31,7 +31,17 @@ TARGET_DIR="$TOPDIR/quectel_build/${VERSION_NUMBER}"
 # Output generating TARGET_DIR
 echo "TARGET_DIR: $TARGET_DIR"
 
+KERNEL_FILE="$TOPDIR/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/esp-qcom-image-qcm6490-idp.vfat"
+
+DTB_FILE="$TOPDIR/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/dtb-qcom-image-qcm6490-idp.vfat"
+
 AP_VERSION_FILE="$TOPDIR/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/qcom-multimedia-image"
+
+mkdir -p "$TARGET_DIR/../output"
+rm -f "$TARGET_DIR/../output/efi.bin"
+rm -f "$TARGET_DIR/../output/dtb.bin"
+cp -L "$KERNEL_FILE" "$TARGET_DIR/../output/efi.bin"
+cp -L "$DTB_FILE"    "$TARGET_DIR/../output/dtb.bin"
 
 if [ ! -d "$AP_VERSION_FILE" ]; then
   echo "$AP_VERSION_FILE is not exist"

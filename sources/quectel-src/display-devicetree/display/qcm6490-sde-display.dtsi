@@ -142,6 +142,7 @@
 	};
 };
 
+
 &dsi_ili9881_video {
 	qcom,dsi-select-clocks = "pll_byte_clk0", "pll_dsi_clk0";
 	qcom,mdss-dsi-display-timings {
