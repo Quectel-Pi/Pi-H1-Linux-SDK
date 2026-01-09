@@ -257,14 +257,6 @@ static void wcd937x_reset(struct wcd937x_priv *wcd937x)
 	usleep_range(20, 30);
 }
 
-static void wcd937x_set_pa(struct wcd937x_priv *wcd937x)
-{
-	gpio_direction_output(wcd937x->pa_gpio, 0);
-	usleep_range(20, 30);
-
-	gpio_set_value(wcd937x->pa_gpio, 1);
-	usleep_range(20, 30);
-}
 static void wcd937x_set_headset1(struct wcd937x_priv *wcd937x)
 {
 	gpio_direction_output(wcd937x->headset1_gpio, 0);
@@ -3021,14 +3013,14 @@ static int wcd937x_probe(struct platform_device *pdev)
 	if (IS_ERR(wcd937x->us_euro_gpio))
 		return dev_err_probe(dev, PTR_ERR(wcd937x->us_euro_gpio),
 				"us-euro swap Control GPIO not found\n");
-
-	wcd937x->pa_gpio = of_get_named_gpio(dev->of_node, "pa-gpios", 0); 
-	if (wcd937x->pa_gpio >= 0)
-	{
-		wcd937x_set_pa(wcd937x);
-	}else{
-		dev_err(dev, "No find pa gpio");
-	} 
+	/*pa	控制在lpass-rx-macro.c中控制，此处删除*/
+	// wcd937x->pa_gpio = of_get_named_gpio(dev->of_node, "pa-gpios", 0); 
+	// if (wcd937x->pa_gpio >= 0)
+	// {
+	// 	wcd937x_set_pa(wcd937x);
+	// }else{
+	// 	dev_err(dev, "No find pa gpio");
+	// } 
 	wcd937x->headset1_gpio = of_get_named_gpio(dev->of_node, "headset1-gpios", 0); 
 	if (wcd937x->headset1_gpio >= 0)
 	{

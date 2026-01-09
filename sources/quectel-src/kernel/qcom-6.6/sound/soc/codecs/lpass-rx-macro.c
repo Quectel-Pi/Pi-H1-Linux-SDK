@@ -16,7 +16,7 @@
 #include <linux/of_clk.h>
 #include <linux/clk-provider.h>
 #include <linux/soundwire/sdw.h>
-
+#include <linux/of_gpio.h>
 #include "lpass-macro-common.h"
 
 #define CDC_RX_TOP_TOP_CFG0		(0x0000)
@@ -2023,6 +2023,22 @@ static bool rx_macro_adie_lb(struct snd_soc_component *component,
 	return false;
 }
 
+static void wcd937x_set_pa(void)
+{
+	gpio_direction_output(689, 1);
+	usleep_range(20, 30);
+	gpio_set_value(689, 1);
+	usleep_range(20, 30);
+}
+
+static void wcd937x_clr_pa(void)
+{
+	gpio_direction_output(689, 1);
+	usleep_range(20, 30);
+	gpio_set_value(689, 0);
+	usleep_range(20, 30);
+}
+
 static int rx_macro_enable_interp_clk(struct snd_soc_component *component,
 				      int event, int interp_idx);
 static int rx_macro_enable_main_path(struct snd_soc_dapm_widget *w,
@@ -2031,10 +2047,22 @@ static int rx_macro_enable_main_path(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
 	u16 gain_reg, reg;
-
+	
 	reg = CDC_RX_RXn_RX_PATH_CTL(w->shift);
 	gain_reg = CDC_RX_RXn_RX_VOL_CTL(w->shift);
-
+	if(strcmp(w->name, "RX INT2_1 INTERP")==0)
+	{
+		if(event==SND_SOC_DAPM_POST_PMU)
+		{
+			dev_info(component->dev, "open wcd9370 pa\n");
+			wcd937x_set_pa();
+		}
+		if(event==SND_SOC_DAPM_POST_PMD)
+		{
+			dev_info(component->dev, "close wcd9370 pa\n");
+			wcd937x_clr_pa();
+		}
+	}
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
 		rx_macro_enable_interp_clk(component, event, w->shift);
