@@ -1,4 +1,0 @@
-#How to build myftm
-cd ath6kl-utils/
-make
-#binary is ath6kl-utils/myftm/myftm
