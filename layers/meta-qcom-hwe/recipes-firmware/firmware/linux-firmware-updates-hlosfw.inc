@@ -4,7 +4,7 @@ require firmware-qcs9100.inc
 require firmware-qcs8300.inc
 require firmware-qcs615.inc
 
-QCM6490_SRC_URI ?= "file://${QUECTEL_PREBUILT_BPFW_DIR}/QCM6490_fw.zip;name=QCM6490_fw"
+QCM6490_SRC_URI ?= "${@qcm6490_fw_src_uri(d)}"
 QCS9100_SRC_URI ?= "${FW_ARTIFACTORY}/${QCS9100_FW_BUILD_ID}/${QCS9100_FW_BIN_PATH}/QCS9100_fw.zip;name=QCS9100_fw"
 QCS8300_SRC_URI ?= "${FW_ARTIFACTORY}/${QCS8300_FW_BUILD_ID}/${QCS8300_FW_BIN_PATH}/QCS8300_fw.zip;name=QCS8300_fw"
 QCS615_SRC_URI  ?= "${FW_ARTIFACTORY}/${QCS615_FW_BUILD_ID}/${QCS615_FW_BIN_PATH}/QCS615_fw.zip;name=QCS615_fw"
