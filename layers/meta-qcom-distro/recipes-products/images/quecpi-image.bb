@@ -34,7 +34,6 @@ IMAGE_INSTALL:append = " quec-ufs-size"
 IMAGE_INSTALL:append = " v4l2loopback camx-v4l2-bridge"   
 
 IMAGE_INSTALL:append = " \
-                    cstrike \
                     e2fsprogs \
                     dtc \
                     sysdig-quectel \

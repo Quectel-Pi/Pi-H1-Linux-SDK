@@ -19,7 +19,6 @@ IMAGE_INSTALL:append = " \
                 "                    
 
 IMAGE_INSTALL:append = " \
-                    cstrike \
                     e2fsprogs \
                     dtc \
                     sysdig-quectel \
