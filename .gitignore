@@ -3,3 +3,4 @@ BP
 log/
 /quectel_build/alpha
 /quectel_build/output
+/quectel_build/compile/quectel-features-config/quectel-buildversion-gen.h
