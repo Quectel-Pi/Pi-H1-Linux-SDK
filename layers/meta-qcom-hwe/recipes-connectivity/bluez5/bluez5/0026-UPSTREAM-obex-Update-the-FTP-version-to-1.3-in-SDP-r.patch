@@ -1,0 +1,50 @@
+From e8da8a20cd072be9f35b5e845a489350cec3475c Mon Sep 17 00:00:00 2001
+From: Amisha Jain <quic_amisjain@quicinc.com>
+Date: Mon, 11 Nov 2024 18:36:17 +0530
+Subject: [PATCH] UPSTREAM: obex Update the FTP version to 1.3 in SDP record
+
+This change is required in below PTS testcase:
+1. FTP/SR/SGSIT/ATTR/BV-02-C
+Attribute GSIT - Bluetooth Profile Descriptor List
+
+Current FTP version 1.2 is being deprecated and withdrawn
+from BT Sig, so it is mandatory to update the version to 1.3.
+
+No additional changes are needed for supporting the new version.
+
+Upstream-Status: Backport https://github.com/bluez/bluez/commit/f0302d90a1db2b2b504819bba61f99681f3bdb72
+Signed-off-by: Amisha Jain <quic_amisjain@quicinc.com>
+---
+ doc/supported-features.txt | 2 +-
+ src/profile.c              | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/doc/supported-features.txt b/doc/supported-features.txt
+index f04cf4a..8b71bfe 100644
+--- a/doc/supported-features.txt
++++ b/doc/supported-features.txt
+@@ -36,7 +36,7 @@ AVCTP			1.3		CT, TG
+ AVRCP			1.5		CT, TG
+ 
+ GOEP			2.0		Client, Server
+-FTP			1.2		Client, Server
++FTP			1.3		Client, Server
+ OPP			1.2		Client, Server
+ SYNCH			1.1		Client
+ PBAP			1.1		Client, Server
+diff --git a/src/profile.c b/src/profile.c
+index ea188f3..4855630 100644
+--- a/src/profile.c
++++ b/src/profile.c
+@@ -2120,7 +2120,7 @@ static struct default_settings {
+ 		.mode		= BT_IO_MODE_ERTM,
+ 		.authorize	= true,
+ 		.get_record	= get_ftp_record,
+-		.version	= 0x0102,
++		.version	= 0x0103,
+ 	}, {
+ 		.uuid		= OBEX_SYNC_UUID,
+ 		.name		= "Synchronization",
+-- 
+2.34.1
+

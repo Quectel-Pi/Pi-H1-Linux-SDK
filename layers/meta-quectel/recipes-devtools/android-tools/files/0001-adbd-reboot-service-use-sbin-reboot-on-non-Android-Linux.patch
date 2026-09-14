@@ -1,0 +1,39 @@
+diff --git a/adb/services.c b/adb/services.c
+index 21b08dc201..edc2706749 100644
+--- a/adb/services.c
++++ b/adb/services.c
+@@ -111,10 +111,26 @@ void restart_usb_service(int fd, void *cookie)
+     writex(fd, buf, strlen(buf));
+     adb_close(fd);
+ }
++#ifndef __ANDROID__
++static void linux_reboot_via_shell(const char *arg)
++{
++    char buf[128];
++    if (snprintf(buf, sizeof(buf), "/sbin/reboot %s", arg ? arg : "") >= (int)sizeof(buf))
++        return;
++    sync();
++    system(buf);
++}
++#endif
+ 
+ void reboot_service(int fd, void *arg)
+ {
+     char buf[100];
++#ifndef __ANDROID__
++    linux_reboot_via_shell((char *)arg);
++    /* Give the reboot command time to take effect, to avoid messing up
++     * scripts which do "adb reboot && adb wait-for-device". */
++    while (1) { pause(); }
++#else
+     char property_val[PROPERTY_VALUE_MAX];
+     int ret;
+ 
+@@ -139,6 +155,7 @@ void reboot_service(int fd, void *arg)
+ cleanup:
+     free(arg);
+     adb_close(fd);
++#endif
+ }
+ 
+ void reverse_service(int fd, void* arg)

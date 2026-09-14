@@ -9,4 +9,4 @@ ALLOW_EMPTY:${PN} = "1"
 
 USERADD_PACKAGES = "${PN}"
 GROUPADD_PARAM:${PN} = "--system system"
-USERADD_PARAM:${PN}  = "--system --no-create-home --groups system --gid system system"
+USERADD_PARAM:${PN}  = "--system --no-create-home --groups system --gid system --shell /sbin/nologin system"

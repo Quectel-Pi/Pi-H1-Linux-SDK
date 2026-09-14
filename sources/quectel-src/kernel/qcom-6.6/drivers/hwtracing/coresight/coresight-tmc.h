@@ -14,6 +14,7 @@
 #include <linux/refcount.h>
 #include "coresight-byte-cntr.h"
 #include "coresight-tmc-usb.h"
+#include "coresight-trace-id.h"
 
 #define TMC_RSZ			0x004
 #define TMC_STS			0x00c
@@ -185,6 +186,7 @@ struct etr_buf {
  * @spinlock:	only one at a time pls.
  * @pid:	Process ID of the process being monitored by the session
  *		that is using this component.
+ * @stop_on_flush: Stop on flush trigger user configuration.
  * @buf:	Snapshot of the trace data for ETF/ETB.
  * @etr_buf:	details of buffer used in TMC-ETR
  * @len:	size of the available trace for ETF/ETB.
@@ -209,6 +211,7 @@ struct tmc_drvdata {
 	spinlock_t		spinlock;
 	pid_t			pid;
 	bool			reading;
+	bool			stop_on_flush;
 	union {
 		char		*buf;		/* TMC ETB */
 		struct etr_buf	*etr_buf;	/* TMC ETR */
@@ -231,6 +234,7 @@ struct tmc_drvdata {
 	struct etr_buf		*perf_buf;
 	enum tmc_etr_out_mode	out_mode;
 	struct tmc_usb_data	*usb_data;
+	u8			atid_refcnt[CORESIGHT_TRACE_ID_RES_TOP];
 };
 
 struct etr_buf_operations {

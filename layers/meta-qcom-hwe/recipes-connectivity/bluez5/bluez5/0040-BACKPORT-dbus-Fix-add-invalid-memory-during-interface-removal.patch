@@ -1,0 +1,66 @@
+From cdd02afbb7eff7aa1bb9f9e8a7b6e0b8321d323c Mon Sep 17 00:00:00 2001
+From: Shuai Zhang <quic_shuaz@quicinc.com>
+Date: Thu, 27 Mar 2025 16:41:28 +0800
+Subject: [PATCH] dbus: Fix add invalid memory during interface removal
+
+test setp
+register_service <uuid>
+register_application <uuid>
+unregister_service <uuid>
+unregister_application
+register_service <uuid>
+register_application <uuid>
+core dump
+
+invalidate_parent_data is called to add the service to the application's
+glist when unregister_service. However, this service has already been
+added to the glist of root object in register_service. This results in
+services existing in both queues,but only the services in the
+application's glist are freed upon removal. A null address is stored
+in root object's glist, a crash dump will occur when get_object is called.
+
+Add a check for the parent pointer to avoid adding the service again.
+
+0  0x0000007ff7df6058 in dbus_message_iter_append_basic ()
+   from /usr/lib/libdbus-1.so.3
+1  0x00000055555a3780 in append_object (data=0x31306666,
+  user_data=0x7ffffff760) at /usr/src/debug/bluez5/5.72/gdbus/object.c:1117
+2  0x0000007ff7ece0cc in g_slist_foreach () from /usr/lib/libglib-2.0.so.0
+3  0x00000055555a37ac in append_object (data=0x5555642cf0,
+  user_data=0x7ffffff760) at /usr/src/debug/bluez5/5.72/gdbus/object.c:1122
+4  0x0000007ff7ece0cc in g_slist_foreach () from /usr/lib/libglib-2.0.so.0
+5  0x00000055555a3630 in get_objects (connection=<optimized out>,
+    message=<optimized out>, user_data=0x555563b390)
+    at /usr/src/debug/bluez5/5.72/gdbus/object.c:1154
+6  0x00000055555a51d0 in process_message (
+    connection=connection@entry=0x5555639310,
+    message=message@entry=0x5555649ac0,
+    method=method@entry=0x55555facf8 <manager_methods>,
+    iface_user_data=<optimized out>)
+    at /usr/src/debug/bluez5/5.72/gdbus/object.c:246
+7  0x00000055555a575c in generic_message (connection=0x5555639310,
+    message=0x5555649ac0, user_data=<optimized out>)
+
+Upstream-Status: Backport [https://web.git.kernel.org/pub/scm/bluetooth/bluez.git/commit/?id=cdd02afbb7eff7aa1bb9f9e8a7b6e0b8321d323c]
+Signed-off-by: Pavani Manjula <quic_pmanjula@quicinc.com>
+---
+ gdbus/object.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/gdbus/object.c b/gdbus/object.c
+index 7b0476f1a..54e04b983 100644
+--- a/gdbus/object.c
++++ b/gdbus/object.c
+@@ -810,6 +810,9 @@ static struct generic_data *invalidate_parent_data(DBusConnection *conn,
+ 	if (child == NULL || g_slist_find(data->objects, child) != NULL)
+ 		goto done;
+ 
++	if (!g_slist_find(parent->objects, child))
++		goto done;
++
+ 	data->objects = g_slist_prepend(data->objects, child);
+ 	child->parent = data;
+ 
+-- 
+2.30.2
+

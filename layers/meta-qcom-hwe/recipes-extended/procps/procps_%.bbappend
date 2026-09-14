@@ -1,6 +1,6 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/${BPN}:"
 
-SRC_URI:append:qcom = "file://procps.conf"
+SRC_URI:append:qcom = " file://procps.conf"
 
 do_install:append:qcom () {
     # For coredump handling

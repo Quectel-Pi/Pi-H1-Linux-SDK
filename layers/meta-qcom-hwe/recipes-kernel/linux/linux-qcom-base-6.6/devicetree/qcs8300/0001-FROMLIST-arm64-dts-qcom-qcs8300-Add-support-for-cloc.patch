@@ -1,0 +1,103 @@
+From 24cc7be780bae08aa4e0c70567bd30b34c628e35 Mon Sep 17 00:00:00 2001
+From: Imran Shaik <quic_imrashai@quicinc.com>
+Date: Thu, 14 Nov 2024 16:35:55 +0530
+Subject: [PATCH] FROMLIST: arm64: dts: qcom: qcs8300: Add support for clock
+ controllers
+
+Add support for GPU, Video, Camera and Display clock controllers on
+Qualcomm QCS8300 platform.
+
+Signed-off-by: Imran Shaik <quic_imrashai@quicinc.com>
+Link: https://lore.kernel.org/all/20241114-qcs8300-mm-cc-dt-patch-v1-1-7a974508c736@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241114-qcs8300-mm-cc-dt-patch-v1-1-7a974508c736@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 59 +++++++++++++++++++++++++++
+ 1 file changed, 59 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index a80b36424a50..b4683ef8efa0 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -5,6 +5,10 @@
+ 
+ #include <dt-bindings/clock/qcom,qcs8300-gcc.h>
+ #include <dt-bindings/clock/qcom,rpmh.h>
++#include <dt-bindings/clock/qcom,sa8775p-camcc.h>
++#include <dt-bindings/clock/qcom,sa8775p-dispcc.h>
++#include <dt-bindings/clock/qcom,sa8775p-gpucc.h>
++#include <dt-bindings/clock/qcom,sa8775p-videocc.h>
+ #include <dt-bindings/dma/qcom-gpi.h>
+ #include <dt-bindings/firmware/qcom,scm.h>
+ #include <dt-bindings/interconnect/qcom,icc.h>
+@@ -2137,6 +2141,20 @@ lpass_ag_noc: interconnect@3c40000 {
+ 			qcom,bcm-voters = <&apps_bcm_voter>;
+ 		};
+ 
++		gpucc: clock-controller@3d90000 {
++			compatible = "qcom,qcs8300-gpucc";
++			reg = <0x0 0x03d90000 0x0 0xa000>;
++			clocks = <&rpmhcc RPMH_CXO_CLK>,
++				 <&gcc GCC_GPU_GPLL0_CLK_SRC>,
++				 <&gcc GCC_GPU_GPLL0_DIV_CLK_SRC>;
++			clock-names = "bi_tcxo",
++				      "gcc_gpu_gpll0_clk_src",
++				      "gcc_gpu_gpll0_div_clk_src";
++			#clock-cells = <1>;
++			#reset-cells = <1>;
++			#power-domain-cells = <1>;
++		};
++
+ 		pmu@9091000 {
+ 			compatible = "qcom,qcs8300-llcc-bwmon", "qcom,sc7280-llcc-bwmon";
+ 			reg = <0x0 0x9091000 0x0 0x1000>;
+@@ -2247,6 +2265,47 @@ gem_noc: interconnect@9100000 {
+ 			qcom,bcm-voters = <&apps_bcm_voter>;
+ 		};
+ 
++		videocc: clock-controller@abf0000 {
++			compatible = "qcom,qcs8300-videocc";
++			reg = <0x0 0x0abf0000 0x0 0x10000>;
++			clocks = <&gcc GCC_VIDEO_AHB_CLK>,
++				 <&rpmhcc RPMH_CXO_CLK>,
++				 <&rpmhcc RPMH_CXO_CLK_A>,
++				 <&sleep_clk>;
++			power-domains = <&rpmhpd RPMHPD_MMCX>;
++			#clock-cells = <1>;
++			#reset-cells = <1>;
++			#power-domain-cells = <1>;
++		};
++
++		camcc: clock-controller@ade0000 {
++			compatible = "qcom,qcs8300-camcc";
++			reg = <0x0 0x0ade0000 0x0 0x20000>;
++			clocks = <&gcc GCC_CAMERA_AHB_CLK>,
++				 <&rpmhcc RPMH_CXO_CLK>,
++				 <&rpmhcc RPMH_CXO_CLK_A>,
++				 <&sleep_clk>;
++			power-domains = <&rpmhpd RPMHPD_MMCX>;
++			#clock-cells = <1>;
++			#reset-cells = <1>;
++			#power-domain-cells = <1>;
++		};
++
++		dispcc: clock-controller@af00000 {
++			compatible = "qcom,sa8775p-dispcc0";
++			reg = <0x0 0x0af00000 0x0 0x20000>;
++			clocks = <&gcc GCC_DISP_AHB_CLK>,
++				 <&rpmhcc RPMH_CXO_CLK>,
++				 <&rpmhcc RPMH_CXO_CLK_A>,
++				 <&sleep_clk>,
++				 <0>, <0>, <0>, <0>,
++				 <0>, <0>, <0>, <0>;
++			power-domains = <&rpmhpd RPMHPD_MMCX>;
++			#clock-cells = <1>;
++			#reset-cells = <1>;
++			#power-domain-cells = <1>;
++		};
++
+ 		llcc: system-cache-controller@9200000 {
+ 			compatible = "qcom,qcs8300-llcc";
+ 			reg = <0x0 0x09200000 0x0 0x80000>,
+-- 
+2.34.1
+

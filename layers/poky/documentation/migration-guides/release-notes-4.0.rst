@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Release notes for 4.0 (kirkstone)
 ---------------------------------
 
@@ -8,9 +10,10 @@ New Features / Enhancements in 4.0
 
 - Linux kernel 5.15, glibc 2.35 and ~300 other recipe upgrades
 
-- Reproducibility: this release fixes the reproducibility issues with ``rust-llvm`` and
-  ``golang``. Recipes in OpenEmbedded-Core are now fully reproducible. Functionality
-  previously in the optional "reproducible" class has been merged into the base class.
+- Reproducibility: this release fixes the reproducibility issues with
+  ``rust-llvm`` and ``golang``. Recipes in OpenEmbedded-Core are now fully
+  reproducible. Functionality previously in the optional "reproducible"
+  class has been merged into the :ref:`ref-classes-base` class.
 
 - Network access is now disabled by default for tasks other than where it is expected to ensure build integrity (where host kernel supports it)
 
@@ -22,17 +25,16 @@ New Features / Enhancements in 4.0
 
      BB_SIGNATURE_HANDLER = "OEEquivHash"
      BB_HASHSERVE = "auto"
-     BB_HASHSERVE_UPSTREAM = "hashserv.yocto.io:8687"
+     BB_HASHSERVE_UPSTREAM = "hashserv.yoctoproject.org:8686"
      SSTATE_MIRRORS ?= "file://.* https://sstate.yoctoproject.org/all/PATH;downloadfilename=PATH"
 
 - The Python package build process is now based on `wheels <https://pythonwheels.com/>`__
   in line with the upstream direction.
 
-- New :ref:`overlayfs <ref-classes-overlayfs>` and
-  :ref:`overlayfs-etc <ref-classes-overlayfs-etc>` classes and
-  ``overlayroot`` support in the initramfs framework to make it easier to
+- New :ref:`ref-classes-overlayfs` and :ref:`ref-classes-overlayfs-etc` classes and
+  ``overlayroot`` support in the :term:`Initramfs` framework to make it easier to
   overlay read-only filesystems (for example) with
-  `OverlayFS <https://en.wikipedia.org/wiki/OverlayFS>`__.
+  :wikipedia:`OverlayFS <OverlayFS>`.
 
 - Inclusive language adjustments to some variable names - see the
   :ref:`4.0 migration guide <migration-4.0-inclusive-language>` for details.
@@ -104,7 +106,7 @@ New Features / Enhancements in 4.0
 
 - Shared state (sstate) improvements:
 
-   - Switched to `ZStandard (zstd) <https://en.wikipedia.org/wiki/Zstd>`__ instead
+   - Switched to :wikipedia:`ZStandard (zstd) <Zstd>` instead
      of Gzip, for better performance.
    - Allow validation of sstate signatures against a list of keys
    - Improved error messages and exception handling
@@ -112,6 +114,7 @@ New Features / Enhancements in 4.0
 - BitBake enhancements:
 
    - Fetcher enhancements:
+
       - New :ref:`bitbake-user-manual/bitbake-user-manual-fetching:crate fetcher (\`\`crate://\`\`)` for Rust packages
       - Added striplevel support to unpack
       - git: Add a warning asking users to set a branch in git urls
@@ -142,7 +145,7 @@ New Features / Enhancements in 4.0
       - qemuarm64: Add tiny ktype to qemuarm64 bsp
       - armv9a/tune: Add the support for the Neoverse N2 core
       - arch-armv8-5a.inc: Add tune include for armv8.5a
-      - grub-efi: Add xen_boot support when 'xen' is in DISTRO_FEATURES for aarch64
+      - grub-efi: Add xen_boot support when 'xen' is in :term:`DISTRO_FEATURES` for aarch64
       - tune-cortexa73: Introduce cortexa73-crypto tune
       - libacpi: Build libacpi also for 'aarch64' machines
       - core-image-tiny-initramfs: Mark recipe as 32 bit ARM compatible
@@ -167,21 +170,21 @@ New Features / Enhancements in 4.0
 
 -  Kernel-related enhancements:
 
-   - Allow initramfs to be built from a separate multiconfig
+   - Allow :term:`Initramfs` to be built from a separate multiconfig
    - Make kernel-base recommend kernel-image, not depend (allowing images containing kernel modules without kernel image)
    - linux-yocto: split vtpm for more granular inclusion
    - linux-yocto: cfg/debug: add configs for kcsan
    - linux-yocto: cfg: add kcov feature fragment
    - linux-yocto: export pkgconfig variables to devshell
    - linux-yocto-dev: use versioned branch as default
-   - New ``KERNEL_DEBUG_TIMESTAMPS`` variable (to replace removed ``BUILD_REPRODUCIBLE_BINARIES`` for the kernel)
+   - New :term:`KERNEL_DEBUG_TIMESTAMPS` variable (to replace removed ``BUILD_REPRODUCIBLE_BINARIES`` for the kernel)
    - Introduce python3-dtschema-wrapper in preparation for mandatory schema checking on dtb files in 5.16
    - Allow disabling kernel artifact symlink creation
    - Allow changing default .bin kernel artifact extension
 
 - FIT image related enhancements:
 
-   - New ``FIT_SUPPORTED_INITRAMFS_FSTYPES`` variable to allow extending initramfs image types to look for
+   - New ``FIT_SUPPORTED_INITRAMFS_FSTYPES`` variable to allow extending :term:`Initramfs` image types to look for
    - New ``FIT_CONF_PREFIX`` variable to allow overriding FIT configuration prefix
    - Use 'bbnote' for better logging
 
@@ -214,7 +217,7 @@ New Features / Enhancements in 4.0
    - Ensure addition of patch-fuzz retriggers do_qa_patch
    - Added a sanity check for allarch packagegroups
 
-- create-spdx class improvements:
+- :ref:`ref-classes-create-spdx` class improvements:
 
    - Get SPDX-License-Identifier from source files
    - Generate manifest also for SDKs
@@ -234,8 +237,10 @@ New Features / Enhancements in 4.0
 
 - SDK-related enhancements:
 
-   - Extended recipes to ``nativesdk``: ``cargo``, ``librsvg``, ``libstd-rs``, ``libva``, ``python3-docutil``, ``python3-packaging``
-   - Enabled nativesdk recipes to find a correct version of the rust cross compiler
+   - Extended recipes to :ref:`ref-classes-nativesdk`: ``cargo``,
+     ``librsvg``, ``libstd-rs``, ``libva``, ``python3-docutil``, ``python3-packaging``
+   - Enabled :ref:`ref-classes-nativesdk` recipes to find a correct version
+     of the rust cross compiler
    - Support creating per-toolchain cmake file in SDK
 
 - Rust enhancements:
@@ -275,7 +280,7 @@ New Features / Enhancements in 4.0
 - volatile-binds: SELinux and overlayfs extensions in mount-copybind
 - gtk-icon-cache: Allow using gtk4
 - kmod: Add an exclude directive to depmod
-- os-release: add os-release-initrd package for use in systemd-based initramfs images
+- os-release: add os-release-initrd package for use in systemd-based :term:`Initramfs` images
 - gstreamer1.0-plugins-base: add support for graphene
 - gpg-sign: Add parameters to gpg signature function
 - package_manager: sign DEB package feeds
@@ -288,7 +293,7 @@ New Features / Enhancements in 4.0
 - libxkbcommon: allow building of API documentation
 - libxkbcommon: split libraries and xkbcli into separate packages
 - systemd: move systemd shared library into its own package
-- systemd: Minimize udev package size if DISTRO_FEATURES doen't contain sysvinit
+- systemd: Minimize udev package size if :term:`DISTRO_FEATURES` doen't contain sysvinit
 
 Known Issues in 4.0
 ~~~~~~~~~~~~~~~~~~~
@@ -300,22 +305,22 @@ Known Issues in 4.0
 Recipe License changes in 4.0
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The following corrections have been made to the LICENSE values set by recipes:
+The following corrections have been made to the :term:`LICENSE` values set by recipes:
 
-* cmake: add BSD-1-Clause & MIT & BSD-2-Clause to LICENSE due to additional vendored libraries in native/target context
-* gettext: extend LICENSE conditional upon PACKAGECONFIG (due to vendored libraries)
+* cmake: add BSD-1-Clause & MIT & BSD-2-Clause to :term:`LICENSE` due to additional vendored libraries in native/target context
+* gettext: extend :term:`LICENSE` conditional upon :term:`PACKAGECONFIG` (due to vendored libraries)
 * gstreamer1.0: update licenses of all modules to LGPL-2.1-or-later (with some exceptions that are GPL-2.0-or-later)
 * gstreamer1.0-plugins-bad/ugly: use the GPL-2.0-or-later only when it is in use
 * kern-tools-native: add missing MIT license due to Kconfiglib
-* libcap: add pam_cap license to LIC_FILES_CHKSUM if pam is enabled
+* libcap: add pam_cap license to :term:`LIC_FILES_CHKSUM` if pam is enabled
 * libidn2: add Unicode-DFS-2016 license
-* libsdl2: add BSD-2-Clause to LICENSE due to default yuv2rgb and hidapi inclusion
-* libx11-compose-data: update LICENSE to "MIT & MIT-style & BSD-1-Clause & HPND & HPND-sell-variant" to better reflect reality
-* libx11: update LICENSE to "MIT & MIT-style & BSD-1-Clause & HPND & HPND-sell-variant" to better reflect reality
-* libxshmfence: correct LICENSE - MIT -> HPND
-* newlib: add BSD-3-Clause to LICENSE
-* python3-idna: correct LICENSE - Unicode -> Unicode-TOU
-* python3-pip: add "Apache-2.0 & MPL-2.0 & LGPL-2.1-only & BSD-3-Clause & PSF-2.0 & BSD-2-Clause" to LICENSE due to vendored libraries
+* libsdl2: add BSD-2-Clause to :term:`LICENSE` due to default yuv2rgb and hidapi inclusion
+* libx11-compose-data: update :term:`LICENSE` to "MIT & MIT-style & BSD-1-Clause & HPND & HPND-sell-variant" to better reflect reality
+* libx11: update :term:`LICENSE` to "MIT & MIT-style & BSD-1-Clause & HPND & HPND-sell-variant" to better reflect reality
+* libxshmfence: correct :term:`LICENSE` - MIT -> HPND
+* newlib: add BSD-3-Clause to :term:`LICENSE`
+* python3-idna: correct :term:`LICENSE` - Unicode -> Unicode-TOU
+* python3-pip: add "Apache-2.0 & MPL-2.0 & LGPL-2.1-only & BSD-3-Clause & PSF-2.0 & BSD-2-Clause" to :term:`LICENSE` due to vendored libraries
 
 Other license-related notes:
 
@@ -332,37 +337,37 @@ Other license-related notes:
 Security Fixes in 4.0
 ~~~~~~~~~~~~~~~~~~~~~
 
-- binutils: :cve:`2021-42574`, :cve:`2021-45078`
-- curl: :cve:`2021-22945`, :cve:`2021-22946`, :cve:`2021-22947`
-- epiphany: :cve:`2021-45085`, :cve:`2021-45086`, :cve:`2021-45087`, :cve:`2021-45088`
-- expat: :cve:`2021-45960`, :cve:`2021-46143`, :cve:`2022-22822`, :cve:`2022-22823`, :cve:`2022-22824`, :cve:`2022-22825`, :cve:`2022-22826`, :cve:`2022-22827`, :cve:`2022-23852`, :cve:`2022-23990`, :cve:`2022-25235`, :cve:`2022-25236`, :cve:`2022-25313`, :cve:`2022-25314`, :cve:`2022-25315`
-- ffmpeg: :cve:`2021-38114`
-- gcc: :cve:`2021-35465`, :cve:`2021-42574`, :cve:`2021-46195`, :cve:`2022-24765`
-- glibc: :cve:`2021-3998`, :cve:`2021-3999`, :cve:`2021-43396`, :cve:`2022-23218`, :cve:`2022-23219`
-- gmp: :cve:`2021-43618`
-- go: :cve:`2021-41771` and :cve:`2021-41772`
-- grub2: :cve:`2021-3981`
-- gzip: :cve:`2022-1271`
-- libarchive : :cve:`2021-31566`, :cve:`2021-36976`
-- libxml2: :cve:`2022-23308`
-- libxslt: :cve:`2021-30560`
-- lighttpd: :cve:`2022-22707`
-- linux-yocto/5.10: amdgpu: :cve:`2021-42327`
-- lua: :cve:`2021-43396`
-- openssl: :cve:`2021-4044`, :cve:`2022-0778`
-- qemu: :cve:`2022-1050`, :cve:`2022-26353`, :cve:`2022-26354`
-- rpm: :cve:`2021-3521`
-- seatd: :cve:`2022-25643`
-- speex: :cve:`2020-23903`
-- squashfs-tools: :cve:`2021-41072`
-- systemd: :cve:`2021-4034`
-- tiff: :cve:`2022-0561`, :cve:`2022-0562`, :cve:`2022-0865`, :cve:`2022-0891`, :cve:`2022-0907`, :cve:`2022-0908`, :cve:`2022-0909`, :cve:`2022-0924`, :cve:`2022-1056`, :cve:`2022-22844`
-- unzip: :cve:`2021-4217`
-- vim: :cve:`2021-3796`, :cve:`2021-3872`, :cve:`2021-3875`, :cve:`2021-3927`, :cve:`2021-3928`, :cve:`2021-3968`, :cve:`2021-3973`, :cve:`2021-4187`, :cve:`2022-0128`, :cve:`2022-0156`, :cve:`2022-0158`, :cve:`2022-0261`, :cve:`2022-0318`, :cve:`2022-0319`, :cve:`2022-0554`, :cve:`2022-0696`, :cve:`2022-0714`, :cve:`2022-0729`, :cve:`2022-0943`
-- virglrenderer: :cve:`2022-0135`, :cve:`2022-0175`
-- webkitgtk: :cve:`2022-22589`, :cve:`2022-22590`, :cve:`2022-22592`
-- xz: :cve:`2022-1271`
-- zlib: :cve:`2018-25032`
+- binutils: :cve_nist:`2021-42574`, :cve_nist:`2021-45078`
+- curl: :cve_nist:`2021-22945`, :cve_nist:`2021-22946`, :cve_nist:`2021-22947`
+- epiphany: :cve_nist:`2021-45085`, :cve_nist:`2021-45086`, :cve_nist:`2021-45087`, :cve_nist:`2021-45088`
+- expat: :cve_nist:`2021-45960`, :cve_nist:`2021-46143`, :cve_nist:`2022-22822`, :cve_nist:`2022-22823`, :cve_nist:`2022-22824`, :cve_nist:`2022-22825`, :cve_nist:`2022-22826`, :cve_nist:`2022-22827`, :cve_nist:`2022-23852`, :cve_nist:`2022-23990`, :cve_nist:`2022-25235`, :cve_nist:`2022-25236`, :cve_nist:`2022-25313`, :cve_nist:`2022-25314`, :cve_nist:`2022-25315`
+- ffmpeg: :cve_nist:`2021-38114`
+- gcc: :cve_nist:`2021-35465`, :cve_nist:`2021-42574`, :cve_nist:`2021-46195`, :cve_nist:`2022-24765`
+- glibc: :cve_nist:`2021-3998`, :cve_nist:`2021-3999`, :cve_nist:`2021-43396`, :cve_nist:`2022-23218`, :cve_nist:`2022-23219`
+- gmp: :cve_nist:`2021-43618`
+- go: :cve_nist:`2021-41771` and :cve_nist:`2021-41772`
+- grub2: :cve_nist:`2021-3981`
+- gzip: :cve_nist:`2022-1271`
+- libarchive : :cve_nist:`2021-31566`, :cve_nist:`2021-36976`
+- libxml2: :cve_nist:`2022-23308`
+- libxslt: :cve_nist:`2021-30560`
+- lighttpd: :cve_nist:`2022-22707`
+- linux-yocto/5.10: amdgpu: :cve_nist:`2021-42327`
+- lua: :cve_nist:`2021-43396`
+- openssl: :cve_nist:`2021-4044`, :cve_nist:`2022-0778`
+- qemu: :cve_nist:`2022-1050`, :cve_nist:`2022-26353`, :cve_nist:`2022-26354`
+- rpm: :cve_nist:`2021-3521`
+- seatd: :cve_nist:`2022-25643`
+- speex: :cve_nist:`2020-23903`
+- squashfs-tools: :cve_nist:`2021-41072`
+- systemd: :cve_nist:`2021-4034`
+- tiff: :cve_nist:`2022-0561`, :cve_nist:`2022-0562`, :cve_nist:`2022-0865`, :cve_nist:`2022-0891`, :cve_nist:`2022-0907`, :cve_nist:`2022-0908`, :cve_nist:`2022-0909`, :cve_nist:`2022-0924`, :cve_nist:`2022-1056`, :cve_nist:`2022-22844`
+- unzip: :cve_nist:`2021-4217`
+- vim: :cve_nist:`2021-3796`, :cve_nist:`2021-3872`, :cve_nist:`2021-3875`, :cve_nist:`2021-3927`, :cve_nist:`2021-3928`, :cve_nist:`2021-3968`, :cve_nist:`2021-3973`, :cve_nist:`2021-4187`, :cve_nist:`2022-0128`, :cve_nist:`2022-0156`, :cve_nist:`2022-0158`, :cve_nist:`2022-0261`, :cve_nist:`2022-0318`, :cve_nist:`2022-0319`, :cve_nist:`2022-0554`, :cve_nist:`2022-0696`, :cve_nist:`2022-0714`, :cve_nist:`2022-0729`, :cve_nist:`2022-0943`
+- virglrenderer: :cve_nist:`2022-0135`, :cve_nist:`2022-0175`
+- webkitgtk: :cve_nist:`2022-22589`, :cve_nist:`2022-22590`, :cve_nist:`2022-22592`
+- xz: :cve_nist:`2022-1271`
+- zlib: :cve_nist:`2018-25032`
 
 
 
@@ -865,7 +870,7 @@ Repositories / Downloads for 4.0
 
 poky
 
--  Repository Location: https://git.yoctoproject.org/git/poky
+-  Repository Location: :yocto_git:`/poky`
 -  Branch: :yocto_git:`kirkstone </poky/log/?h=kirkstone>`
 -  Tag: :yocto_git:`yocto-4.0 </poky/tag/?h=yocto-4.0>`
 -  Git Revision: :yocto_git:`00cfdde791a0176c134f31e5a09eff725e75b905 </poky/commit/?id=00cfdde791a0176c134f31e5a09eff725e75b905>`
@@ -889,7 +894,7 @@ openembedded-core
 
 meta-mingw
 
--  Repository Location: https://git.yoctoproject.org/git/meta-mingw
+-  Repository Location: :yocto_git:`/meta-mingw`
 -  Branch: :yocto_git:`kirkstone </meta-mingw/log/?h=kirkstone>`
 -  Tag: :yocto_git:`yocto-4.0 </meta-mingw/tag/?h=yocto-4.0>`
 -  Git Revision: :yocto_git:`a90614a6498c3345704e9611f2842eb933dc51c1 </meta-mingw/commit/?id=a90614a6498c3345704e9611f2842eb933dc51c1>`
@@ -901,7 +906,7 @@ meta-mingw
 
 meta-gplv2
 
--  Repository Location: https://git.yoctoproject.org/git/meta-gplv2
+-  Repository Location: :yocto_git:`/meta-gplv2`
 -  Branch: :yocto_git:`kirkstone </meta-gplv2/log/?h=kirkstone>`
 -  Tag: :yocto_git:`yocto-4.0 </meta-gplv2/tag/?h=yocto-4.0>`
 -  Git Revision: :yocto_git:`d2f8b5cdb285b72a4ed93450f6703ca27aa42e8a </meta-mingw/commit/?id=d2f8b5cdb285b72a4ed93450f6703ca27aa42e8a>`
@@ -925,7 +930,7 @@ bitbake
 
 yocto-docs
 
--  Repository Location: https://git.yoctoproject.org/git/yocto-docs
+-  Repository Location: :yocto_git:`/yocto-docs`
 -  Branch: :yocto_git:`kirkstone </yocto-docs/log/?h=kirkstone>`
 -  Tag: :yocto_git:`yocto-4.0 </yocto-docs/tag/?h=yocto-4.0>`
 -  Git Revision: :yocto_git:`a6f571ad5b087385cad8765ed455c4b4eaeebca6 </yocto-docs/commit/?id=a6f571ad5b087385cad8765ed455c4b4eaeebca6>`

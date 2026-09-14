@@ -30,6 +30,10 @@ properties:
     description: Flag the port as possible handler of orientation switching
     type: boolean
 
+  default-dp-mode:
+    description: Flag to set default mode to DP
+    type: boolean
+
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
     properties:

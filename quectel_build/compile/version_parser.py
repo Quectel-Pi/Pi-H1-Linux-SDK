@@ -6,6 +6,7 @@ import re
 import sys
 import time
 import shutil
+import subprocess
 from pyhocon import ConfigFactory
 
 env_list = os.environ
@@ -87,6 +88,7 @@ def gen_version_file(ql_env_dic):
         tmp_data += "\n"
         tmp_data += "#define QUECTEL_PROJECT_Project      \""+ql_env_dic.get("Project")+"\"\n"
         tmp_data += "#define QUECTEL_PROJECT_Version      \""+ql_env_dic.get("Version")+"\"\n"
+        tmp_data += "#define QUECTEL_PROJECT_GitCommit    \""+ql_env_dic.get("GitCommit", "unknown")+"\"\n"
         tmp_data += "\n"
         tmp_data += "\n"
         tmp_data += "\n"
@@ -118,10 +120,20 @@ def main(argv):
     if arg_len > 3:
         ql_env_dic['SUBver']=argv[3]        
 
+    # Get git commit ID
+    try:
+        git_commit = subprocess.check_output(['git', '-C', WS, 'rev-parse', 'HEAD'], stderr=subprocess.DEVNULL).decode('utf-8').strip()
+        ql_env_dic['GitCommit'] = git_commit
+    except:
+        ql_env_dic['GitCommit'] = 'unknown'
+
     print ("[")
     print ("Project===>"+ql_env_dic['Project'])
     print ("Version===>"+ql_env_dic['Version'])
+    print ("GitCommit===>"+ql_env_dic['GitCommit'])
     print ("]")
+
+    gen_version_file(ql_env_dic)
 
 if __name__ == '__main__':
     main(sys.argv)

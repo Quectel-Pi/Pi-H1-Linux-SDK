@@ -1,11 +1,12 @@
 SUMMARY = "Collects and summarises system performance statistics"
 DESCRIPTION = "collectd is a daemon which collects system performance statistics periodically and provides mechanisms to store the values in a variety of ways, for example in RRD files."
+HOMEPAGE = "https://collectd.org/"
 LICENSE = "GPL-2.0-only & MIT"
 LIC_FILES_CHKSUM = "file://COPYING;md5=1bd21f19f7f0c61a7be8ecacb0e28854"
 
-DEPENDS = "rrdtool curl libpcap libxml2 yajl libgcrypt libtool lvm2"
+DEPENDS = "curl libpcap libxml2 yajl libgcrypt libtool lvm2"
 
-SRC_URI = "http://collectd.org/files/collectd-${PV}.tar.bz2 \
+SRC_URI = "${GITHUB_BASE_URI}download/${BP}/${BP}.tar.bz2 \
            file://collectd.init \
            file://collectd.service \
            file://no-gcrypt-badpath.patch \
@@ -18,7 +19,7 @@ SRC_URI = "http://collectd.org/files/collectd-${PV}.tar.bz2 \
 SRC_URI[md5sum] = "2b23a65960bc323d065234776a542e04"
 SRC_URI[sha256sum] = "5bae043042c19c31f77eb8464e56a01a5454e0b39fa07cf7ad0f1bfc9c3a09d6"
 
-inherit autotools python3native update-rc.d pkgconfig systemd
+inherit autotools python3native update-rc.d pkgconfig systemd github-releases
 
 SYSTEMD_SERVICE:${PN} = "collectd.service"
 
@@ -50,7 +51,8 @@ PACKAGECONFIG[libmnl] = "--with-libmnl,--without-libmnl,libmnl"
 PACKAGECONFIG[libatasmart] = "--with-libatasmart,--without-libatasmart,libatasmart"
 PACKAGECONFIG[ldap] = "--enable-openldap --with-libldap,--disable-openldap --without-libldap, openldap"
 PACKAGECONFIG[rrdtool] = "--enable-rrdtool,--disable-rrdtool,rrdtool"
-PACKAGECONFIG[rrdcached] = "--enable-rrdcached,--disable-rrdcached,rrdcached"
+PACKAGECONFIG[rrdcached] = "--enable-rrdcached,--disable-rrdcached,rrdtool"
+PACKAGECONFIG[python] = "--enable-python,--disable-python"
 
 EXTRA_OECONF = " \
                 ${FPLAYOUT} \

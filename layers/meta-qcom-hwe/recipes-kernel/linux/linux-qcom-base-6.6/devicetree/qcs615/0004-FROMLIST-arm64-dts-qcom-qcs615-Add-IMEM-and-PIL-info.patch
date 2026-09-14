@@ -1,0 +1,46 @@
+From 233223206f02db53eb96f624021f35de8acec8d7 Mon Sep 17 00:00:00 2001
+From: Lijuan Gao <quic_lijuang@quicinc.com>
+Date: Wed, 7 May 2025 18:26:14 +0800
+Subject: [PATCH 4/6] FROMLIST: arm64: dts: qcom: qcs615: Add IMEM and PIL info
+ region
+
+Add a simple-mfd representing IMEM on QCS615 and define the PIL
+relocation info region as its child. The PIL region in IMEM is used to
+communicate load addresses of remoteproc to post mortem debug tools, so
+that these tools can collect ramdumps.
+
+Link: https://lore.kernel.org/all/20250507-add_qcs615_remoteproc_support-v2-4-52ac6cb43a39@quicinc.com/
+Signed-off-by: Lijuan Gao <quic_lijuang@quicinc.com>
+Upstream-Status: Submitted[https://lore.kernel.org/all/20250507-add_qcs615_remoteproc_support-v2-4-52ac6cb43a39@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs615.dtsi | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs615.dtsi b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+index 97469be3756f..0a2d12971da0 100644
+--- a/arch/arm64/boot/dts/qcom/qcs615.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+@@ -3920,6 +3920,20 @@ spmi_bus: spmi@c440000 {
+ 			qcom,ee = <0>;
+ 		};
+ 
++		sram@146aa000 {
++			compatible = "qcom,qcs615-imem", "syscon", "simple-mfd";
++			reg = <0x0 0x146aa000 0x0 0x1000>;
++			ranges = <0 0 0x146aa000 0x1000>;
++
++			#address-cells = <1>;
++			#size-cells = <1>;
++
++			pil-reloc@94c {
++				compatible = "qcom,pil-reloc-info";
++				reg = <0x94c 0xc8>;
++			};
++		};
++
+ 		apps_smmu: iommu@15000000 {
+ 			compatible = "qcom,qcs615-smmu-500", "qcom,smmu-500", "arm,mmu-500";
+ 			reg = <0x0 0x15000000 0x0 0x80000>;
+-- 
+2.34.1
+

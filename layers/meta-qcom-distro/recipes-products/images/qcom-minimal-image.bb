@@ -4,10 +4,14 @@ LICENSE = "BSD-3-Clause-Clear"
 
 IMAGE_FEATURES += "splash tools-debug allow-root-login post-install-logging enable-adbd"
 
-inherit sota core-image features_check extrausers image-adbd image-qcom-deploy
+inherit core-image features_check extrausers image-adbd image-qcom-deploy
+inherit ${@bb.utils.contains('DISTRO_FEATURES', 'sota', 'sota image_types_ostree image_types_ota', '', d)}
 
 # selinux-image is inherited to utilize the selinux_set_labels API, to perform build-time context labeling.
 inherit  ${@bb.utils.contains('DISTRO_FEATURES', 'selinux', 'selinux-image', '', d)}
+
+# This will set selinux label to ${OTA_SYSROOT}/ostree/.. to perform build-time context labeling.
+inherit ${@bb.utils.contains('DISTRO_FEATURES', 'sota selinux', 'image-qcom-ostree-selinux', '', d)}
 
 # let's make sure we have a good image..
 REQUIRED_DISTRO_FEATURES = "pam systemd"
@@ -23,12 +27,9 @@ SOTA_CLIENT = ""
 IMAGE_INSTALL:remove = "${@oe.utils.ifelse('${SOTA_CLIENT}' != 'aktualizr', 'aktualizr aktualizr-info', '')}"
 
 #Increase image size as a percentage overage to accomodate atleast two OSTree deployments
-IMAGE_OVERHEAD_FACTOR = "1.2"
+IMAGE_OVERHEAD_FACTOR = "2.0"
 
-EXTRA_USERS_PARAMS = "\
-    useradd -r -s /bin/false system; \
-    usermod -p '\$6\$UDMimfYF\$akpHo9mLD4z0vQyKzYxYbsdYxnpUD7B7rHskq1E3zXK8ygxzq719wMxI78i0TIIE0NB1jUToeeFzWXVpBBjR8.' root; \
-    "
+EXTRA_USERS_PARAMS = "usermod -p '\$6\$UDMimfYF\$akpHo9mLD4z0vQyKzYxYbsdYxnpUD7B7rHskq1E3zXK8ygxzq719wMxI78i0TIIE0NB1jUToeeFzWXVpBBjR8.' root;"
 
 # Adding kernel-devsrc to provide kernel development support on SDK
 TOOLCHAIN_TARGET_TASK += "kernel-devsrc"

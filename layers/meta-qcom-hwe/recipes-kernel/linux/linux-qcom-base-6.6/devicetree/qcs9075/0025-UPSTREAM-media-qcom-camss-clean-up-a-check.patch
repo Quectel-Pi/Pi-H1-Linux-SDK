@@ -1,0 +1,35 @@
+From 505c25b613a475e2c2b48af198af75f20ea46926 Mon Sep 17 00:00:00 2001
+From: Dan Carpenter <dan.carpenter@linaro.org>
+Date: Thu, 12 Oct 2023 11:42:33 +0200
+Subject: [PATCH 25/42] UPSTREAM: media: qcom: camss: clean up a check
+
+Imagine that "->vfe_num" is zero, then the subtraction will underflow to
+UINT_MAX.  Plus it's just cleaner to use >= instead.
+
+Signed-off-by: Dan Carpenter <dan.carpenter@linaro.org>
+Acked-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Reviewed-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 0cb8c9482501c46854ddb3d43b1bc05d771b9624]
+---
+ drivers/media/platform/qcom/camss/camss-ispif.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-ispif.c b/drivers/media/platform/qcom/camss/camss-ispif.c
+index be9d2f0a10c1..ddfe94377ee5 100644
+--- a/drivers/media/platform/qcom/camss/camss-ispif.c
++++ b/drivers/media/platform/qcom/camss/camss-ispif.c
+@@ -270,7 +270,7 @@ static int ispif_vfe_reset(struct ispif_device *ispif, u8 vfe_id)
+ 	unsigned long time;
+ 	u32 val;
+ 
+-	if (vfe_id > camss->res->vfe_num - 1) {
++	if (vfe_id >= camss->res->vfe_num) {
+ 		dev_err(camss->dev,
+ 			"Error: asked reset for invalid VFE%d\n", vfe_id);
+ 		return -ENOENT;
+-- 
+2.25.1
+

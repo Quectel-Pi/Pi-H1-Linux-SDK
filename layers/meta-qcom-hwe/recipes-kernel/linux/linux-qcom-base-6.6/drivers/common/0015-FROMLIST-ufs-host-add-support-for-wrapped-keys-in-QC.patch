@@ -1,0 +1,50 @@
+From 35cc78f3b524961774e73863e20c04c2a22e8c07 Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <brgl@bgdev.pl>
+Date: Sun, 1 Dec 2024 22:00:15 +0530
+Subject: [PATCH] FROMLIST: ufs: host: add support for wrapped keys in QCom UFS
+
+Use the wrapped keys capability when HWKM is supported. Whether to use
+HWKM or not would be decided during an ICE probe, and based on this
+information, UFS can decide to use wrapped or raw keys.
+
+Also, propagate the appropriate key size to the ICE driver when wrapped
+keys are used.
+
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org>
+Reviewed-by: Om Prakash Singh <quic_omprsing@quicinc.com>
+Signed-off-by: Gaurav Kashyap <quic_gaurkash@quicinc.com>
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241011-wrapped-keys-v7-15-e3f7a752059b@linaro.org/]
+---
+ drivers/ufs/host/ufs-qcom.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/ufs/host/ufs-qcom.c b/drivers/ufs/host/ufs-qcom.c
+index 5e5619332360..78120a33c7b2 100644
+--- a/drivers/ufs/host/ufs-qcom.c
++++ b/drivers/ufs/host/ufs-qcom.c
+@@ -132,6 +132,8 @@ static int ufs_qcom_ice_init(struct ufs_qcom_host *host)
+ 
+ 	host->ice = ice;
+ 	hba->caps |= UFSHCD_CAP_CRYPTO;
++	if (qcom_ice_hwkm_supported(host->ice))
++		hba->caps |= UFSHCD_CAP_WRAPPED_CRYPTO_KEYS;
+ 
+ 	return 0;
+ }
+@@ -170,7 +172,11 @@ static int ufs_qcom_ice_program_key(struct ufs_hba *hba,
+ 	    cap.key_size != UFS_CRYPTO_KEY_SIZE_256)
+ 		return -EOPNOTSUPP;
+ 
+-	ice_key_size = QCOM_ICE_CRYPTO_KEY_SIZE_256;
++	if (bkey->crypto_cfg.key_type == BLK_CRYPTO_KEY_TYPE_HW_WRAPPED)
++		ice_key_size = QCOM_ICE_CRYPTO_KEY_SIZE_WRAPPED;
++	else
++		ice_key_size = QCOM_ICE_CRYPTO_KEY_SIZE_256;
++
+ 	return qcom_ice_program_key(host->ice,
+ 				    QCOM_ICE_CRYPTO_ALG_AES_XTS,
+ 				    ice_key_size, bkey,
+-- 
+2.48.1
+

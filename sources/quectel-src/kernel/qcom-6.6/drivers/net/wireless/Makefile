@@ -26,5 +26,3 @@ obj-$(CONFIG_WLAN_VENDOR_ZYDAS) += zydas/
 obj-$(CONFIG_WLAN) += legacy/
 obj-$(CONFIG_WLAN) += virtual/
 obj-$(CONFIG_QUECPI_WIRELESS) += quectel/
-obj-$(CONFIG_QUECPI_WIRELESS) += pcie_mhi/
-obj-$(CONFIG_QUECPI_WIRELESS) += sprd_pcie/

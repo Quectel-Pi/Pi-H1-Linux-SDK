@@ -7,6 +7,7 @@ import sys
 import time
 import shutil
 import glob
+import subprocess
 from pyhocon import ConfigFactory
 
 env_list = os.environ
@@ -25,7 +26,9 @@ custoct_list=[] # valid custoct list
 ql_env_dic = {'QUECTEL_PROJECT_NAME':'',
               'QUECTEL_PROJECT_REV':'',
               'QUECTEL_CUSTOM_NAME':'',
+              'QUECTEL_GIT_COMMIT':'',
               'QUECTEL_FEATURE_OPENLINUX':'',
+              'SECBOOT_ENABLE':'',
              }
 
 opt_dic = {'.project_list':'Vaild Project List',
@@ -66,15 +69,31 @@ class color:
     # e.g: print color.BOLD + 'Hello World !' + color.END
 
 def build_help():
+    base_custoct_list = []
+    extra_flag_list = []
+
     prj_list_init(None)
     custoct_list_init(None)
+
+    for item in custoct_list:
+        if item == 'SEC':
+            extra_flag_list.append(item)
+        else:
+            base_custoct_list.append(item)
+    if 'ST' not in base_custoct_list:
+        base_custoct_list.append('ST')
+
     print ()
     print ("'ProjectRev' can be set any value, but should be same with modem")
-    print ("'CustName' if this Version for Standard module, must be set 'STD'")
+    print ("'CustName' supports base mode plus optional SEC, such as 'STD SEC' or 'DBG SEC'")
     print ("********************Build QSM565DWF Standard Firmware Demo*****************************")
     print ("\033[33mstep1: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X STD \033[0m")
+    print ("\033[33mdebug: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X DBG \033[0m")
+    print ("\033[33msecboot: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X STD SEC \033[0m")
+    print ("\033[33mdbg+secboot: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X DBG SEC \033[0m")
     print ("\033[33mstep2: buildall \033[0m")
     print ("\033[33mstep3: buildpackage\033[0m")
+    print ("\033[33mnote : SEC is additive, and ST will be treated as STD\033[0m")
     print ()
     print ("Vaild Projects:")
     print (color.FGREEN)
@@ -82,9 +101,15 @@ def build_help():
         print (i, end=' '),
     print (color.END)
     print ()
-    print ("Vaild CUST_NAME:")
+    print ("Vaild Base CUST_NAME:")
     print (color.FGREEN)
-    for i in custoct_list:
+    for i in base_custoct_list:
+        print (i, end=' '),
+    print (color.END)
+    print ()
+    print ("Optional CUST_FLAG:")
+    print (color.FGREEN)
+    for i in extra_flag_list:
         print (i, end=' '),
     print (color.END)
     print ()
@@ -157,6 +182,34 @@ def custoct_hit_target(target):
     if target in tmp_custoct:
             return True
     return False
+
+def normalize_custom_tokens(custom_args):
+    normalized = []
+    seen = set()
+    deferred = []
+
+    for item in custom_args:
+        if not item:
+            continue
+        for token in re.split('/+', item):
+            token = token.strip().upper()
+            if not token:
+                continue
+            if token == 'ST':
+                token = 'STD'
+            if token not in seen:
+                seen.add(token)
+                if token == 'SEC':
+                    deferred.append(token)
+                else:
+                    normalized.append(token)
+
+    if not normalized:
+        return deferred
+
+    normalized.extend(deferred)
+
+    return normalized
 
 def display_option(opttype, subtype):
     global GP
@@ -367,8 +420,11 @@ def gen_config_file(ql_env_dic):
         tmp_data += "#define QUECTEL_PROJECT_NAME    \""+ql_env_dic.get("QUECTEL_PROJECT_NAME")+"\"\n"
         tmp_data += "#define QUECTEL_PROJECT_REV     \""+ql_env_dic.get("QUECTEL_PROJECT_REV")+"\"\n"
         tmp_data += "#define QUECTEL_CUSTOM_NAME     \""+ql_env_dic.get("QUECTEL_CUSTOM_NAME")+"\"\n"
+        tmp_data += "#define QUECTEL_GIT_COMMIT      \""+ql_env_dic.get("QUECTEL_GIT_COMMIT", "unknown")+"\"\n"
         if ql_env_dic['QUECTEL_FEATURE_OPENLINUX'] == 'OL':
             tmp_data += "#define QUECTEL_FEATURE_OPENLINUX \n"
+        if ql_env_dic.get('SECBOOT_ENABLE') == '1':
+            tmp_data += "#define SECBOOT_ENABLE 1\n"
 
         tmp_data += "/************Quectel Macro************/\n"
         tmp_data += "\n"
@@ -436,6 +492,7 @@ def gen_var_file(ql_env_dic):
         tmp_data  = "QUECTEL_PROJECT_NAME = "+ql_env_dic.get("QUECTEL_PROJECT_NAME")+"\n"
         tmp_data += "QUECTEL_PROJECT_REV = "+ql_env_dic.get("QUECTEL_PROJECT_REV")+"\n"
         tmp_data += "QUECTEL_CUSTOM_NAME = "+ql_env_dic.get("QUECTEL_CUSTOM_NAME")+"\n"
+        tmp_data += "QUECTEL_GIT_COMMIT = "+ql_env_dic.get("QUECTEL_GIT_COMMIT", "unknown")+"\n"
         f.write(tmp_data)
     f.close()
 
@@ -444,21 +501,34 @@ def main(argv):
     print (argv)
     arg_len = len(argv)
     if arg_len < 4:
-        print ("\033[31;1mPlease Enter 'ProjectName', 'ProjectRev', CustName.\033[0m")
+        print ("\033[31;1mPlease Enter 'ProjectName', 'ProjectRev', CustName [SEC].\033[0m")
         build_help()
         #sys.exit(1)
         return
 
     QUECTEL_PROJECT_NAME = argv[1]
     QUECTEL_PROJECT_REV = argv[2]
-    QUECTEL_CUSTOM_NAME = argv[3]
+    custom_tokens = normalize_custom_tokens(argv[3:])
+    QUECTEL_CUSTOM_NAME = '/'.join(custom_tokens)
     QUECTEL_PROJECT_HWREV = ""
+
+    if not QUECTEL_CUSTOM_NAME:
+        print ("\033[31;1mPlease Enter valid CustName(using 'buildconfig' get help).\033[0m")
+        build_help()
+        return
 
     global ql_env_dic
     ql_env_dic['QUECTEL_PROJECT_NAME']= QUECTEL_PROJECT_NAME
     ql_env_dic['QUECTEL_PROJECT_REV']= QUECTEL_PROJECT_REV
     ql_env_dic['QUECTEL_PROJECT_HWREV']= QUECTEL_PROJECT_HWREV
     ql_env_dic['QUECTEL_CUSTOM_NAME']= QUECTEL_CUSTOM_NAME
+    
+    # Get git commit ID
+    try:
+        git_commit = subprocess.check_output(['git', '-C', WS, 'rev-parse', 'HEAD'], stderr=subprocess.DEVNULL).decode('utf-8').strip()
+        ql_env_dic['QUECTEL_GIT_COMMIT'] = git_commit
+    except:
+        ql_env_dic['QUECTEL_GIT_COMMIT'] = 'unknown'
     # ql_env_dic['QUECTEL_PRODUCT_NAME']= QUECTEL_PROJECT_NAME[0:6]+'_'+QUECTEL_PROJECT_NAME[6:]
 
     tmp_split = re.split('/', ql_env_dic.get("QUECTEL_CUSTOM_NAME"))
@@ -466,6 +536,9 @@ def main(argv):
         if 'OL' in custoct:
             ql_env_dic['QUECTEL_FEATURE_OPENLINUX']='OL'
             print ("will include openlinux feature")
+        if 'SEC' in custoct:
+            ql_env_dic['SECBOOT_ENABLE']='1'
+            print ("SECBOOT enabled for signing")
 
     prj_valid_check(argv[1])
     custoct_valid_check(QUECTEL_CUSTOM_NAME)

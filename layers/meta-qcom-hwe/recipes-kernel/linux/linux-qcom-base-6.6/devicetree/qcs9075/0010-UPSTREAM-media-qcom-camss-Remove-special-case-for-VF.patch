@@ -1,0 +1,67 @@
+From 93c09f5756fa6878d108624f68fff616f0a54d3e Mon Sep 17 00:00:00 2001
+From: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Date: Mon, 25 Sep 2023 16:46:59 +0100
+Subject: [PATCH 10/42] UPSTREAM: media: qcom: camss: Remove special case for
+ VFE get/put
+
+From sdm845 onwards we need to ensure the VFE is powered on prior to
+switching on the CSID.
+
+Currently the code tests for sdm845, sm8250 and then does get/set. This is
+not extensible and it turns out is not necessary either since vfe_get and
+vfe_set reference count.
+
+Remove the over-conservative SoC version check.
+
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Suggested-by: Laurent Pinchart <laurent.pinchart@ideasonboard.com>
+Tested-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org> # rb3 # db410c
+Reviewed-by: Laurent Pinchart <laurent.pinchart@ideasonboard.com>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Suresh Vankadara <quic_svankada@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git b2c2715e5aaf959d8f86a8aceccd537ebbdb19f6]
+---
+ drivers/media/platform/qcom/camss/camss-csid.c | 17 +++++++++--------
+ 1 file changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csid.c b/drivers/media/platform/qcom/camss/camss-csid.c
+index 99f651e2021c..95873f988f7e 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid.c
++++ b/drivers/media/platform/qcom/camss/camss-csid.c
+@@ -159,15 +159,17 @@ static int csid_set_power(struct v4l2_subdev *sd, int on)
+ 	struct camss *camss = csid->camss;
+ 	struct device *dev = camss->dev;
+ 	struct vfe_device *vfe = &camss->vfe[csid->id];
+-	u32 version = camss->res->version;
+ 	int ret = 0;
+ 
+ 	if (on) {
+-		if (version == CAMSS_8250 || version == CAMSS_845) {
+-			ret = vfe_get(vfe);
+-			if (ret < 0)
+-				return ret;
+-		}
++		/*
++		 * From SDM845 onwards, the VFE needs to be powered on before
++		 * switching on the CSID. Do so unconditionally, as there is no
++		 * drawback in following the same powering order on older SoCs.
++		 */
++		ret = vfe_get(vfe);
++		if (ret < 0)
++			return ret;
+ 
+ 		ret = pm_runtime_resume_and_get(dev);
+ 		if (ret < 0)
+@@ -217,8 +219,7 @@ static int csid_set_power(struct v4l2_subdev *sd, int on)
+ 		regulator_bulk_disable(csid->num_supplies,
+ 				       csid->supplies);
+ 		pm_runtime_put_sync(dev);
+-		if (version == CAMSS_8250 || version == CAMSS_845)
+-			vfe_put(vfe);
++		vfe_put(vfe);
+ 	}
+ 
+ 	return ret;
+-- 
+2.25.1
+

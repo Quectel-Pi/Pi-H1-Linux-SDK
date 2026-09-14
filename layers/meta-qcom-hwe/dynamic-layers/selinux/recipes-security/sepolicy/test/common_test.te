@@ -2,17 +2,6 @@
 #SPDX-License-Identifier: BSD-3-Clause-Clear
 policy_module(common_test, 1.0.0)
 
-gen_require(`
-        type container_engine_t;
-        type dockerc_t;
-        type dockerd_t;
-    ')
-
-permissive container_engine_t;
-
-permissive dockerc_t;
-permissive dockerd_t;
-
 #TODO: following are added to unblock the tech team
 #      and expected to clean this going fwd.
 
@@ -43,6 +32,7 @@ gen_require(`
 	type  udev_t;
         type unconfined_execmem_t;
         type tmpfs_t;
+        type  pulseaudio_t;
 ')
 
 # Systemd_analyze will read each services
@@ -52,7 +42,7 @@ kernel_search_proc(systemd_analyze_t)
 kernel_read_sysctl(systemd_analyze_t)
 files_getattr_var_lib_dirs(systemd_analyze_t)
 init_search_runtime(systemd_analyze_t)
-files_manage_urandom_seed(systemd_analyze_t)
+init_manage_random_seed(systemd_analyze_t)
 permissive systemd_analyze_t;
 
 #=========================
@@ -71,22 +61,6 @@ domtrans_pattern(unconfined_t, qcom_kernel_tests_exec_t, qcom_kernel_tests_t)
 domtrans_pattern(initrc_t, qcom_kernel_tests_exec_t, qcom_kernel_tests_t)
 permissive  qcom_kernel_tests_t;
 
-#======================
-# for halnativetest
-#
-type qcom_nativehaltest_t;
-type qcom_nativehaltest_exec_t;
-init_system_domain(qcom_nativehaltest_t, qcom_nativehaltest_exec_t)
-role system_r types qcom_nativehaltest_t;
-
-application_domain(qcom_nativehaltest_t, qcom_nativehaltest_exec_t)
-init_daemon_domain(qcom_nativehaltest_t, qcom_nativehaltest_exec_t)
-domtrans_pattern(unconfined_t, qcom_nativehaltest_exec_t, qcom_nativehaltest_t)
-domtrans_pattern(initrc_t, qcom_nativehaltest_exec_t, qcom_nativehaltest_t)
-can_exec(initrc_t, qcom_nativehaltest_t)
-permissive  qcom_nativehaltest_t;
-
-
 mls_file_write_all_levels( unconfined_execmem_t)
 mls_file_read_all_levels(unconfined_execmem_t)
 
@@ -100,7 +74,7 @@ files_type(qcom_sensors_test_t)
 
 qcom_allow_ops_qcom_sensors_test(qcom_sscrpcd_t)
 
-systemd_status_user_runtime_units(unconfined_t)
+systemd_get_user_runtime_units_status(unconfined_t)
 systemd_stop_user_runtime_units(unconfined_t)
 systemd_start_user_runtime_units(unconfined_t)
 
@@ -161,6 +135,7 @@ gen_require(`
             type  syslogd_t;
             type  user_home_dir_t;
             type  systemd_tmpfiles_t;
+            type  unconfined_t;
 ')
 
 allow {systemd_generator_t  systemd_modules_load_t systemd_logind_t qcom_usb_t}   usr_t:lnk_file  {read getattr};
@@ -182,3 +157,4 @@ qcom_loc_read_loc_sock_files(unconfined_t)
 
 qcom_loc_locclient_generic_rules(unconfined_t)
 
+init_dbus_chat_script(unconfined_t)

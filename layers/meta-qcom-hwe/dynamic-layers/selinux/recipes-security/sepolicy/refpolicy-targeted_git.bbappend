@@ -13,7 +13,7 @@ FILES:${PN} += " \
         ${datadir}/selinux/${POLICY_NAME}/*.pp \
         ${QCOM_STORE_ROOT}/${POLICY_NAME}/ \
 "
-SRC_URI:remove:qcom = "file://0042-policy-modules-system-systemd-systemd-user-fixes.patch"
+SRC_URI:remove:qcom = "file://0001-refpolicy-targeted-make-unconfined_u-the-default-sel.patch "
 
 #Patches
 SRC_URI:append:qcom = " file://0070-PENDING-allow-logging-domains-to-execute-busybox.patch \
@@ -27,14 +27,16 @@ SRC_URI:append:qcom = " file://0070-PENDING-allow-logging-domains-to-execute-bus
             file://0078-PENDING-add-sepolicies-for-modem-manager.patch \
             file://0079-PENDING-Add-sepolicy-for-systemd-networkd-wait-online.patch \
             file://0080-PENDING-Add-sepolicy-rules-for-hostapd-hostapd_cli.patch \
-            file://0081-PENDING-SEPolicy-changes-to-allow-read-write-to-dbus-and-bl.patch \
-            file://0082-PENDING-sepolicy-for-bluez-to-access-uhid.patch \
             file://0083-PENDING-Add-Docker-related-policies.patch \
             file://0084-PENDING-Allow-SE-policy-read-and-write-access-to-dbu.patch \
             file://0085-PENDING-Adding-rules-for-dnsmasq.patch \
             file://0086-PENDING-networkmanager-allow-access-tmpfs.patch \
 	    file://0088-PENDING-allow-irqbalance-to-search-bin.patch \
             file://0087-PENDING-Fix-bluetoothctl-not-working-in-shell.patch \
+            file://0089-PENDING-sepolicy-Add-sepolicy-for-obexctl-to-work-in.patch \
+            file://0090-PENDING-sepolicy-Add-sepolicy-rules-for-obex-server-.patch \
+            file://0091-UPSTREAM-Adding-SE-Policy-rules-to-allow-usage-of-un.patch \
+            file://0092-PENDING-Add-sepolicy-rules-for-brctl-to-add-remove-b.patch \
 "
 
 #Policy folders
@@ -44,7 +46,6 @@ SRC_URI:append:qcom = " file://apps/ \
             file://services/ \
             file://system/ \
             file://admin/ \
-            file://files/ \
 "
 
 RDEPENDS:${PN} += "\
@@ -55,6 +56,8 @@ RDEPENDS:${PN} += "\
 ENABLE_TEST_SEPOLICY ?= "y"
 SRC_URI:append:qcom = "\
             ${@bb.utils.contains('ENABLE_TEST_SEPOLICY', 'y', 'file://test/', '', d)} \
+            file://0994-QCLINUX-Enable-required-booleans-through-tunable-pol.patch \
+            file://0995-QCLINUX-selinux-Add-se_debug-macro.patch \
             file://0996-QCLINUX-file_contexts.subs_dist-set-aliases-for-var-lib-seli.patch \
             file://0997-QCLINIUX-sepolicy-update-file_contexts.subs_dist-for-support.patch \
             file://0998-refpolicy-config-update-ssh-to-login-in-sysadmin-rol.patch \
@@ -63,14 +66,16 @@ SRC_URI:append:qcom = "\
 EXTRA_OEMAKE += "tc_usrsbindir=${STAGING_SBINDIR_NATIVE}"
 EXTRA_OEMAKE += "tc_sbindir=${STAGING_DIR_NATIVE}${base_sbindir_native}"
 
-do_compile:qcom() {
-        if [ -f "${WORKDIR}/modules.conf" ] ; then
-                cp -f ${WORKDIR}/modules.conf ${S}/policy/modules.conf
-        fi
-        # oe_runmake conf
-        disable_policy_modules
-        oe_runmake policy
-}
+#
+#se_debug is intended only for debug purpose, should be disabled in prod build.
+#Sepolicies required for debug and testing should be kept inside se_debug.
+#usage:
+#    se_debug(`
+#         <policy rules to be added>
+#     ')
+#To Disable se_debug, Comment the below line.
+#
+EXTRA_OEMAKE += "SE_DEBUG=y"
 
 prepare_policy_store () {
         oe_runmake 'DESTDIR=${D}' 'prefix=${D}${prefix}' install
@@ -129,7 +134,7 @@ EOF
         rm -rf ${D}${QCOM_STORE_ROOT}/final
 }
 
-COMPATIBLE_MACHINE = "qcm6490|qcs9100|qcs8300|qcs615"
+COMPATIBLE_MACHINE = "qcm6490|qcs9100|qcs8300|qcs615|sa535m"
 
 def get_machine(d):
     need_machine = (d.getVar('COMPATIBLE_MACHINE') or "").split("|")
@@ -141,32 +146,12 @@ def get_machine(d):
                 if re.match(n, m):
                     return n
 
-def test_modules_list(d):
-    machine = get_machine(d)
-
-    target_to_policy_map = {
-        'qcm6490': ['qcm6490_test', 'qcs9100_test'],
-        'qcs9100': ['qcm6490_test', 'qcs9100_test'],
-        'qcs8300': ['qcm6490_test', 'qcs9100_test'],
-        'qcs615':  ['qcm6490_test', 'qcs9100_test'],
-        'qcm8550': ['qcm8550_test'],
-        'qcs8550': ['qcs8550_test'],
-    }
-
-    if machine in target_to_policy_map:
-        return target_to_policy_map[machine]
-    else:
-        return None
-
 def copy_target_policies(src_path, dest_path, src_folder, dest_folder, d):
     import shutil
     import os
 
     if src_folder is 'test':
         policy_modules = ["common_test"]
-        test_modules = test_modules_list(d)
-        if test_modules:
-            policy_modules += test_modules
 
     if policy_modules is None:
         return

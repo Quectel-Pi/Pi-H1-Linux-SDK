@@ -1,0 +1,150 @@
+#!/bin/sh
+# Copyright (C) 2026 Quectel Igni.Li.
+# Licensed on MIT
+
+ota_enabled() {
+    return 0
+}
+
+ota_run() {
+    echo "===========Enter initramfs OTA function===========" >/dev/console
+
+    echo 20 > /sys/class/leds/red/brightness
+    echo default-on > /sys/class/leds/red/trigger
+
+    TOP_DIR=/mnt/top_root
+    OTA_INFO_DIR=opt
+ 
+    WORK_DIR=/mnt/def_root
+    BACKUP_DIR=/mnt/backup_root
+
+    WORK_SUBVOL=@system
+    BACKUP_SUBVOL=@backup
+
+    # Boot-success handshake for A/B fallback.
+    # boot_attempts: incremented in initramfs each time we choose the current
+    #                subvol; cleared by the rootfs (ota_run) once boot succeeds.
+    # boot_fail_vol:  set when attempts exceed the threshold; afterwards we
+    #                boot backup directly until the rootfs clears it.
+    # boot_fail_threshold (optional): override, default 3.
+    BOOT_ATTEMPTS_FILE="$OTA_INFO_DIR/boot_attempts"
+    BOOT_FAIL_VOL_FILE="$OTA_INFO_DIR/boot_fail_vol"
+    DEFAULT_BOOT_FAIL_THRESHOLD=3
+    AB_MODE=0
+
+    mkdir -p $TOP_DIR
+    mount -t btrfs -o subvolid=5 /dev/sda3 $TOP_DIR
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to mount /dev/sda3" >/dev/console
+        exec sh
+    fi
+    echo "Mounted /dev/sda3 top-level to $TOP_DIR" >/dev/console
+
+    ####################advance option#######################
+
+    if [ -f "$TOP_DIR/$OTA_INFO_DIR/current_vol" ]; then
+        echo "Reading $TOP_DIR/$OTA_INFO_DIR/current_vol..." >/dev/console
+
+        WORK_SUBVOL=$(tr -d '\r\n' < "$TOP_DIR/$OTA_INFO_DIR/current_vol" | sed 's/^ *//;s/ *$//')
+
+        if [ -z "$WORK_SUBVOL" ]; then
+            echo "Error: current_vol is empty!" >/dev/console
+        else
+            echo "WORK_SUBVOL=$WORK_SUBVOL" >/dev/console
+            AB_MODE=1
+        fi
+    else
+        echo "Warning: $TOP_DIR/$OTA_INFO_DIR/current_vol not found, using default subvolumes" >/dev/console
+    fi
+
+    ####################advance option end#######################
+
+    if [ -d "$TOP_DIR/$WORK_SUBVOL" ]; then
+        echo "@ subvolume exists" >/dev/console
+        if [ -e "$TOP_DIR/$WORK_SUBVOL/restore_flag" ]; then
+            echo "@ restore flag found, update may failed,now enter backup restore" >/dev/console
+            ROOTFS_DIR=$BACKUP_DIR
+            SUBVOL=$BACKUP_SUBVOL
+            #set restore_flag to BACKUP_SUBVOL
+        else
+            # A/B fallback: count consecutive unconfirmed boots of the
+            # current subvol. If it keeps failing to reach userspace, give
+            # up and boot the backup instead (until rootfs clears the flag).
+            ROOTFS_DIR=$WORK_DIR
+            SUBVOL=$WORK_SUBVOL
+
+            if [ "$AB_MODE" = "1" ]; then
+                # Honour an optional override file.
+                THRESHOLD=$DEFAULT_BOOT_FAIL_THRESHOLD
+                if [ -f "$TOP_DIR/$OTA_INFO_DIR/boot_fail_threshold" ]; then
+                    TOVR=$(tr -d '\r\n' < "$TOP_DIR/$OTA_INFO_DIR/boot_fail_threshold" | sed 's/^ *//;s/ *$//')
+                    case "$TOVR" in
+                        ''|*[!0-9]*) ;;
+                        *) THRESHOLD=$TOVR ;;
+                    esac
+                fi
+
+                ATTEMPTS=0
+                if [ -f "$TOP_DIR/$BOOT_ATTEMPTS_FILE" ]; then
+                    A=$(tr -d '\r\n' < "$TOP_DIR/$BOOT_ATTEMPTS_FILE" | sed 's/^ *//;s/ *$//')
+                    case "$A" in
+                        ''|*[!0-9]*) ATTEMPTS=0 ;;
+                        *) ATTEMPTS=$A ;;
+                    esac
+                fi
+
+                FAIL_VOL=""
+                if [ -f "$TOP_DIR/$BOOT_FAIL_VOL_FILE" ]; then
+                    FAIL_VOL=$(tr -d '\r\n' < "$TOP_DIR/$BOOT_FAIL_VOL_FILE" | sed 's/^ *//;s/ *$//')
+                fi
+
+                if [ -n "$FAIL_VOL" ] && [ "$FAIL_VOL" = "$WORK_SUBVOL" ]; then
+                    # Already gave up on this exact target: keep booting
+                    # backup without incrementing (avoids tight reboot loops).
+                    echo "[FALLBACK] $WORK_SUBVOL marked unbootable, booting $BACKUP_SUBVOL" >/dev/console
+                    if [ -d "$TOP_DIR/$BACKUP_SUBVOL" ]; then
+                        ROOTFS_DIR=$BACKUP_DIR
+                        SUBVOL=$BACKUP_SUBVOL
+                    fi
+                elif [ "$ATTEMPTS" -ge "$THRESHOLD" ]; then
+                    echo "[FALLBACK] $WORK_SUBVOL failed $ATTEMPTS/$THRESHOLD boots, switching to $BACKUP_SUBVOL" >/dev/console
+                    if [ -d "$TOP_DIR/$BACKUP_SUBVOL" ]; then
+                        echo "$WORK_SUBVOL" > "$TOP_DIR/$BOOT_FAIL_VOL_FILE.tmp" 2>/dev/null && \
+                            mv -f "$TOP_DIR/$BOOT_FAIL_VOL_FILE.tmp" "$TOP_DIR/$BOOT_FAIL_VOL_FILE"
+                        echo 0 > "$TOP_DIR/$BOOT_ATTEMPTS_FILE.tmp" 2>/dev/null && \
+                            mv -f "$TOP_DIR/$BOOT_ATTEMPTS_FILE.tmp" "$TOP_DIR/$BOOT_ATTEMPTS_FILE"
+                        sync
+                        ROOTFS_DIR=$BACKUP_DIR
+                        SUBVOL=$BACKUP_SUBVOL
+                    else
+                        echo "[FALLBACK] No $BACKUP_SUBVOL available, last-resort boot of $WORK_SUBVOL" >/dev/console
+                    fi
+                else
+                    ATTEMPTS=$((ATTEMPTS + 1))
+                    echo "$ATTEMPTS" > "$TOP_DIR/$BOOT_ATTEMPTS_FILE.tmp" 2>/dev/null && \
+                        mv -f "$TOP_DIR/$BOOT_ATTEMPTS_FILE.tmp" "$TOP_DIR/$BOOT_ATTEMPTS_FILE"
+                    sync
+                    echo "[BOOT] $WORK_SUBVOL attempt $ATTEMPTS/$THRESHOLD" >/dev/console
+                fi
+            fi
+        fi
+        mkdir -p $ROOTFS_DIR
+        mount -t btrfs -o subvol=$SUBVOL /dev/sda3 $ROOTFS_DIR
+        if [ $? -ne 0 ]; then
+            echo "Error: Failed to mount $SUBVOL subvolume, fallback to top-level" >/dev/console
+            ROOTFS_DIR=$TOP_DIR
+            #set flag show subvolume can not be mount
+            echo "SYSTEM WILL RUN IN ROOT FILE SYSTEM!  $ROOTFS_DIR " >/dev/console
+        else
+            echo "Debug: subvolume mount success, umount top rootfs" >/dev/console
+            umount $TOP_DIR
+            echo "SYSTEM WILL RUN IN subvolume $ROOTFS_DIR " >/dev/console
+        fi
+    else
+        echo "@ subvolume not found, using top-level" >/dev/console
+        echo "SYSTEM WILL RUN IN ROOT FILE SYSTEM!  $ROOTFS_DIR " >/dev/console
+        # you should enter top rootfs to create subvolume snapshot if you need
+    fi
+
+    echo "ROOTFS_DIR is set to $ROOTFS_DIR" >/dev/console
+}

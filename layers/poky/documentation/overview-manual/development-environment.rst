@@ -39,10 +39,9 @@ Linus Torvalds in 1991. Conversely, a good example of a non-open source
 project is the Windows family of operating systems developed by
 Microsoft Corporation.
 
-Wikipedia has a good historical description of the Open Source
-Philosophy `here <https://en.wikipedia.org/wiki/Open_source>`__. You can
-also find helpful information on how to participate in the Linux
-Community
+Wikipedia has a good :wikipedia:`historical description of the Open Source
+Philosophy <Open_source>`. You can also find helpful information on how
+to participate in the Linux Community
 `here <https://www.kernel.org/doc/html/latest/process/index.html>`__.
 
 The Development Host
@@ -178,42 +177,31 @@ these tarballs gives you a snapshot of the released files.
 In summary, here is where you can get the project files needed for
 development:
 
--  :yocto_git:`Source Repositories: <>` This area contains IDE
-   Plugins, Matchbox, Poky, Poky Support, Tools, Yocto Linux Kernel, and
-   Yocto Metadata Layers. You can create local copies of Git
-   repositories for each of these areas.
+-  :yocto_git:`Source Repositories: <>` This area contains Poky, Yocto
+   documentation, metadata layers, and Linux kernel. You can create local
+   copies of Git repositories for each of these areas.
 
    .. image:: figures/source-repos.png
-      :align: center
+      :width: 100%
 
    For steps on how to view and access these upstream Git repositories,
    see the ":ref:`dev-manual/start:accessing source repositories`"
    Section in the Yocto Project Development Tasks Manual.
 
--  :yocto_dl:`Index of /releases: </releases>` This is an index
-   of releases such as Poky, Pseudo, installers for cross-development
-   toolchains, miscellaneous support and all released versions of Yocto
-   Project in the form of images or tarballs. Downloading and extracting
-   these files does not produce a local copy of the Git repository but
-   rather a snapshot of a particular release or image.
+-  :yocto_dl:`Yocto release archives: </releases/yocto>` This is where you can
+   download tarballs corresponding to each Yocto Project release. Downloading
+   and extracting these files does not produce a local copy of a Git repository
+   but rather a snapshot corresponding to a particular release.
 
-   .. image:: figures/index-downloads.png
-      :align: center
-
-   For steps on how to view and access these files, see the
-   ":ref:`dev-manual/start:accessing index of releases`"
-   section in the Yocto Project Development Tasks Manual.
-
--  *"DOWNLOADS" page for the* :yocto_home:`Yocto Project Website <>` *:*
-
-   The Yocto Project website includes a "DOWNLOADS" page accessible
+-  :yocto_home:`DOWNLOADS page </software-overview/downloads/>`:
+   The :yocto_home:`Yocto Project website <>` includes a "DOWNLOADS" page accessible
    through the "SOFTWARE" menu that allows you to download any Yocto
    Project release, tool, and Board Support Package (BSP) in tarball
-   form. The tarballs are similar to those found in the
-   :yocto_dl:`Index of /releases: </releases>` area.
+   form. The hyperlinks point to the tarballs under
+   :yocto_dl:`/releases/yocto/`.
 
    .. image:: figures/yp-download.png
-      :align: center
+      :width: 100%
 
    For steps on how to use the "DOWNLOADS" page, see the
    ":ref:`dev-manual/start:using the downloads page`"
@@ -614,30 +602,22 @@ licensing structures in place. License evolution for both Open Source
 and Free Software has an interesting history. If you are interested in
 this history, you can find basic information here:
 
--  `Open source license
-   history <https://en.wikipedia.org/wiki/Open-source_license>`__
+-  :wikipedia:`Open source license history <Open-source_license>`
 
--  `Free software license
-   history <https://en.wikipedia.org/wiki/Free_software_license>`__
+-  :wikipedia:`Free software license history <Free_software_license>`
 
 In general, the Yocto Project is broadly licensed under the
 Massachusetts Institute of Technology (MIT) License. MIT licensing
 permits the reuse of software within proprietary software as long as the
-license is distributed with that software. MIT is also compatible with
-the GNU General Public License (GPL). Patches to the Yocto Project
+license is distributed with that software. Patches to the Yocto Project
 follow the upstream licensing scheme. You can find information on the
-MIT license
-`here <https://www.opensource.org/licenses/mit-license.php>`__. You can
-find information on the GNU GPL
-`here <https://www.opensource.org/licenses/LGPL-3.0>`__.
+MIT license :wikipedia:`here <MIT_License>`.
 
 When you build an image using the Yocto Project, the build process uses
 a known list of licenses to ensure compliance. You can find this list in
-the :term:`Source Directory` at
-``meta/files/common-licenses``. Once the build completes, the list of
-all licenses found and used during that build are kept in the
-:term:`Build Directory` at
-``tmp/deploy/licenses``.
+the :term:`Source Directory` at ``meta/files/common-licenses``. Once the
+build completes, the list of all licenses found and used during that build
+are kept in the :term:`Build Directory` at ``tmp/deploy/licenses``.
 
 If a module requires a license that is not in the base list, the build
 process generates a warning during the build. These tools make it easier

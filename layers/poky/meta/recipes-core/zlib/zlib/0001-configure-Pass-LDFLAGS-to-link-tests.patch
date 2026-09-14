@@ -1,4 +1,7 @@
-From 001971eef84485562f912d8edd4fc7688acfad91 Mon Sep 17 00:00:00 2001
+Upstream-Status: Submitted [https://github.com/madler/zlib/pull/599]
+Signed-off-by: Ross Burton <ross.burton@arm.com>
+
+From ea77f1f003a4d18b23cca703f3c824942863a1b4 Mon Sep 17 00:00:00 2001
 From: Khem Raj <raj.khem@gmail.com>
 Date: Tue, 8 Mar 2022 22:38:47 -0800
 Subject: [PATCH] configure: Pass LDFLAGS to link tests
@@ -9,27 +12,26 @@ using LDFLAGS on compiler commandline along with CFLAGS to ensure the
 tests perform correctly. Without this some tests may fail resulting in
 wrong confgure result, ending in miscompiling the package
 
-Upstream-Status: Submitted [https://github.com/madler/zlib/pull/599]
-
 Signed-off-by: Khem Raj <raj.khem@gmail.com>
+
 ---
  configure | 12 ++++++------
  1 file changed, 6 insertions(+), 6 deletions(-)
 
 diff --git a/configure b/configure
-index e974d1f..69dfa3f 100755
+index c55098a..a7c6d72 100755
 --- a/configure
 +++ b/configure
-@@ -410,7 +410,7 @@ if test $shared -eq 1; then
+@@ -443,7 +443,7 @@ if test $shared -eq 1; then
    echo Checking for shared library support... | tee -a configure.log
    # we must test in two steps (cc then ld), required at least on SunOS 4.x
-   if try $CC -w -c $SFLAGS $test.c &&
+   if try $CC -c $SFLAGS $test.c &&
 -     try $LDSHARED $SFLAGS -o $test$shared_ext $test.o; then
 +     try $LDSHARED $SFLAGS $LDFLAGS -o $test$shared_ext $test.o; then
      echo Building shared library $SHAREDLIBV with $CC. | tee -a configure.log
    elif test -z "$old_cc" -a -z "$old_cflags"; then
      echo No shared library support. | tee -a configure.log
-@@ -492,7 +492,7 @@ int main(void) {
+@@ -505,7 +505,7 @@ int main(void) {
  }
  EOF
    fi
@@ -37,8 +39,8 @@ index e974d1f..69dfa3f 100755
 +  if try $CC $CFLAGS $LDFLAGS -o $test $test.c; then
      sizet=`./$test`
      echo "Checking for a pointer-size integer type..." $sizet"." | tee -a configure.log
-   else
-@@ -530,7 +530,7 @@ int main(void) {
+     CFLAGS="${CFLAGS} -DNO_SIZE_T=${sizet}"
+@@ -539,7 +539,7 @@ int main(void) {
    return 0;
  }
  EOF
@@ -47,7 +49,7 @@ index e974d1f..69dfa3f 100755
      echo "Checking for fseeko... Yes." | tee -a configure.log
    else
      CFLAGS="${CFLAGS} -DNO_FSEEKO"
-@@ -547,7 +547,7 @@ cat > $test.c <<EOF
+@@ -556,7 +556,7 @@ cat > $test.c <<EOF
  #include <errno.h>
  int main() { return strlen(strerror(errno)); }
  EOF
@@ -56,7 +58,7 @@ index e974d1f..69dfa3f 100755
    echo "Checking for strerror... Yes." | tee -a configure.log
  else
    CFLAGS="${CFLAGS} -DNO_STRERROR"
-@@ -654,7 +654,7 @@ int main()
+@@ -663,7 +663,7 @@ int main()
    return (mytest("Hello%d\n", 1));
  }
  EOF
@@ -65,7 +67,7 @@ index e974d1f..69dfa3f 100755
      echo "Checking for vsnprintf() in stdio.h... Yes." | tee -a configure.log
  
      echo >> configure.log
-@@ -744,7 +744,7 @@ int main()
+@@ -753,7 +753,7 @@ int main()
  }
  EOF
  
@@ -74,6 +76,3 @@ index e974d1f..69dfa3f 100755
      echo "Checking for snprintf() in stdio.h... Yes." | tee -a configure.log
  
      echo >> configure.log
--- 
-2.35.1
-

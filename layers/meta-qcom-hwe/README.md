@@ -7,18 +7,17 @@ This layer depends on:
 
 | URI    | Branch |
 | -------- | ------- |
-| https://git.yoctoproject.org/meta-qcom | kirkstone |
-| https://github.com/openembedded/meta-openembedded | kirkstone |
-| https://git.yoctoproject.org/poky | kirkstone |
-| https://git.yoctoproject.org/meta-security | kirkstone |
-| https://git.yoctoproject.org/meta-virtualization | kirkstone |
-| https://git.yoctoproject.org/meta-selinux | kirkstone |
-| https://github.com/quic-yocto/meta-qcom-hwe | kirkstone |
-| https://github.com/quic-yocto/meta-qcom-distro | kirkstone |
+| https://git.yoctoproject.org/meta-qcom | scarthgap |
+| https://github.com/openembedded/meta-openembedded | scarthgap |
+| https://git.yoctoproject.org/poky | scarthgap |
+| https://git.yoctoproject.org/meta-security | scarthgap |
+| https://git.yoctoproject.org/meta-virtualization | scarthgap |
+| https://github.com/qualcomm-linux/meta-qcom-distro | scarthgap |
 
 ## Adding a new machine
 ### Add Machine
-To add a new machine introduce a new machine configuration file at `layers/meta-qcom-hwe/conf/machine/`, for example, `layers/meta-qcom-hwe/conf/machine/testboard.conf`
+To add a new machine introduce a new machine configuration file at `layers/meta-qcom-hwe/conf/machine/`,
+for example, `layers/meta-qcom-hwe/conf/machine/testboard.conf`
 
 ```bash
 #@TYPE: Machine
@@ -26,7 +25,7 @@ To add a new machine introduce a new machine configuration file at `layers/meta-
 #@DESCRIPTION: Machine configuration for a development board, based on Qualcomm QCM6490
 
 MACHINEOVERRIDES =. "qcm6490:"
-require qcm6490.conf
+require conf/machine/include/qcom-qcs6490.inc
 ```
 Adding `MACHINEOVERRIDES` helps to re-use the configurations in recipes created for qcm6490.
 
@@ -38,7 +37,7 @@ bitbake qcom-multimedia-image
 'qcom-wayland' DISTRO and 'qcom-multimedia-image' are defined in meta-qcom-distro layer.
 
 ### Flashing the images on the device
-Flash the images on the device using qdl tool as per the steps in the main documentation.
+Flash the images on the device using qdl tool.
 
 
 ## Known Issues

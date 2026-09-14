@@ -5,7 +5,6 @@
 SUMMARY = "Sato desktop"
 DESCRIPTION = "Packagegroups provide a convenient mechanism of bundling a collection of packages."
 HOMEPAGE = "https://www.yoctoproject.org/"
-PR = "r33"
 
 PACKAGE_ARCH = "${MACHINE_ARCH}"
 
@@ -31,7 +30,7 @@ RDEPENDS:${PN}-base = "\
     matchbox-keyboard-im \
     matchbox-config-gtk \
     xcursor-transparent-theme \
-    adwaita-icon-theme \
+    sato-icon-theme \
     settings-daemon \
     shutdown-desktop \
     ${NETWORK_MANAGER} \

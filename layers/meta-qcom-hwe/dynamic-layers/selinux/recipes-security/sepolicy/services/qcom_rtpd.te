@@ -1,0 +1,14 @@
+#Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+#SPDX-License-Identifier: BSD-3-Clause-Clear
+
+policy_module(qcom_rtpd, 1.0)
+
+########################################
+#
+# Declarations
+#
+
+type qcom_rtpd_t;
+type qcom_rtpd_exec_t;
+
+init_daemon_domain(qcom_rtpd_t, qcom_rtpd_exec_t)

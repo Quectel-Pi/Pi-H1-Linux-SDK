@@ -7,6 +7,8 @@ SRC_URI = "file://quectel-CM.tgz file://99-quectel-cm.rules file://quectel-cm@.s
 
 S = "${WORKDIR}/quectel-CM"
 
+CFLAGS:append = " -Wno-error=unused-result"
+
 do_install:append () {
     install -d ${D}${sysconfdir}/udev/rules.d
     install -m 0644 ${WORKDIR}/99-quectel-cm.rules ${D}${sysconfdir}/udev/rules.d/99-quectel-cm.rules

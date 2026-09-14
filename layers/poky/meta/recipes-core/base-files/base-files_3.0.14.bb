@@ -1,7 +1,6 @@
 SUMMARY = "Miscellaneous files for the base system"
 DESCRIPTION = "The base-files package creates the basic system directory structure and provides a small set of key configuration files for the system."
 SECTION = "base"
-PR = "r89"
 LICENSE = "GPL-2.0-only"
 LIC_FILES_CHKSUM = "file://licenses/GPL-2;md5=94d55d512a9ba36caa9b7df079bae19f"
 # Removed all license related tasks in this recipe as license.bbclass 
@@ -23,9 +22,9 @@ SRC_URI = "file://rotation \
            file://share/dot.bashrc \
            file://share/dot.profile \
            file://licenses/GPL-2 \
-           file://LT9611UXC_DSI_PortA_HDCP_Disable_V5.0.21.bin \
-           file://LT9611UXD.bin \
            "
+SRC_URI:append:libc-glibc = "${@bb.utils.contains('DISTRO_FEATURES', 'systemd systemd-resolved', ' file://0001-add-nss-resolve-to-nsswitch.patch', '', d)}"
+
 S = "${WORKDIR}"
 
 INHIBIT_DEFAULT_DEPS = "1"
@@ -71,29 +70,6 @@ hostname = "${MACHINE}"
 
 BASEFILESISSUEINSTALL ?= "do_install_basefilesissue"
 
-# In previous versions of base-files, /run was a softlink to /var/run and the
-# directory was located in /var/volatlie/run.  Also, /var/lock was a softlink
-# to /var/volatile/lock which is where the real directory was located.  Now,
-# /run and /run/lock are the real directories.  If we are upgrading, we may
-# need to remove the symbolic links first before we create the directories.
-# Otherwise the directory creation will fail and we will have circular symbolic
-# links.
-# 
-pkg_preinst:${PN} () {
-    #!/bin/sh -e
-    if [ x"$D" = "x" ]; then
-        if [ -h "/var/lock" ]; then
-            # Remove the symbolic link
-            rm -f /var/lock
-        fi
-
-        if [ -h "/run" ]; then
-            # Remove the symbolic link
-            rm -f /run
-        fi
-    fi     
-}
-
 do_install () {
 	for d in ${dirs555}; do
 		install -m 0555 -d ${D}$d
@@ -131,9 +107,6 @@ do_install () {
 	install -m 0755 ${WORKDIR}/share/dot.bashrc ${D}${sysconfdir}/skel/.bashrc
 	install -m 0644 ${WORKDIR}/host.conf ${D}${sysconfdir}/host.conf
 	install -m 0644 ${WORKDIR}/motd ${D}${sysconfdir}/motd
-	install -d ${D}/${nonarch_base_libdir}/firmware
-	install -m 0755  ${WORKDIR}/LT9611UXC_DSI_PortA_HDCP_Disable_V5.0.21.bin ${D}/${nonarch_base_libdir}/firmware/lt9611uxc_fw.bin
-	install -m 0755  ${WORKDIR}/LT9611UXD.bin ${D}/${nonarch_base_libdir}/firmware/LT9611UXD.bin
 
 	ln -sf /proc/mounts ${D}${sysconfdir}/mtab
 
@@ -141,6 +114,10 @@ do_install () {
 	if [ "${hostname}" ]; then
 		echo ${hostname} > ${D}${sysconfdir}/hostname
 		echo "127.0.1.1 ${hostname}" >> ${D}${sysconfdir}/hosts
+	fi
+
+	if ${@bb.utils.contains('DISTRO_FEATURES', 'ipv6', 'false', 'true', d)}; then
+		sed -i '/^::1/s/ localhost//' ${D}${sysconfdir}/hosts
 	fi
 }
 

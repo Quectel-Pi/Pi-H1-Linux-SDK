@@ -24,15 +24,15 @@ diff --git a/js/dbusServices/screencast/screencastService.js b/js/dbusServices/s
 index d664a51b083..0645811fa0a 100644
 --- a/js/dbusServices/screencast/screencastService.js
 +++ b/js/dbusServices/screencast/screencastService.js
-@@ -166,7 +166,7 @@ var Recorder = class {
-             });
+@@ -340,7 +340,7 @@ class Recorder extends Signals.EventEmitter {
+                 });
  
-         this._streamProxy = new ScreenCastStreamProxy(Gio.DBus.session,
--            'org.gnome.ScreenCast.Stream',
-+            'org.gnome.Mutter.ScreenCast',
-             streamPath);
+             this._streamProxy = new ScreenCastStreamProxy(Gio.DBus.session,
+-                'org.gnome.ScreenCast.Stream',
++                'org.gnome.Mutter.ScreenCast',
+                 streamPath);
  
-         this._streamProxy.connectSignal('PipeWireStreamAdded',
+             this._streamProxy.connectSignal('PipeWireStreamAdded',
 -- 
 2.30.2
 

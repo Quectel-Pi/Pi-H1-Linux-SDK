@@ -59,22 +59,24 @@ do_install() {
 	install ${FIRMWARE_DIR}/host/wlan_host/sdio/qcom_cfg.ini ${D}/lib/firmware/wlan
 	install -d ${D}${systemd_unitdir}/system/
     install -m 0644 ${S}/WiFi/scripts/wlan-mac-check.service ${D}${systemd_unitdir}/system/wlan-mac-check.service
+#	install -m 0644 ${S}/WiFi/scripts/wpa_supplicant.service ${D}${systemd_unitdir}/system/wpa_supplicant.service
 	install -d ${D}/usr/sbin
 	install -m 0755 ${TOOLS_DIR}/Qcmbr/Qcmbr ${D}/usr/sbin
 	install -m 0755 ${TOOLS_DIR}/btconfig/btconfig ${D}/usr/sbin
 	install -m 0755 ${TOOLS_DIR}/btdiag/Btdiag ${D}/usr/sbin
 	install -m 0755 ${TOOLS_DIR}/myftm/ath6kl-utils/myftm/myftm ${D}/usr/sbin
 	install -m 0755 ${S}/WiFi/scripts/check_mac_addr ${D}/usr/sbin
+	install -m 0755 ${S}/WiFi/scripts/openap ${D}/usr/sbin
 	install -m 0755 ${S}/WiFi/scripts/bt_init.sh  ${D}/usr/sbin
-	install -m 0755 ${S}/WiFi/cnss_host_LEA/chss_proc/host/AIO/apps/hostap/hostapd/hostapd ${D}/usr/sbin
-	install -m 0755 ${S}/WiFi/cnss_host_LEA/chss_proc/host/AIO/apps/hostap/wpa_supplicant/wpa_cli ${D}/usr/sbin
-	install -m 0755 ${S}/WiFi/cnss_host_LEA/chss_proc/host/AIO/apps/hostap/wpa_supplicant/wpa_supplicant ${D}/usr/sbin
-	install -d ${D}/lib/modules/6.6.52-qli-1.3-ver.1.1/updates
-	install -m 0644 ${S}/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/wlan.ko  ${D}/lib/modules/6.6.52-qli-1.3-ver.1.1/updates/wlan.ko
+#	install -m 0755 ${S}/WiFi/cnss_host_LEA/chss_proc/host/AIO/apps/hostap/hostapd/hostapd ${D}/usr/sbin
+#	install -m 0755 ${S}/WiFi/cnss_host_LEA/chss_proc/host/AIO/apps/hostap/wpa_supplicant/wpa_cli ${D}/usr/sbin
+#	install -m 0755 ${S}/WiFi/cnss_host_LEA/chss_proc/host/AIO/apps/hostap/wpa_supplicant/wpa_supplicant ${D}/usr/sbin
+	install -d ${D}/lib/modules/quectel-wifi/updates
+	install -m 0644 ${S}/WiFi/cnss_host_LEA/chss_proc/host/AIO/drivers/qcacld-new/wlan.ko  ${D}/lib/modules/quectel-wifi/updates/wlan.ko
 	install -d ${D}/lib/firmware/qca
 	install -m 0755 ${S}/WiFi/meta_build/load_meta/bt_firmware/* ${D}/lib/firmware/qca
-	install -d ${D}/usr/share/dbus-1/system-services
-	install -m 0755 ${S}/WiFi/scripts/fi.w1.wpa_supplicant1.service ${D}/usr/share/dbus-1/system-services/fi.w1.wpa_supplicant1.service
+#	install -d ${D}/usr/share/dbus-1/system-services
+#	install -m 0755 ${S}/WiFi/scripts/fi.w1.wpa_supplicant1.service ${D}/usr/share/dbus-1/system-services/fi.w1.wpa_supplicant1.service
 	install -d ${D}${sysconfdir}/dbus-1/system.d
 	install -m 0755 ${S}/WiFi/scripts/wpa_supplicant.conf ${D}${sysconfdir}/dbus-1/system.d/wpa_supplicant.conf
 	install -d ${D}${sysconfdir}/NetworkManager/conf.d/
@@ -89,24 +91,7 @@ SYSTEMD_AUTO_ENABLE = "enable"
 INITSCRIPT_NAME = "wlan-mac-check"
 INITSCRIPT_PARAMS = "defaults"
 
-FILES:${PN} += " \ 
-  /lib/firmware/* \
-  /lib/firmware/wlan/qcom_cfg.ini \
-  /usr/sbin/Qcmbr \
-  /usr/sbin/btconfig \
-  /usr/sbin/Btdiag \
-  /usr/sbin/myftm \
-  /usr/sbin/wpa_cli \
-  /usr/sbin/hostapd \
-  /usr/sbin/wpa_supplicant \
-  /usr/sbin/check_mac_addr \
-  /usr/sbin/bt_init.sh \
-  /lib/modules/6.6.52-qli-1.3-ver.1.1/updates/wlan.ko \
-  /usr/lib/systemd/system/wlan-mac-check.service \
-  /usr/share/dbus-1/system-services/fi.w1.wpa_supplicant1.service \
-  ${sysconfdir}/dbus-1/system.d/wpa_supplicant.conf \
-  ${sysconfdir}/NetworkManager/conf.d/ignore-p2p.conf \
-"
+FILES:${PN} = "/"
 INSANE_SKIP:${PN} += "ldflags usrmerge"
 INSANE_SKIP:qca1023-wlan-dbg += "ldflags usrmerge"
 deltask do_rm_work

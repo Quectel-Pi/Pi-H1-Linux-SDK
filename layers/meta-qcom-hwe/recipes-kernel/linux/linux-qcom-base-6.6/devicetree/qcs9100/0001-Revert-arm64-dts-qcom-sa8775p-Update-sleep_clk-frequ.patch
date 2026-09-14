@@ -1,0 +1,31 @@
+From 5b88bb5f21a394ae35be20e6ba508a1a81212204 Mon Sep 17 00:00:00 2001
+From: "Sivasri Kumar, Vanka" <quic_svanka@quicinc.com>
+Date: Thu, 27 Mar 2025 15:20:29 +0530
+Subject: [PATCH 1/2] QCLINUX: Revert "arm64: dts: qcom: sa8775p: Update sleep_clk
+ frequency"
+
+Upstream-Status: Inappropriate
+
+This reverts commit a0753f8993cfe2fd0757dd56e52f949d1779eb6b.
+
+Signed-off-by: Sivasri Kumar, Vanka <quic_svanka@quicinc.com>
+---
+ arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi b/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
+index 864ad109371c..2a6170623ea9 100644
+--- a/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
++++ b/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
+@@ -517,7 +517,7 @@
+ };
+ 
+ &sleep_clk {
+-	clock-frequency = <32000>;
++	clock-frequency = <32764>;
+ };
+ 
+ &spi16 {
+-- 
+2.17.1
+

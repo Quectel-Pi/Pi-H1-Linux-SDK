@@ -278,8 +278,10 @@ static int snd_soc_is_matching_dai(const struct snd_soc_dai_link_component *dlc,
 	if (dlc->dai_args)
 		return snd_soc_is_match_dai_args(dai->driver->dai_args, dlc->dai_args);
 
-	if (!dlc->dai_name)
+	if (!dlc->dai_name) {
+		/* No dai_name specified, match any DAI in the component */
 		return 1;
+	}
 
 	/* see snd_soc_dai_name_get() */
 
@@ -842,6 +844,13 @@ static int snd_soc_is_matching_component(
 
 	component_of_node = soc_component_to_node(component);
 
+	if (dlc->of_node) {
+		pr_info("snd_soc: matching component '%s' dlc_of_node=%pOF component_of_node=%pOF match=%d\n",
+			component->name ? component->name : "null",
+			dlc->of_node, component_of_node,
+			component_of_node == dlc->of_node);
+	}
+
 	if (dlc->of_node && component_of_node != dlc->of_node)
 		return 0;
 	if (dlc->name && strcmp(component->name, dlc->name))
@@ -893,10 +902,24 @@ struct snd_soc_dai *snd_soc_find_dai(
 
 	/* Find CPU DAI from registered DAIs */
 	for_each_component(component)
-		if (snd_soc_is_matching_component(dlc, component))
-			for_each_component_dais(component, dai)
-				if (snd_soc_is_matching_dai(dlc, dai))
+		if (snd_soc_is_matching_component(dlc, component)) {
+			for_each_component_dais(component, dai) {
+				if (snd_soc_is_matching_dai(dlc, dai)) {
+					pr_info("snd_soc: find_dai matched '%s' in component '%s'\n",
+						dai->name, component->name);
 					return dai;
+				}
+			}
+			/* Component matched but no DAI matched */
+			if (dlc->of_node)
+				pr_info("snd_soc: find_dai component '%s' matched of_node but no DAI matched (dai_name='%s')\n",
+					component->name,
+					dlc->dai_name ? dlc->dai_name : "(null)");
+		}
+
+	if (dlc->of_node)
+		pr_info("snd_soc: find_dai FAILED for of_node=%pOF dai_name='%s'\n",
+			dlc->of_node, dlc->dai_name ? dlc->dai_name : "(null)");
 
 	return NULL;
 }
@@ -1025,6 +1048,9 @@ component_dai_empty:
 void snd_soc_remove_pcm_runtime(struct snd_soc_card *card,
 				struct snd_soc_pcm_runtime *rtd)
 {
+	if (!rtd)
+		return;
+
 	lockdep_assert_held(&client_mutex);
 
 	/*
@@ -1064,10 +1090,14 @@ static int snd_soc_add_pcm_runtime(struct snd_soc_card *card,
 	if (ret < 0)
 		return ret;
 
-	if (dai_link->ignore)
+	if (dai_link->ignore) {
+		pr_info("snd_soc: link '%s' ignored\n", dai_link->name ? dai_link->name : "null");
 		return 0;
+	}
 
-	dev_dbg(card->dev, "ASoC: binding %s\n", dai_link->name);
+	pr_info("snd_soc: binding link '%s' cpu_num=%d codec_num=%d\n",
+		dai_link->name ? dai_link->name : "null",
+		dai_link->num_cpus, dai_link->num_codecs);
 
 	ret = soc_dai_link_sanity_check(card, dai_link);
 	if (ret < 0)
@@ -1078,23 +1108,35 @@ static int snd_soc_add_pcm_runtime(struct snd_soc_card *card,
 		return -ENOMEM;
 
 	for_each_link_cpus(dai_link, i, cpu) {
+		pr_info("snd_soc: binding CPU for link '%s' cpu_of_node=%pOF dai_name='%s'\n",
+			dai_link->name ? dai_link->name : "null",
+			cpu->of_node, cpu->dai_name ? cpu->dai_name : "(null)");
 		asoc_rtd_to_cpu(rtd, i) = snd_soc_find_dai(cpu);
 		if (!asoc_rtd_to_cpu(rtd, i)) {
 			dev_info(card->dev, "ASoC: CPU DAI %s not registered\n",
 				 cpu->dai_name);
 			goto _err_defer;
 		}
+		pr_info("snd_soc: bound CPU '%s' to link '%s'\n",
+			snd_soc_dai_name_get(asoc_rtd_to_cpu(rtd, i)),
+			dai_link->name ? dai_link->name : "null");
 		snd_soc_rtd_add_component(rtd, asoc_rtd_to_cpu(rtd, i)->component);
 	}
 
 	/* Find CODEC from registered CODECs */
 	for_each_link_codecs(dai_link, i, codec) {
+		pr_info("snd_soc: binding codec for link '%s' codec_of_node=%pOF dai_name='%s'\n",
+			dai_link->name ? dai_link->name : "null",
+			codec->of_node, codec->dai_name ? codec->dai_name : "(null)");
 		asoc_rtd_to_codec(rtd, i) = snd_soc_find_dai(codec);
 		if (!asoc_rtd_to_codec(rtd, i)) {
 			dev_info(card->dev, "ASoC: CODEC DAI %s not registered\n",
 				 codec->dai_name);
 			goto _err_defer;
 		}
+		pr_info("snd_soc: bound codec '%s' to link '%s'\n",
+			snd_soc_dai_name_get(asoc_rtd_to_codec(rtd, i)),
+			dai_link->name ? dai_link->name : "null");
 
 		snd_soc_rtd_add_component(rtd, asoc_rtd_to_codec(rtd, i)->component);
 	}
@@ -2038,6 +2080,9 @@ static int snd_soc_bind_card(struct snd_soc_card *card)
 	struct snd_soc_component *component;
 	int ret;
 
+	pr_info("snd_soc: bind_card '%s' num_links=%d\n",
+		card->name ? card->name : "null", card->num_links);
+
 	mutex_lock(&client_mutex);
 	snd_soc_card_mutex_lock_root(card);
 
@@ -2935,7 +2980,7 @@ int snd_soc_of_parse_pin_switches(struct snd_soc_card *card, const char *prop)
 	unsigned int i, nb_controls;
 	int ret;
 
-	if (!of_property_read_bool(dev->of_node, prop))
+	if (!of_property_present(dev->of_node, prop))
 		return 0;
 
 	strings = devm_kcalloc(dev, nb_controls_max,
@@ -3009,23 +3054,17 @@ int snd_soc_of_parse_tdm_slot(struct device_node *np,
 	if (rx_mask)
 		snd_soc_of_get_slot_mask(np, "dai-tdm-slot-rx-mask", rx_mask);
 
-	if (of_property_read_bool(np, "dai-tdm-slot-num")) {
-		ret = of_property_read_u32(np, "dai-tdm-slot-num", &val);
-		if (ret)
-			return ret;
+	ret = of_property_read_u32(np, "dai-tdm-slot-num", &val);
+	if (ret && ret != -EINVAL)
+		return ret;
+	if (!ret && slots)
+		*slots = val;
 
-		if (slots)
-			*slots = val;
-	}
-
-	if (of_property_read_bool(np, "dai-tdm-slot-width")) {
-		ret = of_property_read_u32(np, "dai-tdm-slot-width", &val);
-		if (ret)
-			return ret;
-
-		if (slot_width)
-			*slot_width = val;
-	}
+	ret = of_property_read_u32(np, "dai-tdm-slot-width", &val);
+	if (ret && ret != -EINVAL)
+		return ret;
+	if (!ret && slot_width)
+		*slot_width = val;
 
 	return 0;
 }
@@ -3249,10 +3288,10 @@ unsigned int snd_soc_daifmt_parse_format(struct device_node *np,
 	 * SND_SOC_DAIFMT_INV_MASK area
 	 */
 	snprintf(prop, sizeof(prop), "%sbitclock-inversion", prefix);
-	bit = !!of_get_property(np, prop, NULL);
+	bit = of_property_read_bool(np, prop);
 
 	snprintf(prop, sizeof(prop), "%sframe-inversion", prefix);
-	frame = !!of_get_property(np, prop, NULL);
+	frame = of_property_read_bool(np, prop);
 
 	switch ((bit << 4) + frame) {
 	case 0x11:
@@ -3289,12 +3328,12 @@ unsigned int snd_soc_daifmt_parse_clock_provider_raw(struct device_node *np,
 	 * check "[prefix]frame-master"
 	 */
 	snprintf(prop, sizeof(prop), "%sbitclock-master", prefix);
-	bit = !!of_get_property(np, prop, NULL);
+	bit = of_property_present(np, prop);
 	if (bit && bitclkmaster)
 		*bitclkmaster = of_parse_phandle(np, prop, 0);
 
 	snprintf(prop, sizeof(prop), "%sframe-master", prefix);
-	frame = !!of_get_property(np, prop, NULL);
+	frame = of_property_present(np, prop);
 	if (frame && framemaster)
 		*framemaster = of_parse_phandle(np, prop, 0);
 

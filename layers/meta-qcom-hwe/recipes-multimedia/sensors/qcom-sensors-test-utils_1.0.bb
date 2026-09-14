@@ -7,11 +7,13 @@ DESCRIPTION = "Sensors-test-utils Library"
 
 DEPENDS += "glib-2.0 property-vault syslog-plumber qcom-sensors-utils"
 
-QCM6490_SHA256SUM = "e7fb07aac062185d3d01c801800464cfe0be03cfea323311d7b23bd39d7966e2"
+QCM6490_SHA256SUM = "c2cb0276802aa083f6f3c5f4bfad55bd8ea04b4140714546c985ca1e7fbd7f93"
+QCS615_SHA256SUM = "b1af334f18cc0aa26ba7b112d2e4ee3eb0d311e93a7c29434e8c54ba89f8ddde"
 
 SRC_URI[qcm6490.sha256sum] = "${QCM6490_SHA256SUM}"
+SRC_URI[qcs615.sha256sum] = "${QCS615_SHA256SUM}"
 
-SRC_URI = "https://${PBT_ARTIFACTORY}/${PBT_BUILD_ID}/${PBT_BIN_PATH}/${BPN}_${PV}_${PBT_ARCH}.tar.gz;name=${PBT_ARCH}"
+SRC_URI = "${PBT_ARTIFACTORY}/${PBT_BUILD_ID}/${PBT_BIN_PATH}/${BPN}_${PV}_${PBT_ARCH}.tar.gz;name=${PBT_ARCH}"
 
 FILES:${PN} += "${includedir}/*"
 FILES:${PN} += "/usr/lib/*"

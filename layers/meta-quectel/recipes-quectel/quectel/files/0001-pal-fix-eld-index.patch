@@ -1,0 +1,25 @@
+diff --git a/device/src/DisplayPortUpstream.cpp b/device/src/DisplayPortUpstream.cpp
+index 42646e6f..375093a8 100644
+--- a/device/src/DisplayPortUpstream.cpp
++++ b/device/src/DisplayPortUpstream.cpp
+@@ -360,9 +360,18 @@ int DisplayPort::getEldInfo(struct audio_mixer *mixer, int controller, int strea
+     if (state->eldInfo == NULL)
+         state->eldInfo = (struct eldAudioInfo *)calloc(1, sizeof(struct eldAudioInfo));
+ 
+-    PAL_VERBOSE(LOG_TAG," mixer ctl name: %s", mixerCtlName);
++    PAL_VERBOSE(LOG_TAG," mixer ctl name: %s, index: %d", mixerCtlName, controller);
+ 
+-    ctl = mixer_get_ctl_by_name(mixer, mixerCtlName);
++    /*
++     * Multiple display controllers each expose their own "ELD" mixer
++     * control (e.g. DP0 -> first ELD, DP1/HDMI -> second ELD).  Use the
++     * controller index to select the correct one; mixer_get_ctl_by_name()
++     * would always return the first (DP0) ELD which may be empty when
++     * HDMI (controller 1) is the active output.
++     */
++    ctl = mixer_get_ctl_by_name_and_index(mixer, mixerCtlName, controller);
++    if (!ctl)
++        ctl = mixer_get_ctl_by_name(mixer, mixerCtlName);
+     if (!ctl) {
+         PAL_ERR(LOG_TAG," Could not get ctl for mixer cmd - %s", mixerCtlName);
+         goto fail;

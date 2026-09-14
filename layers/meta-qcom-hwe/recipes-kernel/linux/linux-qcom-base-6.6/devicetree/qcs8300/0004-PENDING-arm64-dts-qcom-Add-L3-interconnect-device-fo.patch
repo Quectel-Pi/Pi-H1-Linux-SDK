@@ -1,0 +1,55 @@
+From 47b24d72f479bd6960c8a55d01f0ca7e675a90f9 Mon Sep 17 00:00:00 2001
+From: Raviteja Laggyshetty <quic_rlaggysh@quicinc.com>
+Date: Tue, 26 Nov 2024 14:21:07 +0530
+Subject: [PATCH 4/4] PENDING: arm64: dts: qcom: Add L3 interconnect device for
+ QCS8300
+
+Add Epoch Subsystem (EPSS) L3 interconnect provider nodes on QCS8300.
+
+Change-Id: I22e9062fb420af8ec5eaa0e63b0a719195532f39
+Signed-off-by: Raviteja Laggyshetty <quic_rlaggysh@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index f037a399f98f..c0c334c6677e 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -18,6 +18,7 @@
+ #include <dt-bindings/power/qcom,rpmhpd.h>
+ #include <dt-bindings/power/qcom-rpmpd.h>
+ #include <dt-bindings/soc/qcom,rpmh-rsc.h>
++#include <dt-bindings/interconnect/qcom,osm-l3.h>
+ 
+ / {
+ 	interrupt-parent = <&intc>;
+@@ -3830,6 +3831,24 @@
+ 			};
+ 		};
+ 
++		epss_l3_cl0: interconnect@18590000 {
++			compatible = "qcom,sa8775p-epss-l3-cl0",
++				     "qcom,epss-l3";
++			reg = <0x0 0x18590000 0x0 0x1000>;
++			clocks = <&rpmhcc RPMH_CXO_CLK>, <&gcc GCC_GPLL0>;
++			clock-names = "xo", "alternate";
++			#interconnect-cells = <1>;
++		};
++
++		epss_l3_cl1: interconnect@18592000 {
++			compatible = "qcom,sa8775p-epss-l3-cl1",
++				     "qcom,epss-l3";
++			reg = <0x0 0x18592000 0x0 0x1000>;
++			clocks = <&rpmhcc RPMH_CXO_CLK>, <&gcc GCC_GPLL0>;
++			clock-names = "xo", "alternate";
++			#interconnect-cells = <1>;
++		};
++
+ 		remoteproc_gpdsp: remoteproc@20c00000 {
+ 			compatible = "qcom,qcs8300-gpdsp-pas", "qcom,sa8775p-gpdsp0-pas";
+ 			reg = <0x0 0x20c00000 0x0 0x10000>;
+-- 
+2.17.1
+

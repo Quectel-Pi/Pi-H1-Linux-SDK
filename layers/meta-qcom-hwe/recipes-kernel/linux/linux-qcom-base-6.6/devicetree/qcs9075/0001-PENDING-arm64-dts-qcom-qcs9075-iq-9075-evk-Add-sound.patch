@@ -1,0 +1,309 @@
+From 1d3459d49bfafa15452d5d5b6803ef98c7baeca9 Mon Sep 17 00:00:00 2001
+From: Sairamreddy Bojja <quic_sbojja@quicinc.com>
+Date: Mon, 14 Apr 2025 14:23:11 +0530
+Subject: [PATCH] PENDING: arm64: dts: qcom: qcs9075-iq-9075-evk: Add sound
+ node for qcs9075 rb8 evk
+
+Add sound node for qcs9075-iq-9075-evk rb8 board.
+
+Change-Id: Id6dcac769593943ffb837d079ae2c873845d86a3
+Signed-off-by: Sairamreddy Bojja <quic_sbojja@quicinc.com>
+Upstream-Status: Pending
+---
+ .../boot/dts/qcom/qcs9075-iq-9075-evk.dts     | 273 ++++++++++++++++++
+ 1 file changed, 273 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts b/arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts
+index 5b7ceef02a51..147f2417b2f7 100644
+--- a/arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts
++++ b/arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts
+@@ -31,6 +31,78 @@ chosen {
+ 		stdout-path = "serial0:115200n8";
+ 	};
+ 
++	max98357a: audio-codec-0 {
++		compatible = "maxim,max98357a";
++		#sound-dai-cells = <0>;
++	};
++
++	dmic_codec: dmic-codec {
++		compatible = "dmic-codec";
++		#sound-dai-cells = <0>;
++		num-channels = <1>;
++	};
++
++	sound: sound {
++		compatible = "qcom,qcs9075-rb8-sndcard";
++		model = "qcs9075-rb8-snd-card";
++
++		clocks = <&q6prmcc LPASS_HW_MACRO_VOTE LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
++			 <&q6prmcc LPASS_HW_DCODEC_VOTE LPASS_CLK_ATTRIBUTE_COUPLE_NO>;
++		clock-names = "macro", "dcodec";
++
++		pinctrl-names = "default", "mi2s_aud_out_active", "mi2s_aud_out_sleep";
++		pinctrl-0 = <&hs0_mi2s_data0_sleep>, <&hs0_mi2s_sclk_sleep>,
++			    <&hs0_mi2s_data1_sleep>, <&hs0_mi2s_ws_sleep>,
++			    <&hs1_mi2s_data0_sleep>, <&hs1_mi2s_sclk_sleep>,
++			    <&hs1_mi2s_data1_sleep>, <&hs1_mi2s_ws_sleep>,
++			    <&hs2_mi2s_data0_sleep>, <&hs2_mi2s_data1_sleep>,
++			    <&hs2_mi2s_sck_sleep>, <&hs2_mi2s_ws_sleep>;
++		pinctrl-1 = <&hs0_mi2s_data0>, <&hs0_mi2s_sclk>,
++			    <&hs0_mi2s_data1>, <&hs0_mi2s_ws>,
++			    <&hs1_mi2s_data0>, <&hs1_mi2s_sclk>,
++			    <&hs1_mi2s_data1>, <&hs1_mi2s_ws>,
++			    <&hs2_mi2s_data0>, <&hs2_mi2s_data1>,
++			    <&hs2_mi2s_sck>, <&hs2_mi2s_ws>;
++		pinctrl-2 = <&hs0_mi2s_data0_sleep>, <&hs0_mi2s_sclk_sleep>,
++			    <&hs0_mi2s_data1_sleep>, <&hs0_mi2s_ws_sleep>,
++			    <&hs1_mi2s_data0_sleep>, <&hs1_mi2s_sclk_sleep>,
++			    <&hs1_mi2s_data1_sleep>, <&hs1_mi2s_ws_sleep>,
++			    <&hs2_mi2s_data0_sleep>, <&hs2_mi2s_data1_sleep>,
++			    <&hs2_mi2s_sck_sleep>, <&hs2_mi2s_ws_sleep>;
++
++		hs0-mi2s-playback-dai-link {
++			link-name = "MI2S-LPAIF_SDR-RX-PRIMARY";
++
++			cpu {
++				sound-dai = <&q6apmbedai PRIMARY_SDR_MI2S_RX>;
++			};
++
++			codec {
++				sound-dai = <&max98357a>;
++			};
++
++			platform {
++				sound-dai = <&q6apm>;
++			};
++		};
++
++		hs2-mi2s-capture-dai-link {
++			link-name = "MI2S-LPAIF_SDR-TX-TERTIARY";
++
++			cpu {
++				sound-dai = <&q6apmbedai TERTIARY_SDR_MI2S_TX>;
++			};
++
++			codec {
++				sound-dai = <&dmic_codec>;
++			};
++
++			platform {
++				sound-dai = <&q6apm>;
++			};
++		};
++	};
++
+ 	wcn6855-pmu {
+ 		compatible = "qcom,wcn6855-pmu";
+ 
+@@ -864,6 +936,207 @@ bt_bootstrap_default: bt_bootstrap_default {
+ 		drive-strength = <2>;
+ 	};
+ 
++	hs0_mi2s_data0_sleep: hs0-mi2s-data0-sleep-state {
++		pins = "gpio116";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	hs0_mi2s_data0: hs0-mi2s-data0-state {
++		pins = "gpio116";
++		function = "hs0_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++	};
++
++	hs0_mi2s_data1_sleep: hs0-mi2s-data1-sleep-state {
++		pins = "gpio117";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	hs0_mi2s_data1: hs0-mi2s-data1-state {
++		pins = "gpio117";
++		function = "hs0_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++	};
++
++	hs0_mi2s_sclk_sleep: hs0-mi2s-sclk-sleep-state {
++		pins = "gpio114";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	hs0_mi2s_sclk: hs0-mi2s-sclk-state {
++		pins = "gpio114";
++		function = "hs0_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++	};
++
++	hs0_mi2s_ws_sleep: hs0-mi2s-ws-sleep-state {
++		pins = "gpio115";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	hs0_mi2s_ws: hs0-mi2s-ws-state {
++		pins = "gpio115";
++		function = "hs0_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++		output-high;
++	};
++
++	hs1_mi2s_data0: hs1-mi2s-data0-state {
++		pins = "gpio120";
++		function = "hs1_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++	};
++
++	hs1_mi2s_data0_sleep: hs1-mi2s-data0-sleep-state {
++		pins = "gpio120";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	hs1_mi2s_data1: hs1-mi2s-data1-state {
++		pins = "gpio121";
++		function = "hs1_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++	};
++
++	hs1_mi2s_data1_sleep: hs1-mi2s-data1-sleep-state {
++		pins = "gpio121";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	hs1_mi2s_sclk: hs1-mi2s-sclk-state {
++		pins = "gpio119";
++		function = "hs1_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++	};
++
++	hs1_mi2s_sclk_sleep: hs1-mi2s-sclk-sleep-state {
++		pins = "gpio119";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	hs1_mi2s_ws: hs1-mi2s-ws-state {
++		pins = "gpio118";
++		function = "hs1_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++		output-high;
++	};
++
++	hs1_mi2s_ws_sleep: hs1-mi2s-ws-sleep-state {
++		pins = "gpio118";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	hs2_mi2s_data0: hs2-mi2s-data0-state {
++		pins = "gpio124";
++		function = "hs2_mi2s";
++		drive-strength = <8>;
++		input-enable;
++		bias-disable;
++	};
++
++	hs2_mi2s_data0_sleep: hs2-mi2s-data0-sleep-state {
++		pins = "gpio124";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	hs2_mi2s_data1: hs2-mi2s-data1-state {
++		pins = "gpio125";
++		function = "hs2_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++	};
++
++	hs2_mi2s_data1_sleep: hs2-mi2s-data1-sleep-state {
++		pins = "gpio125";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	hs2_mi2s_sck: hs2-mi2s-sck-state {
++		pins = "gpio122";
++		function = "hs2_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++		output-high;
++	};
++
++	hs2_mi2s_sck_sleep: hs2-mi2s-sck-sleep-state {
++		pins = "gpio122";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	hs2_mi2s_ws: hs2-mi2s-ws-state {
++		pins = "gpio123";
++		function = "hs2_mi2s";
++		drive-strength = <8>;
++		bias-disable;
++		output-high;
++	};
++
++	hs2_mi2s_ws_sleep: hs2-mi2s-ws-sleep-state {
++		pins = "gpio123";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
++	mi2s_mclk: mi2s-mclk-state {
++		pins = "gpio105";
++		function = "mi2s_mclk0";
++		drive-strength = <8>;
++		bias-disable;
++		output-high;
++	};
++
++	mi2s_mclk_sleep: mi2s-mclk-sleep-state {
++		pins = "gpio105";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++		input-enable;
++	};
++
+ 	qup_uart10_default: qup-uart10-state {
+ 		pins = "gpio46", "gpio47";
+ 		function = "qup1_se3";
+-- 
+2.34.1
+

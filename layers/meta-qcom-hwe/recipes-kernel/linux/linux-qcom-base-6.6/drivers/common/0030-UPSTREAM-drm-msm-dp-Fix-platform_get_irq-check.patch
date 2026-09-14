@@ -1,0 +1,39 @@
+From 182af2573338d6b215e32e7bd4b2e639915927f6 Mon Sep 17 00:00:00 2001
+From: Dan Carpenter <dan.carpenter@linaro.org>
+Date: Wed, 6 Dec 2023 15:02:05 +0300
+Subject: [PATCH 030/146] UPSTREAM: drm/msm/dp: Fix platform_get_irq() check
+
+The platform_get_irq() function returns negative error codes.  It never
+returns zero.  Fix the check accordingly.
+
+Fixes: 82c2a5751227 ("drm/msm/dp: tie dp_display_irq_handler() with dp driver")
+Signed-off-by: Dan Carpenter <dan.carpenter@linaro.org>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/570755/
+Link: https://lore.kernel.org/r/c12bb69b-d676-4345-9712-48aab48f2b48@moroto.mountain
+Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git c4ac0c6c96f0985357c5866cf22fd642390409dd]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 46551b35a0ee..5b2f8e4de45e 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -1199,9 +1199,9 @@ static int dp_display_request_irq(struct dp_display_private *dp)
+ 	struct platform_device *pdev = dp->dp_display.pdev;
+ 
+ 	dp->irq = platform_get_irq(pdev, 0);
+-	if (!dp->irq) {
++	if (dp->irq < 0) {
+ 		DRM_ERROR("failed to get irq\n");
+-		return -EINVAL;
++		return dp->irq;
+ 	}
+ 
+ 	rc = devm_request_irq(&pdev->dev, dp->irq, dp_display_irq_handler,
+-- 
+2.34.1
+

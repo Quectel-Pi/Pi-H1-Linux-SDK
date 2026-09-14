@@ -6,16 +6,18 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=3b83ef96387f14655fc854ddc3c6bd57"
 RDEPENDS:${PN} = "skopeo"
 RDEPENDS:${PN}:class-native = ""
 
-SRCREV_umoci = "fa8e9f875805f24ede2c52f1cda2abeab944c560"
+SRCREV_umoci = "33ec00665c66321f1b1f34ca7e6f370ac35c1233"
 SRC_URI = "git://github.com/opencontainers/umoci.git;branch=main;name=umoci;destsuffix=github.com/opencontainers/umoci;protocol=https \
           "
 
-PV = "v0.4.7-dev+git${SRCPV}"
+PV = "v0.4.7+git"
 S = "${WORKDIR}/github.com/opencontainers/umoci"
 GO_IMPORT = "github.com/opencontainers/umoci"
 
 inherit goarch
 inherit go
+
+COMPATIBLE_HOST = "^(?!mips).*"
 
 # This disables seccomp and apparmor, which are on by default in the
 # go package. 
@@ -39,6 +41,8 @@ do_compile:class-native () {
 
     export GOPATH="${WORKDIR}/git/"
     export GO111MODULE=off
+
+    export STATIC_BUILD_FLAGS="-trimpath"
 
     cd ${S}
 
@@ -66,6 +70,7 @@ do_compile() {
 
     export GO111MODULE=off
 
+    export BUILD_FLAGS="-trimpath"
     cd ${S}
 
     oe_runmake umoci

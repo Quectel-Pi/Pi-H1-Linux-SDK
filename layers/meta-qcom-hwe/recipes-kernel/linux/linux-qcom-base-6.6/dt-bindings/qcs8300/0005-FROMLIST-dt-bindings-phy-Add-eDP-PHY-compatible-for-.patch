@@ -1,0 +1,50 @@
+From 9891bf4bc77be0e5430628147e7f94f20af5f3bf Mon Sep 17 00:00:00 2001
+From: Yongxing Mou <quic_yongmou@quicinc.com>
+Date: Mon, 13 Jan 2025 17:06:20 +0800
+Subject: [PATCH 5/7] FROMLIST: dt-bindings: phy: Add eDP PHY compatible for
+ QCS8300
+
+Add compatible string for the supported eDP PHY on QCS8300 platform.
+QCS8300 have the same eDP PHY with SA8775P.
+
+Reviewed-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Signed-off-by: Mahadevan <quic_mahap@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250113-dpphy_qcs9300-v1-1-842798ceee78@quicinc.com/]
+---
+ .../devicetree/bindings/phy/qcom,edp-phy.yaml | 19 ++++++++++++-------
+ 1 file changed, 12 insertions(+), 7 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/phy/qcom,edp-phy.yaml b/Documentation/devicetree/bindings/phy/qcom,edp-phy.yaml
+index 293fb6a9b1c3..eb97181cbb95 100644
+--- a/Documentation/devicetree/bindings/phy/qcom,edp-phy.yaml
++++ b/Documentation/devicetree/bindings/phy/qcom,edp-phy.yaml
+@@ -16,13 +16,18 @@ description:
+ 
+ properties:
+   compatible:
+-    enum:
+-      - qcom,sa8775p-edp-phy
+-      - qcom,sc7280-edp-phy
+-      - qcom,sc8180x-edp-phy
+-      - qcom,sc8280xp-dp-phy
+-      - qcom,sc8280xp-edp-phy
+-      - qcom,x1e80100-dp-phy
++    oneOf:
++      - enum:
++          - qcom,sa8775p-edp-phy
++          - qcom,sc7280-edp-phy
++          - qcom,sc8180x-edp-phy
++          - qcom,sc8280xp-dp-phy
++          - qcom,sc8280xp-edp-phy
++          - qcom,x1e80100-dp-phy
++      - items:
++          - enum:
++              - qcom,qcs8300-edp-phy
++          - const: qcom,sa8775p-edp-phy
+ 
+   reg:
+     items:
+-- 
+2.34.1
+

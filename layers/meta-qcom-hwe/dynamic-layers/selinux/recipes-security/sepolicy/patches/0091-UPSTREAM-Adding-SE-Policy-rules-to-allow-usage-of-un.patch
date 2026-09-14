@@ -1,0 +1,103 @@
+From eb78bce7a29355bc406c22fd052e93700161818e Mon Sep 17 00:00:00 2001
+From: Damodar Reddy GangiReddy <quic_dgangire@quicinc.com>
+Date: Mon, 17 Feb 2025 17:03:17 +0530
+Subject: [PATCH] UPSTREAM: Adding SE Policy rules to allow usage of
+ unix stream sockets by dbus and bluetooth contexts when Gatt notifications
+ are turned on by remote.
+
+Below are the avc denials that are resolved -
+
+1. AVC avc:  denied  { use } for  pid=916 comm="dbus-daemon"
+path="socket:[71126]" dev="sockfs" ino=71126
+scontext=system_u:system_r:system_dbusd_t:s0-s15:c0.c1023
+tcontext=system_u:system_r:bluetooth_helper_t:s0-s15:c0.c1023
+tclass=fd permissive=0
+
+2. AVC avc:  denied  { read write } for  pid=913 comm="dbus-daemon"
+path="socket:[25037]" dev="sockfs" ino=25037
+scontext=system_u:system_r:system_dbusd_t:s0-s15:c0.c1023
+tcontext=system_u:system_r:bluetooth_helper_t:s0-s15:c0.c1023
+tclass=unix_stream_socket permissive=0
+
+3. AVC avc:  denied  { use } for  pid=910 comm="bluetoothd"
+path="socket:[23966]" dev="sockfs" ino=23966
+scontext=system_u:system_r:bluetooth_t:s0-s15:c0.c1023
+tcontext=system_u:system_r:bluetooth_helper_t:s0-s15:c0.c1023
+tclass=fd permissive=0
+
+4. AVC avc:  denied  { read write } for  pid=2229 comm="bluetoothd"
+path="socket:[27264]" dev="sockfs" ino=27264
+scontext=system_u:system_r:bluetooth_t:s0-s15:c0.c1023
+tcontext=system_u:system_r:bluetooth_helper_t:s0-s15:c0.c1023
+tclass=unix_stream_socket permissive=0
+
+Signed-off-by: Damodar Reddy GangiReddy <quic_dgangire@quicinc.com>
+Upstream-Status: Backport [https://github.com/SELinuxProject/refpolicy/commit/50a5555f2f282c1a000a0c7ef91fc1f29c71521f]
+---
+ policy/modules/services/bluetooth.if | 22 ++++++++++++++++++++++
+ policy/modules/services/bluetooth.te |  3 +++
+ policy/modules/services/dbus.te      |  1 +
+ 3 files changed, 26 insertions(+)
+
+diff --git a/policy/modules/services/bluetooth.if b/policy/modules/services/bluetooth.if
+index 0fb15c6eb..f806ee255 100644
+--- a/policy/modules/services/bluetooth.if
++++ b/policy/modules/services/bluetooth.if
+@@ -227,6 +227,28 @@ interface(`bluetooth_dontaudit_read_helper_state',`
+ 	dontaudit $1 bluetooth_helper_t:file read_file_perms;
+ ')
+ 
++#####################################
++## <summary>
++##	Connect to bluetooth over a unix domain
++##	stream socket. The socket can be used
++##      for read and write. This is required for
++#       bluetooth helper context.
++## </summary>
++## <param name="domain">
++##	<summary>
++##	Domain allowed access.
++##	</summary>
++## </param>
++#
++interface(`bluetooth_use_inherited_helper_stream_sockets',`
++	gen_require(`
++		type bluetooth_helper_t;
++	')
++
++	allow $1 bluetooth_helper_t:unix_stream_socket rw_socket_perms;
++	allow $1 bluetooth_helper_t:fd use;
++')
++
+ ########################################
+ ## <summary>
+ ##	All of the rules required to
+diff --git a/policy/modules/services/bluetooth.te b/policy/modules/services/bluetooth.te
+index 200919022..f7830c6dd 100644
+--- a/policy/modules/services/bluetooth.te
++++ b/policy/modules/services/bluetooth.te
+@@ -76,6 +76,9 @@ filetrans_pattern(bluetooth_t, bluetooth_conf_t, bluetooth_conf_rw_t, { dir file
+ allow bluetooth_t bluetooth_lock_t:file manage_file_perms;
+ files_lock_filetrans(bluetooth_t, bluetooth_lock_t, file)
+ 
++bluetooth_use_inherited_helper_stream_sockets(bluetooth_t)
++
++
+ manage_dirs_pattern(bluetooth_t, bluetooth_tmp_t, bluetooth_tmp_t)
+ manage_files_pattern(bluetooth_t, bluetooth_tmp_t, bluetooth_tmp_t)
+ files_tmp_filetrans(bluetooth_t, bluetooth_tmp_t, { dir file })
+diff --git a/policy/modules/services/dbus.te b/policy/modules/services/dbus.te
+index 75aa378f0..405c8d3f3 100644
+--- a/policy/modules/services/dbus.te
++++ b/policy/modules/services/dbus.te
+@@ -266,6 +266,7 @@ optional_policy(`
+ 
+ optional_policy(`
+ 	bluetooth_use(system_dbusd_t)
++	bluetooth_use_inherited_helper_stream_sockets(system_dbusd_t)
+ ')
+ 
+ optional_policy(`
+-- 
+2.34.1
+

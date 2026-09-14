@@ -7,7 +7,7 @@
  *
  * Copyright (C) 2011 Google, Inc.
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/dma-mapping.h>
@@ -49,6 +49,7 @@ struct carveout_heap {
 	struct gen_pool *pool;
 	struct device *dev;
 	bool is_secure;
+	bool is_init_page_zero;
 	phys_addr_t base;
 };
 
@@ -57,6 +58,7 @@ struct secure_carveout_heap {
 	struct carveout_heap carveout_heap;
 };
 
+static int carveout_pages_zero(struct page *page, size_t size);
 static void sc_heap_free(struct qcom_sg_buffer *buffer);
 
 void __maybe_unused pages_sync_for_device(struct device *dev, struct page *page,
@@ -174,6 +176,13 @@ static struct dma_buf *__carveout_heap_allocate(struct carveout_heap *carveout_h
 
 	sg_set_page(table->sgl, pfn_to_page(PFN_DOWN(paddr)), len, 0);
 
+	/* Zero out the allocated pages that were not zeroed during initialization.*/
+	if (!carveout_heap->is_init_page_zero) {
+		ret = carveout_pages_zero(sg_page(table->sgl), len);
+		if (ret)
+			goto err_free_carveout;
+	}
+
 	buffer->vmperm = carveout_setup_vmperm(carveout_heap, &buffer->sg_table);
 	if (IS_ERR(buffer->vmperm))
 		goto err_free_carveout;
@@ -203,8 +212,6 @@ err_free:
 	return ERR_PTR(ret);
 }
 
-static int carveout_pages_zero(struct page *page, size_t size);
-
 static void carveout_heap_free(struct qcom_sg_buffer *buffer)
 {
 	struct carveout_heap *carveout_heap;
@@ -217,7 +224,9 @@ static void carveout_heap_free(struct qcom_sg_buffer *buffer)
 
 	dev = carveout_heap->dev;
 
-	carveout_pages_zero(page, buffer->len);
+	if (carveout_heap->is_init_page_zero)
+		carveout_pages_zero(page, buffer->len);
+
 	carveout_free(carveout_heap, paddr, buffer->len);
 	sg_free_table(table);
 	kfree(buffer);
@@ -254,9 +263,11 @@ static int carveout_init_heap_memory(struct carveout_heap *co_heap,
 	struct page *page = pfn_to_page(PFN_DOWN(base));
 	int ret = 0;
 
-	ret = carveout_pages_zero(page, size);
-	if (ret)
-		return ret;
+	if (co_heap->is_init_page_zero) {
+		ret = carveout_pages_zero(page, size);
+		if (ret)
+			return ret;
+	}
 
 	co_heap->pool = gen_pool_create(PAGE_SHIFT, -1);
 	if (!co_heap->pool)
@@ -304,6 +315,12 @@ int qcom_carveout_heap_create(struct platform_heap *heap_data)
 	carveout_heap = kzalloc(sizeof(*carveout_heap), GFP_KERNEL);
 	if (!carveout_heap)
 		return -ENOMEM;
+
+#if defined(CONFIG_QCOM_DMABUF_HEAPS_CARVEOUT_DEFER_ZERO)
+	carveout_heap->is_init_page_zero = false;
+#else
+	carveout_heap->is_init_page_zero = true;
+#endif
 
 	ret = __carveout_heap_init(heap_data, carveout_heap);
 	if (ret)
@@ -386,6 +403,9 @@ int qcom_secure_carveout_heap_create(struct platform_heap *heap_data)
 	sc_heap = kzalloc(sizeof(*sc_heap), GFP_KERNEL);
 	if (!sc_heap)
 		return -ENOMEM;
+
+	/* Always zero secure carveout memory at init time for security reasons */
+	sc_heap->carveout_heap.is_init_page_zero = true;
 
 	ret = __carveout_heap_init(heap_data, &sc_heap->carveout_heap);
 	if (ret)

@@ -8,7 +8,9 @@ SECTION = "console/network"
 LICENSE = "BSD-3-Clause"
 LIC_FILES_CHKSUM = "file://COPYING.TXT;md5=932ca542d6c6cb8a59a0bcd76ab67cc3"
 
-SRC_URI = "http://www.kermitproject.org/ftp/kermit/archives/cku${PV}.tar.gz;subdir=${BPN}-${PV}"
+SRC_URI = "http://www.kermitproject.org/ftp/kermit/archives/cku${PV}.tar.gz;subdir=${BPN}-${PV} \
+           file://0001-Fix-function-prototype-errors.patch \
+           "
 SRC_URI[md5sum] = "eac4dbf18b45775e4cdee5a7c74762b0"
 SRC_URI[sha256sum] = "0d5f2cd12bdab9401b4c836854ebbf241675051875557783c332a6a40dac0711"
 
@@ -26,7 +28,7 @@ do_compile () {
     # The original makefile doesn't differentiate between CC and CC_FOR_BUILD,
     # so we build wart manually. Note that you need a ckwart.o with the proper
     # timestamp to make this hack work:
-    ${BUILD_CC} -c ckwart.c
+    ${BUILD_CC} -DMAINTYPE=int -c -o ckwart.o ckwart.c
     ${BUILD_CC} -o wart ckwart.o
     ./wart ckcpro.w ckcpro.c
 
@@ -43,7 +45,8 @@ do_compile () {
         -DNORESEND -DNOAUTODL -DNOSTREAMING -DNOHINTS -DNOCKXYZ -DNOLEARN \
         -DNOMKDIR -DNOPERMS -DNOCKTIMERS -DNOCKREGEX -DNOREALPATH \
         -DCK_SMALL -DNOLOGDIAL -DNORENAME -DNOWHATAMI \
-        -DNOARROWKEYS"
+        -DNOARROWKEYS -DMAINTYPE=int \
+        -D_DEFAULT_SOURCE -ansi"
 }
 
 do_install () {

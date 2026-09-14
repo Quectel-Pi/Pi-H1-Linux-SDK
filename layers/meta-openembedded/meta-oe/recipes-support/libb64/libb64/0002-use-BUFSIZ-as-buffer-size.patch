@@ -1,20 +1,20 @@
-From ee03e265804a07a0da5028b86960031bd7ab86b2 Mon Sep 17 00:00:00 2001
-From: Khem Raj <raj.khem@gmail.com>
+From 9ec49389f56816d7ac2331296c03d147531a421a Mon Sep 17 00:00:00 2001
+From: Jakub Wilk <jwilk@debian.org>
 Date: Sat, 27 Mar 2021 22:01:13 -0700
 Subject: [PATCH] use BUFSIZ as buffer size
 
-Author: Jakub Wilk <jwilk@debian.org>
 Bug: http://sourceforge.net/tracker/?func=detail&atid=785907&aid=3591336&group_id=152942
 
 Upstream-Status: Pending
 Signed-off-by: Khem Raj <raj.khem@gmail.com>
+
 ---
  include/b64/decode.h | 3 ++-
  include/b64/encode.h | 3 ++-
  2 files changed, 4 insertions(+), 2 deletions(-)
 
 diff --git a/include/b64/decode.h b/include/b64/decode.h
-index 12b16ea..e9019f3 100644
+index b2362e5..8db1d09 100644
 --- a/include/b64/decode.h
 +++ b/include/b64/decode.h
 @@ -8,6 +8,7 @@ For details, see http://sourceforge.net/projects/libb64
@@ -32,10 +32,10 @@ index 12b16ea..e9019f3 100644
 -		decoder(int buffersize_in = BUFFERSIZE)
 +		decoder(int buffersize_in = BUFSIZ)
  		: _buffersize(buffersize_in)
- 		{}
- 
+ 		{
+ 			base64_init_decodestate(&_state);
 diff --git a/include/b64/encode.h b/include/b64/encode.h
-index 5d807d9..e7a7035 100644
+index c1a5f88..644e4dd 100644
 --- a/include/b64/encode.h
 +++ b/include/b64/encode.h
 @@ -8,6 +8,7 @@ For details, see http://sourceforge.net/projects/libb64
@@ -52,6 +52,6 @@ index 5d807d9..e7a7035 100644
  
 -		encoder(int buffersize_in = BUFFERSIZE)
 +		encoder(int buffersize_in = BUFSIZ)
- 		: _buffersize(buffersize_in)
- 		{}
- 
+ 			: _buffersize(buffersize_in)
+ 		{
+ 			base64_init_encodestate(&_state);

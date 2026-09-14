@@ -1,0 +1,116 @@
+From 2ab5e2e7a60cc28497261236d89a4506621e3a13 Mon Sep 17 00:00:00 2001
+From: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Date: Thu, 23 Nov 2023 17:03:00 +0000
+Subject: [PATCH 33/42] UPSTREAM: media: qcom: camss: Flag which VFEs require a
+ power-domain
+
+At the moment we have some complex code for determining if a VFE requires a
+power-domain attachment. Particularly discordant in this scheme is the
+subtle reliance on VFE and VFE Lite declaration ordering in our resources.
+
+VFE id is used to determine if a VFE is lite or not and consequently if a
+VFE requires power-domain attachment. VFE Lite though is not a correct
+delineation between power-domain and non power-domain state since early
+SoCs have neither VFE Lite nor power-domains attached to VFEs.
+
+Introduce has_pd to the VFE resource structure to allow the CAMSS code to
+understand if it needs to try to attach a power-domain for a given VFE.
+
+As a side-effect from this we no longer need to care about VFE Lite or
+non-Lite or the id number associated with either and which order the
+VFE/VFE Lite was declared in.
+
+Reviewed-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Tested-by: Matti Lehtimäki <matti.lehtimaki@gmail.com>
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git ac6494e0ca444d82ff9dc0df87fcfca1d91c5cd2]
+---
+ drivers/media/platform/qcom/camss/camss-vfe.h | 1 +
+ drivers/media/platform/qcom/camss/camss.c     | 8 ++++++++
+ 2 files changed, 9 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.h b/drivers/media/platform/qcom/camss/camss-vfe.h
+index 8606c3b6332a..8918faf773c9 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.h
++++ b/drivers/media/platform/qcom/camss/camss-vfe.h
+@@ -129,6 +129,7 @@ struct vfe_isr_ops {
+ struct vfe_subdev_resources {
+ 	u8 line_num;
+ 	bool is_lite;
++	bool has_pd;
+ 	const struct vfe_hw_ops *hw_ops;
+ 	const struct camss_formats *formats_rdi;
+ 	const struct camss_formats *formats_pix;
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 4218a530e1dc..06bec9eda447 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -325,6 +325,7 @@ static const struct camss_subdev_resources vfe_res_8x96[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
++			.has_pd = true,
+ 			.hw_ops = &vfe_ops_4_7,
+ 			.formats_rdi = &vfe_formats_rdi_8x96,
+ 			.formats_pix = &vfe_formats_pix_8x96
+@@ -350,6 +351,7 @@ static const struct camss_subdev_resources vfe_res_8x96[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
++			.has_pd = true,
+ 			.hw_ops = &vfe_ops_4_7,
+ 			.formats_rdi = &vfe_formats_rdi_8x96,
+ 			.formats_pix = &vfe_formats_pix_8x96
+@@ -551,6 +553,7 @@ static const struct camss_subdev_resources vfe_res_660[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
++			.has_pd = true,
+ 			.hw_ops = &vfe_ops_4_8,
+ 			.formats_rdi = &vfe_formats_rdi_8x96,
+ 			.formats_pix = &vfe_formats_pix_8x96
+@@ -579,6 +582,7 @@ static const struct camss_subdev_resources vfe_res_660[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
++			.has_pd = true,
+ 			.hw_ops = &vfe_ops_4_8,
+ 			.formats_rdi = &vfe_formats_rdi_8x96,
+ 			.formats_pix = &vfe_formats_pix_8x96
+@@ -778,6 +782,7 @@ static const struct camss_subdev_resources vfe_res_845[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 4,
++			.has_pd = true,
+ 			.is_lite = false,
+ 			.hw_ops = &vfe_ops_170,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+@@ -806,6 +811,7 @@ static const struct camss_subdev_resources vfe_res_845[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 4,
++			.has_pd = true,
+ 			.is_lite = false,
+ 			.hw_ops = &vfe_ops_170,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+@@ -1017,6 +1023,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
++			.has_pd = true,
+ 			.is_lite = false,
+ 			.hw_ops = &vfe_ops_480,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+@@ -1044,6 +1051,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
++			.has_pd = true,
+ 			.is_lite = false,
+ 			.hw_ops = &vfe_ops_480,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+-- 
+2.25.1
+

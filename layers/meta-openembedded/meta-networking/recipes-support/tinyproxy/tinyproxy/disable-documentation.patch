@@ -3,6 +3,8 @@ From: Benjamin Gaignard <benjamin.gaignard@linaro.org>
 Date: Thu, 20 Apr 2017 14:25:18 +0200
 
 ---
+Upstream-Status: Pending
+
  Makefile.am  |  1 -
  configure.ac | 17 -----------------
  2 files changed, 18 deletions(-)
@@ -23,7 +25,7 @@ diff --git a/configure.ac b/configure.ac
 index 3849383..9f3a633 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -190,18 +190,6 @@ AC_SUBST(CPPFLAGS)
+@@ -179,18 +179,6 @@ AC_SUBST(CPPFLAGS)
  AC_SUBST(LIBS)
  AC_SUBST(ADDITIONAL_OBJECTS)
  
@@ -42,7 +44,7 @@ index 3849383..9f3a633 100644
  AM_CONDITIONAL(HAVE_POD2MAN, test "x$POD2MAN" != "x" -a "x$POD2MAN" != "xno")
  
  AC_PATH_PROG(GPERF, gperf, no)
-@@ -226,11 +214,6 @@ src/Makefile
+@@ -216,11 +204,6 @@ src/Makefile
  data/Makefile
  data/templates/Makefile
  etc/Makefile

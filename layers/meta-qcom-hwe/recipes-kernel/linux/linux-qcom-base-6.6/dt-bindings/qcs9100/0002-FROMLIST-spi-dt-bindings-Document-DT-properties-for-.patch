@@ -1,0 +1,56 @@
+From a4e9fab08b6d4b90649c510543220e6aab7e746c Mon Sep 17 00:00:00 2001
+From: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Date: Tue, 15 Oct 2024 11:58:06 +0530
+Subject: [PATCH 2/8] FROMLIST: spi: dt-bindings: Document DT properties for
+ QUP firmware loading
+
+Document the 'qcom,load-firmware' and 'qcom,xfer-mode' properties to
+support SE(Serial Engine) firmware loading from the protocol driver and
+to select the data transfer mode, either GPI DMA (Generic Packet Interface)
+or non-GPI mode (PIO/CPU DMA).
+
+SPI controller can operate in one of two modes based on the
+'qcom,xfer-mode' property, and the firmware is loaded accordingly.
+
+Change-Id: I1be04da626938625916d86bf976f89e1836cb8f5
+Co-developed-by: Mukesh Kumar Savaliya <quic_msavaliy@quicinc.com>
+Signed-off-by: Mukesh Kumar Savaliya <quic_msavaliy@quicinc.com>
+Signed-off-by: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Link: https://lore.kernel.org/linux-kernel/20241204150326.1470749-3-quic_vdadhani@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/linux-kernel/20241204150326.1470749-3-quic_vdadhani@quicinc.com/]
+---
+ .../devicetree/bindings/spi/qcom,spi-geni-qcom.yaml   | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/spi/qcom,spi-geni-qcom.yaml b/Documentation/devicetree/bindings/spi/qcom,spi-geni-qcom.yaml
+index 2e20ca313ec1..7038981f54ff 100644
+--- a/Documentation/devicetree/bindings/spi/qcom,spi-geni-qcom.yaml
++++ b/Documentation/devicetree/bindings/spi/qcom,spi-geni-qcom.yaml
+@@ -66,6 +66,15 @@ properties:
+   reg:
+     maxItems: 1
+ 
++  qcom,load-firmware:
++    type: boolean
++    description: Optional property to load SE (serial engine) Firmware from protocol driver.
++
++  qcom,xfer-mode:
++    description: Value 1,2 and 3 represents FIFO, CPU DMA and GSI DMA mode respectively.
++    $ref: /schemas/types.yaml#/definitions/uint32
++    enum: [1, 2, 3]
++
+ required:
+   - compatible
+   - clocks
+@@ -97,6 +106,8 @@ examples:
+         interconnects = <&qup_virt MASTER_QUP_CORE_0 0 &qup_virt SLAVE_QUP_CORE_0 0>,
+                         <&gem_noc MASTER_APPSS_PROC 0 &config_noc SLAVE_QUP_0 0>;
+         interconnect-names = "qup-core", "qup-config";
++        qcom,load-firmware;
++        qcom,xfer-mode = <1>;
+     };
+ 
+   - |
+-- 
+2.34.1
+

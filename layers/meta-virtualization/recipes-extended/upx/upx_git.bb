@@ -1,5 +1,5 @@
 SUMMARY = "Ultimate executable compressor."
-HOMEPAGE = "* https://upx.github.io/"
+HOMEPAGE = "https://upx.github.io/"
 LICENSE = "GPL-2.0-only"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=353753597aa110e0ded3508408c6374a"
 SRCREV_upx = "099c3d829e80488af7395a4242b318877e980da4"

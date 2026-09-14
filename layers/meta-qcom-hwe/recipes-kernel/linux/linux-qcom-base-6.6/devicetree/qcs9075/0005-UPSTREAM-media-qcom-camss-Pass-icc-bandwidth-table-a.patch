@@ -1,0 +1,119 @@
+From d89a9cca57fb760bce5a14b950965143a5059b69 Mon Sep 17 00:00:00 2001
+From: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Date: Mon, 25 Sep 2023 16:46:54 +0100
+Subject: [PATCH 05/42] UPSTREAM: media: qcom: camss: Pass icc bandwidth table
+ as a platform parameter
+
+Pass the bandwidth table as a platform parameter not if/else derived
+pointer to the static table.
+
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Acked-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Reviewed-by: Laurent Pinchart <laurent.pinchart@ideasonboard.com>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Suresh Vankadara <quic_svankada@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 9e0c2597779921c03f6265c1ce45b0121004e301]
+---
+ drivers/media/platform/qcom/camss/camss.c | 29 +++++++----------------
+ drivers/media/platform/qcom/camss/camss.h |  3 ++-
+ 2 files changed, 11 insertions(+), 21 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 98635912088c..3ee070be690a 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1488,21 +1488,15 @@ static int camss_configure_pd(struct camss *camss)
+ static int camss_icc_get(struct camss *camss)
+ {
+ 	const struct resources_icc *icc_res;
+-	int nbr_icc_paths = 0;
+ 	int i;
+ 
+-	if (camss->version == CAMSS_8250) {
+-		icc_res = &icc_res_sm8250[0];
+-		nbr_icc_paths =	ICC_SM8250_COUNT;
+-	}
++	icc_res = camss->res->icc_res;
+ 
+-	for (i = 0; i < nbr_icc_paths; i++) {
++	for (i = 0; i < camss->res->icc_path_num; i++) {
+ 		camss->icc_path[i] = devm_of_icc_get(camss->dev,
+ 						     icc_res[i].name);
+ 		if (IS_ERR(camss->icc_path[i]))
+ 			return PTR_ERR(camss->icc_path[i]);
+-
+-		camss->icc_bw_tbl[i] = icc_res[i].icc_bw_tbl;
+ 	}
+ 
+ 	return 0;
+@@ -1746,6 +1740,8 @@ static const struct camss_resources sm8250_resources = {
+ 	.csiphy_res = csiphy_res_8250,
+ 	.csid_res = csid_res_8250,
+ 	.vfe_res = vfe_res_8250,
++	.icc_res = icc_res_sm8250,
++	.icc_path_num = ARRAY_SIZE(icc_res_sm8250),
+ };
+ 
+ static const struct of_device_id camss_dt_match[] = {
+@@ -1762,14 +1758,10 @@ MODULE_DEVICE_TABLE(of, camss_dt_match);
+ static int __maybe_unused camss_runtime_suspend(struct device *dev)
+ {
+ 	struct camss *camss = dev_get_drvdata(dev);
+-	int nbr_icc_paths = 0;
+ 	int i;
+ 	int ret;
+ 
+-	if (camss->version == CAMSS_8250)
+-		nbr_icc_paths =	ICC_SM8250_COUNT;
+-
+-	for (i = 0; i < nbr_icc_paths; i++) {
++	for (i = 0; i < camss->res->icc_path_num; i++) {
+ 		ret = icc_set_bw(camss->icc_path[i], 0, 0);
+ 		if (ret)
+ 			return ret;
+@@ -1781,17 +1773,14 @@ static int __maybe_unused camss_runtime_suspend(struct device *dev)
+ static int __maybe_unused camss_runtime_resume(struct device *dev)
+ {
+ 	struct camss *camss = dev_get_drvdata(dev);
+-	int nbr_icc_paths = 0;
++	const struct resources_icc *icc_res = camss->res->icc_res;
+ 	int i;
+ 	int ret;
+ 
+-	if (camss->version == CAMSS_8250)
+-		nbr_icc_paths =	ICC_SM8250_COUNT;
+-
+-	for (i = 0; i < nbr_icc_paths; i++) {
++	for (i = 0; i < camss->res->icc_path_num; i++) {
+ 		ret = icc_set_bw(camss->icc_path[i],
+-				 camss->icc_bw_tbl[i].avg,
+-				 camss->icc_bw_tbl[i].peak);
++				 icc_res[i].icc_bw_tbl.avg,
++				 icc_res[i].icc_bw_tbl.peak);
+ 		if (ret)
+ 			return ret;
+ 	}
+diff --git a/drivers/media/platform/qcom/camss/camss.h b/drivers/media/platform/qcom/camss/camss.h
+index 20c84e832888..8b2e4adb923e 100644
+--- a/drivers/media/platform/qcom/camss/camss.h
++++ b/drivers/media/platform/qcom/camss/camss.h
+@@ -84,6 +84,8 @@ struct camss_resources {
+ 	const struct camss_subdev_resources *csid_res;
+ 	const struct camss_subdev_resources *ispif_res;
+ 	const struct camss_subdev_resources *vfe_res;
++	const struct resources_icc *icc_res;
++	const unsigned int icc_path_num;
+ };
+ 
+ struct camss {
+@@ -105,7 +107,6 @@ struct camss {
+ 	struct device **genpd;
+ 	struct device_link **genpd_link;
+ 	struct icc_path *icc_path[ICC_SM8250_COUNT];
+-	struct icc_bw_tbl icc_bw_tbl[ICC_SM8250_COUNT];
+ 	const struct camss_resources *res;
+ };
+ 
+-- 
+2.25.1
+

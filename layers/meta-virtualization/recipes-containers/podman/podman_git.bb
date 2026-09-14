@@ -11,19 +11,19 @@ REQUIRED_DISTRO_FEATURES ?= "seccomp ipv6"
 
 DEPENDS = " \
     go-metalinter-native \
-    go-md2man-native \
     gpgme \
     libseccomp \
     ${@bb.utils.filter('DISTRO_FEATURES', 'systemd', d)} \
+    gettext-native \
 "
 
-SRCREV = "717edd7b844dcd66468f5d991991d87e9fc14c12"
+SRCREV = "bb81e85a430fa95d23a15b77c717fd68bf06ebf2"
 SRC_URI = " \
-    git://github.com/containers/libpod.git;branch=v4.0;protocol=https \
-    file://0001-Rename-BUILDFLAGS-to-GOBUILDFLAGS.patch;patchdir=src/import \
-    file://0002-Define-ActKillThread-equal-to-ActKill.patch;patchdir=src/import/vendor/github.com/seccomp/libseccomp-golang \
-    file://CVE-2022-27649.patch;patchdir=src/import \
+    git://github.com/containers/libpod.git;branch=v5.0;protocol=https \
     ${@bb.utils.contains('PACKAGECONFIG', 'rootless', 'file://50-podman-rootless.conf', '', d)} \
+    file://0001-Use-securejoin.SecureJoin-when-forming-userns-paths.patch;patchdir=src/import/vendor/github.com/containers/storage \
+    file://CVE-2025-6032.patch;patchdir=src/import \
+    file://CVE-2024-9341.patch;patchdir=src/import \
 "
 
 LICENSE = "Apache-2.0"
@@ -33,14 +33,19 @@ GO_IMPORT = "import"
 
 S = "${WORKDIR}/git"
 
-PV = "4.0.1+git${SRCPV}"
+PV = "5.0.1+git"
+
+CVE_STATUS[CVE-2022-2989] = "fixed-version: fixed since v4.3.0"
+CVE_STATUS[CVE-2023-0778] = "fixed-version: fixed since v4.5.0"
 
 PACKAGES =+ "${PN}-contrib"
 
 PODMAN_PKG = "github.com/containers/libpod"
+
+BUILDTAGS_EXTRA ?= "${@bb.utils.contains('VIRTUAL-RUNTIME_container_networking','cni','cni','',d)}"
 BUILDTAGS ?= "seccomp varlink \
 ${@bb.utils.contains('DISTRO_FEATURES', 'systemd', 'systemd', '', d)} \
-exclude_graphdriver_btrfs exclude_graphdriver_devicemapper"
+exclude_graphdriver_btrfs exclude_graphdriver_devicemapper ${BUILDTAGS_EXTRA}"
 
 # overide LDFLAGS to allow podman to build without: "flag provided but not # defined: -Wl,-O1
 export LDFLAGS=""
@@ -48,7 +53,11 @@ export LDFLAGS=""
 # https://github.com/llvm/llvm-project/issues/53999
 TOOLCHAIN = "gcc"
 
+# podmans Makefile expects BUILDFLAGS to be set but go.bbclass defines them in GOBUILDFLAGS
+export BUILDFLAGS="${GOBUILDFLAGS}"
+
 inherit go goarch
+inherit container-host
 inherit systemd pkgconfig
 
 do_configure[noexec] = "1"
@@ -56,7 +65,7 @@ do_configure[noexec] = "1"
 EXTRA_OEMAKE = " \
      PREFIX=${prefix} BINDIR=${bindir} LIBEXECDIR=${libexecdir} \
      ETCDIR=${sysconfdir} TMPFILESDIR=${nonarch_libdir}/tmpfiles.d \
-     SYSTEMDDIR=${systemd_unitdir}/system USERSYSTEMDDIR=${systemd_unitdir}/user \
+     SYSTEMDDIR=${systemd_unitdir}/system USERSYSTEMDDIR=${systemd_user_unitdir} \
 "
 
 # remove 'docker' from the packageconfig if you don't want podman to
@@ -85,7 +94,11 @@ do_compile() {
 	export CGO_CFLAGS="${CFLAGS} --sysroot=${STAGING_DIR_TARGET}"
 	export CGO_LDFLAGS="${LDFLAGS} --sysroot=${STAGING_DIR_TARGET}"
 
-	oe_runmake BUILDTAGS="${BUILDTAGS}"
+	# podman now builds go-md2man and requires the host/build details
+	export NATIVE_GOOS=${BUILD_GOOS}
+	export NATIVE_GOARCH=${BUILD_GOARCH}
+
+	oe_runmake NATIVE_GOOS=${BUILD_GOOS} NATIVE_GOARCH=${BUILD_GOARCH} BUILDTAGS="${BUILDTAGS}"
 }
 
 do_install() {
@@ -107,13 +120,20 @@ do_install() {
 	if ${@bb.utils.contains('PACKAGECONFIG', 'rootless', 'true', 'false', d)}; then
 		install -d "${D}${sysconfdir}/sysctl.d"
 		install -m 0644 "${WORKDIR}/50-podman-rootless.conf" "${D}${sysconfdir}/sysctl.d"
+		install -d "${D}${sysconfdir}/containers"
+		cat <<-EOF >> "${D}${sysconfdir}/containers/containers.conf"
+		[NETWORK]
+		default_rootless_network_cmd="slirp4netns"
+		EOF
 	fi
 }
 
 FILES:${PN} += " \
     ${systemd_unitdir}/system/* \
-    ${systemd_unitdir}/user/* \
+    ${nonarch_libdir}/systemd/* \
+    ${systemd_user_unitdir}/* \
     ${nonarch_libdir}/tmpfiles.d/* \
+    ${datadir}/user-tmpfiles.d/* \
     ${sysconfdir}/cni \
 "
 
@@ -123,9 +143,18 @@ SYSTEMD_SERVICE:${PN} = "podman.service podman.socket"
 # that busybox is configured with nsenter
 VIRTUAL-RUNTIME_base-utils-nsenter ?= "util-linux-nsenter"
 
+COMPATIBLE_HOST = "^(?!mips).*"
+
 RDEPENDS:${PN} += "\
-	conmon virtual-runc iptables cni skopeo ${VIRTUAL-RUNTIME_base-utils-nsenter} \
+	catatonit conmon ${VIRTUAL-RUNTIME_container_runtime} iptables libdevmapper ${VIRTUAL-RUNTIME_container_networking} ${VIRTUAL-RUNTIME_base-utils-nsenter} \
 	${@bb.utils.contains('PACKAGECONFIG', 'rootless', 'fuse-overlayfs slirp4netns', '', d)} \
 "
-RRECOMMENDS:${PN} += "slirp4netns kernel-module-xt-masquerade kernel-module-xt-comment"
+RRECOMMENDS:${PN} += "slirp4netns \
+                      kernel-module-xt-masquerade \
+                      kernel-module-xt-comment \
+                      kernel-module-xt-mark \
+                      kernel-module-xt-addrtype \
+                      kernel-module-xt-conntrack \
+                      kernel-module-xt-tcpudp \
+                      "
 RCONFLICTS:${PN} = "${@bb.utils.contains('PACKAGECONFIG', 'docker', 'docker', '', d)}"

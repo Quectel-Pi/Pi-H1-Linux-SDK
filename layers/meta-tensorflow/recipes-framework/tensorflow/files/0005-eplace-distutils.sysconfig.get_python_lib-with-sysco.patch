@@ -1,0 +1,70 @@
+From ed741b43579f3b543832daf66486fb8522dec9c4 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@eng.windriver.com>
+Date: Thu, 29 Feb 2024 23:26:53 -0800
+Subject: [PATCH] eplace distutils.sysconfig.get_python_lib() with
+ sysconfig.get_path('purelib') - python 3.10 support
+
+This is part of the effort for 51776 to get python 3.10 support.
+This PR replace distutils.sysconfig.get_python_lib() with sysconfig.get_path('purelib')
+as distutils has been deprecated by python 3.10.
+
+Note sysconfig has been available since python 3.2.
+
+Signed-off-by: Yong Tang <yong.tang.github@outlook.com>
+
+Upstream-Status: Backport from tensorflow github
+[https://github.com/tensorflow/tensorflow/pull/51865]
+
+Rebase to 2.16
+Signed-off-by: Hongxu Jia <hongxu.jia@eng.windriver.com>
+---
+ tensorflow/api_template.__init__.py    | 5 ++---
+ tensorflow/api_template_v1.__init__.py | 5 ++---
+ 2 files changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/tensorflow/api_template.__init__.py b/tensorflow/api_template.__init__.py
+index a0f88926b5e..d98c045bdeb 100644
+--- a/tensorflow/api_template.__init__.py
++++ b/tensorflow/api_template.__init__.py
+@@ -27,7 +27,7 @@ this file with a file generated from [`api_template.__init__.py`](https://www.gi
+ """
+ # pylint: disable=g-bad-import-order,protected-access,g-import-not-at-top
+ 
+-import distutils as _distutils
++import sysconfig as _sysconfig
+ import importlib
+ import inspect as _inspect
+ import os as _os
+@@ -98,8 +98,7 @@ _site_packages_dirs += [p for p in _sys.path if "site-packages" in p]
+ if "getsitepackages" in dir(_site):
+   _site_packages_dirs += _site.getsitepackages()
+ 
+-if "sysconfig" in dir(_distutils):
+-  _site_packages_dirs += [_distutils.sysconfig.get_python_lib()]
++_site_packages_dirs += [_sysconfig.get_path('purelib')]
+ 
+ _site_packages_dirs = list(set(_site_packages_dirs))
+ 
+diff --git a/tensorflow/api_template_v1.__init__.py b/tensorflow/api_template_v1.__init__.py
+index 6a4ab4e655f..012c54f7fed 100644
+--- a/tensorflow/api_template_v1.__init__.py
++++ b/tensorflow/api_template_v1.__init__.py
+@@ -14,7 +14,7 @@
+ # ==============================================================================
+ """Bring in all of the public TensorFlow interface into this module."""
+ 
+-import distutils as _distutils
++import sysconfig as _sysconfig
+ import importlib
+ import inspect as _inspect
+ import os as _os
+@@ -147,8 +147,7 @@ _site_packages_dirs += [p for p in _sys.path if "site-packages" in p]
+ if "getsitepackages" in dir(_site):
+   _site_packages_dirs += _site.getsitepackages()
+ 
+-if "sysconfig" in dir(_distutils):
+-  _site_packages_dirs += [_distutils.sysconfig.get_python_lib()]
++_site_packages_dirs += [_sysconfig.get_path('purelib')]
+ 
+ _site_packages_dirs = list(set(_site_packages_dirs))
+ 

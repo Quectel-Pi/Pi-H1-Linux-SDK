@@ -126,9 +126,9 @@ msm-$(CONFIG_DRM_MSM_DP)+= dp/dp_aux.o \
 	dp/dp_drm.o \
 	dp/dp_link.o \
 	dp/dp_panel.o \
-	dp/dp_parser.o \
-	dp/dp_power.o \
-	dp/dp_audio.o
+	dp/dp_audio.o \
+	dp/dp_utils.o \
+	dp/dp_mst_drm.o
 
 msm-$(CONFIG_DRM_FBDEV_EMULATION) += msm_fbdev.o
 
@@ -147,4 +147,5 @@ msm-$(CONFIG_DRM_MSM_DSI_14NM_PHY) += dsi/phy/dsi_phy_14nm.o
 msm-$(CONFIG_DRM_MSM_DSI_10NM_PHY) += dsi/phy/dsi_phy_10nm.o
 msm-$(CONFIG_DRM_MSM_DSI_7NM_PHY) += dsi/phy/dsi_phy_7nm.o
 
-obj-$(CONFIG_DRM_MSM)	+= msm.o
+obj-$(CONFIG_DRM_MSM)	+= msm_display.o
+msm_display-y := $(msm-y)

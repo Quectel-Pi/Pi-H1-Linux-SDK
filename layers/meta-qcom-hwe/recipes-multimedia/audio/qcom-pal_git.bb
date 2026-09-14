@@ -4,28 +4,27 @@ DESCRIPTION = "pal"
 SECTION = "multimedia"
 
 LICENSE = "BSD-3-Clause"
-LIC_FILES_CHKSUM += "file://Pal.cpp;beginline=31;endline=32;md5=e733afaf233fbcbc22769d0a9bda0b3e \
-                     file://inc/PalDefs.h;beginline=30;endline=31;md5=e733afaf233fbcbc22769d0a9bda0b3e"
+LIC_FILES_CHKSUM += "file://Pal.cpp;beginline=31;endline=32;md5=c83ea7207cf32b515967896ac7a5f0bc \
+                     file://inc/PalDefs.h;beginline=30;endline=31;md5=c83ea7207cf32b515967896ac7a5f0bc"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/vendor/qcom/opensource/arpal-lx.git;protocol=https"
 SRCBRANCH  = "audio-core.lnx.1.0.r1-rel"
-SRCREV     = "9254849d3dc20f1c84dbc1af99ba5c37bd9188e3"
+SRCREV     = "3e5cf712f22f9e15a3b4c389a6c0970e33033db8"
 
 SRC_URI  = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=audio/opensource/arpal-lx \
-            file://adsprpcd_audiopd.service \
-            file://0001-modify-mix-path.patch \
-            file://0001-modify-mix-speaker-path.patch \
-            file://0002-modify-dmic-path-config.patch \
-            file://0001-mix_rdac_modify.xml.patch \
-            file://0003-modify_qcm6490_headphones_rdac.xml.patch"
+            file://adsprpcd_audiopd.service"
 
 S = "${WORKDIR}/audio/opensource/arpal-lx"
 
-DEPENDS = "tinyalsa tinycompress qcom-agm qcom-kvh2xml qcom-audioroute dspservices-headers qcom-pal-headers"
+DEPENDS = "tinyalsa tinycompress qcom-agm qcom-kvh2xml qcom-audioroute fastrpc qcom-pal-headers"
 
-EXTRA_OECONF += " --with-glib --with-syslog"
+EXTRA_OECONF += " --with-glib --with-syslog --enable-upstream-support=yes"
 
 SYSTEMD_SERVICE:${PN} += "adsprpcd_audiopd.service"
+
+SOLIBS = ".so*"
+FILES_SOLIBSDEV = ""
+INSANE_SKIP:${PN} = "dev-so"
 
 do_install:append () {
     install -d ${D}${systemd_system_unitdir}

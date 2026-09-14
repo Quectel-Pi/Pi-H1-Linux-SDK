@@ -546,5 +546,7 @@ struct arm_smmu_device *qcom_smmu_impl_init(struct arm_smmu_device *smmu);
 
 void arm_smmu_write_context_bank(struct arm_smmu_device *smmu, int idx);
 int arm_mmu500_reset(struct arm_smmu_device *smmu);
+struct iommu_group *arm_smmu_find_group_by_cbndx(struct arm_smmu_device *smmu, int cbndx);
+int arm_smmu_get_first_dev(struct device *dev, void *data);
 
 #endif /* _ARM_SMMU_H */

@@ -1,0 +1,2 @@
+EXTRA_IMAGECMD:vfat = " -s 16 -S 4096"
+RM_WORK_EXCLUDE += "${PN}"

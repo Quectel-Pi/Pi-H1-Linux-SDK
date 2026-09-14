@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0
-// Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
-// Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+/*
+ *  Copyright (c) 2017-2018, The Linux Foundation. All rights reserved.
+ *  Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
 
 #include <linux/acpi.h>
 #include <linux/clk.h>
@@ -17,24 +19,16 @@
 #include <linux/pm_runtime.h>
 #include <linux/soc/qcom/geni-se.h>
 #include <linux/spinlock.h>
-#include <soc/qcom/qup_fw_load.h>
 
-#define CREATE_TRACE_POINTS
-#include <trace/events/qup_buses_trace.h>
+#define I2C_LOG(log_fn, level, dev, fmt, ...) do { \
+	if ((level) <= log_level) \
+		geni_trace_log(dev, "i2c", fmt, ##__VA_ARGS__); \
+	else \
+		log_fn(dev, fmt, ##__VA_ARGS__); \
+} while (0)
 
-void i2c_trace_log(struct device *dev, const char *fmt, ...)
-{
-	struct va_format vaf = {
-		.fmt = fmt,
-	};
-
-	va_list args;
-
-	va_start(args, fmt);
-	vaf.va = &args;
-	trace_buses_log_info(dev_name(dev), &vaf);
-	va_end(args);
-}
+#define I2C_ERR_LOG(level, dev, fmt, ...) I2C_LOG(dev_err, level, dev, fmt, ##__VA_ARGS__)
+#define I2C_DBG_LOG(level, dev, fmt, ...) I2C_LOG(dev_dbg, level, dev, fmt, ##__VA_ARGS__)
 
 #define SE_I2C_TX_TRANS_LEN		0x26c
 #define SE_I2C_RX_TRANS_LEN		0x270
@@ -174,6 +168,27 @@ static const struct geni_i2c_clk_fld geni_i2c_clk_map[] = {
 	{KHZ(1000), 1, 3,  9, 18},
 };
 
+static int log_level = -1;
+static ssize_t log_level_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", log_level);
+}
+
+static ssize_t log_level_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	int val;
+
+	if (kstrtoint(buf, 10, &val) != 0 || val < LOG_LVL_ERROR || val >= LOG_LVL_MAX)
+		return -EINVAL;
+
+	log_level = val;
+	return count;
+}
+static DEVICE_ATTR_RW(log_level);
+
 static int geni_i2c_clk_map_idx(struct geni_i2c_dev *gi2c)
 {
 	int i;
@@ -220,10 +235,12 @@ static void geni_i2c_err_misc(struct geni_i2c_dev *gi2c)
 		rx_st = readl_relaxed(gi2c->se.base + SE_GENI_RX_FIFO_STATUS);
 		tx_st = readl_relaxed(gi2c->se.base + SE_GENI_TX_FIFO_STATUS);
 	}
-	i2c_trace_log(gi2c->se.dev, "DMA:%d tx_stat:0x%x, rx_stat:0x%x, irq-stat:0x%x\n",
-		      dma, tx_st, rx_st, m_stat);
-	i2c_trace_log(gi2c->se.dev, "m_cmd:0x%x, geni_status:0x%x, geni_ios:0x%x\n",
-		      m_cmd, geni_s, geni_ios);
+	I2C_DBG_LOG(LOG_LVL_VERBOSE, gi2c->se.dev,
+		    "DMA:%d tx_stat:0x%x, rx_stat:0x%x, irq-stat:0x%x\n",
+		    dma, tx_st, rx_st, m_stat);
+	I2C_DBG_LOG(LOG_LVL_VERBOSE, gi2c->se.dev,
+		    "m_cmd:0x%x, geni_status:0x%x, geni_ios:0x%x\n",
+		    m_cmd, geni_s, geni_ios);
 }
 
 static void geni_i2c_err(struct geni_i2c_dev *gi2c, int err)
@@ -231,8 +248,9 @@ static void geni_i2c_err(struct geni_i2c_dev *gi2c, int err)
 	if (!gi2c->err)
 		gi2c->err = gi2c_log[err].err;
 	if (gi2c->cur)
-		i2c_trace_log(gi2c->se.dev, "len:%d, slv-addr:0x%x, RD/WR:%d\n",
-			      gi2c->cur->len, gi2c->cur->addr, gi2c->cur->flags);
+		I2C_DBG_LOG(LOG_LVL_INFO, gi2c->se.dev,
+			    "len:%d, slv-addr:0x%x, RD/WR:%d\n",
+			    gi2c->cur->len, gi2c->cur->addr, gi2c->cur->flags);
 
 	switch (err) {
 	case GENI_ABORT_DONE:
@@ -240,10 +258,12 @@ static void geni_i2c_err(struct geni_i2c_dev *gi2c, int err)
 		break;
 	case NACK:
 	case GENI_TIMEOUT:
-		i2c_trace_log(gi2c->se.dev, "%s\n", gi2c_log[err].msg);
+		I2C_DBG_LOG(LOG_LVL_INFO, gi2c->se.dev,
+			    "%s\n", gi2c_log[err].msg);
 		break;
 	default:
-		dev_err(gi2c->se.dev, "%s\n", gi2c_log[err].msg);
+		I2C_ERR_LOG(LOG_LVL_ERROR, gi2c->se.dev, "%s\n",
+			    gi2c_log[err].msg);
 		geni_i2c_err_misc(gi2c);
 		break;
 	}
@@ -292,8 +312,9 @@ static irqreturn_t geni_i2c_irq(int irq, void *dev)
 		if (!dma)
 			writel_relaxed(0, base + SE_GENI_TX_WATERMARK_REG);
 	} else if (dma) {
-		i2c_trace_log(gi2c->se.dev, "i2c dma tx:0x%x, dma rx:0x%x\n",
-			      dm_tx_st, dm_rx_st);
+		I2C_DBG_LOG(LOG_LVL_VERBOSE, gi2c->se.dev,
+			    "i2c dma tx:0x%x, dma rx:0x%x\n",
+			    dm_tx_st, dm_rx_st);
 	} else if (cur->flags & I2C_M_RD &&
 		   m_stat & (M_RX_FIFO_WATERMARK_EN | M_RX_FIFO_LAST_EN)) {
 		u32 rxcnt = rx_st & RX_FIFO_WC_MSK;
@@ -366,7 +387,8 @@ static void geni_i2c_abort_xfer(struct geni_i2c_dev *gi2c)
 	} while (!gi2c->abort_done && time_left);
 
 	if (!time_left)
-		dev_err(gi2c->se.dev, "Timeout abort_m_cmd\n");
+		I2C_ERR_LOG(LOG_LVL_ERROR, gi2c->se.dev,
+			    "Timeout abort_m_cmd\n");
 }
 
 static void geni_i2c_rx_fsm_rst(struct geni_i2c_dev *gi2c)
@@ -381,7 +403,8 @@ static void geni_i2c_rx_fsm_rst(struct geni_i2c_dev *gi2c)
 	} while (!(val & RX_RESET_DONE) && time_left);
 
 	if (!(val & RX_RESET_DONE))
-		dev_err(gi2c->se.dev, "Timeout resetting RX_FSM\n");
+		I2C_ERR_LOG(LOG_LVL_ERROR, gi2c->se.dev,
+			    "Timeout resetting RX_FSM\n");
 }
 
 static void geni_i2c_tx_fsm_rst(struct geni_i2c_dev *gi2c)
@@ -396,7 +419,8 @@ static void geni_i2c_tx_fsm_rst(struct geni_i2c_dev *gi2c)
 	} while (!(val & TX_RESET_DONE) && time_left);
 
 	if (!(val & TX_RESET_DONE))
-		dev_err(gi2c->se.dev, "Timeout resetting TX_FSM\n");
+		I2C_ERR_LOG(LOG_LVL_ERROR, gi2c->se.dev,
+			    "Timeout resetting TX_FSM\n");
 }
 
 static void geni_i2c_rx_msg_cleanup(struct geni_i2c_dev *gi2c,
@@ -516,10 +540,12 @@ static void i2c_gpi_cb_result(void *cb, const struct dmaengine_result *result)
 	} else if (i2c->status & (BIT(ARB_LOST) << 5)) {
 		geni_i2c_err(gi2c, ARB_LOST);
 	} else if (result->result != DMA_TRANS_NOERROR) {
-		dev_err(gi2c->se.dev, "DMA txn failed:%d\n", result->result);
+		I2C_ERR_LOG(LOG_LVL_ERROR, gi2c->se.dev,
+			    "DMA txn failed:%d\n", result->result);
 		gi2c->err = -EIO;
 	} else if (result->residue) {
-		i2c_trace_log(gi2c->se.dev, "DMA xfer has pending: %d\n", result->residue);
+		I2C_DBG_LOG(LOG_LVL_VERBOSE, gi2c->se.dev,
+			    "DMA xfer has pending: %d\n", result->residue);
 	}
 
 	complete(&gi2c->done);
@@ -576,7 +602,8 @@ static int geni_i2c_gpi(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
 
 	ret = dmaengine_slave_config(dma_chan, config);
 	if (ret) {
-		dev_err(gi2c->se.dev, "dma config error: %d for op:%d\n", ret, op);
+		I2C_ERR_LOG(LOG_LVL_ERROR, gi2c->se.dev,
+			    "dma config error: %d for op:%d\n", ret, op);
 		goto err_config;
 	}
 
@@ -591,7 +618,8 @@ static int geni_i2c_gpi(struct geni_i2c_dev *gi2c, struct i2c_msg *msg,
 
 	desc = dmaengine_prep_slave_single(dma_chan, addr, msg->len, dma_dirn, flags);
 	if (!desc) {
-		dev_err(gi2c->se.dev, "prep_slave_sg failed\n");
+		I2C_ERR_LOG(LOG_LVL_ERROR, gi2c->se.dev,
+			    "prep_slave_sg failed\n");
 		ret = -EIO;
 		goto err_config;
 	}
@@ -640,12 +668,13 @@ static int geni_i2c_gpi_xfer(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[], i
 	if (gi2c->is_shared)
 		peripheral->shared_se = true;
 
-	i2c_trace_log(gi2c->se.dev, "%s: num:%d addr:0x%x\n",
-		      __func__, num, msgs[0].addr);
+	I2C_DBG_LOG(LOG_LVL_INFO, gi2c->se.dev, "%s: num:%d addr:0x%x\n",
+		    __func__, num, msgs[0].addr);
 	for (i = 0; i < num; i++) {
 		gi2c->cur = &msgs[i];
 		gi2c->err = 0;
-		i2c_trace_log(gi2c->se.dev, "msg[%d].len:%d\n", i, gi2c->cur->len);
+		I2C_DBG_LOG(LOG_LVL_INFO, gi2c->se.dev, "msg[%d].len:%d\n", i,
+			    gi2c->cur->len);
 
 		peripheral->first_msg = (i == 0) ? 1 : 0;
 		peripheral->last_msg = (i == num - 1) ? 1 : 0;
@@ -686,7 +715,8 @@ static int geni_i2c_gpi_xfer(struct geni_i2c_dev *gi2c, struct i2c_msg msgs[], i
 	return num;
 
 err:
-	dev_err(gi2c->se.dev, "GPI transfer failed: %d\n", ret);
+	I2C_ERR_LOG(LOG_LVL_ERROR, gi2c->se.dev, "GPI transfer failed: %d\n",
+		    ret);
 	dmaengine_terminate_sync(gi2c->rx_c);
 	dmaengine_terminate_sync(gi2c->tx_c);
 	geni_i2c_gpi_unmap(gi2c, &msgs[i], tx_buf, tx_addr, rx_buf, rx_addr);
@@ -698,8 +728,8 @@ static int geni_i2c_fifo_xfer(struct geni_i2c_dev *gi2c,
 {
 	int i, ret = 0;
 
-	i2c_trace_log(gi2c->se.dev, "%s: num:%d addr:0x%x\n",
-		      __func__, num, msgs[0].addr);
+	I2C_DBG_LOG(LOG_LVL_INFO, gi2c->se.dev, "%s: num:%d addr:0x%x\n",
+		    __func__, num, msgs[0].addr);
 	for (i = 0; i < num; i++) {
 		u32 m_param = i < (num - 1) ? STOP_STRETCH : 0;
 
@@ -707,12 +737,14 @@ static int geni_i2c_fifo_xfer(struct geni_i2c_dev *gi2c,
 
 		gi2c->cur = &msgs[i];
 		if (msgs[i].flags & I2C_M_RD) {
-			i2c_trace_log(gi2c->se.dev, "%s: msgs[%d].len:%d R\n",
-				      __func__, i, gi2c->cur->len);
+			I2C_DBG_LOG(LOG_LVL_VERBOSE, gi2c->se.dev,
+				    "%s: msgs[%d].len:%d R\n",
+				    __func__, i, gi2c->cur->len);
 			ret = geni_i2c_rx_one_msg(gi2c, &msgs[i], m_param);
 		} else {
-			i2c_trace_log(gi2c->se.dev, "%s: msgs[%d].len:%d W\n",
-				      __func__, i, gi2c->cur->len);
+			I2C_DBG_LOG(LOG_LVL_VERBOSE, gi2c->se.dev,
+				    "%s: msgs[%d].len:%d W\n",
+				    __func__, i, gi2c->cur->len);
 			ret = geni_i2c_tx_one_msg(gi2c, &msgs[i], m_param);
 		}
 		if (ret)
@@ -734,11 +766,13 @@ static int geni_i2c_xfer(struct i2c_adapter *adap,
 	reinit_completion(&gi2c->done);
 	ret = pm_runtime_get_sync(gi2c->se.dev);
 	if (ret < 0 && gi2c->suspended) {
-		i2c_trace_log(gi2c->se.dev, "%s: pm_runtime_get_sync failed ! doing force resume\n",
-			      __func__);
+		I2C_DBG_LOG(LOG_LVL_VERBOSE, gi2c->se.dev,
+			    "%s: pm_runtime_get_sync failed ! doing force resume\n",
+			    __func__);
 		ret = geni_i2c_runtime_resume(gi2c->se.dev);
 		if (ret) {
-			dev_err(gi2c->se.dev, "error turning SE resources:%d\n", ret);
+			I2C_ERR_LOG(LOG_LVL_ERROR, gi2c->se.dev,
+				    "error turning SE resources:%d\n", ret);
 			pm_runtime_put_noidle(gi2c->se.dev);
 			/* Set device in suspended since resume failed */
 			pm_runtime_set_suspended(gi2c->se.dev);
@@ -807,7 +841,7 @@ static int setup_gpi_dma(struct geni_i2c_dev *gi2c)
 		goto err_rx;
 	}
 
-	i2c_trace_log(gi2c->se.dev, "Grabbed GPI dma channels\n");
+	I2C_DBG_LOG(LOG_LVL_INFO, gi2c->se.dev, "Grabbed GPI dma channels\n");
 	return 0;
 
 err_rx:
@@ -816,39 +850,10 @@ err_tx:
 	return ret;
 }
 
-/**
- * geni_check_fw_validity: Function to checks firmware validity.
- * @gi2c: geni i2c device.
- *
- * This function checks firmware validity by reading se protocol
- * register. In case protocol value is not correct, it will try
- * to load se firmware. if firmware load is failed, it will return
- * failure. if firmware load is success, it will recheck firmware
- * validity by checking proto value.
- *
- * return: Return 0 if no error, else return error value.
- */
-static int geni_check_fw_validity(struct geni_i2c_dev *gi2c)
-{
-	struct device *dev = gi2c->se.dev;
-	u32 proto;
-	int ret;
-
-	proto = geni_se_read_proto(&gi2c->se);
-	if (proto != GENI_SE_I2C) {
-		ret = geni_load_se_firmware(&gi2c->se, GENI_SE_I2C);
-		if (ret) {
-			dev_err(dev, "Cannot load firmware from linux for i2c error: %d\n", ret);
-			return -ENXIO;
-		}
-	}
-	return 0;
-}
-
 static int geni_i2c_probe(struct platform_device *pdev)
 {
 	struct geni_i2c_dev *gi2c;
-	u32 tx_depth, fifo_disable;
+	u32 proto, tx_depth, fifo_disable;
 	int ret;
 	struct device *dev = &pdev->dev;
 	const struct geni_i2c_desc *desc = NULL;
@@ -878,7 +883,7 @@ static int geni_i2c_probe(struct platform_device *pdev)
 	ret = device_property_read_u32(dev, "clock-frequency",
 				       &gi2c->clk_freq_out);
 	if (ret) {
-		i2c_trace_log(dev, "Bus frequency not specified, default to 100kHz.\n");
+		I2C_DBG_LOG(LOG_LVL_INFO, dev, "Bus frequency not specified, default to 100kHz.\n");
 		gi2c->clk_freq_out = KHZ(100);
 	}
 
@@ -890,25 +895,18 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		return gi2c->irq;
 
 	ret = geni_i2c_clk_map_idx(gi2c);
-	if (ret) {
-		dev_err(dev, "Invalid clk frequency %d Hz: %d\n",
-			gi2c->clk_freq_out, ret);
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "Invalid clk frequency %d Hz\n", gi2c->clk_freq_out);
 
 	gi2c->adap.algo = &geni_i2c_algo;
 	init_completion(&gi2c->done);
 	spin_lock_init(&gi2c->lock);
 	platform_set_drvdata(pdev, gi2c);
-	ret = devm_request_irq(dev, gi2c->irq, geni_i2c_irq, IRQF_EARLY_RESUME | IRQF_NO_SUSPEND,
+	ret = devm_request_irq(dev, gi2c->irq, geni_i2c_irq, IRQF_NO_AUTOEN,
 			       dev_name(dev), gi2c);
-	if (ret) {
-		dev_err(dev, "Request_irq failed:%d: err:%d\n",
-			gi2c->irq, ret);
-		return ret;
-	}
-	/* Disable the interrupt so that the system can enter low-power mode */
-	disable_irq(gi2c->irq);
+	if (ret)
+		return dev_err_probe(dev, ret, "Request_irq failed: %d\n", gi2c->irq);
+
 	i2c_set_adapdata(&gi2c->adap, gi2c);
 	gi2c->adap.dev.parent = dev;
 	gi2c->adap.dev.of_node = dev->of_node;
@@ -937,16 +935,19 @@ static int geni_i2c_probe(struct platform_device *pdev)
 
 	ret = geni_se_resources_on(&gi2c->se);
 	if (ret) {
-		dev_err(dev, "Error turning on resources %d\n", ret);
-		clk_disable_unprepare(gi2c->core_clk);
-		return ret;
+		dev_err_probe(dev, ret, "Error turning on resources\n");
+		goto err_clk;
 	}
-
-	ret = geni_check_fw_validity(gi2c);
-	if (ret) {
-		geni_se_resources_off(&gi2c->se);
-		clk_disable_unprepare(gi2c->core_clk);
-		return ret;
+	proto = geni_se_read_proto(&gi2c->se);
+	if (proto == GENI_SE_INVALID_PROTO) {
+		ret = geni_load_se_firmware(&gi2c->se, GENI_SE_I2C);
+		if (ret) {
+			dev_err_probe(dev, ret, "i2c firmware load failed ret: %d\n", ret);
+			goto err_resources;
+		}
+	} else if (proto != GENI_SE_I2C) {
+		ret = dev_err_probe(dev, -ENXIO, "Invalid proto %d\n", proto);
+		goto err_resources;
 	}
 
 	if (desc && desc->no_dma_support)
@@ -958,13 +959,10 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		/* FIFO is disabled, so we can only use GPI DMA */
 		gi2c->gpi_mode = true;
 		ret = setup_gpi_dma(gi2c);
-		if (ret) {
-			geni_se_resources_off(&gi2c->se);
-			clk_disable_unprepare(gi2c->core_clk);
-			return dev_err_probe(dev, ret, "Failed to setup GPI DMA mode\n");
-		}
+		if (ret)
+			goto err_resources;
 
-		i2c_trace_log(dev, "Using GPI DMA mode for I2C\n");
+		I2C_DBG_LOG(LOG_LVL_INFO, dev, "Using GPI DMA mode for I2C\n");
 	} else {
 		gi2c->gpi_mode = false;
 		tx_depth = geni_se_get_tx_fifo_depth(&gi2c->se);
@@ -974,10 +972,9 @@ static int geni_i2c_probe(struct platform_device *pdev)
 			tx_depth = desc->tx_fifo_depth;
 
 		if (!tx_depth) {
-			dev_err(dev, "Invalid TX FIFO depth\n");
-			geni_se_resources_off(&gi2c->se);
-			clk_disable_unprepare(gi2c->core_clk);
-			return -EINVAL;
+			ret = dev_err_probe(dev, -EINVAL,
+					    "Invalid TX FIFO depth\n");
+			goto err_resources;
 		}
 
 		gi2c->tx_wm = tx_depth - 1;
@@ -985,18 +982,18 @@ static int geni_i2c_probe(struct platform_device *pdev)
 		geni_se_config_packing(&gi2c->se, BITS_PER_BYTE,
 				       PACKING_BYTES_PW, true, true, true);
 
-		i2c_trace_log(dev, "i2c fifo/se-dma mode. fifo depth:%d\n", tx_depth);
+		I2C_DBG_LOG(LOG_LVL_INFO, dev, "i2c fifo/se-dma mode. fifo depth:%d\n", tx_depth);
 	}
 
 	if (of_property_read_bool(pdev->dev.of_node, "qcom,shared-se")) {
 		gi2c->is_shared = true;
-		i2c_trace_log(&pdev->dev, "Multi-EE usecase with shared SE\n");
+		I2C_DBG_LOG(LOG_LVL_VERBOSE, &pdev->dev, "Multi-EE usecase with shared SE\n");
 	}
 
 	clk_disable_unprepare(gi2c->core_clk);
 	ret = geni_se_resources_off(&gi2c->se);
 	if (ret) {
-		dev_err(dev, "Error turning off resources %d\n", ret);
+		dev_err_probe(dev, ret, "Error turning off resources\n");
 		goto err_dma;
 	}
 
@@ -1012,14 +1009,26 @@ static int geni_i2c_probe(struct platform_device *pdev)
 
 	ret = i2c_add_adapter(&gi2c->adap);
 	if (ret) {
-		dev_err(dev, "Error adding i2c adapter %d\n", ret);
+		dev_err_probe(dev, ret, "Error adding i2c adapter\n");
 		pm_runtime_disable(gi2c->se.dev);
 		goto err_dma;
 	}
 
-	i2c_trace_log(dev, "Geni-I2C adaptor successfully added\n");
+	ret = device_create_file(gi2c->se.dev, &dev_attr_log_level);
+	if (ret)
+		I2C_ERR_LOG(LOG_LVL_ERROR, gi2c->se.dev,
+			    "Failed to create sysfs entry ret:%d\n", ret);
 
-	return 0;
+	I2C_DBG_LOG(LOG_LVL_INFO, dev, "Geni-I2C adaptor successfully added\n");
+
+	return ret;
+
+err_resources:
+	geni_se_resources_off(&gi2c->se);
+err_clk:
+	clk_disable_unprepare(gi2c->core_clk);
+
+	return ret;
 
 err_dma:
 	release_gpi_dma(gi2c);
@@ -1030,6 +1039,7 @@ static void geni_i2c_remove(struct platform_device *pdev)
 {
 	struct geni_i2c_dev *gi2c = platform_get_drvdata(pdev);
 
+	device_remove_file(gi2c->se.dev, &dev_attr_log_level);
 	i2c_del_adapter(&gi2c->adap);
 	release_gpi_dma(gi2c);
 	pm_runtime_disable(gi2c->se.dev);

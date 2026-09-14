@@ -2,8 +2,109 @@
 
 # Quectel buildconfig project
 TOPDIR=$(pwd); export TOPDIR
-KERNEL_FILE="$TOPDIR/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/esp-qcom-image-qcm6490-idp.vfat"
-DTB_FILE="$TOPDIR/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/dtb-qcom-image-qcm6490-idp.vfat"
+BASE_RECIPES_FILE="${TOPDIR}/quectel_build/config/base-recipes"
+if [ -f "${BASE_RECIPES_FILE}" ]; then
+    TARGET_IMAGE=$(cat "${BASE_RECIPES_FILE}")
+else
+    TARGET_IMAGE="quecpi-image"
+fi
+export TARGET_IMAGE
+
+KERNEL_FILE="$TOPDIR/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/esp-qcom-image-qcm6490-idp.rootfs.vfat"
+DTB_FILE="$TOPDIR/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/dtb-qcom-image-qcm6490-idp.rootfs.vfat"
+
+DOWNLOAD_URL="ftp://192.168.25.201/src_files/buildroot-dl/quectel-pi-h1"
+
+# GitHub rootfs release (used by DEBIAN/UBUNTU builds)
+GITHUB_ROOTFS_DL_URL="https://github.com/super617/pi-rootfs/releases/download/latest"
+GITHUB_ROOTFS_API_URL="https://api.github.com/repos/super617/pi-rootfs/releases/latest"
+GITHUB_ROOTFS_API_CACHE="${TMPDIR:-/tmp}/pi-rootfs-latest.json"
+
+if [ ! -f downloads/downloads.done ]; then
+    SYNC_OK=0
+    mkdir -p downloads
+
+    DL_CMD=""
+    if command -v wget &>/dev/null; then
+        DL_CMD="wget"
+    elif command -v curl &>/dev/null; then
+        DL_CMD="curl"
+    elif busybox wget --help &>/dev/null 2>&1; then
+        DL_CMD="busybox_wget"
+    else
+        echo -e "\033[31;1m[WARN] No download tool found (wget/curl), skipping sync, Yocto will download on its own\033[0m"
+    fi
+
+    if [ -n "${DL_CMD}" ]; then
+        echo -e "\033[33;1m[INFO] Checking server at ${DOWNLOAD_URL}...\033[0m"
+        HTTP_OK=0
+        if [ "${DL_CMD}" = "wget" ]; then
+            wget -q --spider "${DOWNLOAD_URL}/" 2>/dev/null && HTTP_OK=1
+        elif [ "${DL_CMD}" = "curl" ]; then
+            curl -sf -o /dev/null "${DOWNLOAD_URL}/" 2>/dev/null && HTTP_OK=1
+        else
+            busybox wget -q --spider "${DOWNLOAD_URL}/" 2>/dev/null && HTTP_OK=1
+        fi
+
+        if [ ${HTTP_OK} -eq 1 ]; then
+            echo -e "\033[32;1m[INFO] Syncing downloads from FTP mirror...\033[0m"
+            if command -v lftp &>/dev/null; then
+                # lftp mirror: parallel multi-connection sync (fastest for 40G)
+                # NOTE: single mirror pass can miss files (parallel race), so loop 3x
+                # with --only-missing (incremental, idempotent). Verified complete
+                # after loops: top files + git2 repos + .done markers all match.
+                # wget --exclude-directories does NOT work for FTP (leaks git2 to
+                # top level), hence lftp is required.
+                LFTP_PARALLEL="${LFTP_PARALLEL:-8}"
+                FTP_HOST="${DOWNLOAD_URL#*//}"; FTP_HOST="${FTP_HOST%%/*}"
+                FTP_PATH="/${DOWNLOAD_URL#*//${FTP_HOST}}"; FTP_PATH="${FTP_PATH#//}"
+                SYNC_OK=1
+                for i in 1 2 3; do
+                    lftp -u anonymous, -e "
+open ${FTP_HOST}
+set net:timeout 15
+set net:reconnect-interval-base 2
+set mirror:use-pget-n ${LFTP_PARALLEL}
+set mirror:no-empty-dirs true
+mirror --parallel=${LFTP_PARALLEL} --use-pget-n=${LFTP_PARALLEL} --no-empty-dirs --only-missing \
+    --exclude-glob '*.listing' --exclude-glob 'git2/*' \
+    ${FTP_PATH}/ ${TOPDIR}/downloads/
+mirror --parallel=${LFTP_PARALLEL} --use-pget-n=${LFTP_PARALLEL} --no-empty-dirs --only-missing \
+    --exclude-glob '*.listing' \
+    ${FTP_PATH}/git2/ ${TOPDIR}/downloads/git2/
+quit
+" 2>/dev/null || SYNC_OK=0
+                done
+            elif [ "${DL_CMD}" = "wget" ]; then
+                # Fallback: serial wget recursive mirror (works everywhere, slower;
+                # NOTE: leaks git2 to top-level but files still land, bitbake only
+                # reads downloads/git2/ so extra top-level copies are harmless-ish,
+                # prefer lftp)
+                wget -q -r -np --no-parent -nH --cut-dirs=4 -P "${TOPDIR}/downloads" \
+                    --reject "index.html*" "${DOWNLOAD_URL}/" 2>/dev/null && SYNC_OK=1
+            elif [ "${DL_CMD}" = "curl" ]; then
+                # Fallback: serial curl (wget missing but curl present)
+                for file in $(curl -sf "${DOWNLOAD_URL}/" | grep -oP 'href="\K[^"]+' | grep -v '/'); do
+                    curl -sf -o "${TOPDIR}/downloads/${file}" "${DOWNLOAD_URL}/${file}" || break
+                done
+                [ -f "${TOPDIR}/downloads/downloads.done" ] && SYNC_OK=1
+            else
+                busybox wget -q -r -np --no-parent -nH --cut-dirs=4 -P "${TOPDIR}/downloads" \
+                    --reject "index.html*" "${DOWNLOAD_URL}/" 2>/dev/null && SYNC_OK=1
+            fi
+
+            if [ ${SYNC_OK} -eq 1 ]; then
+                touch downloads/downloads.done
+                echo -e "\033[32;1m[INFO] downloads sync completed\033[0m"
+            else
+                echo -e "\033[31;1m[ERROR] download failed, Yocto will download on its own\033[0m"
+            fi
+        else
+            echo -e "\033[33;1m[WARN] server not reachable, skipping sync, Yocto will download on its own\033[0m"
+        fi
+    fi
+fi
+
 
 env_check()
 {
@@ -24,9 +125,212 @@ unset_unisoc_env() {
   unset DISTRO MACHINENAME MACHINE USERDEBUG SECBOOT_ENABLE NWMODE
 }
 
+has_custom_token()
+{
+    local expected="$1"
+    local token
+
+    for token in "${@:4}"; do
+        case "${token^^}" in
+            "${expected}"|"${expected}/"*|*/"${expected}"|*/"${expected}/"*)
+                return 0
+                ;;
+        esac
+    done
+
+    return 1
+}
+
+# --- GitHub rootfs download helpers (DEBIAN/UBUNTU builds) -------------------
+# Map buildconfig token (DEBIAN/UBUNTU) to the GitHub release asset name.
+rootfs_asset_name()
+{
+    case "${1^^}" in
+        DEBIAN) echo "debian-gnome-rootfs.tar.xz" ;;
+        UBUNTU) echo "ubuntu26-gnome-rootfs.tar.xz" ;;
+    esac
+}
+
+sha256_of()
+{
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum "$1" 2>/dev/null | awk '{print $1}'
+    elif command -v shasum >/dev/null 2>&1; then
+        shasum -a 256 "$1" 2>/dev/null | awk '{print $1}'
+    fi
+}
+
+# Download helper: curl (resumable) preferred, wget fallback.
+# Interactive terminal: curl's default meter prints a live percentage table
+# (%, speed, ETA) with no progress bar; wget's default bar also shows %.
+# When stderr is redirected (logs/CI) the meter is suppressed (-sS still
+# surfaces errors).
+# HTTP/1.1 is forced: GitHub's 1GB+ assets over HTTP/2 often die with
+# "curl: (92) HTTP/2 stream was not closed cleanly"; --retry-all-errors
+# (curl >= 7.71) makes transient errors like that retry automatically.
+github_rootfs_download()
+{
+    local url="$1" out="$2" curl_extra="" wget_extra=""
+    if [ ! -t 2 ]; then
+        # Non-interactive: suppress the meter but keep errors visible
+        curl_extra="-sS"
+        wget_extra="-q"
+    fi
+    if command -v curl >/dev/null 2>&1; then
+        if curl --help all 2>/dev/null | grep -q -- '--retry-all-errors'; then
+            curl_extra="${curl_extra} --retry-all-errors"
+        fi
+        curl -fL --http1.1 --retry 5 --retry-delay 5 -C - --max-time 7200 ${curl_extra} -o "$out" "$url"
+    elif command -v wget >/dev/null 2>&1; then
+        wget -c --timeout=30 --tries=3 ${wget_extra} -O "$out" "$url"
+    else
+        return 1
+    fi
+}
+
+# ETag of the latest release asset (content fingerprint, used when the GitHub
+# API is rate-limited or unreachable). The Azure blob ETag changes whenever
+# the file content changes, so it is a cheap "is it the latest?" signal.
+github_rootfs_remote_etag()
+{
+    command -v curl >/dev/null 2>&1 || return 1
+    curl -sIL --max-time 30 "${GITHUB_ROOTFS_DL_URL}/${1}" 2>/dev/null | grep -i '^etag:' | tail -1 | tr -d '\r' | sed 's/^[Ee][Tt][Aa][Gg]:[[:space:]]*//'
+}
+
+# Parse the "sha256:<hex>" digest of an asset from the GitHub release JSON
+# (pretty-printed, one field per line; digest may be null for some assets).
+github_rootfs_remote_sha256()
+{
+    awk -v asset="$1" '
+        /"name":/  { gsub(/[" ,]/, "", $2); name=$2 }
+        /"digest":/ && name==asset && $2!="null" {
+            gsub(/[" ,]/, "", $2)
+            sub(/^sha256:/, "", $2)
+            print $2
+            exit
+        }
+    ' "$2"
+}
+
+# Fetch one rootfs tarball from GitHub:
+#   - local tarball missing                      -> download
+#   - local sha256 != latest (API digest)        -> download
+#   - API unavailable (rate limit/offline)       -> ETag fallback, else keep
+#                                                   local tarball + warn
+fetch_github_rootfs_asset()
+{
+    local asset="$1"
+    [ -n "$asset" ] || return 0
+    mkdir -p "${TOPDIR}/prebuild"
+
+    local tar="${TOPDIR}/prebuild/${asset}"
+    local src_dir="${TOPDIR}/prebuild/${asset%.tar.*}"
+    local etag_file="${tar}.etag"
+    local dl_url="${GITHUB_ROOTFS_DL_URL}/${asset}"
+    local remote_sha="" json_tmp=""
+
+    # 1) Try a fresh GitHub API call (asset digest = sha256 of the latest file)
+    json_tmp=$(mktemp) || json_tmp=""
+    if [ -n "$json_tmp" ] && curl -sfL --max-time 30 "${GITHUB_ROOTFS_API_URL}" -o "$json_tmp" 2>/dev/null; then
+        remote_sha=$(github_rootfs_remote_sha256 "$asset" "$json_tmp")
+        if [ -n "$remote_sha" ]; then
+            mkdir -p "$(dirname "${GITHUB_ROOTFS_API_CACHE}")"
+            mv -f "$json_tmp" "${GITHUB_ROOTFS_API_CACHE}" 2>/dev/null
+            json_tmp=""
+        fi
+    fi
+    [ -z "$json_tmp" ] || rm -f "$json_tmp"
+    # 2) Fall back to the cached release JSON if the fresh call failed
+    if [ -z "$remote_sha" ] && [ -f "${GITHUB_ROOTFS_API_CACHE}" ]; then
+        remote_sha=$(github_rootfs_remote_sha256 "$asset" "${GITHUB_ROOTFS_API_CACHE}")
+    fi
+
+    local need_download=0 reason=""
+    if [ ! -f "$tar" ]; then
+        need_download=1
+        reason="local tarball not found"
+    elif [ -n "$remote_sha" ]; then
+        local local_sha
+        local_sha=$(sha256_of "$tar")
+        if [ -z "$local_sha" ]; then
+            need_download=1
+            reason="cannot compute local sha256"
+        elif [ "$local_sha" != "$remote_sha" ]; then
+            need_download=1
+            reason="local sha256 ${local_sha} != latest ${remote_sha}"
+        else
+            echo -e "\033[32;1m[INFO] ${asset}: up to date (sha256 match)\033[0m"
+        fi
+    else
+        # API unreachable/rate-limited: compare ETags instead
+        local old_etag="" new_etag
+        [ -f "$etag_file" ] && old_etag=$(cat "$etag_file")
+        new_etag=$(github_rootfs_remote_etag "$asset")
+        if [ -n "$new_etag" ]; then
+            if [ -n "$old_etag" ] && [ "$old_etag" = "$new_etag" ]; then
+                echo -e "\033[32;1m[INFO] ${asset}: up to date (etag match)\033[0m"
+            else
+                need_download=1
+                reason="etag changed (${old_etag:-none} -> ${new_etag})"
+            fi
+        else
+            echo -e "\033[33;1m[WARN] ${asset}: cannot verify against GitHub (API/network unavailable), keep local tarball\033[0m"
+        fi
+    fi
+
+    if [ "$need_download" -eq 1 ]; then
+        echo -e "\033[33;1m[INFO] ${asset}: ${reason}, downloading ${dl_url}\033[0m"
+        local part="${tar}.part"
+        # Keep an existing .part: curl -C - resumes from it on the next run
+        # (a failed download must not force a 1GB restart from zero).
+        if github_rootfs_download "$dl_url" "$part"; then
+            # Integrity check when the expected sha256 is known
+            if [ -n "$remote_sha" ]; then
+                local dl_sha
+                dl_sha=$(sha256_of "$part")
+                if [ -n "$dl_sha" ] && [ "$dl_sha" != "$remote_sha" ]; then
+                    echo -e "\033[31;1m[ERROR] ${asset}: sha256 mismatch after download (${dl_sha} != ${remote_sha}), aborting\033[0m"
+                    rm -f "$part"
+                    return 1
+                fi
+            fi
+            rm -f "$tar"
+            mv -f "$part" "$tar"
+            local new_etag
+            new_etag=$(github_rootfs_remote_etag "$asset")
+            [ -n "$new_etag" ] && echo "$new_etag" > "$etag_file"
+            # Invalidate the extracted tree so bitbake re-extracts the new tarball
+            if [ -d "$src_dir" ]; then
+                echo -e "\033[33;1m[INFO] ${asset}: removing stale extracted tree ${src_dir}\033[0m"
+                rm -rf "$src_dir"
+            fi
+            echo -e "\033[32;1m[INFO] ${asset}: downloaded $(stat -c %s "$tar" 2>/dev/null) bytes -> ${tar}\033[0m"
+        else
+            if [ -f "$part" ]; then
+                echo -e "\033[31;1m[ERROR] ${asset}: download interrupted, partial file kept at ${part}\033[0m"
+                echo -e "\033[31;1m       rerun buildconfig to resume from $(stat -c %s "$part" 2>/dev/null) bytes (-C -)\033[0m"
+            else
+                echo -e "\033[31;1m[ERROR] ${asset}: download failed: ${dl_url}\033[0m"
+            fi
+            return 1
+        fi
+    fi
+    return 0
+}
+
 function buildpackage()
 { 
-    $TOPDIR/quectel_build/a_key_generation.sh $QUECTEL_PROJECT_NAME $QUECTEL_PROJECT_REV $QUECTEL_CUSTOM_NAME
+    TARGET_IMAGE=$TARGET_IMAGE $TOPDIR/quectel_build/a_key_generation.sh $QUECTEL_PROJECT_NAME $QUECTEL_PROJECT_REV $QUECTEL_CUSTOM_NAME
+}
+
+function flash()
+{
+    local flash_script="${TOPDIR}/quectel_build/tools/flash.sh"
+    if [ ! -x "${flash_script}" ]; then
+        echo -e "\033[31;1m[ERROR] flash script not found or not executable: ${flash_script}\033[0m"
+        return 1
+    fi
+    "${flash_script}" "$@"
 }
 
 
@@ -55,23 +359,109 @@ function buildenv()
 
 function buildconfig()
 {
-    if [ "x$3" = "xDBG" ]; then
+    # Build type selection via an optional trailing DEBUG parameter:
+    #   buildconfig <proj> <rev> <STD|DEBIAN|UBUNTU|...> [DEBUG]
+    #   with DEBUG        -> debug build  (DEBUG_BUILD=1, PERFORMANCE_BUILD=0)
+    #   without DEBUG     -> performance build (DEBUG_BUILD=0, PERFORMANCE_BUILD=1, default)
+    # The DEBUG token is consumed here and NOT passed to config_parser.py
+    # (it is not a registered custoct token).
+    local BUILD_ARGS=()
+    local DEBUG_BUILD_FLAG=0
+    for arg in "$@"; do
+        if [ "${arg^^}" = "DEBUG" ]; then
+            DEBUG_BUILD_FLAG=1
+        else
+            BUILD_ARGS+=("$arg")
+        fi
+    done
+
+    # DBG token: keep debug symbols (no strip) AND force a debug build.
+    if has_custom_token "DBG" "${BUILD_ARGS[@]}"; then
         echo 'INHIBIT_PACKAGE_STRIP = "1"'         >> ${BUILDDIR}/conf/local.conf
         echo 'INHIBIT_PACKAGE_DEBUG_STRIP = "1"'   >> ${BUILDDIR}/conf/local.conf
         echo 'INHIBIT_SYSROOT_STRIP = "1"'         >> ${BUILDDIR}/conf/local.conf
+        DEBUG_BUILD_FLAG=1
+        echo -e "\033[32;1mDBG mode: keep debug symbols (INHIBIT strip)\033[0m"
     fi
+
+    # Apply the build type to auto.conf (DEBUG_BUILD / PERFORMANCE_BUILD).
+    if [ "${DEBUG_BUILD_FLAG}" -eq 1 ]; then
+        sed -i 's/^DEBUG_BUILD = .*/DEBUG_BUILD = "1"/' ${BUILDDIR}/conf/auto.conf
+        sed -i 's/^PERFORMANCE_BUILD = .*/PERFORMANCE_BUILD = "0"/' ${BUILDDIR}/conf/auto.conf
+        export DEBUG_BUILD=1 PERFORMANCE_BUILD=0
+        echo -e "\033[32;1mDEBUG build enabled (DEBUG_BUILD=1, dump download_mode=1 on cmdline)\033[0m"
+    else
+        sed -i 's/^DEBUG_BUILD = .*/DEBUG_BUILD = "0"/' ${BUILDDIR}/conf/auto.conf
+        sed -i 's/^PERFORMANCE_BUILD = .*/PERFORMANCE_BUILD = "1"/' ${BUILDDIR}/conf/auto.conf
+        export DEBUG_BUILD=0 PERFORMANCE_BUILD=1
+        echo -e "\033[32;1mPERFORMANCE build enabled (DEBUG_BUILD=0, dump off by default)\033[0m"
+    fi
+
+    # Handle SEC parameter for secure boot builds
+    if has_custom_token "SEC" "${BUILD_ARGS[@]}"; then
+        echo 'SECBOOT_ENABLE = "1"' >> ${BUILDDIR}/conf/auto.conf
+        export SECBOOT_ENABLE=1
+        # Create flag file for config_help to re-apply
+        touch /tmp/.secboot_enabled
+        echo -e "\033[32;1mSECBOOT mode enabled\033[0m"
+    else
+        export SECBOOT_ENABLE=0
+        rm -f /tmp/.secboot_enabled
+    fi
+
+    # Handle WESTON parameter for secure boot builds
+    WESTON_SYNC_FILE=${TOPDIR}/quectel_build/compile/quectel-features-config/weston-sync-list
+    UBUNTU_SYNC_FILE=${TOPDIR}/quectel_build/compile/quectel-features-config/ubuntu-sync-list
+    DEBIAN_SYNC_FILE=${TOPDIR}/quectel_build/compile/quectel-features-config/debian-sync-list
+
+    MOUNT_CONTROL_FILE=${TOPDIR}/layers/meta-qcom-hwe/recipes-core/packagegroups/packagegroup-qcom-initscripts.bb
+
+    if has_custom_token "WESTON" "${BUILD_ARGS[@]}" || has_custom_token "STD" "${BUILD_ARGS[@]}"; then
+        echo 'SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS = "1"' >> ${BUILDDIR}/conf/local.conf
+    else
+        sed -i '/^SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS/d' ${BUILDDIR}/conf/local.conf
+    fi
+    if has_custom_token "UBUNTU" "${BUILD_ARGS[@]}"; then
+        cp -rf ${UBUNTU_SYNC_FILE} ${TOPDIR}/prebuild/sync-list
+        fetch_github_rootfs_asset "$(rootfs_asset_name UBUNTU)"
+    fi
+
+    if has_custom_token "DEBIAN" "${BUILD_ARGS[@]}"; then
+        cp -rf ${DEBIAN_SYNC_FILE} ${TOPDIR}/prebuild/sync-list
+        fetch_github_rootfs_asset "$(rootfs_asset_name DEBIAN)"
+    fi
+
     env_check
     if [ ! -f ${TOPDIR}//config/linker/versions ]
     then
-        python -B ${TOPDIR}//quectel_build/compile/version_parser_auto.py $*
+        python -B ${TOPDIR}//quectel_build/compile/version_parser_auto.py "${BUILD_ARGS[@]}"
         if [ $? != 0 ];then
             break
         fi
     fi
 
-    python -B ${TOPDIR}/quectel_build/compile/config_parser.py $*
+    python -B ${TOPDIR}/quectel_build/compile/config_parser.py "${BUILD_ARGS[@]}"
     if [ $? != 0 ];then
         break
+    fi
+
+    # Update auto.conf from quectel_var.inc after config_parser generates it
+    if [ -f "${TOPDIR}/quectel_build/compile/quectel-features-config/quectel_var.inc" ] && [ -n "${BUILDDIR}" ]; then
+        local prj_name=$(grep "^QUECTEL_PROJECT_NAME" "${TOPDIR}/quectel_build/compile/quectel-features-config/quectel_var.inc" | cut -d= -f2 | tr -d ' ')
+        local prj_rev=$(grep "^QUECTEL_PROJECT_REV" "${TOPDIR}/quectel_build/compile/quectel-features-config/quectel_var.inc" | cut -d= -f2 | tr -d ' ')
+        local cust_name=$(grep "^QUECTEL_CUSTOM_NAME" "${TOPDIR}/quectel_build/compile/quectel-features-config/quectel_var.inc" | cut -d= -f2 | tr -d ' ')
+        local git_commit=$(grep "^QUECTEL_GIT_COMMIT" "${TOPDIR}/quectel_build/compile/quectel-features-config/quectel_var.inc" | cut -d= -f2 | tr -d ' ')
+        [ -n "$prj_name" ] && sed -i "s/^BUILDNAME = .*$/BUILDNAME = \"$prj_name\"/" ${BUILDDIR}/conf/auto.conf
+        [ -n "$prj_rev" ] && sed -i "s/^QUECTEL_PROJECT_REV = .*$/QUECTEL_PROJECT_REV = \"$prj_rev\"/" ${BUILDDIR}/conf/auto.conf
+        [ -n "$cust_name" ] && sed -i "s/^QUECTEL_CUSTOM_NAME = .*$/QUECTEL_CUSTOM_NAME = \"$cust_name\"/" ${BUILDDIR}/conf/auto.conf
+        [ -n "$git_commit" ] && sed -i "s/^QUECTEL_GIT_COMMIT = .*$/QUECTEL_GIT_COMMIT = \"$git_commit\"/" ${BUILDDIR}/conf/auto.conf
+        echo -e "\033[32;1mUpdated auto.conf from quectel_var.inc\033[0m"
+    fi
+
+    # Re-apply SECBOOT_ENABLE after config_parser.py (which regenerates auto.conf)
+    if [ "${SECBOOT_ENABLE}" = "1" ] && [ -n "${BUILDDIR}" ]; then
+        echo 'SECBOOT_ENABLE = "1"' >> ${BUILDDIR}/conf/auto.conf
+        echo -e "\033[32;1mSECBOOT re-applied to auto.conf after config_parser\033[0m"
     fi
 
     buildenv
@@ -81,7 +471,9 @@ function buildconfig()
     export QUECTEL_CUSTOM_NAME
     export QUECTEL_FEATURE_OPENLINUX
     
+    cp -rf ${PRJECT_GEN_FILE} ${TOPDIR}/layers/meta-quectel/recipes-quectel/atcid/files/atci/quectel/inc/quectel-buildconfig-gen.h
 }
+
 
 export QUECTEL_DIR=${TOPDIR}
 
@@ -97,12 +489,21 @@ config_help()
 }
 config_help $@
 
+# Re-apply SECBOOT_ENABLE after config_help (which regenerates auto.conf)
+if [ -f /tmp/.secboot_enabled ] && [ -n "${BUILDDIR}" ]; then
+    echo 'SECBOOT_ENABLE = "1"' >> ${BUILDDIR}/conf/auto.conf
+    export SECBOOT_ENABLE=1
+    echo -e "\033[32;1mSECBOOT re-applied to auto.conf\033[0m"
+fi
+
 function buildall() {
-    bitbake qcom-multimedia-image
+
+    bitbake $TARGET_IMAGE -c cleanall
+    bitbake $TARGET_IMAGE
 }
 
 function buildsdk() {
-    bitbake qcom-multimedia-image -c populate_sdk
+    bitbake $TARGET_IMAGE -c populate_sdk
     $TOPDIR/quectel_build/compile/export_sdk.sh $@
     $TOPDIR/quectel_build/do_image_package.sh
 }
@@ -113,8 +514,8 @@ function do_kernel_images() {
 
 function buildesdk() {
     # bitbake qcom-multimedia-crossesdk-image
-    bitbake qcom-multimedia-image -c populate_sdk
-    bitbake qcom-multimedia-image -c populate_sdk_ext
+    bitbake $TARGET_IMAGE -c populate_sdk
+    bitbake $TARGET_IMAGE -c populate_sdk_ext
 }
 
 function buildkernel() {
@@ -131,23 +532,29 @@ function builddtb() {
     cp -L "$DTB_FILE"    "${TOPDIR}/quectel_build/output/dtb.bin"
 }
 
-
-function setopenkernel() {
-    cp $TOPDIR/quectel_build/config/bb/non-ostree/linux-qcom-uki.bb  $TOPDIR/layers/meta-qcom-hwe/recipes-kernel/images/linux-qcom-uki.bb
-    cp $TOPDIR/quectel_build/config/bb/non-ostree/qcom-base.inc $TOPDIR/layers/meta-qcom-distro/conf/distro/include/qcom-base.inc
+function enter_rootfs() {
+    cd "${TOPDIR}/prebuild"
+    ./enter_debian_shell.sh
+    cd "${TOPDIR}/"
 }
-
-function setostreekernel() {
-    cp $TOPDIR/quectel_build/config/bb/ostree/linux-qcom-uki.bb  $TOPDIR/layers/meta-qcom-hwe/recipes-kernel/images/linux-qcom-uki.bb
-    cp $TOPDIR/quectel_build/config/bb/ostree/qcom-base.inc $TOPDIR/layers/meta-qcom-distro/conf/distro/include/qcom-base.inc
-}
-
 
 export MACHINE=qcm6490-idp
 export DISTRO=qcom-wayland
 export FWZIP_PATH="${PWD}/quectel_build/prebuilt_bpfw"
 export EXTRALAYERS="meta-qcom-qim-product-sdk"
 export QCOM_SELECTED_BSP="custom"
+# Build type default is PERFORMANCE (release). buildconfig consumes an
+# optional trailing DEBUG argument to switch to a debug build:
+#   buildconfig <proj> <rev> <STD|DEBIAN|UBUNTU|...> DEBUG  -> DEBUG_BUILD=1
+#   buildconfig <proj> <rev> <STD|DEBIAN|UBUNTU|...>        -> PERFORMANCE_BUILD=1
+# These exports are used by set_bb_env.sh to write conf/auto.conf.
+export DEBUG_BUILD=${DEBUG_BUILD:-0}
+export PERFORMANCE_BUILD=${PERFORMANCE_BUILD:-1}
+
+export WS_ROOT="${TOPDIR}"
+
+# Export SECBOOT_ENABLE and WS_ROOT to bitbake environment
+export BB_ENV_PASSTHROUGH_ADDITIONS="${BB_ENV_PASSTHROUGH_ADDITIONS} SECBOOT_ENABLE WS_ROOT"
 
 
 . setup-environment
@@ -156,10 +563,14 @@ cat <<EOF
 
 #############################################################
 Build command:
-    Buildconfig:            buildconfig [project_name] [project_rev] [custom_name]
+    Buildconfig:            buildconfig [project_name] [project_rev] [custom_name ...]
     Complete Compilation:   buildall
     Export SDK:             buildsdk [packagename]
     A key generation:       buildpackage
+    Flash firmware:         flash [ufs|emmc]
+Secboot:
+    Enable secboot:         buildconfig [project_name] [project_rev] [custom_name ...] SEC
+    Secboot package output: buildpackage
 #############################################################
 
 EOF
@@ -168,4 +579,3 @@ function rebake() {
 bitbake $@ -c cleansstate
 bitbake $@
 }
-

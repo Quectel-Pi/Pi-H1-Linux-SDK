@@ -11,8 +11,6 @@ XSERVER ?= " \
     xserver-xorg-module-libint10 \
     ${@bb.utils.contains('DISTRO_FEATURES', 'opengl', '${XSERVER_OPENGL}', 'xf86-video-fbdev', d)} \
     xf86-input-evdev \
-    xf86-input-mouse \
-    xf86-input-keyboard \
 "
 
 PREFERRED_PROVIDER_virtual/egl ?= "mesa"
@@ -39,3 +37,21 @@ SERIAL_CONSOLES ?= "115200;ttyMSM0"
 # image.  All our boards (except db410c) have 2GiB and db410c has 1GiB of RAM,
 # so this image would fit.
 INITRAMFS_MAXSIZE = "393216"
+
+# Use systemd-boot as the EFI bootloader
+EFI_PROVIDER = "systemd-boot"
+
+# Install packages at root of ESP
+EFI_PREFIX = ""
+
+# Location of dtb inside ESP
+EFI_DTB_DIR ?= "${EFI_PREFIX}dtb"
+
+# Unified Kernel Image (UKI) name
+EFI_LINUX_IMG ?= "linux-${MACHINE}.efi"
+
+# Place dtb at EFIDTDIR to seamlessly package
+KERNEL_DTBDEST = "${EFI_DTB_DIR}"
+
+# UKI generation needs uncompressed Kernel image
+KERNEL_IMAGETYPES:append = " Image"

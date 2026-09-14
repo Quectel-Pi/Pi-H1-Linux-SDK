@@ -1,0 +1,218 @@
+From b84e0a6a59b7c9043d13a594f8434c13be7cf82e Mon Sep 17 00:00:00 2001
+From: Chaitanya Saggurthi <quic_csaggurt@quicinc.com>
+Date: Tue, 4 Feb 2025 10:48:15 +0530
+Subject: [PATCH] Add MT SMS storage support
+
+Add MT SMS storage support
+
+Signed-off-by: Chaitanya Saggurthi <quic_csaggurt@quicinc.com>
+---
+ libmm-glib/mm-sms-storage.c  |  1 -
+ src/mm-broadband-modem-qmi.c | 43 ++++++++++++++++++++++++++++++++----
+ src/mm-sms-part-3gpp.c       |  6 ++++-
+ src/mm-sms-part.c            | 21 ++++++++++++++++++
+ src/mm-sms-part.h            |  5 +++++
+ src/mm-sms-qmi.c             | 23 ++++++++++++++-----
+ 6 files changed, 88 insertions(+), 11 deletions(-)
+
+diff --git a/libmm-glib/mm-sms-storage.c b/libmm-glib/mm-sms-storage.c
+index 77c2c7f7..7295d6f6 100644
+--- a/libmm-glib/mm-sms-storage.c
++++ b/libmm-glib/mm-sms-storage.c
+@@ -12,7 +12,6 @@
+ #include <ModemManager.h>
+ #define _LIBMM_INSIDE_MM
+ #include <libmm-glib.h>
+-#include <gdbm.h>
+ #include "json-glib/json-glib.h"
+ #include "mm-common-helpers.h"
+ #include "mm-sms-storage.h"
+diff --git a/src/mm-broadband-modem-qmi.c b/src/mm-broadband-modem-qmi.c
+index 87b66456..3537af95 100644
+--- a/src/mm-broadband-modem-qmi.c
++++ b/src/mm-broadband-modem-qmi.c
+@@ -7536,14 +7536,28 @@ messaging_set_default_storage (MMIfaceModemMessaging *_self,
+     /* Build routes array and add it as input
+      * Just worry about Class 0 and Class 1 messages for now */
+     input = qmi_message_wms_set_routes_input_new ();
+-    routes_array = g_array_sized_new (FALSE, FALSE, sizeof (route), 2);
++    routes_array = g_array_sized_new (FALSE, FALSE, sizeof (route), 6);
+     route.message_type = QMI_WMS_MESSAGE_TYPE_POINT_TO_POINT;
+     route.message_class = QMI_WMS_MESSAGE_CLASS_0;
+-    route.storage = mm_sms_storage_to_qmi_storage_type (storage);
+-    route.receipt_action = QMI_WMS_RECEIPT_ACTION_STORE_AND_NOTIFY;
++    route.storage = QMI_WMS_STORAGE_TYPE_NONE;
++    route.receipt_action =  QMI_WMS_RECEIPT_ACTION_TRANSFER_ONLY;
+     g_array_append_val (routes_array, route);
++
+     route.message_class = QMI_WMS_MESSAGE_CLASS_1;
+     g_array_append_val (routes_array, route);
++
++    route.message_class = QMI_WMS_MESSAGE_CLASS_2;
++    g_array_append_val (routes_array, route);
++
++    route.message_class = QMI_WMS_MESSAGE_CLASS_3;
++    g_array_append_val (routes_array, route);
++
++    route.message_class = QMI_WMS_MESSAGE_CLASS_NONE;
++    g_array_append_val (routes_array, route);
++
++    route.message_class = QMI_WMS_MESSAGE_CLASS_CDMA;
++    g_array_append_val (routes_array, route);
++
+     qmi_message_wms_set_routes_input_set_route_list (input, routes_array, NULL);
+ 
+     mm_obj_dbg (self, "setting default messaging routes...");
+@@ -7830,6 +7844,27 @@ wms_list_messages_ready (QmiClientWms *client,
+     read_next_sms_part (task);
+ }
+ 
++MMSmsPart *
++mm_create_sms_part_from_pdu (guint index,
++                        const gchar  *hexpdu,
++                        MMSmsState state,
++                        gpointer      log_object,
++                        GError      **error)
++{
++    g_autofree guint8 *pdu = NULL;
++    gsize              pdu_len;
++
++    /* Convert PDU from hex to binary */
++    pdu = mm_utils_hexstr2bin (hexpdu, -1, &pdu_len, error);
++    if (!pdu) {
++        g_prefix_error (error, "Couldn't convert 3GPP PDU from hex to binary: ");
++        return NULL;
++    }
++
++    return mm_sms_part_3gpp_new_from_binary_pdu (index, pdu, pdu_len, log_object,
++                                                    state == MM_SMS_STATE_RECEIVED, error);
++}
++
+ static void
+ load_messages_from_local_storage (GTask *task)
+ {
+@@ -7851,7 +7886,7 @@ load_messages_from_local_storage (GTask *task)
+         if (mm_sms_storage_read_message (l->data, &pdu, &state, &error)) {
+ 
+             MMSmsPart *part;
+-            part = mm_sms_part_3gpp_new_from_pdu (l->data, pdu, self, &error);
++            part = mm_create_sms_part_from_pdu (l->data, pdu, state, self, &error);
+             if (part) {
+                 mm_obj_dbg (self, "correctly parsed PDU (%d)", l->data);
+                 mm_iface_modem_messaging_take_part (MM_IFACE_MODEM_MESSAGING (self),
+diff --git a/src/mm-sms-part-3gpp.c b/src/mm-sms-part-3gpp.c
+index 6e089bd9..745b6700 100644
+--- a/src/mm-sms-part-3gpp.c
++++ b/src/mm-sms-part-3gpp.c
+@@ -391,6 +391,7 @@ mm_sms_part_3gpp_new_from_binary_pdu (guint         index,
+     guint tp_user_data_len_offset = 0;
+     MMSmsEncoding user_data_encoding = MM_SMS_ENCODING_UNKNOWN;
+     gchar *address;
++    GArray *array;
+ 
+     /* Create the new MMSmsPart */
+     sms_part = mm_sms_part_new (index, MM_SMS_PDU_TYPE_UNKNOWN);
+@@ -810,7 +811,10 @@ mm_sms_part_3gpp_new_from_binary_pdu (guint         index,
+             }
+         }
+     }
+-
++    array = g_array_append_vals (g_array_sized_new (FALSE, FALSE, sizeof (guint8), pdu_len),
++                                     pdu,
++                                     pdu_len);
++    mm_sms_part_set_pdu (sms_part, array);
+     return sms_part;
+ }
+ 
+diff --git a/src/mm-sms-part.c b/src/mm-sms-part.c
+index ee2cd9f0..25dc3bee 100644
+--- a/src/mm-sms-part.c
++++ b/src/mm-sms-part.c
+@@ -37,6 +37,7 @@ struct _MMSmsPart {
+     gchar *text;
+     MMSmsEncoding encoding;
+     GByteArray *data;
++    GByteArray *pdu;
+     gint  class;
+     guint validity_relative;
+     gboolean delivery_report_request;
+@@ -163,6 +164,26 @@ mm_sms_part_take_data (MMSmsPart *self,
+     self->data = value;
+ }
+ 
++PART_GET_FUNC (const GByteArray *, pdu)
++
++void
++mm_sms_part_set_pdu (MMSmsPart *self,
++                      GByteArray *value)
++{
++    if (self->pdu)
++        g_byte_array_unref (self->pdu);
++    self->pdu = (value ? g_byte_array_ref (value) : NULL);
++}
++
++void
++mm_sms_part_take_pdu (MMSmsPart *self,
++                       GByteArray *value)
++{
++    if (self->pdu)
++        g_byte_array_unref (self->pdu);
++    self->pdu = value;
++}
++
+ gboolean
+ mm_sms_part_should_concat (MMSmsPart *self)
+ {
+diff --git a/src/mm-sms-part.h b/src/mm-sms-part.h
+index 2ea44a85..b346820d 100644
+--- a/src/mm-sms-part.h
++++ b/src/mm-sms-part.h
+@@ -105,6 +105,11 @@ void              mm_sms_part_set_data               (MMSmsPart *part,
+ void              mm_sms_part_take_data              (MMSmsPart *part,
+                                                       GByteArray *data);
+ 
++const GByteArray *mm_sms_part_get_pdu               (MMSmsPart *part);
++void              mm_sms_part_set_pdu               (MMSmsPart *part,
++                                                      GByteArray *data);
++void              mm_sms_part_take_pdu              (MMSmsPart *part,
++                                                      GByteArray *data);
+ MMSmsEncoding     mm_sms_part_get_encoding           (MMSmsPart *part);
+ void              mm_sms_part_set_encoding           (MMSmsPart *part,
+                                                       MMSmsEncoding encoding);
+diff --git a/src/mm-sms-qmi.c b/src/mm-sms-qmi.c
+index d12f3c58..ac3137d2 100644
+--- a/src/mm-sms-qmi.c
++++ b/src/mm-sms-qmi.c
+@@ -211,11 +211,24 @@ sms_store_next_part (GTask *task)
+         return;
+     }
+ 
+-    /* Get PDU */
+-    if (MM_SMS_PART_IS_3GPP ((MMSmsPart *)ctx->current->data))
+-        pdu = mm_sms_part_3gpp_get_submit_pdu ((MMSmsPart *)ctx->current->data, &pdulen, &msgstart, self, &error);
+-    else if (MM_SMS_PART_IS_CDMA ((MMSmsPart *)ctx->current->data))
+-        pdu = mm_sms_part_cdma_get_submit_pdu ((MMSmsPart *)ctx->current->data, &pdulen, self, &error);
++    if (mm_sms_part_get_pdu((MMSmsPart *)ctx->current->data)) {
++        mm_obj_dbg (self, "sms_store_next_part, PDU is present in sms part");
++        GArray *array_pdu;
++        array_pdu = mm_sms_part_get_pdu((MMSmsPart *)ctx->current->data);
++        mm_obj_dbg (self, "sms_store_next_part, PDU is present in sms part lenn:%d",
++                    array_pdu->len);
++        pdu = (guint8 *)array_pdu->data;
++        pdulen = array_pdu->len;
++    } else {
++        mm_obj_dbg (self, "sms_store_next_part, get submit PDU");
++        /* Get PDU */
++        if (MM_SMS_PART_IS_3GPP ((MMSmsPart *)ctx->current->data))
++            pdu = mm_sms_part_3gpp_get_submit_pdu ((MMSmsPart *)ctx->current->data,
++                                                    &pdulen, &msgstart, self, &error);
++        else if (MM_SMS_PART_IS_CDMA ((MMSmsPart *)ctx->current->data))
++            pdu = mm_sms_part_cdma_get_submit_pdu ((MMSmsPart *)ctx->current->data, &pdulen,
++                                                    self, &error);
++    }
+ 
+     if (!pdu) {
+         if (error)
+-- 
+2.25.1
+

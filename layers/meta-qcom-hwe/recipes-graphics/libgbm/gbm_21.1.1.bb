@@ -16,7 +16,7 @@ PROVIDES += "virtual/libgbm libgbm"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/display/libgbm.git;protocol=https"
 SRCBRANCH  = "display.qclinux.1.0.r1-rel"
-SRCREV     = "5eb3c08f78412718642498ba95178ee1b974a0d7"
+SRCREV     = "d2f771e8c80698a18b16f14ea60d5d55abede683"
 
 SRC_URI =  "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=display/vendor/qcom/opensource/display/libgbm"
 
@@ -47,7 +47,7 @@ PACKAGE_ARCH ?= "${MACHINE_ARCH}"
 
 # The headers for GBM are contained in a completely separate package. Force
 # that subsidiary package to be installed anytime that gbm-dev is.
-RPROVIDES:${PN} += "libgbm"
+RPROVIDES:${PN} += "virtual/libgbm"
 
 do_install:append(){
     install -d ${D}${libdir}/

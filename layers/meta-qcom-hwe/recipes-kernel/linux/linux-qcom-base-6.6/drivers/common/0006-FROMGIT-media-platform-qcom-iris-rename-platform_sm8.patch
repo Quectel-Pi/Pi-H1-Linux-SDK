@@ -1,0 +1,47 @@
+From 71fe05e73e77eddfa3d162e771e6e91d7045d592 Mon Sep 17 00:00:00 2001
+From: Neil Armstrong <neil.armstrong@linaro.org>
+Date: Thu, 17 Apr 2025 16:59:06 +0200
+Subject: [PATCH 6/7] FROMGIT: media: platform: qcom/iris: rename platform_sm8550
+ to platform_gen2
+
+In order to prepare for supporting the SM8650 SoC, move the
+iris_platform_sm8550.c file into iris_platform_gen2.c that will
+contain all the common HFI GEN2x structures.
+
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Tested-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org> # x1e Dell
+Signed-off-by: Neil Armstrong <neil.armstrong@linaro.org>
+Reviewed-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Signed-off-by: Bryan O'Donoghue <bod@kernel.org>
+Signed-off-by: Hans Verkuil <hverkuil@xs4all.nl>
+Link: https://lore.kernel.org/linux-media/20250417-topic-sm8x50-iris-v10-v7-6-f020cb1d0e98@linaro.org
+Git-repo: https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
+Git-commit: dc40021c13d412f48e11a5c4aeb9e0a997ff2b95
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/ dc40021c13d412f48e11a5c4aeb9e0a997ff2b95]
+---
+ drivers/media/platform/qcom/iris/Makefile                       | 2 +-
+ .../qcom/iris/{iris_platform_sm8550.c => iris_platform_gen2.c}  | 0
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+ rename drivers/media/platform/qcom/iris/{iris_platform_sm8550.c => iris_platform_gen2.c} (100%)
+
+diff --git a/drivers/media/platform/qcom/iris/Makefile b/drivers/media/platform/qcom/iris/Makefile
+index 27a8ca27ac03..0ed6d2e8e485 100644
+--- a/drivers/media/platform/qcom/iris/Makefile
++++ b/drivers/media/platform/qcom/iris/Makefile
+@@ -9,7 +9,7 @@ iris-objs += iris_buffer.o \
+              iris_hfi_gen2_packet.o \
+              iris_hfi_gen2_response.o \
+              iris_hfi_queue.o \
+-             iris_platform_sm8550.o \
++             iris_platform_gen2.o \
+              iris_power.o \
+              iris_probe.o \
+              iris_resources.o \
+diff --git a/drivers/media/platform/qcom/iris/iris_platform_sm8550.c b/drivers/media/platform/qcom/iris/iris_platform_gen2.c
+similarity index 100%
+rename from drivers/media/platform/qcom/iris/iris_platform_sm8550.c
+rename to drivers/media/platform/qcom/iris/iris_platform_gen2.c
+-- 
+2.34.1
+

@@ -1,0 +1,72 @@
+From f05fc1268ef38b36d35397c46a49b0095270d643 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Mon, 4 Mar 2024 17:44:35 +0800
+Subject: [PATCH] support hermetic Python
+
+Due to commit [e85860e8382 use hermetic Python in Tensorflow. See
+ci/official/requirements_updater/README.md for details.] applied
+
+It use hermetic Python to instead of external Python
+
+Upstream-Status: Inappropriate [Yocto specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ tensorflow/BUILD                      | 3 +++
+ tensorflow/compiler/tf2tensorrt/BUILD | 1 +
+ tensorflow/python/BUILD               | 2 ++
+ tensorflow/tensorflow.bzl             | 2 ++
+ 4 files changed, 8 insertions(+)
+
+diff --git a/tensorflow/BUILD b/tensorflow/BUILD
+index 24c2bbf82ef..0bf6127ffd1 100644
+--- a/tensorflow/BUILD
++++ b/tensorflow/BUILD
+@@ -134,6 +134,9 @@ PACKAGE_STATIC_DEPS = [
+     "@riegeli//:__subpackages__",
+     "@org_brotli//:__subpackages__",
+     "@net_zstd//:__subpackages__",
++    "@ducc//:__subpackages__",
++    "@pybind11//:__subpackages__",
++    "@python_x86_64-unknown-linux-gnu//:__subpackages__",
+ ] + tsl_async_value_deps()
+ 
+ package(
+diff --git a/tensorflow/compiler/tf2tensorrt/BUILD b/tensorflow/compiler/tf2tensorrt/BUILD
+index 91ef722b52d..320c3e80e6c 100644
+--- a/tensorflow/compiler/tf2tensorrt/BUILD
++++ b/tensorflow/compiler/tf2tensorrt/BUILD
+@@ -1097,6 +1097,7 @@ pybind_extension(
+         "@zlib//:__subpackages__",
+         "@local_tsl//tsl:__subpackages__",
+         "@local_xla//xla:__subpackages__",
++        "@python_x86_64-unknown-linux-gnu//:__subpackages__",
+     ],
+     deps = [
+         ":common_utils",
+diff --git a/tensorflow/python/BUILD b/tensorflow/python/BUILD
+index 675709d4314..65b3fd20b4f 100644
+--- a/tensorflow/python/BUILD
++++ b/tensorflow/python/BUILD
+@@ -741,6 +741,8 @@ pywrap_tensorflow_macro(
+         "@zlib//:__subpackages__",
+         "@local_tsl//tsl:__subpackages__",
+         "@local_xla//xla:__subpackages__",
++        "@pypi_numpy//:__subpackages__",
++        "@python_x86_64-unknown-linux-gnu//:__subpackages__",
+     ] + tsl_async_value_deps(),
+     win_def_file = ":pywrap_tensorflow_filtered_def_file",
+     deps = [
+diff --git a/tensorflow/tensorflow.bzl b/tensorflow/tensorflow.bzl
+index 51ae807cae7..a2cdbfd73fd 100644
+--- a/tensorflow/tensorflow.bzl
++++ b/tensorflow/tensorflow.bzl
+@@ -3304,6 +3304,8 @@ def tf_python_pybind_static_deps(testonly = False):
+         "@upb//:__subpackages__",
+         "@zlib//:__subpackages__",
+         "@local_tsl//tsl:__subpackages__",
++        "@python_x86_64-unknown-linux-gnu//:__subpackages__",
++        "@pypi_numpy//:__subpackages__",
+     ]
+     static_deps += tsl_async_value_deps()
+     static_deps += [] if not testonly else [

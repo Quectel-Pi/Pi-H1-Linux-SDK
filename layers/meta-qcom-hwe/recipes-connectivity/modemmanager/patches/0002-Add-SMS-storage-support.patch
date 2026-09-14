@@ -1,0 +1,505 @@
+From a32e8ee6a0a6607927aa4b1206190b47fc423844 Mon Sep 17 00:00:00 2001
+From: Chaitanya Saggurthi <quic_csaggurt@quicinc.com>
+Date: Tue, 4 Feb 2025 10:46:28 +0530
+Subject: [PATCH] Add SMS storage support
+
+Add SMS local storage support in modem manager.
+
+Signed-off-by: Chaitanya Saggurthi <quic_csaggurt@quicinc.com>
+---
+ libmm-glib/meson.build       |   6 +-
+ libmm-glib/mm-sms-storage.c  | 229 +++++++++++++++++++++++++++++++++++
+ libmm-glib/mm-sms-storage.h  |  26 ++++
+ meson.build                  |   1 -
+ src/mm-broadband-modem-qmi.c |  61 +++++++++-
+ src/mm-sms-qmi.c             |  46 ++++++-
+ 6 files changed, 360 insertions(+), 9 deletions(-)
+ create mode 100644 libmm-glib/mm-sms-storage.c
+ create mode 100644 libmm-glib/mm-sms-storage.h
+
+diff --git a/libmm-glib/meson.build b/libmm-glib/meson.build
+index de668dab..dca23ec6 100644
+--- a/libmm-glib/meson.build
++++ b/libmm-glib/meson.build
+@@ -61,6 +61,7 @@ headers = files(
+   'mm-sms.h',
+   'mm-sms-properties.h',
+   'mm-unlock-retries.h',
++  'mm-sms-storage.h',
+ )
+ 
+ install_headers(
+@@ -123,9 +124,10 @@ sources = files(
+   'mm-sms.c',
+   'mm-sms-properties.c',
+   'mm-unlock-retries.c',
++  'mm-sms-storage.c',
+ )
+-
+-deps = [include_dep]
++glib_json_dp = dependency('json-glib-1.0', version: '>= 1.0')
++deps = [include_dep,glib_json_dp]
+ 
+ libname = 'mm-glib'
+ 
+diff --git a/libmm-glib/mm-sms-storage.c b/libmm-glib/mm-sms-storage.c
+new file mode 100644
+index 00000000..77c2c7f7
+--- /dev/null
++++ b/libmm-glib/mm-sms-storage.c
+@@ -0,0 +1,229 @@
++/* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
++/*
++ * SPDX-License-Identifier:  LGPL-2.0
++ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++
++#include <ctype.h>
++#include <string.h>
++
++#include <glib.h>
++
++#include <ModemManager.h>
++#define _LIBMM_INSIDE_MM
++#include <libmm-glib.h>
++#include <gdbm.h>
++#include "json-glib/json-glib.h"
++#include "mm-common-helpers.h"
++#include "mm-sms-storage.h"
++
++static gchar *dbname = "/etc/ModemManager/smsDb.json";
++
++/** Store message in local storage in "pdu,state" format*/
++gboolean
++mm_sms_storage_store_message(gchar *pdu, MMSmsState state, guint32 *idx, GError **error)
++{
++    JsonParser *parser = json_parser_new ();
++    GError *err = NULL;
++    guint msg_ref = 0;
++    JsonNode *root;
++    JsonObject *root_object;
++    JsonReader *reader = NULL;
++    gboolean no_data = TRUE;
++    if (!json_parser_load_from_file(parser, dbname, &err)) {
++        if (err->code != G_FILE_ERROR_NOENT) {
++            g_object_unref (parser);
++            g_set_error (err,
++                         MM_CORE_ERROR,
++                         MM_CORE_ERROR_FAILED,
++                         "Unable to open JSON file");
++            *error = err;
++            return FALSE;
++        }
++        g_error_free(err);
++        err = NULL;
++    } else {
++        root = json_parser_get_root (parser);
++        if( JSON_NODE_TYPE(root) == JSON_NODE_OBJECT) {
++            no_data = FALSE;
++            reader = json_reader_new (root);
++            root_object = json_node_get_object(root);
++            if(json_reader_read_member (reader, "msg_ref")) {
++              msg_ref = json_reader_get_int_value (reader);
++            }
++            json_reader_end_member (reader);
++        }
++    }
++
++    if (no_data) {
++        root = json_node_new(JSON_NODE_OBJECT);
++        root_object = json_object_new();
++    }
++    msg_ref++;
++
++    json_object_set_int_member(root_object, "msg_ref", msg_ref);
++    JsonObject *object = json_object_new();
++    json_object_set_string_member(object, "pdu", pdu);
++    json_object_set_int_member(object, "state", state);
++    json_object_set_object_member (root_object, g_strdup_printf ("%u", msg_ref), object);
++    json_node_take_object(root, root_object);
++
++    JsonGenerator *generator = json_generator_new();
++    json_generator_set_root(generator, root);
++
++    // Write the data to JSON
++    if (!json_generator_to_file(generator, dbname, err)) {
++        g_set_error (err,
++                     MM_CORE_ERROR,
++                     MM_CORE_ERROR_FAILED,
++                     "DB write operation failed");
++        *error = err;
++        g_object_unref (parser);
++        if (reader)
++            g_object_unref (reader);
++        if (no_data)
++            json_node_unref (root);
++        return FALSE;
++    }
++
++    g_object_unref (parser);
++    if (reader)
++        g_object_unref (reader);
++    if (no_data)
++        json_node_unref (root);
++    *idx = msg_ref;
++    return TRUE;
++}
++
++/* Delete a message of given index from the storage */
++gboolean
++mm_sms_storage_delete_message (guint index, GError **error)
++{
++
++    JsonParser *parser = json_parser_new ();
++    JsonNode *root;
++    JsonObject *root_object;
++    JsonReader *reader;
++
++    if (!json_parser_load_from_file(parser, dbname, error)) {
++        g_set_error (error,
++                     MM_CORE_ERROR,
++                     MM_CORE_ERROR_FAILED,
++                     "Unable to open JSON file");
++        g_object_unref (parser);
++        return FALSE;
++    }
++    root = json_parser_get_root (parser);
++    if( JSON_NODE_TYPE(root) == JSON_NODE_OBJECT) {
++        reader = json_reader_new (root);
++        root_object = json_node_get_object(root);
++    } else {
++        g_set_error (error,
++                     MM_CORE_ERROR,
++                     MM_CORE_ERROR_FAILED,
++                     "No messages present in the DB");
++        g_object_unref (parser);
++        return FALSE;
++    }
++
++    //Delete message
++    json_object_remove_member (root_object, g_strdup_printf ("%u", index));
++    JsonGenerator *generator = json_generator_new();
++    json_generator_set_root(generator, root);
++
++    // Write the data to JSON
++    if (!json_generator_to_file(generator, dbname, error)) {
++        g_set_error (error,
++                     MM_CORE_ERROR,
++                     MM_CORE_ERROR_FAILED,
++                     "DB write operation failed");
++        return FALSE;
++    }
++
++    g_object_unref (parser);
++    g_object_unref (reader);
++    return TRUE;
++
++}
++
++/* Read a message of given idex from stoarge */
++gboolean
++mm_sms_storage_read_message (guint index, gchar **pdu, MMSmsState *state, GError **error)
++{
++    JsonParser *parser = json_parser_new ();
++    JsonNode *root;
++    JsonObject *root_object;
++    JsonReader *reader;
++
++    if (!json_parser_load_from_file(parser, dbname, error)) {
++        g_set_error (error,
++                     MM_CORE_ERROR,
++                     MM_CORE_ERROR_FAILED,
++                     "Unable to open JSON file");
++        g_object_unref (parser);
++        return FALSE;
++    }
++    root = json_parser_get_root (parser);
++    if( JSON_NODE_TYPE(root) == JSON_NODE_OBJECT) {
++        reader = json_reader_new (root);
++        root_object = json_node_get_object(root);
++    } else {
++        g_set_error (error,
++                     MM_CORE_ERROR,
++                     MM_CORE_ERROR_FAILED,
++                     "No messages present in the DB");
++        g_object_unref (parser);
++        return FALSE;
++    }
++    JsonNode *node = json_object_get_member (root_object, g_strdup_printf ("%u", index));
++    if (node) {
++        JsonObject *obj = json_node_get_object (node);
++        *pdu = g_strdup(json_object_get_string_member (obj, "pdu"));
++        *state = json_object_get_int_member (obj, "state");
++    }
++    g_object_unref (parser);
++    g_object_unref (reader);
++    return TRUE;
++}
++
++/* Return all valid indexces */
++GList *
++mm_sms_storage_read_all_indexces (GError **error)
++{
++    JsonParser *parser = json_parser_new ();
++    JsonNode *root;
++    JsonObject *root_object;
++    JsonReader *reader;
++    GList *list = NULL;
++    gulong msg_ref;
++    if (!json_parser_load_from_file(parser, dbname, error)) {
++        g_set_error (error,
++                     MM_CORE_ERROR,
++                     MM_CORE_ERROR_FAILED,
++                     "Unable to open JSON file");
++        g_object_unref (parser);
++        return NULL;
++    }
++    root = json_parser_get_root (parser);
++    if( JSON_NODE_TYPE(root) == JSON_NODE_OBJECT) {
++        reader = json_reader_new (root);
++        root_object = json_node_get_object(root);
++    } else {
++        g_set_error (error,
++                     MM_CORE_ERROR,
++                     MM_CORE_ERROR_FAILED,
++                     "No messages present in the DB");
++        g_object_unref (parser);
++        return NULL;
++    }
++    GList *memberNames = json_object_get_members(root_object);
++    GList *iter;
++    for (iter = memberNames; iter != NULL; iter = iter->next) {
++        const gchar *memberName = (const gchar *)iter->data;
++        msg_ref = g_ascii_strtoll (memberName, NULL, 10);
++        list = g_list_append (list, msg_ref);
++    }
++    g_object_unref (parser);
++    g_object_unref (reader);
++    return list;
++}
+diff --git a/libmm-glib/mm-sms-storage.h b/libmm-glib/mm-sms-storage.h
+new file mode 100644
+index 00000000..fd50e936
+--- /dev/null
++++ b/libmm-glib/mm-sms-storage.h
+@@ -0,0 +1,26 @@
++/* -*- Mode: C; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- */
++/*
++ * SPDX-License-Identifier:  LGPL-2.0
++ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++
++#ifndef MM_SMS_STORAGE_H
++#define MM_SMS_STORAGE_H
++
++#include <glib.h>
++#include <ModemManager.h>
++
++gboolean
++mm_sms_storage_store_message(gchar *pdu,
++                             MMSmsState state, guint32 *idx, GError **error);
++gboolean
++mm_sms_storage_delete_message (guint index, GError **error);
++gboolean
++mm_sms_storage_read_message (guint index,
++                             gchar **pdu, MMSmsState *state, GError **error);
++GList *
++mm_sms_storage_read_all_indexces (GError **error);
++
++
++
++#endif /* MM_SMS_STORAGE_H */
+diff --git a/meson.build b/meson.build
+index cebbf81f..cbc825b6 100644
+--- a/meson.build
++++ b/meson.build
+@@ -143,7 +143,6 @@ glib_version = '2.56'
+ gio_unix_dep = dependency('gio-unix-2.0')
+ glib_dep = dependency('glib-2.0', version: '>= ' + glib_version)
+ gmodule_dep = dependency('gmodule-2.0')
+-
+ deps = [
+   glib_dep,
+   dependency('gio-2.0'),
+diff --git a/src/mm-broadband-modem-qmi.c b/src/mm-broadband-modem-qmi.c
+index 239834bd..87b66456 100644
+--- a/src/mm-broadband-modem-qmi.c
++++ b/src/mm-broadband-modem-qmi.c
+@@ -52,6 +52,7 @@
+ #include "mm-sms-part-cdma.h"
+ #include "mm-call-qmi.h"
+ #include "mm-call-list.h"
++#include "mm-sms-storage.h"
+ 
+ static void iface_modem_init (MMIfaceModem *iface);
+ static void iface_modem_3gpp_init (MMIfaceModem3gpp *iface);
+@@ -7404,6 +7405,8 @@ messaging_load_supported_storages_finish (MMIfaceModemMessaging *_self,
+     }
+     supported = MM_SMS_STORAGE_ME;
+     g_array_append_val (*mem1, supported);
++    supported = MM_SMS_STORAGE_TA;
++    g_array_append_val (*mem1, supported);
+     *mem2 = g_array_ref (*mem1);
+     *mem3 = g_array_ref (*mem1);
+     return TRUE;
+@@ -7827,6 +7830,48 @@ wms_list_messages_ready (QmiClientWms *client,
+     read_next_sms_part (task);
+ }
+ 
++static void
++load_messages_from_local_storage (GTask *task)
++{
++    MMBroadbandModemQmi *self;
++    LoadInitialSmsPartsContext *ctx;
++    GList *indexs, *l;
++    GError *error = NULL;
++    gchar *pdu;
++    MMSmsState state;
++
++    self = g_task_get_source_object (task);
++    ctx = g_task_get_task_data (task);
++    mm_obj_dbg (self, "load_messages_from_local_storage");
++    /* read all indexes from storage */
++    indexs = mm_sms_storage_read_all_indexces (&error);
++
++    for (l = indexs; l; l = g_list_next (l))
++    {
++        if (mm_sms_storage_read_message (l->data, &pdu, &state, &error)) {
++
++            MMSmsPart *part;
++            part = mm_sms_part_3gpp_new_from_pdu (l->data, pdu, self, &error);
++            if (part) {
++                mm_obj_dbg (self, "correctly parsed PDU (%d)", l->data);
++                mm_iface_modem_messaging_take_part (MM_IFACE_MODEM_MESSAGING (self),
++                                                    part,
++                                                    state != MM_SMS_STATE_UNKNOWN? 
++                                                    state: MM_SMS_STATE_STORED,
++                                                    ctx->storage);
++            } else {
++                /* Don't treat the error as critical */
++                mm_obj_dbg (self, "error parsing PDU (%d): %s", l->data, error->message);
++                g_clear_error (&error);
++            }
++        } else {
++            mm_obj_warn (self, "Failed to read the messages");
++        }
++   }
++
++   g_task_return_boolean (task, TRUE);
++}
++
+ static void
+ load_initial_sms_parts_step (GTask *task)
+ {
+@@ -7991,19 +8036,25 @@ load_initial_sms_parts (MMIfaceModemMessaging *_self,
+         return iface_modem_messaging_parent->load_initial_sms_parts (_self, storage, callback, user_data);
+     }
+ 
++    ctx = g_slice_new0 (LoadInitialSmsPartsContext);
++    ctx->storage = storage;
++
++    task = g_task_new (self, NULL, callback, user_data);
++    g_task_set_task_data (task, ctx, (GDestroyNotify)load_initial_sms_parts_context_free);
++
++    if (ctx->storage == MM_SMS_STORAGE_TA) {
++        load_messages_from_local_storage(task);
++        return;
++    }
++
+     if (!mm_shared_qmi_ensure_client (MM_SHARED_QMI (self),
+                                       QMI_SERVICE_WMS, &client,
+                                       callback, user_data))
+         return;
+ 
+-    ctx = g_slice_new0 (LoadInitialSmsPartsContext);
+     ctx->client = QMI_CLIENT_WMS (g_object_ref (client));
+-    ctx->storage = storage;
+     ctx->step = LOAD_INITIAL_SMS_PARTS_STEP_FIRST;
+ 
+-    task = g_task_new (self, NULL, callback, user_data);
+-    g_task_set_task_data (task, ctx, (GDestroyNotify)load_initial_sms_parts_context_free);
+-
+     load_initial_sms_parts_step (task);
+ }
+ 
+diff --git a/src/mm-sms-qmi.c b/src/mm-sms-qmi.c
+index 3db0512e..d12f3c58 100644
+--- a/src/mm-sms-qmi.c
++++ b/src/mm-sms-qmi.c
+@@ -33,6 +33,7 @@
+ #include "mm-sms-part-3gpp.h"
+ #include "mm-sms-part-cdma.h"
+ #include "mm-log-object.h"
++#include "mm-sms-storage.h"
+ 
+ G_DEFINE_TYPE (MMSmsQmi, mm_sms_qmi, MM_TYPE_BASE_SMS)
+ 
+@@ -232,6 +233,33 @@ sms_store_next_part (GTask *task)
+         return;
+     }
+ 
++    /* Save the message in local data base */
++    if(ctx->storage == MM_SMS_STORAGE_TA) {
++        guint32 idx;
++        gchar *hex;
++        GError *error = NULL;
++        mm_obj_dbg (self, "sms_store_next_part, storing in TA");
++        hex = mm_utils_bin2hexstr (pdu, pdulen);
++        MMSmsState state = mm_gdbus_sms_get_state (MM_GDBUS_SMS (self));
++        if (!mm_sms_storage_store_message(hex, state, &idx, &error)) {
++            g_task_return_error (task, error);
++            g_object_unref (task);
++            g_free (hex);
++            return;
++        } else {
++            GList *parts;
++            /* Set the index in the part we hold */
++            parts = mm_base_sms_get_parts (self);
++            mm_sms_part_set_index ((MMSmsPart *)parts->data, (guint)idx);
++
++            /* Go on with next one */
++            ctx->current = g_list_next (ctx->current);
++            g_free (hex);
++            sms_store_next_part (task);
++            return;
++        }
++    }
++
+     /* Convert to GArray */
+     array = g_array_append_vals (g_array_sized_new (FALSE, FALSE, sizeof (guint8), pdulen),
+                                  pdu,
+@@ -617,7 +645,8 @@ sms_send (MMBaseSms *self,
+                   NULL);
+ 
+     /* If the SMS is STORED, try to send from storage */
+-    ctx->from_storage = (mm_base_sms_get_storage (self) != MM_SMS_STORAGE_UNKNOWN);
++    ctx->from_storage = ((mm_base_sms_get_storage (self) != MM_SMS_STORAGE_UNKNOWN) &&
++                         (mm_base_sms_get_storage (self) != MM_SMS_STORAGE_TA));
+ 
+     ctx->current = mm_base_sms_get_parts (self);
+ 
+@@ -729,6 +758,21 @@ delete_next_part (GTask *task)
+         return;
+     }
+ 
++    /* If the storage is TA delete the message from local storage */
++    if (mm_base_sms_get_storage (self) == MM_SMS_STORAGE_TA) {
++        GError *error = NULL;
++        mm_obj_dbg (self, "delete_next_part, deleteing in TA");
++        if(!mm_sms_storage_delete_message (
++                (guint32)mm_sms_part_get_index ((MMSmsPart *)ctx->current->data), error))
++            ctx->n_failed++;
++        /* We reset the index, as there is no longer that part */
++        mm_sms_part_set_index ((MMSmsPart *)ctx->current->data, SMS_PART_INVALID_INDEX);
++
++        ctx->current = g_list_next (ctx->current);
++        delete_next_part (task);
++        return;
++    }
++
+     input = qmi_message_wms_delete_input_new ();
+     qmi_message_wms_delete_input_set_memory_storage (
+         input,
+-- 
+2.25.1
+

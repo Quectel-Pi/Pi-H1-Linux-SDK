@@ -1,0 +1,325 @@
+From 8abbc61f8fde88dd93244765d80bff26c5816387 Mon Sep 17 00:00:00 2001
+From: Damodar Reddy GangiReddy <quic_dgangire@quicinc.com>
+Date: Fri, 13 Dec 2024 12:20:44 +0530
+Subject: [PATCH BlueZ v1] obexd: Add system bus support for obexd
+
+Currently obexd uses session bus.
+Distros  where session bus is not supported and still obex profiles
+are required in that case use system bus instead of session bus
+which can be configured at run time.
+
+An Command line option has been added to achieve it.
+{ "system-bus", 's', 0, G_OPTION_ARG_NONE, &option_system_bus,
+"Use System bus "}
+
+we can use option obexd -s to use system bus.
+
+Signed-off-by: Damodar Reddy GangiReddy <quic_dgangire@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/bluetooth/bluez.git/commit/?id=002ee180b1b5c17989e197ee0b77cdcac5a5ef6e]
+---
+ Makefile.am             |  6 +++++-
+ obexd/client/ftp.c      |  3 ++-
+ obexd/client/map.c      |  3 ++-
+ obexd/client/opp.c      |  3 ++-
+ obexd/client/pbap.c     |  3 ++-
+ obexd/client/session.c  |  3 ++-
+ obexd/client/sync.c     |  3 ++-
+ obexd/plugins/pcsuite.c |  2 +-
+ obexd/src/main.c        | 26 ++++++++++++++++++++++++++
+ obexd/src/manager.c     |  2 +-
+ obexd/src/obex.conf     | 28 ++++++++++++++++++++++++++++
+ obexd/src/obexd.h       |  5 +++++
+ 12 files changed, 78 insertions(+), 9 deletions(-)
+ create mode 100644 obexd/src/obex.conf
+
+diff --git a/Makefile.am b/Makefile.am
+index e738eb3a5..afc4270e1 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -35,6 +35,10 @@ if DATAFILES
+ dbusdir = $(DBUS_CONFDIR)/dbus-1/system.d
+ dbus_DATA = src/bluetooth.conf
+ 
++if OBEX
++dbus_DATA += obexd/src/obex.conf
++endif
++
+ conf_DATA =
+ state_DATA =
+ endif
+@@ -423,7 +427,7 @@ manual_pages += doc/org.bluez.obex.Client.5 doc/org.bluez.obex.Session.5 \
+ 
+ EXTRA_DIST += src/genbuiltin src/bluetooth.conf \
+ 			src/main.conf profiles/network/network.conf \
+-			profiles/input/input.conf
++			profiles/input/input.conf obexd/src/obex.conf
+ 
+ test_scripts =
+ unit_tests =
+diff --git a/obexd/client/ftp.c b/obexd/client/ftp.c
+index 160e0636a..b61f5bb87 100644
+--- a/obexd/client/ftp.c
++++ b/obexd/client/ftp.c
+@@ -19,6 +19,7 @@
+ #include "gdbus/gdbus.h"
+ 
+ #include "obexd/src/log.h"
++#include "obexd/src/obexd.h"
+ #include "transfer.h"
+ #include "session.h"
+ #include "driver.h"
+@@ -463,7 +464,7 @@ int ftp_init(void)
+ 
+ 	DBG("");
+ 
+-	conn = dbus_bus_get(DBUS_BUS_SESSION, NULL);
++	conn = obex_get_dbus_connection();
+ 	if (!conn)
+ 		return -EIO;
+ 
+diff --git a/obexd/client/map.c b/obexd/client/map.c
+index 74828cddb..24a41bb70 100644
+--- a/obexd/client/map.c
++++ b/obexd/client/map.c
+@@ -27,6 +27,7 @@
+ #include "gdbus/gdbus.h"
+ 
+ #include "obexd/src/log.h"
++#include "obexd/src/obexd.h"
+ #include "obexd/src/map_ap.h"
+ #include "map-event.h"
+ 
+@@ -2063,7 +2064,7 @@ int map_init(void)
+ 
+ 	DBG("");
+ 
+-	conn = dbus_bus_get(DBUS_BUS_SESSION, NULL);
++	conn = obex_get_dbus_connection();
+ 	if (!conn)
+ 		return -EIO;
+ 
+diff --git a/obexd/client/opp.c b/obexd/client/opp.c
+index 90d0c0c8e..c22e919ba 100644
+--- a/obexd/client/opp.c
++++ b/obexd/client/opp.c
+@@ -17,6 +17,7 @@
+ #include "gdbus/gdbus.h"
+ 
+ #include "obexd/src/log.h"
++#include "obexd/src/obexd.h"
+ 
+ #include "transfer.h"
+ #include "session.h"
+@@ -178,7 +179,7 @@ int opp_init(void)
+ 
+ 	DBG("");
+ 
+-	conn = dbus_bus_get(DBUS_BUS_SESSION, NULL);
++	conn = obex_get_dbus_connection();
+ 	if (!conn)
+ 		return -EIO;
+ 
+diff --git a/obexd/client/pbap.c b/obexd/client/pbap.c
+index 2d2aa9508..bc3fdcf9f 100644
+--- a/obexd/client/pbap.c
++++ b/obexd/client/pbap.c
+@@ -27,6 +27,7 @@
+ #include "gdbus/gdbus.h"
+ 
+ #include "obexd/src/log.h"
++#include "obexd/src/obexd.h"
+ 
+ #include "transfer.h"
+ #include "session.h"
+@@ -1303,7 +1304,7 @@ int pbap_init(void)
+ 
+ 	DBG("");
+ 
+-	conn = dbus_bus_get(DBUS_BUS_SESSION, NULL);
++	conn = obex_get_dbus_connection();
+ 	if (!conn)
+ 		return -EIO;
+ 
+diff --git a/obexd/client/session.c b/obexd/client/session.c
+index 7d8ebb04e..3eb8d44f1 100644
+--- a/obexd/client/session.c
++++ b/obexd/client/session.c
+@@ -27,6 +27,7 @@
+ #include "gobex/gobex.h"
+ 
+ #include "obexd/src/log.h"
++#include "obexd/src/obexd.h"
+ #include "transfer.h"
+ #include "session.h"
+ #include "driver.h"
+@@ -583,7 +584,7 @@ struct obc_session *obc_session_create(const char *source,
+ 	if (driver == NULL)
+ 		return NULL;
+ 
+-	conn = dbus_bus_get(DBUS_BUS_SESSION, NULL);
++	conn = obex_get_dbus_connection();
+ 	if (conn == NULL)
+ 		return NULL;
+ 
+diff --git a/obexd/client/sync.c b/obexd/client/sync.c
+index 92faf4434..fe70b9135 100644
+--- a/obexd/client/sync.c
++++ b/obexd/client/sync.c
+@@ -21,6 +21,7 @@
+ #include "gdbus/gdbus.h"
+ 
+ #include "obexd/src/log.h"
++#include "obexd/src/obexd.h"
+ 
+ #include "transfer.h"
+ #include "session.h"
+@@ -224,7 +225,7 @@ int sync_init(void)
+ 
+ 	DBG("");
+ 
+-	conn = dbus_bus_get(DBUS_BUS_SESSION, NULL);
++	conn = obex_get_dbus_connection();
+ 	if (!conn)
+ 		return -EIO;
+ 
+diff --git a/obexd/plugins/pcsuite.c b/obexd/plugins/pcsuite.c
+index f5a9d9ae8..50ba53fef 100644
+--- a/obexd/plugins/pcsuite.c
++++ b/obexd/plugins/pcsuite.c
+@@ -322,7 +322,7 @@ static gboolean send_backup_dbus_message(const char *oper,
+ 
+ 	file_size = size ? *size : 0;
+ 
+-	conn = g_dbus_setup_bus(DBUS_BUS_SESSION, NULL, NULL);
++	conn = obex_setup_dbus_connection(NULL, NULL);
+ 
+ 	if (conn == NULL)
+ 		return FALSE;
+diff --git a/obexd/src/main.c b/obexd/src/main.c
+index d950883f0..450809e3e 100644
+--- a/obexd/src/main.c
++++ b/obexd/src/main.c
+@@ -41,6 +41,8 @@
+ #define DEFAULT_CAP_FILE CONFIGDIR "/capability.xml"
+ 
+ static GMainLoop *main_loop = NULL;
++static DBusConnection *connection;
++
+ 
+ static gboolean signal_handler(GIOChannel *channel, GIOCondition cond,
+ 							gpointer user_data)
+@@ -126,6 +128,7 @@ static char *option_noplugin = NULL;
+ 
+ static gboolean option_autoaccept = FALSE;
+ static gboolean option_symlinks = FALSE;
++static gboolean option_system_bus = FALSE;
+ 
+ static gboolean parse_debug(const char *key, const char *value,
+ 				gpointer user_data, GError **error)
+@@ -164,6 +167,8 @@ static GOptionEntry options[] = {
+ 				"scripts", "FILE" },
+ 	{ "auto-accept", 'a', 0, G_OPTION_ARG_NONE, &option_autoaccept,
+ 				"Automatically accept push requests" },
++	{ "system-bus", 's', 0, G_OPTION_ARG_NONE, &option_system_bus,
++				"Use System bus "},
+ 	{ NULL },
+ };
+ 
+@@ -227,6 +232,27 @@ static gboolean root_folder_setup(char *root, char *root_setup)
+ 	return is_dir(root);
+ }
+ 
++DBusConnection *obex_get_dbus_connection(void)
++{
++	if (connection)
++		return dbus_connection_ref(connection);
++
++	connection = dbus_bus_get(option_system_bus ?
++				DBUS_BUS_SYSTEM : DBUS_BUS_SESSION, NULL);
++
++	return connection;
++}
++
++DBusConnection *obex_setup_dbus_connection(const char *name,
++					DBusError *error)
++{
++	connection = g_dbus_setup_bus(option_system_bus ?
++				DBUS_BUS_SYSTEM : DBUS_BUS_SESSION,
++				name, error);
++
++	return connection;
++}
++
+ int main(int argc, char *argv[])
+ {
+ 	GOptionContext *context;
+diff --git a/obexd/src/manager.c b/obexd/src/manager.c
+index 73fd6b9af..b5d6a3b74 100644
+--- a/obexd/src/manager.c
++++ b/obexd/src/manager.c
+@@ -488,7 +488,7 @@ gboolean manager_init(void)
+ 
+ 	dbus_error_init(&err);
+ 
+-	connection = g_dbus_setup_bus(DBUS_BUS_SESSION, OBEXD_SERVICE, &err);
++	connection = obex_setup_dbus_connection(OBEXD_SERVICE, &err);
+ 	if (connection == NULL) {
+ 		if (dbus_error_is_set(&err) == TRUE) {
+ 			fprintf(stderr, "%s\n", err.message);
+diff --git a/obexd/src/obex.conf b/obexd/src/obex.conf
+new file mode 100644
+index 000000000..114bdb882
+--- /dev/null
++++ b/obexd/src/obex.conf
+@@ -0,0 +1,28 @@
++<!-- This configuration file specifies the required security policies
++     for Bluetooth core daemon to work. -->
++
++<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-BUS Bus Configuration 1.0//EN"
++ "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
++<busconfig>
++
++  <!-- ../system.conf have denied everything, so we just punch some holes -->
++
++  <policy user="root">
++    <allow own="org.bluez.obex"/>
++    <allow send_destination="org.bluez.obex"/>
++    <allow send_interface="org.bluez.obex.Agent1"/>
++    <allow send_interface="org.bluez.obex.Client1"/>
++    <allow send_interface="org.bluez.obex.Session1"/>
++    <allow send_interface="org.bluez.obex.Transfer1"/>
++    <allow send_interface="org.bluez.obex.ObjectPush1"/>
++    <allow send_interface="org.bluez.obex.PhonebookAccess1"/>
++    <allow send_interface="org.bluez.obex.Synchronization1"/>
++    <allow send_interface="org.bluez.obex.MessageAccess1"/>
++    <allow send_interface="org.bluez.obex.Message1"/>
++  </policy>
++
++  <policy context="default">
++    <allow send_destination="org.bluez.obex"/>
++  </policy>
++
++</busconfig>
+diff --git a/obexd/src/obexd.h b/obexd/src/obexd.h
+index fe312a65b..192641483 100644
+--- a/obexd/src/obexd.h
++++ b/obexd/src/obexd.h
+@@ -8,6 +8,8 @@
+  *
+  */
+ 
++#include <dbus/dbus.h>
++
+ #define OBEX_OPP	(1 << 1)
+ #define OBEX_FTP	(1 << 2)
+ #define OBEX_BIP	(1 << 3)
+@@ -28,3 +30,6 @@ gboolean obex_option_auto_accept(void);
+ const char *obex_option_root_folder(void);
+ gboolean obex_option_symlinks(void);
+ const char *obex_option_capability(void);
++DBusConnection *obex_get_dbus_connection(void);
++DBusConnection *obex_setup_dbus_connection(const char *name,
++					DBusError *error);
+-- 
+2.34.1
+

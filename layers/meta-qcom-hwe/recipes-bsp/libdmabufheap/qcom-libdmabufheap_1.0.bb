@@ -8,11 +8,12 @@ DEPENDS:qcom-custom-bsp += "linux-kernel-qcom-headers"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/system/memory/libdmabufheap.git;protocol=https"
 SRCBRANCH  = "memory-le-apps.lnx.1.0.r35-rel"
-SRCREV     = "37bf33001a41b66676d6d1883982f0b14583fc02"
+SRCREV     = "42ee7943f7ea71588dea3a507fd0e13b7230e472"
 
 SRC_URI   = " \
              ${SRCPROJECT};branch=${SRCBRANCH};destsuffix=system/memory/libdmabufheap \
              file://kmem.rules \
+             file://0001-libdmabufheap-Update-generated-libs-version.patch \
              "
 
 S = "${WORKDIR}/system/memory/libdmabufheap"

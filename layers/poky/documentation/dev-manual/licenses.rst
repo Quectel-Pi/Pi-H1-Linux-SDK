@@ -123,6 +123,13 @@ name and version (after variable expansion)::
 
    LICENSE_FLAGS = "license_${PN}_${PV}"
 
+It is possible to give more details about a specific license
+using flags on the :term:`LICENSE_FLAGS_DETAILS` variable::
+
+   LICENSE_FLAGS_DETAILS[my-eula-license] = "For further details, see https://example.com/eula."
+
+If set, this will be displayed to the user if the license hasn't been accepted.
+
 In order for a component restricted by a
 :term:`LICENSE_FLAGS` definition to be enabled and included in an image, it
 needs to have a matching entry in the global
@@ -294,8 +301,6 @@ to be covered by assuming that there are three main areas of concern:
 -  Compilation scripts and modifications to the source code must be
    provided.
 
--  spdx files can be provided.
-
 There are other requirements beyond the scope of these three and the
 methods described in this section (e.g. the mechanism through which
 source code is distributed).
@@ -327,7 +332,7 @@ completeness.
 
    The Yocto Project generates a license manifest during image creation
    that is located in
-   ``${DEPLOY_DIR}/licenses/<image-name>-<machine>.rootfs-<datestamp>/``
+   ``${DEPLOY_DIR}/licenses/${SSTATE_PKGARCH}/<image-name>-<machine>.rootfs-<datestamp>/``
    to assist with any audits.
 
 Providing the Source Code
@@ -405,7 +410,7 @@ achieving compliance with section 3a of GPLv2 and with section 6 of
 GPLv3.
 
 Providing License Text
-~~~~~~~~~~~~~~~~~~~~~~
+----------------------
 
 One requirement that is often overlooked is inclusion of license text.
 This requirement also needs to be dealt with prior to generating the
@@ -473,12 +478,12 @@ example:
    # clean up the .git repos
    $ find . -name ".git" -type d -exec rm -rf {} \;
 
-One
-thing a development organization might want to consider for end-user
-convenience is to modify ``meta-poky/conf/bblayers.conf.sample`` to
-ensure that when the end user utilizes the released build system to
-build an image, the development organization's layers are included in
-the ``bblayers.conf`` file automatically::
+One thing a development organization might want to consider for end-user
+convenience is to modify
+``meta-poky/conf/templates/default/bblayers.conf.sample`` to ensure that when
+the end user utilizes the released build system to build an image, the
+development organization's layers are included in the ``bblayers.conf`` file
+automatically::
 
    # POKY_BBLAYERS_CONF_VERSION is increased each time build/conf/bblayers.conf
    # changes incompatibly

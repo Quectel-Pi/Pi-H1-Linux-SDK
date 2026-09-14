@@ -5,21 +5,19 @@ DESCRIPTION = "Installs  kernel headers required to build userspace. \
 These headers are installed in ${includedir}/linux-kernel-qcom path."
 
 LICENSE = "GPLv2.0-with-linux-syscall-note"
-#LIC_FILES_CHKSUM = "file://COPYING;md5=6bc538ed5bd9a7fc9398086aedcd7e46"
-LIC_FILES_CHKSUM = "file://${WORKSPACE}/sources/quectel-src/kernel/qcom-6.6/COPYING;md5=6bc538ed5bd9a7fc9398086aedcd7e46"
+LIC_FILES_CHKSUM = "file://COPYING;md5=6bc538ed5bd9a7fc9398086aedcd7e46"
 
 inherit kernel-arch
 
 COMPATIBLE_MACHINE = "(qcom)"
 
-#SRCPROJECT = "git://git.codelinaro.org/clo/la/kernel/qcom.git;protocol=https"
-#SRCBRANCH  = "kernel.qclinux.1.0.r1-rel"
-#SRCREV     = "d3ed32bf7ee64db22653833d4c3d9a80dd76896d"
-#
-#SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=kernel"
-FILESPATH =+ "${WORKSPACE}/sources/quectel-src/kernel:"
-SRC_URI = "file://qcom-6.6"
-S = "${WORKDIR}/qcom-6.6"
+SRCPROJECT = "git://git.codelinaro.org/clo/la/kernel/qcom.git;protocol=https"
+SRCBRANCH  = "kernel.qclinux.1.0.r1-rel"
+SRCREV     = "de229c16e2aad78e054a222957219e8fda5bb335"
+
+SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=kernel"
+
+S = "${WORKDIR}/kernel"
 
 DEPENDS += "flex-native bison-native rsync-native"
 
@@ -70,4 +68,3 @@ python () {
     if ('qcom-base-bsp' in mach_overrides):
         raise bb.parse.SkipRecipe("linux-kernel-qcom-headers not compatible with qcom-base-bsp")
 }
-RDEPENDS:${PN}-dev = ""

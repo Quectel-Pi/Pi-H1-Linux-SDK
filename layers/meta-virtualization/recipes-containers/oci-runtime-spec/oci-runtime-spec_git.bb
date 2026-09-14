@@ -7,10 +7,10 @@ LIC_FILES_CHKSUM = "file://src/${PKG_NAME}/LICENSE;md5=b355a61a394a504dacde901c9
 SRCNAME = "runtime-spec"
 
 PKG_NAME = "github.com/opencontainers/${SRCNAME}"
-SRC_URI = "git://${PKG_NAME}.git;destsuffix=git/src/${PKG_NAME};branch=main;protocol=https"
+SRC_URI = "git://${PKG_NAME};destsuffix=git/src/${PKG_NAME};branch=main;protocol=https"
 
-SRCREV = "7ceeb8af52593e37d8ef28bd350f50044b7adf1d"
-PV = "v1.0.2+git${SRCPV}"
+SRCREV = "720792f25ae6e9ee6b1332db698f37659e69ce8d"
+PV = "v1.1.0-rc2+git"
 
 S = "${WORKDIR}/git"
 

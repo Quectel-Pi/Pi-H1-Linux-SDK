@@ -60,6 +60,8 @@ properties:
 
   vdda-pll-supply: true
 
+  vdda-aux-supply: true
+
   "#clock-cells":
     const: 1
     description:
@@ -89,6 +91,12 @@ properties:
       port@2:
         $ref: /schemas/graph.yaml#/properties/port
         description: Incoming endpoint from the DisplayPort controller
+
+  default-typec-orientation-reverse:
+    description:
+      Helps set Type-C reverse orientation if default Type-C orientation
+      is fixed for usb port and display port for combo phy.
+    type: boolean
 
 required:
   - compatible

@@ -1,0 +1,91 @@
+From 33164c889a759f4d4f2dc31244b9e2937cba854f Mon Sep 17 00:00:00 2001
+From: Yi Zhao <yi.zhao@windriver.com>
+Date: Thu, 4 Feb 2021 10:48:54 +0800
+Subject: [PATCH] policy/modules/system/systemd: systemd --user fixes
+
+Fixes:
+systemctl[277]: Failed to connect to bus: No medium found
+
+avc: denied { mknod } for  pid=297 comm="systemd" capability=27
+scontext=root:sysadm_r:sysadm_systemd_t
+tcontext=root:sysadm_r:sysadm_systemd_t tclass=capability permissive=0
+
+avc: denied { bpf } for pid=297 comm="systemd" capability=39
+scontext=root:sysadm_r:sysadm_systemd_t
+tcontext=root:sysadm_r:sysadm_systemd_t tclass=capability2 permissive=0
+
+avc: denied { sys_admin } for pid=297 comm="systemd" capability=21
+scontext=root:sysadm_r:sysadm_systemd_t
+tcontext=root:sysadm_r:sysadm_systemd_t tclass=capability permissive=0
+
+avc: denied { perfmon } for pid=297 comm="systemd" capability=38
+scontext=root:sysadm_r:sysadm_systemd_t
+tcontext=root:sysadm_r:sysadm_systemd_t tclass=capability2 permissive=0
+
+Upstream-Status: Inappropriate [embedded specific]
+
+Signed-off-by: Yi Zhao <yi.zhao@windriver.com>
+---
+ policy/modules/system/systemd.if    | 30 +++++++++++++++++++++++++++++
+ policy/modules/system/userdomain.if |  4 ++++
+ 2 files changed, 34 insertions(+)
+
+diff --git a/policy/modules/system/systemd.if b/policy/modules/system/systemd.if
+index 28f0ad089..d7219dc37 100644
+--- a/policy/modules/system/systemd.if
++++ b/policy/modules/system/systemd.if
+@@ -228,6 +228,36 @@ template(`systemd_role_template',`
+ 	')
+ ')
+ 
++######################################
++## <summary>
++##	Admin role for systemd --user
++## </summary>
++## <param name="prefix">
++##	<summary>
++##	Prefix for generated types
++##	</summary>
++## </param>
++## <param name="role">
++##	<summary>
++##	The admin role.
++##	</summary>
++## </param>
++## <param name="userdomain">
++##	<summary>
++##	The amdin domain for the role.
++##	</summary>
++## </param>
++#
++template(`systemd_admin_role_extra',`
++	gen_require(`
++		type $1_systemd_t;
++	')
++
++	allow $1_systemd_t $3:process noatsecure;
++	allow $1_systemd_t self:capability { mknod sys_admin };
++	allow $1_systemd_t self:capability2 { bpf perfmon };
++')
++
+ ######################################
+ ## <summary>
+ ##   Allow the specified domain to be started as a daemon by the
+diff --git a/policy/modules/system/userdomain.if b/policy/modules/system/userdomain.if
+index 088cb87b2..504747917 100644
+--- a/policy/modules/system/userdomain.if
++++ b/policy/modules/system/userdomain.if
+@@ -1464,6 +1464,10 @@ template(`userdom_admin_user_template',`
+ 	optional_policy(`
+ 		userhelper_exec($1_t)
+ 	')
++
++	optional_policy(`
++		systemd_admin_role_extra($1, $1_r, $1_t)
++	')
+ ')
+ 
+ ########################################
+-- 
+2.25.1
+

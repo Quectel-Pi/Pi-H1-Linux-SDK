@@ -1,4 +1,6 @@
 #
+# Copyright OpenEmbedded Contributors
+#
 # SPDX-License-Identifier: MIT
 #
 
@@ -21,7 +23,7 @@ class BuildhistoryDiffTests(BuildhistoryBase):
         pkgv = result.output.rstrip()
         result = runCmd("buildhistory-diff -p %s" % get_bb_var('BUILDHISTORY_DIR'))
         expected_endlines = [
-            "xcursor-transparent-theme-dev: RDEPENDS: removed \"xcursor-transparent-theme (['= %s-r1'])\", added \"xcursor-transparent-theme (['= %s-r0'])\"" % (pkgv, pkgv),
+            "xcursor-transparent-theme-dev: RRECOMMENDS: removed \"xcursor-transparent-theme (['= %s-r1'])\", added \"xcursor-transparent-theme (['= %s-r0'])\"" % (pkgv, pkgv),
             "xcursor-transparent-theme-staticdev: RDEPENDS: removed \"xcursor-transparent-theme-dev (['= %s-r1'])\", added \"xcursor-transparent-theme-dev (['= %s-r0'])\"" % (pkgv, pkgv)
         ]
         for line in result.output.splitlines():
@@ -34,18 +36,16 @@ class BuildhistoryDiffTests(BuildhistoryBase):
         if expected_endlines:
             self.fail('Missing expected line endings:\n  %s' % '\n  '.join(expected_endlines))
 
-class OEScriptTests(OESelftestTestCase):
-    scripts_dir = os.path.join(get_bb_var('COREBASE'), 'scripts')
-
 @unittest.skipUnless(importlib.util.find_spec("cairo"), "Python cairo module is not present")
-class OEPybootchartguyTests(OEScriptTests):
+class OEPybootchartguyTests(OESelftestTestCase):
 
     @classmethod
     def setUpClass(cls):
-        super(OEScriptTests, cls).setUpClass()
+        super().setUpClass()
         bitbake("core-image-minimal -c rootfs -f")
         cls.tmpdir = get_bb_var('TMPDIR')
         cls.buildstats = cls.tmpdir + "/buildstats/" + sorted(os.listdir(cls.tmpdir + "/buildstats"))[-1]
+        cls.scripts_dir = os.path.join(get_bb_var('COREBASE'), 'scripts')
 
     def test_pybootchartguy_help(self):
         runCmd('%s/pybootchartgui/pybootchartgui.py  --help' % self.scripts_dir)
@@ -63,7 +63,12 @@ class OEPybootchartguyTests(OEScriptTests):
         self.assertTrue(os.path.exists(self.tmpdir + "/charts.pdf"))
 
 
-class OEGitproxyTests(OEScriptTests):
+class OEGitproxyTests(OESelftestTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.scripts_dir = os.path.join(get_bb_var('COREBASE'), 'scripts')
 
     def test_oegitproxy_help(self):
         try:
@@ -121,10 +126,16 @@ class OEGitproxyTests(OEScriptTests):
 class OeRunNativeTest(OESelftestTestCase):
     def test_oe_run_native(self):
         bitbake("qemu-helper-native -c addto_recipe_sysroot")
-        result = runCmd("oe-run-native qemu-helper-native tunctl -h")
-        self.assertIn("Delete: tunctl -d device-name [-f tun-clone-device]", result.output)
+        result = runCmd("oe-run-native qemu-helper-native qemu-oe-bridge-helper --help")
+        self.assertIn("Helper function to find and exec qemu-bridge-helper", result.output)
 
-class OEListPackageconfigTests(OEScriptTests):
+class OEListPackageconfigTests(OESelftestTestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.scripts_dir = os.path.join(get_bb_var('COREBASE'), 'scripts')
+
     #oe-core.scripts.List_all_the_PACKAGECONFIG's_flags
     def check_endlines(self, results,  expected_endlines): 
         for line in results.output.splitlines():
@@ -146,7 +157,7 @@ class OEListPackageconfigTests(OEScriptTests):
         results = runCmd('%s/contrib/list-packageconfig-flags.py' % self.scripts_dir)
         expected_endlines = []
         expected_endlines.append("RECIPE NAME                  PACKAGECONFIG FLAGS")
-        expected_endlines.append("pinentry                     gtk2 libcap ncurses qt secret")
+        expected_endlines.append("pinentry                     gtk2 ncurses qt secret")
         expected_endlines.append("tar                          acl selinux")
 
         self.check_endlines(results, expected_endlines)
@@ -164,11 +175,10 @@ class OEListPackageconfigTests(OEScriptTests):
     def test_packageconfig_flags_option_all(self):
         results = runCmd('%s/contrib/list-packageconfig-flags.py -a' % self.scripts_dir)
         expected_endlines = []
-        expected_endlines.append("pinentry-1.2.0")
-        expected_endlines.append("PACKAGECONFIG ncurses libcap")
+        expected_endlines.append("pinentry-1.2.1")
+        expected_endlines.append("PACKAGECONFIG ncurses")
         expected_endlines.append("PACKAGECONFIG[qt] --enable-pinentry-qt, --disable-pinentry-qt, qtbase-native qtbase")
         expected_endlines.append("PACKAGECONFIG[gtk2] --enable-pinentry-gtk2, --disable-pinentry-gtk2, gtk+ glib-2.0")
-        expected_endlines.append("PACKAGECONFIG[libcap] --with-libcap, --without-libcap, libcap")
         expected_endlines.append("PACKAGECONFIG[ncurses] --enable-ncurses  --with-ncurses-include-dir=${STAGING_INCDIR}, --disable-ncurses, ncurses")
         expected_endlines.append("PACKAGECONFIG[secret] --enable-libsecret, --disable-libsecret, libsecret")
 
@@ -178,7 +188,7 @@ class OEListPackageconfigTests(OEScriptTests):
         results = runCmd('%s/contrib/list-packageconfig-flags.py -p' % self.scripts_dir)
         expected_endlines = []
         expected_endlines.append("RECIPE NAME                  PACKAGECONFIG FLAGS")
-        expected_endlines.append("pinentry                     gtk2 libcap ncurses qt secret")
+        expected_endlines.append("pinentry                     gtk2 ncurses qt secret")
 
         self.check_endlines(results, expected_endlines)
 

@@ -1,0 +1,50 @@
+From e84a74dfa419d18901715d1ebe9394baff0d42c1 Mon Sep 17 00:00:00 2001
+From: Yongxing Mou <quic_yongmou@quicinc.com>
+Date: Tue, 11 Feb 2025 15:42:12 +0800
+Subject: [PATCH 145/146] FROMLIST: drm/msm/dp: Populate the max_streams for
+ qcs8300 mst controller
+
+Add support to program 2 streams MST for qcs8300. Previously, the
+qcs8300 reused the driver of the sm8650's DP controller because they
+have the same base address, offset, and number of controllers. However,
+now we need to enable the MST feature for the qcs8300, so we need a new
+patch The qcs8300 use the same DPU hardware as sa8775p but only have one
+DPU and dp controller which supports 4 streams MST, but currently we only
+enable 2 streams MST. It use the intf0 and intf3 to output the data
+streams of MST0 and MST1.
+
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250212-mst_qcs8300-v1-3-38a8aa08394b@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 856e9fff7a25..528c0a1e9b4a 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -150,6 +150,13 @@ static const unsigned int stream_intf_map_sa_8775p[][DP_STREAM_MAX] = {
+ 	{}
+ };
+ 
++static const struct msm_dp_desc msm_dp_desc_qcs8300[] = {
++	{ .io_start = 0x0af54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true, .max_streams = 2,
++	  .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_0],
++	},
++	{}
++};
++
+ static const struct msm_dp_desc msm_dp_desc_sa8775p[] = {
+ 	{ .io_start = 0x0af54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true, .max_streams = 2,
+ 	  .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_0],
+@@ -211,6 +218,7 @@ static const struct msm_dp_desc msm_dp_desc_sm8650[] = {
+ };
+ 
+ static const struct of_device_id msm_dp_dt_match[] = {
++	{ .compatible = "qcom,qcs8300-dp", .data = &msm_dp_desc_qcs8300 },
+ 	{ .compatible = "qcom,sa8775p-dp", .data = &msm_dp_desc_sa8775p },
+ 	{ .compatible = "qcom,sc7180-dp", .data = &msm_dp_desc_sc7180 },
+ 	{ .compatible = "qcom,sc7280-dp", .data = &msm_dp_desc_sc7280 },
+-- 
+2.34.1
+

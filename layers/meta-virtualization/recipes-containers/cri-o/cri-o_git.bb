@@ -14,10 +14,9 @@ At a high level, we expect the scope of cri-o to be restricted to the following 
  - Resource isolation as required by the CRI \
  "
 
-SRCREV_cri-o = "1607c6ec2eddc927ef736db5525761e49df13e24"
+SRCREV_cri-o = "359f960f46697517f048e6ff3caf728ae75cb384"
 SRC_URI = "\
-	git://github.com/kubernetes-sigs/cri-o.git;branch=release-1.23;name=cri-o;protocol=https \
-	file://0001-Makefile-force-symlinks.patch \
+	git://github.com/kubernetes-sigs/cri-o.git;branch=release-1.30;name=cri-o;protocol=https \
         file://crio.conf \
 	"
 
@@ -27,7 +26,7 @@ LIC_FILES_CHKSUM = "file://src/import/LICENSE;md5=e3fc50a88d0a364313df4b21ef20c2
 
 GO_IMPORT = "import"
 
-PV = "1.23.1+git${SRCREV_cri-o}"
+PV = "1.30.8+git${SRCREV_cri-o}"
 
 inherit features_check
 REQUIRED_DISTRO_FEATURES ?= "seccomp"
@@ -50,7 +49,7 @@ PACKAGECONFIG[selinux] = ",,libselinux"
 
 PACKAGES =+ "${PN}-config"
 
-RDEPENDS:${PN} += " virtual-containerd virtual-runc"
+RDEPENDS:${PN} += " ${VIRTUAL-RUNTIME_container_runtime}"
 RDEPENDS:${PN} += " e2fsprogs-mke2fs conmon util-linux iptables conntrack-tools"
 
 inherit systemd
@@ -109,7 +108,7 @@ FILES:${PN} += "/usr/share/containers/oci/hooks.d"
 # don't clobber hooks.d
 ALLOW_EMPTY:${PN} = "1"
 
-INSANE_SKIP:${PN} += "ldflags already-stripped"
+INSANE_SKIP:${PN} += "ldflags already-stripped textrel"
 
 deltask compile_ptest_base
 

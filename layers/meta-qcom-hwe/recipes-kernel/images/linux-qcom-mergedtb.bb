@@ -81,8 +81,12 @@ python do_compile() {
         output = dtb + "." + str(dtbos_found)
         shutil.copy2(os.path.join(dtbo_dir, output), os.path.join(dtoverlaydir, dtb))
 
-        #Append final overlayed dtb file to combined-dtb.dtb
-        combined_dtb = os.path.join(dtoverlaydir, "combined-dtb.dtb")
+        #Append final overlaid DTB file to the appropriate combined DTB.
+        #EL2 DTB files required for KVM, are added to combined-dtb-el2.dtb.
+        #All remaining DTBs are added to combined-dtb.dtb.
+        dtb_type = "combined-dtb-el2.dtb" if "-el2" in dtb else "combined-dtb.dtb"
+        combined_dtb = os.path.join(dtoverlaydir, dtb_type)
+
         with open(combined_dtb, 'ab') as fout:
             with open(os.path.join(dtoverlaydir, dtb), 'rb') as fin:
                 bb.debug(1, "combining: %s" % os.path.join(dtoverlaydir,dtb))
@@ -95,7 +99,11 @@ do_install() {
 
 PACKAGE_ARCH = "${MACHINE_ARCH}"
 
-PACKAGES = "${PN}-combined ${PN}"
+#Allow to build empty ${PN}-el2-combined package
+ALLOW_EMPTY:${PN}-el2-combined = "1"
+
+PACKAGE_BEFORE_PN = "${PN}-combined ${PN}-el2-combined"
 
 FILES:${PN}-combined += "combined-dtb.dtb"
+FILES:${PN}-el2-combined += "combined-dtb-el2.dtb"
 FILES:${PN} += "*.dtb"

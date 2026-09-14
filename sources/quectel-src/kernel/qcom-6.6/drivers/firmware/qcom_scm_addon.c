@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #define QCOM_SCM_MP_CP_SMMU_APERTURE_ID         0x1b
@@ -16,6 +16,10 @@
 #define QCOM_SCM_SVC_INFO       0x06
 #define QCOM_SCM_INFO_IS_CALL_AVAIL 0x01
 #define QCOM_SCM_INFO_GET_FEAT_VERSION_CMD  0x03
+/* ID for Secure State*/
+#define QCOM_SCM_GET_SECURE_STATE           0x4
+/* IDs for QCOM_SCM_INFO_BW_PROF_ID */
+#define QCOM_SCM_INFO_BW_PROF_ID            0x07
 
 /* TOS Services and Function IDs */
 #define QCOM_SCM_SVC_QSEELOG            0x01
@@ -39,10 +43,9 @@
 
 #define QCOM_SCM_IO_RESET           0x03
 
-/* IDs for SHM bridge */
-#define QCOM_SCM_MEMP_SHM_BRIDGE_ENABLE         0x1c
-#define QCOM_SCM_MEMP_SHM_BRIDGE_DELETE         0x1d
-#define QCOM_SCM_MEMP_SHM_BRDIGE_CREATE         0x1e
+/* IDs for TZ FFI */
+#define QCOM_SCM_SVC_SAFETY		0x23
+#define QCOM_SCM_TZ_SAFETY_ENABLE_FFI	0x1
 
 /* IDs for sdi and sec wdog control */
 #define QCOM_SCM_BOOT_SEC_WDOG_DIS	0x07
@@ -54,12 +57,13 @@
 #define QCOM_SCM_SVC_SHE                        0x21
 #define QCOM_SCM_SHE_ID                         0x1
 
-/* IDs for QCOM_SCM_INFO_BW_PROF_ID */
-#define QCOM_SCM_INFO_BW_PROF_ID	0x07
-
 /* IDs for CAMERA */
 #define QCOM_SCM_SVC_CAMERA			0x18
 #define QCOM_SCM_CAMERA_UPDATE_CAMNOC_QOS	0xA
+
+/* IDs for Dump Table*/
+#define QCOM_SCM_SVC_UTIL			0x03
+#define QCOM_SCM_UTIL_DUMP_TABLE_ASSIGN		0x13
 
 static int __qcom_scm_get_feat_version(struct device *dev, u64 feat_id, u64 *version)
 {
@@ -331,14 +335,14 @@ bool qcom_scm_kgsl_set_smmu_aperture_available(void)
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_aperture_available);
 
-int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
+static int __qcom_scm_kgsl_set_smmu_aperture(unsigned int reg_index, unsigned int num_context_bank)
 {
 	struct qcom_scm_desc desc = {
 		.svc = QCOM_SCM_SVC_MP,
 		.cmd = QCOM_SCM_MP_CP_SMMU_APERTURE_ID,
 		.owner = ARM_SMCCC_OWNER_SIP,
 		.args[0] = 0xffff0000
-				| ((QCOM_SCM_CP_APERTURE_REG & 0xff) << 8)
+				| ((reg_index & 0xff) << 8)
 				| (num_context_bank & 0xff),
 		.args[1] = 0xffffffff,
 		.args[2] = 0xffffffff,
@@ -347,9 +351,19 @@ int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
 	};
 
 	return qcom_scm_call(__scm->dev, &desc, NULL);
+}
 
+int qcom_scm_kgsl_set_smmu_aperture(unsigned int num_context_bank)
+{
+	return __qcom_scm_kgsl_set_smmu_aperture(QCOM_SCM_CP_APERTURE_REG, num_context_bank);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_aperture);
+
+int qcom_scm_kgsl_set_smmu_gos_aperture(unsigned int reg_index, unsigned int num_context_bank)
+{
+	return __qcom_scm_kgsl_set_smmu_aperture(reg_index, num_context_bank);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_kgsl_set_smmu_gos_aperture);
 
 int qcom_scm_kgsl_init_regs(u32 gpu_req)
 {
@@ -364,6 +378,20 @@ int qcom_scm_kgsl_init_regs(u32 gpu_req)
 	return qcom_scm_call(__scm->dev, &desc, NULL);
 }
 EXPORT_SYMBOL_GPL(qcom_scm_kgsl_init_regs);
+
+int qcom_scm_multi_kgsl_init_regs(u32 gpu_req, u32 cmd)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_GPU,
+		.cmd = cmd,
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = gpu_req,
+		.arginfo = QCOM_SCM_ARGS(1),
+	};
+
+	return qcom_scm_call(__scm->dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_multi_kgsl_init_regs);
 
 int qcom_scm_invoke_smc(phys_addr_t in_buf, size_t in_buf_size,
 		phys_addr_t out_buf, size_t out_buf_size, int32_t *result,
@@ -463,62 +491,32 @@ int qcom_scm_invoke_callback_response(phys_addr_t out_buf,
 }
 EXPORT_SYMBOL_GPL(qcom_scm_invoke_callback_response);
 
-int qcom_scm_enable_shm_bridge(void)
+/**
+ * Enable the TZ-FFI safety feature by passing TrustZone a list of memory regions
+ * to mark as RW.
+ * @buf - a buffer which contains the list of memory regions
+ * @size - the size of the buffer
+ * @crc8 - the crc calculation of the buffer
+ */
+int qcom_scm_tz_safety_enable_ffi(phys_addr_t buf, size_t size, uint8_t crc8)
 {
 	int ret;
 	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_MP,
-		.cmd = QCOM_SCM_MEMP_SHM_BRIDGE_ENABLE,
-		.owner = ARM_SMCCC_OWNER_SIP
-	};
-	struct qcom_scm_res res;
-
-	ret = qcom_scm_call(__scm->dev, &desc, &res);
-
-	return ret ? : res.result[0];
-}
-EXPORT_SYMBOL_GPL(qcom_scm_enable_shm_bridge);
-
-int qcom_scm_delete_shm_bridge(u64 handle)
-{
-	struct qcom_scm_desc desc = {
-		.svc = QCOM_SCM_SVC_MP,
-		.cmd = QCOM_SCM_MEMP_SHM_BRIDGE_DELETE,
+		.svc = QCOM_SCM_SVC_SAFETY,
+		.cmd = QCOM_SCM_TZ_SAFETY_ENABLE_FFI,
 		.owner = ARM_SMCCC_OWNER_SIP,
-		.args[0] = handle,
-		.arginfo = QCOM_SCM_ARGS(1, QCOM_SCM_VAL),
-	};
-
-	return qcom_scm_call(__scm ? __scm->dev : NULL, &desc, NULL);
-}
-EXPORT_SYMBOL_GPL(qcom_scm_delete_shm_bridge);
-
-int qcom_scm_create_shm_bridge(u64 pfn_and_ns_perm_flags,
-	u64 ipfn_and_s_perm_flags, u64 size_and_flags, u64 ns_vmids,
-	u64 *handle)
-{
-	int ret;
-	struct qcom_scm_desc desc = {
-	.svc = QCOM_SCM_SVC_MP,
-	.cmd = QCOM_SCM_MEMP_SHM_BRDIGE_CREATE,
-	.owner = ARM_SMCCC_OWNER_SIP,
-	.args[0] = pfn_and_ns_perm_flags,
-	.args[1] = ipfn_and_s_perm_flags,
-	.args[2] = size_and_flags,
-	.args[3] = ns_vmids,
-	.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_VAL, QCOM_SCM_VAL,
-				QCOM_SCM_VAL, QCOM_SCM_VAL),
+		.args[0] = buf,
+		.args[1] = size,
+		.args[2] = crc8,
+		.arginfo = QCOM_SCM_ARGS(3, QCOM_SCM_RO, QCOM_SCM_VAL, QCOM_SCM_VAL),
 	};
 	struct qcom_scm_res res;
 
 	ret = qcom_scm_call(__scm->dev, &desc, &res);
 
-	if (handle)
-		*handle = res.result[1];
-
 	return ret ? : res.result[0];
 }
-EXPORT_SYMBOL_GPL(qcom_scm_create_shm_bridge);
+EXPORT_SYMBOL_GPL(qcom_scm_tz_safety_enable_ffi);
 
 /**
  * qcm_scm_sec_wdog_deactivate() - Deactivate secure watchdog
@@ -595,6 +593,27 @@ int qcom_scm_ddrbw_profiler(phys_addr_t in_buf, size_t in_buf_size,
 }
 EXPORT_SYMBOL_GPL(qcom_scm_ddrbw_profiler);
 
+
+int qcom_scm_get_secure_state(u64 *res1)
+{
+	int ret;
+
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_INFO,
+		.cmd = QCOM_SCM_GET_SECURE_STATE,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	struct qcom_scm_res res;
+
+	ret = qcom_scm_call(__scm->dev, &desc, &res);
+	if (res1)
+		*res1 = res.result[0];
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_scm_get_secure_state);
+
+
 /**
  * qcom_scm_she_op() - request TZ SHE (Secure Hardware Extension) service
  *		       to perform crypto operations based on SHE tables.
@@ -617,7 +636,7 @@ int qcom_scm_she_op(u64 _arg1, u64 _arg2, u64 _arg3, u64 _arg4, u64 *res1)
 	desc.args[2] = _arg3;
 	desc.args[3] = _arg4;
 
-	ret = qcom_scm_call(__scm ? __scm->dev : NULL, &desc, &res);
+	ret = qcom_scm_call_atomic(__scm ? __scm->dev : NULL, &desc, &res);
 
 	/* The result from SHE service must be handled by the SHE client */
 	if (res1)
@@ -671,3 +690,37 @@ int qcom_scm_camera_update_camnoc_qos(uint32_t use_case_id,
 	return ret;
 }
 EXPORT_SYMBOL_GPL(qcom_scm_camera_update_camnoc_qos);
+
+int qcom_scm_assign_dump_table_region(bool is_assign, phys_addr_t addr, size_t size)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_SVC_UTIL,
+		.cmd = QCOM_SCM_UTIL_DUMP_TABLE_ASSIGN,
+		.arginfo = QCOM_SCM_ARGS(3, QCOM_SCM_VAL, QCOM_SCM_VAL, QCOM_SCM_VAL),
+		.owner = ARM_SMCCC_OWNER_SIP,
+		.args[0] = is_assign,
+		.args[1] = addr,
+		.args[2] = size,
+	};
+
+	return qcom_scm_call(__scm->dev, &desc, NULL);
+}
+EXPORT_SYMBOL_GPL(qcom_scm_assign_dump_table_region);
+
+int qcom_scm_load_ccu_qup_fw(u32 qup_type)
+{
+	struct qcom_scm_desc desc = {
+		.svc = QCOM_SCM_TZ_CCU_QUP,
+		.cmd = QCOM_SCM_LOAD_CCU_QUP_FW,
+		.arginfo = QCOM_SCM_ARGS(1),
+		.args[0] = qup_type,
+		.owner = ARM_SMCCC_OWNER_SIP,
+	};
+	struct qcom_scm_res res;
+	int ret;
+
+	ret = qcom_scm_call(__scm->dev, &desc, &res);
+
+	return ret ? : res.result[0];
+}
+EXPORT_SYMBOL_GPL(qcom_scm_load_ccu_qup_fw);

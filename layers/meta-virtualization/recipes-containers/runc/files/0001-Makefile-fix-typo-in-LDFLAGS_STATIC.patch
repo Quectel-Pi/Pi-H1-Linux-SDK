@@ -1,0 +1,30 @@
+From 6f20df5de2c6eb2343202c55e4a8b3d9a4feff10 Mon Sep 17 00:00:00 2001
+From: CrazyMax <crazy-max@users.noreply.github.com>
+Date: Tue, 14 Feb 2023 21:27:26 +0100
+Subject: [PATCH] Makefile: fix typo in LDFLAGS_STATIC
+
+Upstream-Status: Backport [https://github.com/opencontainers/runc/commit/2e44a2028077]
+
+Signed-off-by: CrazyMax <crazy-max@users.noreply.github.com>
+(cherry picked from commit 2e44a2028077685cde67d7988f95ce66110be5ae)
+Signed-off-by: Deepak Rathore <deeratho@cisco.com>
+---
+ Makefile | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+Index: git/src/import/Makefile
+===================================================================
+--- git.orig/src/import/Makefile
++++ git/src/import/Makefile
+@@ -36,7 +36,7 @@ LDFLAGS_STATIC := -extldflags -static
+ ifneq (,$(filter $(GOARCH),arm64 amd64))
+ 	ifeq (,$(findstring -race,$(EXTRA_FLAGS)))
+ 		GO_BUILDMODE_STATIC := -buildmode=pie
+-		LDFLAGS_STATIC := -linkmode external -extldflags --static-pie
++		LDFLAGS_STATIC := -linkmode external -extldflags -static-pie
+ 	endif
+ endif
+ # Enable static PIE binaries on supported platforms.
+-- 
+2.42.0
+

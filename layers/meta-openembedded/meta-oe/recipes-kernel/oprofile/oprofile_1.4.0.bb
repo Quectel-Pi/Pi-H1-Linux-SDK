@@ -30,6 +30,8 @@ SRC_URI = "${SOURCEFORGE_MIRROR}/${BPN}/${BPN}-${PV}.tar.gz \
            file://0008-include-linux-limits.h-for-MAX_INPUT.patch \
            file://0009-Prevent-running-check-tests-on-host-if-cross-compili.patch \
            file://0010-oprofile-Determine-the-root-home-directory-dynamical.patch \
+           file://0001-configure-Include-unistd.h-for-getpid-API.patch \
+           file://0001-Replace-std-bind2nd-with-generic-lambda.patch \
 "
 SRC_URI[sha256sum] = "7ba06f99d7c188389d20d1d5e53ee690c7733f87aa9af62bd664fa0ca235a412"
 
@@ -56,16 +58,18 @@ do_install_ptest() {
 		find ${tooltest} -perm /u=x -type f| cpio -pvdu ${D}${PTEST_PATH}
 	done
 
-	# needed by some libop tests
-	cp -r events ${D}${PTEST_PATH}
-
+	install -d ${D}${PTEST_PATH}/../${BP}/events ${D}${PTEST_PATH}/../${BP}/libutil++/tests
 	# needed by libregex regex_test
 	cp libregex/stl.pat ${D}${PTEST_PATH}/libregex
 	cp libregex/tests/mangled-name ${D}${PTEST_PATH}/libregex/tests
 
 	# needed by litutil++ file_manip_tests
 	cp ${S}/libutil++/tests/file_manip_tests.cpp \
+		libutil++/tests/file_manip_tests.o ${D}${PTEST_PATH}/../${BP}/libutil++/tests
+	cp ${S}/libutil++/tests/file_manip_tests.cpp \
 		libutil++/tests/file_manip_tests.o ${D}${PTEST_PATH}/libutil++/tests
+	# needed by some libop tests
+	cp -R --no-dereference --preserve=mode,links -v ${S}/events ${D}${PTEST_PATH}/../${BP}
 }
 
 RDEPENDS:${PN} = "binutils-symlinks"
@@ -73,3 +77,4 @@ RDEPENDS:${PN} = "binutils-symlinks"
 FILES:${PN} = "${bindir} ${libdir}/${BPN}/lib*${SOLIBS} ${datadir}/${BPN}"
 FILES:${PN}-dev += "${libdir}/${BPN}/lib*${SOLIBSDEV} ${libdir}/${BPN}/lib*.la"
 FILES:${PN}-staticdev += "${libdir}/${BPN}/lib*.a"
+FILES:${PN}-ptest += "${libdir}/${BPN}/${BP}"

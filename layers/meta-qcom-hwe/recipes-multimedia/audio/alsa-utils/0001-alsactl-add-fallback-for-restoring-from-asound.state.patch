@@ -27,10 +27,10 @@ index c0c1b23..318752d 100644
  GOTO="alsa_restore_end"
  
  LABEL="alsa_restore_go"
-+TEST!="@asoundrcfile@", TEST=="@daemonswitch@", RUN+="@sbindir@/alsactl -f @initasoundrcfile@ nrestore $attr{device/number}", GOTO="alsa_restore_end"
-+TEST!="@asoundrcfile@", TEST!="@daemonswitch@", RUN+="@sbindir@/alsactl -f @initasoundrcfile@ restore $attr{device/number}", GOTO="alsa_restore_end"
- TEST!="@daemonswitch@", RUN+="@sbindir@/alsactl restore $attr{device/number}"
- TEST=="@daemonswitch@", RUN+="@sbindir@/alsactl nrestore $attr{device/number}"
++TEST!="@asoundrcfile@", TEST=="@daemonswitch@", RUN+="@sbindir@/alsactl -f @initasoundrcfile@ nrestore $devnode", GOTO="alsa_restore_end"
++TEST!="@asoundrcfile@", TEST!="@daemonswitch@", RUN+="@sbindir@/alsactl -f @initasoundrcfile@ restore $devnode", GOTO="alsa_restore_end"
+ TEST!="@daemonswitch@", RUN+="@sbindir@/alsactl restore $devnode"
+ TEST=="@daemonswitch@", RUN+="@sbindir@/alsactl nrestore $devnode"
  
 diff --git a/alsactl/Makefile.am b/alsactl/Makefile.am
 index deff2cd..c6e3ced 100644

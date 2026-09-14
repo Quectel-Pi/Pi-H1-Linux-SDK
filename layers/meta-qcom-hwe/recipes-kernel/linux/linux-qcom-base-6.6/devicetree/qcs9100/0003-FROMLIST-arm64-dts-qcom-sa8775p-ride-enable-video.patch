@@ -1,0 +1,36 @@
+From cb9fc7c7d418fdfc79df2147b962d05109be53c9 Mon Sep 17 00:00:00 2001
+From: Vikash Garodia <quic_vgarodia@quicinc.com>
+Date: Mon, 21 Apr 2025 20:16:57 +0530
+Subject: [PATCH 3/3] FROMLIST: arm64: dts: qcom: sa8775p-ride: enable video
+
+Enable video nodes on the sa8775p-ride board and point to the
+appropriate firmware files.
+
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@oss.qualcomm.com>
+Signed-off-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-media/20250421-dtbinding-v5-3-363c1c05bc80@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi b/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
+index 2a15eb43ea83..bfc46930268a 100644
+--- a/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
++++ b/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
+@@ -502,6 +502,12 @@ &i2c18 {
+ 	status = "okay";
+ };
+ 
++&iris {
++	firmware-name = "qcom/vpu/vpu30_p4_s6.mbn";
++
++	status = "okay";
++};
++
+ &mdss0 {
+ 	status = "okay";
+ };
+-- 
+2.34.1
+

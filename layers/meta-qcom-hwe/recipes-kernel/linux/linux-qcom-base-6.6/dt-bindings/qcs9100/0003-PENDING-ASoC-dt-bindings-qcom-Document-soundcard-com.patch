@@ -1,0 +1,29 @@
+From 66824c8dc171aca7f6105ad67f00ac64fd6ab6d6 Mon Sep 17 00:00:00 2001
+From: Mohammad Rafi Shaik <quic_mohs@quicinc.com>
+Date: Tue, 11 Mar 2025 10:23:27 +0530
+Subject: [PATCH 3/8] PENDING: ASoC: dt-bindings: qcom: Document soundcard
+ compatibles for QCS9075 RB8
+
+Document the sound card compatible for QCS9075 RB8.
+
+Signed-off-by: Mohammad Rafi Shaik <quic_mohs@quicinc.com>
+Upstream-Status: Pending
+---
+ Documentation/devicetree/bindings/sound/qcom,sm8250.yaml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/sound/qcom,sm8250.yaml b/Documentation/devicetree/bindings/sound/qcom,sm8250.yaml
+index 262de7a60a73..9596bc0f7dfc 100644
+--- a/Documentation/devicetree/bindings/sound/qcom,sm8250.yaml
++++ b/Documentation/devicetree/bindings/sound/qcom,sm8250.yaml
+@@ -24,6 +24,7 @@ properties:
+       - enum:
+           - qcom,apq8016-sbc-sndcard
+           - qcom,msm8916-qdsp6-sndcard
++          - qcom,qcs9075-rb8-sndcard
+           - qcom,qrb5165-rb5-sndcard
+           - qcom,sc8280xp-sndcard
+           - qcom,sdm845-sndcard
+-- 
+2.34.1
+

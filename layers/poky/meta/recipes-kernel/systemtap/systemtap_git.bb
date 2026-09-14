@@ -6,10 +6,10 @@ HOMEPAGE = "https://sourceware.org/systemtap/"
 
 require systemtap_git.inc
 
-SRC_URI += "file://0001-improve-reproducibility-for-c-compiling.patch \
-            file://0001-staprun-address-ncurses-6.3-failures.patch \
-            file://0001-gcc12-c-compatibility-re-tweak-for-rhel6-use-functio.patch \
-            file://0001-bpf-translate.cxx-Prevent-Werror-maybe-uninitialized.patch \
+SRC_URI += " \
+           file://0001-improve-reproducibility-for-c-compiling.patch \
+           file://0001-staprun-address-ncurses-6.3-failures.patch \
+           file://0001-Make-stp_task_work-compatible-with-6.11-kernels.patch \
            "
 
 DEPENDS = "elfutils"
@@ -25,15 +25,19 @@ STAP_DOCS ?= "--disable-docs --disable-publican --disable-refdocs"
 
 EXTRA_OECONF += "${STAP_DOCS} "
 
-PACKAGECONFIG ??= "translator sqlite monitor python3-probes"
+PACKAGECONFIG ??= "translator sqlite monitor python3-probes ${@bb.utils.filter('DISTRO_FEATURES', 'debuginfod', d)}"
 PACKAGECONFIG[translator] = "--enable-translator,--disable-translator,boost,bash"
 PACKAGECONFIG[libvirt] = "--enable-libvirt,--disable-libvirt,libvirt"
 PACKAGECONFIG[sqlite] = "--enable-sqlite,--disable-sqlite,sqlite3"
 PACKAGECONFIG[monitor] = "--enable-monitor,--disable-monitor,ncurses json-c"
 PACKAGECONFIG[python3-probes] = "--with-python3-probes,--without-python3-probes,python3-setuptools-native"
+PACKAGECONFIG[debuginfod] = "--with-debuginfod, --without-debuginfod"
 
 inherit autotools gettext pkgconfig systemd
-inherit ${@bb.utils.contains('PACKAGECONFIG', 'python3-probes', 'setuptools3-base', '', d)}
+inherit_defer ${@bb.utils.contains('PACKAGECONFIG', 'python3-probes', 'setuptools3-base', '', d)}
+
+# | ../git/elaborate.cxx:2601:21: error: storing the address of local variable 'sym' in '*s.systemtap_session::symbol_resolver' [-Werror=dangling-pointer=]
+CXXFLAGS += "-Wno-dangling-pointer"
 
 # exporter comes with python3-probes
 PACKAGES =+ "${PN}-exporter"

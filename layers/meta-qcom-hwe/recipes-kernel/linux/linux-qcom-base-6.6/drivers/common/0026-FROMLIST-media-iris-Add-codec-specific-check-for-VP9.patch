@@ -1,0 +1,57 @@
+From a297f7ac0fdef59aa2ff61e11fff6c1744be23ed Mon Sep 17 00:00:00 2001
+From: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Date: Fri, 9 May 2025 14:09:12 +0530
+Subject: [PATCH 26/26] FROMLIST: media: iris: Add codec specific check for VP9
+ decoder drain handling
+
+Add a codec specific for the VP9 decoder to ensure that a non-null
+buffer is sent to the firmware during drain. The firmware enforces a
+check for VP9 decoder that the number of buffers queued and dequeued on
+the output plane should match. When a null buffer is sent, the firmware
+does not return a response for it, leading to a count mismatch and an
+assertion failure from the firmware.
+
+Acked-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-HDK
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-HDK
+Signed-off-by: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-media/20250509-video-iris-hevc-vp9-v5-26-59b4ff7d331c@quicinc.com/]
+---
+ drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c  | 2 ++
+ drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c | 4 ++++
+ 2 files changed, 6 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c b/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
+index 2e3f5a6b2ff1..5fc30d54af4d 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
+@@ -401,6 +401,8 @@ static int iris_hfi_gen1_session_drain(struct iris_inst *inst, u32 plane)
+ 	ip_pkt.shdr.hdr.pkt_type = HFI_CMD_SESSION_EMPTY_BUFFER;
+ 	ip_pkt.shdr.session_id = inst->session_id;
+ 	ip_pkt.flags = HFI_BUFFERFLAG_EOS;
++	if (inst->codec == V4L2_PIX_FMT_VP9)
++		ip_pkt.packet_buffer = 0xdeadb000;
+ 
+ 	return iris_hfi_queue_cmd_write(inst->core, &ip_pkt, ip_pkt.shdr.hdr.size);
+ }
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c b/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c
+index 926acee1f48c..8d1ce8a19a45 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c
+@@ -348,6 +348,10 @@ static void iris_hfi_gen1_session_etb_done(struct iris_inst *inst, void *packet)
+ 	struct iris_buffer *buf = NULL;
+ 	bool found = false;
+ 
++	/* EOS buffer sent via drain won't be in v4l2 buffer list */
++	if (pkt->packet_buffer == 0xdeadb000)
++		return;
++
+ 	v4l2_m2m_for_each_src_buf_safe(m2m_ctx, m2m_buffer, n) {
+ 		buf = to_iris_buffer(&m2m_buffer->vb);
+ 		if (buf->index == pkt->input_tag) {
+-- 
+2.34.1
+

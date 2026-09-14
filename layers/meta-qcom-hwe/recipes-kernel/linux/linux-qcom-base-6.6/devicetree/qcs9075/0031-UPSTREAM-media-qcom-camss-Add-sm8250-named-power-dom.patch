@@ -1,0 +1,49 @@
+From 4a8fbe007bb04a69d6b1f7159199e853f700d2d1 Mon Sep 17 00:00:00 2001
+From: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Date: Thu, 23 Nov 2023 17:03:07 +0000
+Subject: [PATCH 31/42] UPSTREAM: media: qcom: camss: Add sm8250 named
+ power-domain support
+
+Declare power-domain names "top", "ife0" and "ife1" eponymously for the
+power-domains TITAN_TOP_GDSC, IFE_0_GDSC and IFE_1_GDSC respectively.
+
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Reviewed-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 8016943b5947cd485078e23899945c51e818aa63]
+---
+ drivers/media/platform/qcom/camss/camss.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 786ae09fe571..4218a530e1dc 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1013,6 +1013,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe0" },
+ 		.interrupt = { "vfe0" },
++		.pd_name = "ife0",
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
+@@ -1039,6 +1040,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe1" },
+ 		.interrupt = { "vfe1" },
++		.pd_name = "ife1",
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
+@@ -2001,6 +2003,7 @@ static const struct camss_resources sdm845_resources = {
+ 
+ static const struct camss_resources sm8250_resources = {
+ 	.version = CAMSS_8250,
++	.pd_name = "top",
+ 	.csiphy_res = csiphy_res_8250,
+ 	.csid_res = csid_res_8250,
+ 	.vfe_res = vfe_res_8250,
+-- 
+2.25.1
+

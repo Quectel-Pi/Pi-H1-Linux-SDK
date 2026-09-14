@@ -1,0 +1,55 @@
+From 68bba65220427f15dab1394e0a50a0e7239d7035 Mon Sep 17 00:00:00 2001
+From: "Russell King (Oracle)" <rmk+kernel@armlinux.org.uk>
+Date: Fri, 24 Nov 2023 12:28:03 +0000
+Subject: [PATCH 08/39] UPSTREAM: net: phy: marvell10g: fill in
+ possible_interfaces
+
+Fill in the possible_interfaces member according to the selected
+mactype mode.
+
+Signed-off-by: Russell King (Oracle) <rmk+kernel@armlinux.org.uk>
+Reviewed-by: Andrew Lunn <andrew@lunn.ch>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 82f2e76b660a490ae226db80d495b7c785e00d7a]
+---
+ drivers/net/phy/marvell10g.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
+
+diff --git a/drivers/net/phy/marvell10g.c b/drivers/net/phy/marvell10g.c
+index a880b3375dee..ad43e280930c 100644
+--- a/drivers/net/phy/marvell10g.c
++++ b/drivers/net/phy/marvell10g.c
+@@ -803,6 +803,22 @@ static const struct mv3310_mactype mv3340_mactypes[] = {
+ 	},
+ };
+ 
++static void mv3310_fill_possible_interfaces(struct phy_device *phydev)
++{
++	struct mv3310_priv *priv = dev_get_drvdata(&phydev->mdio.dev);
++	unsigned long *possible = phydev->possible_interfaces;
++	const struct mv3310_mactype *mactype = priv->mactype;
++
++	if (mactype->interface_10g != PHY_INTERFACE_MODE_NA)
++		__set_bit(priv->mactype->interface_10g, possible);
++
++	if (!mactype->fixed_interface) {
++		__set_bit(PHY_INTERFACE_MODE_5GBASER, possible);
++		__set_bit(PHY_INTERFACE_MODE_2500BASEX, possible);
++		__set_bit(PHY_INTERFACE_MODE_SGMII, possible);
++	}
++}
++
+ static int mv3310_config_init(struct phy_device *phydev)
+ {
+ 	struct mv3310_priv *priv = dev_get_drvdata(&phydev->mdio.dev);
+@@ -845,6 +861,8 @@ static int mv3310_config_init(struct phy_device *phydev)
+ 
+ 	priv->mactype = &chip->mactypes[mactype];
+ 
++	mv3310_fill_possible_interfaces(phydev);
++
+ 	/* Enable EDPD mode - saving 600mW */
+ 	err = mv3310_set_edpd(phydev, ETHTOOL_PHY_EDPD_DFLT_TX_MSECS);
+ 	if (err)
+-- 
+2.34.1
+

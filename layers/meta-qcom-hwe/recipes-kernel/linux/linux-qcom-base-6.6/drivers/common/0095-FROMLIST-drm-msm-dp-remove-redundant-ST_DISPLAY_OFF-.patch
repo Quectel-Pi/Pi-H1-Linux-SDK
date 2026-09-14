@@ -1,0 +1,45 @@
+From 4b40aa8956eb72d48fe93f8dc7e67be013cef84b Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Mon, 2 Dec 2024 16:39:01 -0800
+Subject: [PATCH 095/146] FROMLIST: drm/msm/dp: remove redundant ST_DISPLAY_OFF
+ checks in msm_dp_bridge_atomic_enable()
+
+The checks in msm_dp_display_prepare() for making sure that we are in
+ST_DISPLAY_OFF OR ST_MAINLINK_READY seem redundant.
+
+DRM fwk shall not issue any commits if state is not ST_MAINLINK_READY as
+msm_dp's atomic_check callback returns a failure if state is not ST_MAINLINK_READY.
+
+For the ST_DISPLAY_OFF check, its mainly to guard against a scenario that
+there is an atomic_enable() without a prior atomic_disable() which once again
+should not really happen.
+
+To simplify the code, get rid of these checks.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241202-hpd_display_off-v1-2-8d0551847753@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 6 ------
+ 1 file changed, 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 0196fb2066fc..d964b32e635b 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -1519,12 +1519,6 @@ void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
+ 		return;
+ 	}
+ 
+-	state = msm_dp_display->hpd_state;
+-	if (state != ST_DISPLAY_OFF && state != ST_MAINLINK_READY) {
+-		mutex_unlock(&msm_dp_display->event_mutex);
+-		return;
+-	}
+-
+ 	rc = msm_dp_display_set_mode(dp, &msm_dp_display->msm_dp_mode);
+ 	if (rc) {
+ 		DRM_ERROR("Failed to perform a mode set, rc=%d\n", rc);
+-- 
+2.34.1
+

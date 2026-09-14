@@ -1,0 +1,92 @@
+From cf358b3e7baa28a1cf62be796e178f686de19a32 Mon Sep 17 00:00:00 2001
+From: Stephen Rothwell <sfr@canb.auug.org.au>
+Date: Thu, 21 Dec 2023 13:09:46 +1100
+Subject: [PATCH 17/39] UPSTREAM: linux-next: build failure after merge of the
+ net-next tree
+
+Hi all,
+
+After merging the net-next tree, today's linux-next build (x86_64
+allmodconfig) failed like this:
+
+drivers/net/phy/aquantia/aquantia_firmware.c: In function 'aqr_fw_load_memory':
+drivers/net/phy/aquantia/aquantia_firmware.c:135:23: error: implicit declaration of function 'crc_ccitt_false'; did you mean 'crc_ccitt_byte'? [-Werror=implicit-function-declaration]
+  135 |                 crc = crc_ccitt_false(crc, crc_data, sizeof(crc_data));
+      |                       ^~~~~~~~~~~~~~~
+      |                       crc_ccitt_byte
+
+Caused by commit
+
+  e93984ebc1c8 ("net: phy: aquantia: add firmware load support")
+
+interacting with commit
+
+  56ded2dd1a43 ("lib: crc_ccitt_false() is identical to crc_itu_t()")
+
+from the mm tree.
+
+I have applied the following merge fix patch:
+
+From: Stephen Rothwell <sfr@canb.auug.org.au>
+Date: Thu, 21 Dec 2023 12:49:11 +1100
+Subject: [PATCH] fix up for "net: phy: aquantia: add firmware load support"
+
+interacting with commit
+
+  56ded2dd1a43 ("lib: crc_ccitt_false() is identical to crc_itu_t()")
+
+from the mm tree.
+
+Signed-off-by: Stephen Rothwell <sfr@canb.auug.org.au>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 6c8e2407100e4ff1db86e4af65b74be7895031a2]
+---
+ drivers/net/phy/aquantia/Kconfig             | 2 +-
+ drivers/net/phy/aquantia/aquantia_firmware.c | 6 +++---
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/net/phy/aquantia/Kconfig b/drivers/net/phy/aquantia/Kconfig
+index a35de4b9b554..1a65678583cf 100644
+--- a/drivers/net/phy/aquantia/Kconfig
++++ b/drivers/net/phy/aquantia/Kconfig
+@@ -1,6 +1,6 @@
+ # SPDX-License-Identifier: GPL-2.0-only
+ config AQUANTIA_PHY
+ 	tristate "Aquantia PHYs"
+-	select CRC_CCITT
++	select CRC_ITU_T
+ 	help
+ 	  Currently supports the Aquantia AQ1202, AQ2104, AQR105, AQR405
+diff --git a/drivers/net/phy/aquantia/aquantia_firmware.c b/drivers/net/phy/aquantia/aquantia_firmware.c
+index ff34d00d5a0e..0c9640ef153b 100644
+--- a/drivers/net/phy/aquantia/aquantia_firmware.c
++++ b/drivers/net/phy/aquantia/aquantia_firmware.c
+@@ -3,7 +3,7 @@
+ #include <linux/bitfield.h>
+ #include <linux/of.h>
+ #include <linux/firmware.h>
+-#include <linux/crc-ccitt.h>
++#include <linux/crc-itu-t.h>
+ #include <linux/nvmem-consumer.h>
+ 
+ #include <asm/unaligned.h>
+@@ -132,7 +132,7 @@ static int aqr_fw_load_memory(struct phy_device *phydev, u32 addr,
+ 		crc_data[3] = word;
+ 
+ 		/* ...calculate CRC as we load data... */
+-		crc = crc_ccitt_false(crc, crc_data, sizeof(crc_data));
++		crc = crc_itu_t(crc, crc_data, sizeof(crc_data));
+ 	}
+ 	/* ...gets CRC from MAILBOX after we have loaded the entire section... */
+ 	up_crc = phy_read_mmd(phydev, MDIO_MMD_VEND1, VEND1_GLOBAL_MAILBOX_INTERFACE2);
+@@ -164,7 +164,7 @@ static int aqr_fw_boot(struct phy_device *phydev, const u8 *data, size_t size,
+ 		phydev_err(phydev, "bad firmware CRC in firmware\n");
+ 		return ret;
+ 	}
+-	calculated_crc = crc_ccitt_false(0, data, size - sizeof(u16));
++	calculated_crc = crc_itu_t(0, data, size - sizeof(u16));
+ 	if (read_crc != calculated_crc) {
+ 		phydev_err(phydev, "bad firmware CRC: file 0x%04x calculated 0x%04x\n",
+ 			   read_crc, calculated_crc);
+-- 
+2.34.1
+

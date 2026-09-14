@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * LPI GPIO pin control driver for QTi LPASS
  */
 
@@ -128,7 +128,7 @@ static const struct lpi_pingroup qcs8300_groups[] = {
 	LPI_PINGROUP(2, LPI_NO_SLEW, qua_mi2s_data, _, _, _),
 	LPI_PINGROUP(3, LPI_NO_SLEW, qua_mi2s_data, _, _, _),
 	LPI_PINGROUP(4, LPI_NO_SLEW, qua_mi2s_data, _, _, _),
-	LPI_PINGROUP(5, LPI_NO_SLEW, ext_mclk1_c, qua_mi2s_data, _, _),
+	LPI_PINGROUP(5, LPI_NO_SLEW, _, ext_mclk1_c, qua_mi2s_data, _),
 	LPI_PINGROUP(6, LPI_NO_SLEW, dmic1_clk, i2s1_clk, _, _),
 	LPI_PINGROUP(7, LPI_NO_SLEW, dmic1_data, i2s1_ws, _, _),
 	LPI_PINGROUP(8, LPI_NO_SLEW, dmic2_clk, i2s1_data, _, _),
@@ -137,7 +137,7 @@ static const struct lpi_pingroup qcs8300_groups[] = {
 	LPI_PINGROUP(11, LPI_NO_SLEW, i2s2_ws, _, _, _),
 	LPI_PINGROUP(12, LPI_NO_SLEW, dmic3_clk, i2s4_clk, _, _),
 	LPI_PINGROUP(13, LPI_NO_SLEW, dmic3_data, i2s4_ws, ext_mclk1_a, _),
-	LPI_PINGROUP(14, LPI_NO_SLEW, ext_mclk1_d, _, _, _),
+	LPI_PINGROUP(14, LPI_NO_SLEW, _, ext_mclk1_d, _, _),
 	LPI_PINGROUP(15, LPI_NO_SLEW, i2s2_data, _, _, _),
 	LPI_PINGROUP(16, LPI_NO_SLEW, i2s2_data, _, _, _),
 	LPI_PINGROUP(17, LPI_NO_SLEW, dmic4_clk, i2s4_data, _, _),

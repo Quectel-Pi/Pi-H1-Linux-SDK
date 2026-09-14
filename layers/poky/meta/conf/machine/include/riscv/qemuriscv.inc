@@ -3,14 +3,13 @@ PREFERRED_PROVIDER_virtual/bootloader ?= "u-boot"
 require conf/machine/include/qemu.inc
 require conf/machine/include/riscv/tune-riscv.inc
 
-MACHINE_FEATURES = "screen keyboard ext2 ext3 serial"
+MACHINE_FEATURES += "keyboard ext2 ext3 serial"
 
 KERNEL_IMAGETYPE = "Image"
 KERNEL_IMAGETYPES += "uImage"
 KEEPUIMAGE = "no"
 
 SERIAL_CONSOLES ?= "115200;ttyS0 115200;hvc0"
-SERIAL_CONSOLES_CHECK = "${SERIAL_CONSOLES}"
 
 IMAGE_FSTYPES += "ext4 wic.qcow2"
 
@@ -26,7 +25,7 @@ UBOOT_ENTRYPOINT:riscv32 = "0x80400000"
 UBOOT_ENTRYPOINT:riscv64 = "0x80200000"
 
 # qemuboot options
-QB_SMP = "-smp 4"
+QB_SMP ?= "-smp 4"
 QB_KERNEL_CMDLINE_APPEND = "earlycon=sbi"
 QB_MACHINE = "-machine virt"
 QB_DEFAULT_BIOS = "fw_jump.elf"
@@ -34,6 +33,7 @@ QB_TAP_OPT = "-netdev tap,id=net0,ifname=@TAP@,script=no,downscript=no"
 QB_NETWORK_DEVICE = "-device virtio-net-device,netdev=net0,mac=@MAC@"
 QB_ROOTFS_OPT = "-drive id=disk0,file=@ROOTFS@,if=none,format=raw -device virtio-blk-device,drive=disk0"
 QB_SERIAL_OPT = "-device virtio-serial-device -chardev null,id=virtcon -device virtconsole,chardev=virtcon"
-QB_TCPSERIAL_OPT = " -device virtio-serial-device -chardev socket,id=virtcon,port=@PORT@,host=127.0.0.1 -device virtconsole,chardev=virtcon"
+QB_TCPSERIAL_OPT = " -device virtio-serial-device -chardev socket,id=virtcon,port=@PORT@,host=127.0.0.1,nodelay=on -device virtconsole,chardev=virtcon"
 QB_GRAPHICS = "-device bochs-display"
-QB_OPT_APPEND = "-device virtio-tablet-pci -device virtio-keyboard-pci"
+QB_OPT_APPEND = "-device qemu-xhci -device usb-tablet -device usb-kbd"
+QB_OPT_APPEND:riscv32 = "-device virtio-tablet-pci -device virtio-keyboard-pci"

@@ -1,0 +1,7 @@
+#Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+#SPDX-License-Identifier: BSD-3-Clause-Clear
+
+#file_context for ims daemon
+
+/usr/bin/imsd -- gen_context(system_u:object_r:qcom_imsd_exec_t,s0)
+#/tmp/imsd_socket   -- gen_context(system_u:object_r:qcom_imsd_sock_t,s0)

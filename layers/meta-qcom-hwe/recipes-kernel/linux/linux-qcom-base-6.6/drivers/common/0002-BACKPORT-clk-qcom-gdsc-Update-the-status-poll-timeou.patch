@@ -1,0 +1,37 @@
+From ab14c7eb0388a120ada28243bf9c7dfe35a30321 Mon Sep 17 00:00:00 2001
+From: Taniya Das <quic_tdas@quicinc.com>
+Date: Fri, 14 Feb 2025 09:57:00 +0530
+Subject: [PATCH 2/2] BACKPORT: clk: qcom: gdsc: Update the status poll timeout
+ for GDSC
+
+During the GDSC FSM state, the GDSC hardware waits for an ACK from the
+respective subsystem core. In some scenarios, this ACK can be delayed.
+To handle such delays, increase the GDSC status poll timeout from 1500us
+to 2000us as per the design recommendation.
+
+Signed-off-by: Taniya Das <quic_tdas@quicinc.com>
+Reviewed-by: Imran Shaik <quic_imrashai@quicinc.com>
+Tested-by: Imran Shaik <quic_imrashai@quicinc.com> # on QCS8300
+Link: https://lore.kernel.org/all/20250214-gdsc_fixes-v1-2-73e56d68a80f@quicinc.com/
+Signed-off-by: Dongfang Zhao <quic_doz@quicinc.com>
+Upstream-Status: Backport[https://lore.kernel.org/all/20250214-gdsc_fixes-v1-2-73e56d68a80f@quicinc.com/]
+---
+ drivers/clk/qcom/gdsc.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/clk/qcom/gdsc.c b/drivers/clk/qcom/gdsc.c
+index cefd1d1c96ef..2161dc4bbda8 100644
+--- a/drivers/clk/qcom/gdsc.c
++++ b/drivers/clk/qcom/gdsc.c
+@@ -47,7 +47,7 @@
+ #define RETAIN_MEM		BIT(14)
+ #define RETAIN_PERIPH		BIT(13)
+ 
+-#define STATUS_POLL_TIMEOUT_US	1500
++#define STATUS_POLL_TIMEOUT_US	2000
+ #define TIMEOUT_US		500
+ 
+ #define domain_to_gdsc(domain) container_of(domain, struct gdsc, pd)
+-- 
+2.34.1
+

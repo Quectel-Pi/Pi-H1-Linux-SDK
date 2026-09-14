@@ -12,7 +12,7 @@ COMPATIBLE_HOST = '(x86_64.*).*-linux'
 
 LIC_FILES_CHKSUM = "file://COPYING;md5=a5680865974e05cf0510615ee1d745d8"
 
-PV = "0+git${SRCPV}"
+PV = "0+git"
 
 S = "${WORKDIR}/git"
 
@@ -30,7 +30,7 @@ RDEPENDS:${PN} = " \
     "
 
 do_compile() {
-    oe_runmake CC="${TARGET_PREFIX}gcc ${TOOLCHAIN_OPTIONS}" \
+    oe_runmake CC="${TARGET_PREFIX}gcc ${TOOLCHAIN_OPTIONS} ${DEBUG_PREFIX_MAP}" \
                CPP="${CPP}" \
                LD="${LD}" \
                OBJCOPY="${OBJCOPY}" \

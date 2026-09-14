@@ -1,7 +1,7 @@
 .. SPDX-License-Identifier: CC-BY-SA-2.0-UK
 
 Efficiently Fetching Source Files During a Build
-================================================
+************************************************
 
 The OpenEmbedded build system works with source files located through
 the :term:`SRC_URI` variable. When
@@ -15,7 +15,7 @@ source files and how you can pre-fetch files all of which leads to more
 efficient use of resources and time.
 
 Setting up Effective Mirrors
-----------------------------
+============================
 
 A good deal that goes into a Yocto Project build is simply downloading
 all of the source tarballs. Maybe you have been working with another
@@ -47,7 +47,7 @@ an example, see the variable's glossary entry in the Yocto Project
 Reference Manual.
 
 Getting Source Files and Suppressing the Build
-----------------------------------------------
+==============================================
 
 Another technique you can use to ready yourself for a successive string
 of build operations, is to pre-fetch all the source files without

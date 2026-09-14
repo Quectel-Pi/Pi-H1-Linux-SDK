@@ -16,6 +16,8 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
 #include <drm/drm_edid.h>
+#include <linux/usb/typec_mux.h>
+#include <linux/usb/typec_retimer.h>
 
 struct display_connector {
 	struct drm_bridge	bridge;
@@ -25,6 +27,8 @@ struct display_connector {
 
 	struct regulator	*supply;
 	struct gpio_desc	*ddc_en;
+
+	struct typec_retimer	*typec_retimer;
 };
 
 static inline struct display_connector *
@@ -185,6 +189,7 @@ static irqreturn_t display_connector_hpd_irq(int irq, void *arg)
 	struct display_connector *conn = arg;
 	struct drm_bridge *bridge = &conn->bridge;
 
+	typec_retimer_set(conn->typec_retimer, NULL);
 	drm_bridge_hpd_notify(bridge, display_connector_detect(bridge));
 
 	return IRQ_HANDLED;
@@ -205,6 +210,7 @@ static int display_connector_get_supply(struct platform_device *pdev,
 static int display_connector_probe(struct platform_device *pdev)
 {
 	struct display_connector *conn;
+	struct fwnode_handle *fwnode;
 	unsigned int type;
 	const char *label = NULL;
 	int ret;
@@ -265,6 +271,14 @@ static int display_connector_probe(struct platform_device *pdev)
 	default:
 		conn->bridge.type = type;
 		break;
+	}
+
+	fwnode = dev_fwnode(&pdev->dev);
+	conn->typec_retimer = fwnode_typec_retimer_get(fwnode);
+	if (IS_ERR(conn->typec_retimer)) {
+		fwnode_handle_put(fwnode);
+		return dev_err_probe(&pdev->dev, PTR_ERR(conn->typec_retimer),
+					 "failed to acquire retimer-switch\n");
 	}
 
 	/* All the supported connector types support interlaced modes. */

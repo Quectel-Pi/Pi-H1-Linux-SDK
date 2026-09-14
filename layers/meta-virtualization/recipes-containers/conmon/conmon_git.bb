@@ -9,16 +9,18 @@ REQUIRED_DISTRO_FEATURES ?= "seccomp"
 
 DEPENDS = "glib-2.0 go-md2man-native libseccomp"
 
-SRCREV = "4c41ec2a215c502ad6c38ea255ac1082fa1d381d"
+SRCREV = "affab49967eb62f75d2a47398344ab053326289f"
 SRC_URI = "\
     git://github.com/containers/conmon.git;branch=main;protocol=https \
 "
 
-PV = "2.1.0+git${SRCPV}"
+PV = "2.1.10+git"
 
 S = "${WORKDIR}/git"
 
 inherit pkgconfig
+
+export GOCACHE = "${B}/.cache"
 
 EXTRA_OEMAKE = "PREFIX=${prefix} BINDIR=${bindir} LIBEXECDIR=${libexecdir}"
 

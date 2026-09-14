@@ -434,6 +434,7 @@ const char ts_tx_type_names[][ETH_GSTRING_LEN] = {
 	[HWTSTAMP_TX_ON]		= "on",
 	[HWTSTAMP_TX_ONESTEP_SYNC]	= "onestep-sync",
 	[HWTSTAMP_TX_ONESTEP_P2P]	= "onestep-p2p",
+	[HWTSTAMP_TX_EXTERNAL_TIME_SRC]	= "external-time-src",
 };
 static_assert(ARRAY_SIZE(ts_tx_type_names) == __HWTSTAMP_TX_CNT);
 

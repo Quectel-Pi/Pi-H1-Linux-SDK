@@ -1,0 +1,95 @@
+From 74bee3ab9e9e08779553b1fd296575b079d1bd26 Mon Sep 17 00:00:00 2001
+From: Lijuan Gao <quic_lijuang@quicinc.com>
+Date: Wed, 7 May 2025 18:26:11 +0800
+Subject: [PATCH 1/6] FROMLIST: dt-bindings: remoteproc: qcom,sm8150-pas:
+ Document QCS615 remoteproc
+
+Document the components used to boot the ADSP and CDSP on the Qualcomm
+QCS615 SoC. Use fallback to indicate the compatibility of the remoteproc
+on the QCS615 with that on the SM8150.
+
+Reviewed-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Link: https://lore.kernel.org/all/20250507-add_qcs615_remoteproc_support-v2-1-52ac6cb43a39@quicinc.com/
+Signed-off-by: Lijuan Gao <quic_lijuang@quicinc.com>
+Upstream-Status: Submitted[https://lore.kernel.org/all/20250507-add_qcs615_remoteproc_support-v2-1-52ac6cb43a39@quicinc.com/]
+---
+ .../bindings/remoteproc/qcom,sm8150-pas.yaml  | 49 ++++++++++++-------
+ 1 file changed, 30 insertions(+), 19 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/remoteproc/qcom,sm8150-pas.yaml b/Documentation/devicetree/bindings/remoteproc/qcom,sm8150-pas.yaml
+index 238c6e5e67c5..286e8a2614dd 100644
+--- a/Documentation/devicetree/bindings/remoteproc/qcom,sm8150-pas.yaml
++++ b/Documentation/devicetree/bindings/remoteproc/qcom,sm8150-pas.yaml
+@@ -15,14 +15,23 @@ description:
+ 
+ properties:
+   compatible:
+-    enum:
+-      - qcom,sm8150-adsp-pas
+-      - qcom,sm8150-cdsp-pas
+-      - qcom,sm8150-mpss-pas
+-      - qcom,sm8150-slpi-pas
+-      - qcom,sm8250-adsp-pas
+-      - qcom,sm8250-cdsp-pas
+-      - qcom,sm8250-slpi-pas
++    oneOf:
++      - items:
++          - enum:
++              - qcom,qcs615-adsp-pas
++          - const: qcom,sm8150-adsp-pas
++      - items:
++          - enum:
++              - qcom,qcs615-cdsp-pas
++          - const: qcom,sm8150-cdsp-pas
++      - enum:
++          - qcom,sm8150-adsp-pas
++          - qcom,sm8150-cdsp-pas
++          - qcom,sm8150-mpss-pas
++          - qcom,sm8150-slpi-pas
++          - qcom,sm8250-adsp-pas
++          - qcom,sm8250-cdsp-pas
++          - qcom,sm8250-slpi-pas
+ 
+   reg:
+     maxItems: 1
+@@ -59,13 +68,14 @@ allOf:
+   - if:
+       properties:
+         compatible:
+-          enum:
+-            - qcom,sm8150-adsp-pas
+-            - qcom,sm8150-cdsp-pas
+-            - qcom,sm8150-slpi-pas
+-            - qcom,sm8250-adsp-pas
+-            - qcom,sm8250-cdsp-pas
+-            - qcom,sm8250-slpi-pas
++          contains:
++            enum:
++              - qcom,sm8150-adsp-pas
++              - qcom,sm8150-cdsp-pas
++              - qcom,sm8150-slpi-pas
++              - qcom,sm8250-adsp-pas
++              - qcom,sm8250-cdsp-pas
++              - qcom,sm8250-slpi-pas
+     then:
+       properties:
+         interrupts:
+@@ -82,10 +92,11 @@ allOf:
+   - if:
+       properties:
+         compatible:
+-          enum:
+-            - qcom,sm8150-adsp-pas
+-            - qcom,sm8150-cdsp-pas
+-            - qcom,sm8250-cdsp-pas
++          contains:
++            enum:
++              - qcom,sm8150-adsp-pas
++              - qcom,sm8150-cdsp-pas
++              - qcom,sm8250-cdsp-pas
+     then:
+       properties:
+         power-domains:
+-- 
+2.34.1
+

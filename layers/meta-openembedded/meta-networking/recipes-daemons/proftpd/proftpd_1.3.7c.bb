@@ -16,11 +16,14 @@ SRC_URI = "git://github.com/proftpd/proftpd.git;branch=${BRANCH};protocol=https 
            file://build_fixup.patch \
            file://proftpd.service \
            file://CVE-2023-51713.patch \
+           file://CVE-2024-57392.patch \
            "
 
 S = "${WORKDIR}/git"
 
 inherit autotools-brokensep useradd update-rc.d systemd multilib_script
+
+EXTRA_OECONF += "--enable-largefile"
 
 PACKAGECONFIG ??= "shadow \
                    ${@bb.utils.filter('DISTRO_FEATURES', 'ipv6 pam', d)} \
@@ -59,7 +62,6 @@ PACKAGECONFIG[nls] = "--enable-nls, --disable-nls"
 
 #add mod_dso to core modules
 PACKAGECONFIG[dso] = "--enable-dso, --disable-dso"
-PACKAGECONFIG[largefile] = "--enable-largefile, --disable-largefile"
 
 #omit mod_auth_file from core modules
 PACKAGECONFIG[auth] = "--enable-auth-file, --disable-auth-file"

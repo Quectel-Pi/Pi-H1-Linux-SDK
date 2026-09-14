@@ -149,3 +149,60 @@ interface(`qcom_access_bt_socket_file',`
 
     allow $1 qcom_bluetooth_src_ctrl_sock_t:sock_file write_sock_file_perms;
 ')
+
+########################################
+## <summary>
+##       Write bluetooth socket files
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+
+interface(`qcom_write_bt_src_socket_file',`
+    gen_require(`
+        type qcom_bluetooth_src_ctrl_sock_t;
+    ')
+
+    allow $1 qcom_bluetooth_src_ctrl_sock_t:sock_file { write };
+')
+
+########################################
+## <summary>
+##       Write bluetooth socket files
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+
+interface(`qcom_connect_to_bt_socket',`
+    gen_require(`
+        type qcom_bluetooth_t;
+    ')
+
+    allow $1 qcom_bluetooth_t:unix_stream_socket connectto;
+')
+
+########################################
+## <summary>
+##       Write bluetooth socket files
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+
+interface(`qcom_unlink_bt_src_socket_file',`
+    gen_require(`
+        type qcom_bluetooth_src_ctrl_sock_t;
+    ')
+
+    allow $1 qcom_bluetooth_src_ctrl_sock_t:sock_file { unlink };
+')

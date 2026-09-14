@@ -1,6 +1,6 @@
-From d9f4eb76a081b53ed3f42656993ef2b5ab8af135 Mon Sep 17 00:00:00 2001
+From 5e508da29b7dc1f1aba2f85f008b7314755c0627 Mon Sep 17 00:00:00 2001
 From: Sasi Kumar Maddineni <quic_sasikuma@quicinc.com>
-Date: Wed, 15 Nov 2023 23:13:39 +0530
+Date: Wed, 25 Sep 2024 12:37:01 +0530
 Subject: [PATCH] PENDING: add perms to mount to resolve service failures
 
 Added required permissions to mount to resolve
@@ -10,22 +10,53 @@ Upstream-status: Pending
 
 Signed-off-by: Sasi Kumar Maddineni <quic_sasikuma@quicinc.com>
 ---
+ policy/modules/kernel/devices.if    | 18 ++++++++++
  policy/modules/kernel/files.if      | 20 +++++++++++
- policy/modules/kernel/filesystem.if | 36 +++++++++++++++++++
+ policy/modules/kernel/filesystem.if | 18 ++++++++++
  policy/modules/services/chronyd.if  | 18 ++++++++++
+ policy/modules/services/ntp.if      | 17 +++++++++
  policy/modules/system/init.if       | 56 +++++++++++++++++++++++++++++
  policy/modules/system/libraries.if  | 19 ++++++++++
- policy/modules/system/mount.te      | 13 +++++++
- 6 files changed, 162 insertions(+)
+ policy/modules/system/mount.te      | 14 ++++++++
+ 8 files changed, 180 insertions(+)
 
-diff --git a/policy/modules/kernel/files.if b/policy/modules/kernel/files.if
-index b308eefd9..b92c2e8c4 100644
---- a/policy/modules/kernel/files.if
-+++ b/policy/modules/kernel/files.if
-@@ -7792,6 +7792,26 @@ interface(`files_manage_generic_spool',`
- 	manage_files_pattern($1, var_spool_t, var_spool_t)
+diff --git a/policy/modules/kernel/devices.if b/policy/modules/kernel/devices.if
+index cae0b55c0..4c44efe6f 100644
+--- a/policy/modules/kernel/devices.if
++++ b/policy/modules/kernel/devices.if
+@@ -5147,6 +5147,24 @@ interface(`dev_mount_usbfs',`
+ 	allow $1 usbfs_t:filesystem mount;
  ')
 
++#######################################
++## <summary>
++##      getattr on a usbfs filesystem.
++## </summary>
++## <param name="domain">
++##      <summary>
++##      Domain allowed access.
++##      </summary>
++## </param>
++#
++interface(`fs_getattr_usbfs_files',`
++        gen_require(`
++                type usbfs_t;
++        ')
++
++        allow $1 usbfs_t:filesystem getattr;
++')
++
+ ########################################
+ ## <summary>
+ ##	Associate a file to a usbfs filesystem.
+diff --git a/policy/modules/kernel/files.if b/policy/modules/kernel/files.if
+index b6c7d1e07..0f7b7bc34 100644
+--- a/policy/modules/kernel/files.if
++++ b/policy/modules/kernel/files.if
+@@ -237,6 +237,26 @@ interface(`files_runtime_file',`
+ 	typeattribute $1 pidfile;
+ ')
+ 
 +########################################
 +## <summary>
 +##      Mount generic spool
@@ -48,33 +79,15 @@ index b308eefd9..b92c2e8c4 100644
 +
  ########################################
  ## <summary>
- ##	Create objects in the spool directory
+ ##	Make the specified type a
 diff --git a/policy/modules/kernel/filesystem.if b/policy/modules/kernel/filesystem.if
-index 1fdba77f5..63032bcc0 100644
+index 839a4d634..6627f89a1 100644
 --- a/policy/modules/kernel/filesystem.if
 +++ b/policy/modules/kernel/filesystem.if
-@@ -1912,6 +1912,42 @@ interface(`fs_cifs_domtrans',`
- 	domain_auto_transition_pattern($1, cifs_t, $2)
+@@ -43,6 +43,24 @@ interface(`fs_noxattr_type',`
+ 	typeattribute $1 noxattrfs;
  ')
-
-+#######################################
-+## <summary>
-+##      getattr on a functionfs filesystem.
-+## </summary>
-+## <param name="domain">
-+##      <summary>
-+##      Domain allowed access.
-+##      </summary>
-+## </param>
-+#
-+interface(`fs_getattr_functionfs_files',`
-+        gen_require(`
-+                type functionfs_t;
-+        ')
-+
-+        allow $1 functionfs_t:filesystem getattr;
-+')
-+
+ 
 +#######################################
 +## <summary>
 +##      search on a configfs filesystem.
@@ -93,17 +106,17 @@ index 1fdba77f5..63032bcc0 100644
 +        allow $1 configfs_t:dir search;
 +')
 +
- #######################################
+ ########################################
  ## <summary>
- ##	Create, read, write, and delete dirs
+ ##	Transform specified type into a filesystem
 diff --git a/policy/modules/services/chronyd.if b/policy/modules/services/chronyd.if
-index 25fb1b0d7..24a3d829b 100644
+index 0232025fd..1d12b2961 100644
 --- a/policy/modules/services/chronyd.if
 +++ b/policy/modules/services/chronyd.if
-@@ -398,3 +398,21 @@ interface(`chronyd_getattr_init_script_file',`
+@@ -76,6 +76,24 @@ interface(`chronyd_getattr_init_script_file',`
          allow $1 chronyd_initrc_exec_t:file getattr;
  ')
-
+ 
 +########################################
 +## <summary>
 +##      Allow to read chronyd_var_lib_t
@@ -122,12 +135,43 @@ index 25fb1b0d7..24a3d829b 100644
 +        allow $1 chronyd_var_lib_t:dir list_dir_perms;
 +')
 +
+ ########################################
+ ## <summary>
+ ##	Execute chronyd server in the
+diff --git a/policy/modules/services/ntp.if b/policy/modules/services/ntp.if
+index 0d3432293..b7b4470c2 100644
+--- a/policy/modules/services/ntp.if
++++ b/policy/modules/services/ntp.if
+@@ -176,6 +176,23 @@ interface(`ntp_read_drift_files',`
+ 	read_files_pattern($1, ntp_drift_t, ntp_drift_t)
+ ')
+
++########################################
++## <summary>
++##      Write ntp drift files.
++## </summary>
++## <param name="domain">
++##      <summary>
++##      Domain allowed access.
++##      </summary>
++## </param>
++#
++interface(`ntp_write_drift_files',`
++        gen_require(`
++                type ntp_drift_t;
++        ')
++        allow $1 ntp_drift_t:file write;
++')
++
+ ########################################
+ ## <summary>
+ ##	specified domain creates /var/lib/ntpsec/ with the correct type
 diff --git a/policy/modules/system/init.if b/policy/modules/system/init.if
-index 0171ee299..2f57eb339 100644
+index b2e3d639e..a76eb37e2 100644
 --- a/policy/modules/system/init.if
 +++ b/policy/modules/system/init.if
-@@ -1373,6 +1373,25 @@ interface(`init_manage_var_lib_files',`
- 	files_search_var_lib($1)
+@@ -41,6 +41,62 @@ interface(`init_path_unit_location_file',`
+ 	files_type($1)
  ')
 
 +########################################
@@ -149,13 +193,6 @@ index 0171ee299..2f57eb339 100644
 +        files_search_var_lib($1)
 +')
 +
- ########################################
- ## <summary>
- ##	Create files in /var/lib/systemd
-@@ -3025,6 +3044,43 @@ interface(`init_manage_utmp',`
- 	allow $1 initrc_runtime_t:file manage_file_perms;
- ')
-
 +########################################
 +## <summary>
 +##      Create, read, write, and delete utmp directory.
@@ -195,15 +232,15 @@ index 0171ee299..2f57eb339 100644
 +
  ########################################
  ## <summary>
- ##	Add a watch on utmp.
+ ##	Create a file type used for init scripts.
 diff --git a/policy/modules/system/libraries.if b/policy/modules/system/libraries.if
-index 15cba69bc..0ba278bd6 100644
+index 4fa9bb5fe..44b9ecf28 100644
 --- a/policy/modules/system/libraries.if
 +++ b/policy/modules/system/libraries.if
-@@ -233,6 +233,25 @@ interface(`libs_dontaudit_write_lib_dirs',`
- 	dontaudit $1 lib_t:dir write;
+@@ -19,6 +19,25 @@ interface(`libs_domtrans_ldconfig',`
+ 	domtrans_pattern($1, ldconfig_exec_t, ldconfig_t)
  ')
-
+ 
 +########################################
 +## <summary>
 +##      Mount library directory.
@@ -225,15 +262,15 @@ index 15cba69bc..0ba278bd6 100644
 +
  ########################################
  ## <summary>
- ##	Create, read, write, and delete library directories.
+ ##	Execute ldconfig in the ldconfig domain.
 diff --git a/policy/modules/system/mount.te b/policy/modules/system/mount.te
-index 3481f9294..db9082ef9 100644
+index 8cd51d563..6a40c813b 100644
 --- a/policy/modules/system/mount.te
 +++ b/policy/modules/system/mount.te
-@@ -146,6 +146,19 @@ selinux_getattr_fs(mount_t)
+@@ -149,6 +149,20 @@ seutil_read_config(mount_t)
+ selinux_getattr_fs(mount_t)
 
  userdom_use_all_users_fds(mount_t)
-
 +init_manage_utmp(mount_t)
 +init_manage_utmp_dir(mount_t)
 +init_delete_utmp_chr_file(mount_t)
@@ -243,13 +280,13 @@ index 3481f9294..db9082ef9 100644
 +init_manage_var_lib_files(mount_t)
 +init_manage_var_lib_dir(mount_t)
 +fs_search_configfs_files(mount_t)
-+fs_getattr_functionfs_files(mount_t)
++fs_getattr_usbfs_files(mount_t)
 +files_relabel_var_lib_dirs(mount_t)
 +chronyd_var_lib_file(mount_t)
-+
++auth_getattr_shadow(mount_t)
++ntp_write_drift_files(mount_t)
+
  ifdef(`distro_redhat',`
  	optional_policy(`
- 		auth_read_pam_console_data(mount_t)
 --
-2.17.1
-
+2.25.1

@@ -1,0 +1,74 @@
+From e51de51550c25c86dbadd247a0ed37bc56c07c32 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@eng.windriver.com>
+Date: Fri, 1 Mar 2024 00:22:22 -0800
+Subject: [PATCH] add yocto toolchain to support cross compiling
+
+Upstream-Status: Inappropriate [oe specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@eng.windriver.com>
+---
+ WORKSPACE                 | 6 ++++++
+ tensorflow/BUILD          | 9 +++++++++
+ tensorflow/workspace2.bzl | 8 ++++++++
+ 3 files changed, 23 insertions(+)
+
+diff --git a/WORKSPACE b/WORKSPACE
+index 9b33f0cfdf1..852ee626ff1 100644
+--- a/WORKSPACE
++++ b/WORKSPACE
+@@ -92,3 +92,9 @@ tf_workspace1()
+ load("@//tensorflow:workspace0.bzl", "tf_workspace0")
+ 
+ tf_workspace0()
++
++new_local_repository(
++    name = "yocto_compiler",
++    path = "%%WORKDIR%%",
++    build_file = "//:BUILD.yocto_compiler",
++)
+diff --git a/tensorflow/BUILD b/tensorflow/BUILD
+index 0bf6127ffd1..fc4f0314429 100644
+--- a/tensorflow/BUILD
++++ b/tensorflow/BUILD
+@@ -358,6 +358,15 @@ config_setting(
+     visibility = ["//visibility:public"],
+ )
+ 
++config_setting(
++    name = "yocto_armeabi",
++    values = {
++        "crosstool_top": "@local_config_yocto_compiler//:toolchain",
++        "cpu": "armeabi",
++    },
++    visibility = ["//visibility:public"],
++)
++
+ config_setting(
+     name = "android_arm",
+     constraint_values = if_google(
+diff --git a/tensorflow/workspace2.bzl b/tensorflow/workspace2.bzl
+index 3ef4a544f1a..9e4c2da9fe2 100644
+--- a/tensorflow/workspace2.bzl
++++ b/tensorflow/workspace2.bzl
+@@ -49,6 +49,7 @@ load("//tensorflow/tools/def_file_filter:def_file_filter_configure.bzl", "def_fi
+ load("//tensorflow/tools/toolchains:cpus/aarch64/aarch64_compiler_configure.bzl", "aarch64_compiler_configure")
+ load("//tensorflow/tools/toolchains:cpus/arm/arm_compiler_configure.bzl", "arm_compiler_configure")
+ load("//tensorflow/tools/toolchains/clang6:repo.bzl", "clang6_configure")
++load("//third_party/toolchains/yocto:yocto_compiler_configure.bzl", "yocto_compiler_configure")
+ load("//tensorflow/tools/toolchains/embedded/arm-linux:arm_linux_toolchain_configure.bzl", "arm_linux_toolchain_configure")
+ load("//tensorflow/tools/toolchains/remote:configure.bzl", "remote_execution_configure")
+ load("//tensorflow/tools/toolchains/remote_config:configs.bzl", "initialize_rbe_configs")
+@@ -127,6 +128,13 @@ def _tf_toolchains():
+     # Load aarch64 toolchain
+     aarch64_compiler_configure()
+ 
++    # Point //external/local_config_yocto_compiler to //external/yocto_compiler
++    yocto_compiler_configure(
++        name = "local_config_yocto_compiler",
++        build_file = "//third_party/toolchains/yocto:BUILD",
++        remote_config_repo = "../yocto_compiler",
++    )
++
+     # TFLite crossbuild toolchain for embeddeds Linux
+     arm_linux_toolchain_configure(
+         name = "local_config_embedded_arm",

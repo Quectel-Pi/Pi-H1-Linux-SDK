@@ -1,0 +1,12 @@
+[Unit]
+Description=Rebuild dconf database at boot
+After=local-fs.target
+Before=gdm.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/pi-cleanup.sh
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -6,14 +6,13 @@ COMPATIBLE_MACHINE = "qcm6490|qcs9100|qcs8300|qcs615"
 
 PROVIDES += "virtual/bootbins"
 
-SRC_URI ="https://${FW_ARTIFACTORY}/${FW_BUILD_ID}/${FW_BIN_PATH}/${BOOTBINARIES}.zip;name=${PBT_ARCH}"
+SRC_URI:qcm6490 = "file://${QUECTEL_PREBUILT_BPFW_DIR}/QCM6490_bootbinaries.zip;name=qcm6490"
+SRC_URI ="${FW_ARTIFACTORY}/${FW_BUILD_ID}/${FW_BIN_PATH}/${BOOTBINARIES}.zip;name=${PBT_ARCH}"
 
-#SRC_URI[qcm6490.sha256sum] = "08c0798f1ab9f380c94b54141847c7b365c87f2a072a2461779cf282809aeeb4"
-#qcm6490
-SRC_URI = "file://${FWZIP_PATH}/${BOOTBINARIES}.zip"
-SRC_URI[qcs9100.sha256sum] = "bd024ffe419f13b19907b285d0369bf9dfdf77b7e95052b9e4869957ddcaf07f"
-SRC_URI[qcs8300.sha256sum] = "224e3d59239efc4e64baec98db5c4df0f5ccd166b75226455533996dac0debae"
-SRC_URI[qcs615.sha256sum]  = "d15d18296ada2c1d94d3127ab374ecb8cfb4f68a3db66f76d7a4a3f1f09e2130"
+SRC_URI[qcm6490.sha256sum] = "f333b604eda6f0d3d9376f29c37146f709ae057fff79b1f280c54acd666b44bb"
+SRC_URI[qcs9100.sha256sum] = "963d54a9e9a3ef29c6933b3d71faa035b72df07cc36f42c14c39ed5f47878026"
+SRC_URI[qcs8300.sha256sum] = "2067015d9a96d7e009ffec3a42bb7f88a659eb96c6b9e6f9df849af222a8f0e3"
+SRC_URI[qcs615.sha256sum]  = "a5cd09352d760699ca79d76b28a20f6519db8d2c3b121074c15235d01f7e3a76"
 
 include firmware-common.inc
 
@@ -42,17 +41,24 @@ python do_install() {
         name, ext = os.path.splitext(item)
         if name.startswith('partition') and ext == '.xml':
             os.remove(os.path.join(d.getVar('D'), item))
+        if name.startswith('contents') and ext == '.xml':
+            os.remove(os.path.join(d.getVar('D'), item))
 
 }
 
 inherit deploy
 
 do_deploy() {
-    find "${D}" -name '*.bin' -exec install -m 0644 {} ${DEPLOYDIR} \;
-    find "${D}" -name '*.elf' -exec install -m 0644 {} ${DEPLOYDIR} \;
-    find "${D}" -name '*.fv' -exec install -m 0644 {} ${DEPLOYDIR} \;
-    find "${D}" -name '*.mbn' -exec install -m 0644 {} ${DEPLOYDIR} \;
-    find "${D}" -name '*.melf' -exec install -m 0644 {} ${DEPLOYDIR} \;
+    find "${D}" -maxdepth 1 -name '*.bin' -exec install -m 0644 {} ${DEPLOYDIR} \;
+    find "${D}" -maxdepth 1 -name '*.elf' -exec install -m 0644 {} ${DEPLOYDIR} \;
+    find "${D}" -maxdepth 1 -name '*.fv' -exec install -m 0644 {} ${DEPLOYDIR} \;
+    find "${D}" -maxdepth 1 -name '*.mbn' -exec install -m 0644 {} ${DEPLOYDIR} \;
+    find "${D}" -maxdepth 1 -name '*.melf' -exec install -m 0644 {} ${DEPLOYDIR} \;
+    # Copy sail_nor files to deploydir
+    for f in $(find "${D}/sail_nor" -type f -printf '%P ') ; do
+        install -d ${DEPLOYDIR}/sail_nor
+        install -m 0644 ${D}/sail_nor/$f ${DEPLOYDIR}/sail_nor/$f
+    done
 }
 addtask deploy before do_build after do_install
 
@@ -60,7 +66,7 @@ PACKAGE_ARCH = "${SOC_ARCH}"
 
 PACKAGES += "${PN}-copyright"
 
-FILES:${PN} += "/*.elf /*.mbn /*.bin /*.fv */.melf"
+FILES:${PN} += "/*.elf /*.mbn /*.bin /*.fv */.melf /sail_nor/*"
 FILES:${PN}-copyright += "/Qualcomm-Technologies-Inc.-Proprietary"
 
 INSANE_SKIP:${PN} = "arch"

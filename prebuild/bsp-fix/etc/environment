@@ -1,0 +1,12 @@
+LIBVA_DRIVER_NAME=msm
+# QCom adreno GStreamer plugins live in /usr/lib/gstreamer-1.0/ (Yocto BSP
+# default plugin dir). trixie's libgstreamer only scans the multiarch dir
+# /usr/lib/aarch64-linux-gnu/gstreamer-1.0/ by default, so without this path
+# override the qti* plugins are never registered and customer workloads
+# relying on NPU/video DSP acceleration silently miss them.
+# This is the same mechanism LIBVA_DRIVER_NAME above uses (pam_env readenv=1
+# reads /etc/environment); /etc/environment.d/ alone is NOT honoured across
+# autologin GNOME sessions on this image because user-environment-d-generator
+# is not wired in. /etc/profile.d/gst-qti-plugins.sh additionally covers
+# non-PAM POSIX shells.
+GST_PLUGIN_PATH=/usr/lib/gstreamer-1.0

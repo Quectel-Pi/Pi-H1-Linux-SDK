@@ -1,21 +1,6 @@
 DEPENDS = " \
-    go-cli \
-    go-pty \
-    go-context \
-    go-mux \
-    go-patricia \
-    go-logrus \
-    go-fsnotify \
-    go-dbus \
-    go-capability \
-    go-systemd \
     btrfs-tools \
     sqlite3 \
-    go-distribution \
-    compose-file \
-    go-connections \
-    notary \
-    grpc-go \
     libtool-native \
     libtool \
     "
@@ -27,7 +12,7 @@ RDEPENDS:${PN} = "util-linux util-linux-unshare iptables \
                   bridge-utils \
                   ca-certificates \
                  "
-RDEPENDS:${PN} += "virtual-containerd virtual-runc"
+RDEPENDS:${PN} += "virtual-containerd ${VIRTUAL-RUNTIME_container_runtime}"
 
 RRECOMMENDS:${PN} = "kernel-module-dm-thin-pool kernel-module-nf-nat kernel-module-nf-conntrack-netlink kernel-module-xt-addrtype kernel-module-xt-masquerade"
 
@@ -78,7 +63,7 @@ do_compile() {
 	ln -sf ${WORKDIR}/git/libnetwork .gopath/src/github.com/docker/libnetwork
 	ln -sf ${WORKDIR}/git/cli .gopath/src/github.com/docker/cli
 
-	export GOPATH="${S}/src/import/.gopath:${S}/src/import/vendor:${STAGING_DIR_TARGET}/${prefix}/local/go"
+	export GOPATH="${S}/src/import/.gopath:${S}/src/import/vendor"
 	export GOROOT="${STAGING_DIR_NATIVE}/${nonarch_libdir}/${HOST_SYS}/go"
 
 	# Pass the needed cflags/ldflags so that cgo

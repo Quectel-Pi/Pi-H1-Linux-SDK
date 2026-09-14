@@ -7,18 +7,33 @@ Upstream-Status: Pending
 
 Signed-off-by: Komal Bajaj <quic_kbajaj@quicinc.com>
 ---
+ policy/modules/services/irqbalance.fc | 2 ++
  policy/modules/services/irqbalance.te | 2 ++
- 1 file changed, 2 insertions(+)
+ 2 files changed, 4 insertions(+)
 
+diff --git a/policy/modules/services/irqbalance.fc b/policy/modules/services/irqbalance.fc
+index a9fb42964..804e7f965 100644
+--- a/policy/modules/services/irqbalance.fc
++++ b/policy/modules/services/irqbalance.fc
+@@ -7,3 +7,5 @@
+ /usr/bin/irqbalance				--	gen_context(system_u:object_r:irqbalance_exec_t,s0)
+ 
+ /usr/sbin/irqbalance				--	gen_context(system_u:object_r:irqbalance_exec_t,s0)
++
++/usr/sbin/irq.sh				--	gen_context(system_u:object_r:irqbalance_exec_t,s0)
 diff --git a/policy/modules/services/irqbalance.te b/policy/modules/services/irqbalance.te
 index 35dd36e28..26677b000 100644
 --- a/policy/modules/services/irqbalance.te
 +++ b/policy/modules/services/irqbalance.te
-@@ -57,3 +57,5 @@ miscfiles_read_localization(irqbalance_t)
+@@ -57,3 +57,9 @@ miscfiles_read_localization(irqbalance_t)
  userdom_dontaudit_use_unpriv_user_fds(irqbalance_t)
  userdom_dontaudit_search_user_home_dirs(irqbalance_t)
  
 +corecmd_search_bin(irqbalance_t)
++access_bin_shell_exec(irqbalance_t)
++allow irqbalance_t self:fifo_file rw_fifo_file_perms; 
++allow irqbalance_t irqbalance_exec_t:file execute_no_trans;
++files_read_usr_files(irqbalance_t)
 +
 -- 
 2.46.0

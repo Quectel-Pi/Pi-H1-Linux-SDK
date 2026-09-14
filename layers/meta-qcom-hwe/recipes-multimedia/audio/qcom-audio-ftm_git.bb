@@ -7,7 +7,7 @@ DESCRIPTION = "Audio FTM"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/vendor/qcom-opensource/audio_ftm.git;protocol=https"
 SRCBRANCH  = "audio-core.lnx.1.0.r1-rel"
-SRCREV     = "bc4eb5e019994c1564ff649e0eabfe60b621371a"
+SRCREV     = "9c1700d019ea0f53fb26f080829580c6d7fd55f0"
 
 SRC_URI =  "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=audio/opensource/audio_ftm"
 

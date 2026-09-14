@@ -1,0 +1,47 @@
+From 28acb4a213938bcb7e55ef3859699091c1f434c0 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@eng.windriver.com>
+Date: Thu, 1 Dec 2022 19:32:33 +0800
+Subject: [PATCH] HttpDownloader: save download tarball to distdir
+
+It is helpful for collecting tarball url which supports offline build.
+
+Upstream-Status: Inappropriate [oe specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@eng.windriver.com>
+---
+ .../bazel/repository/downloader/DownloadManager.java | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/src/main/java/com/google/devtools/build/lib/bazel/repository/downloader/DownloadManager.java b/src/main/java/com/google/devtools/build/lib/bazel/repository/downloader/DownloadManager.java
+index bf65090..ee30dde 100755
+--- a/src/main/java/com/google/devtools/build/lib/bazel/repository/downloader/DownloadManager.java
++++ b/src/main/java/com/google/devtools/build/lib/bazel/repository/downloader/DownloadManager.java
+@@ -213,6 +213,7 @@ public class DownloadManager {
+         } else {
+           for (String name : candidateFileNames) {
+             boolean match = false;
++            name += "_"+cacheKey;
+             Path candidate = dir.getRelative(name);
+             try {
+               eventHandler.post(
+@@ -280,6 +281,17 @@ public class DownloadManager {
+       repositoryCache.put(destination, KeyType.SHA256, canonicalId);
+     }
+ 
++    for (Path dir : distdir) {
++      if (!dir.exists())
++        FileSystemUtils.createDirectoryAndParents(dir);
++
++      if (dir.isDirectory()) {
++        Path dl_mirror = dir.getRelative(destination.getBaseName()+"_"+checksum.get().toString());
++        if (!dl_mirror.exists())
++            FileSystemUtils.copyFile(destination, dl_mirror);
++      }
++    }
++
+     return destination;
+   }
+ 
+-- 
+2.27.0
+

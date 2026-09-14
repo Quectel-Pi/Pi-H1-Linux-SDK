@@ -1,0 +1,14 @@
+[Unit]
+Description=PulseAudio Sound Service
+After= diag-router.service
+Requires= diag-router.service
+
+[Service]
+# Note that notify will only work if --daemonize=no
+Type=notify
+Restart=on-failure
+RestartSec=3
+StateDirectory=pulse
+
+[Install]
+WantedBy=multi-user.target

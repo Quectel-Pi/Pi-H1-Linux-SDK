@@ -1,0 +1,35 @@
+From 238a133213a2d626a9726a6d87bd7b9c03da420c Mon Sep 17 00:00:00 2001
+From: Konrad Dybcio <konrad.dybcio@linaro.org>
+Date: Thu, 6 Feb 2025 15:28:27 +0530
+Subject: [PATCH 2/2] BACKPORT: drm/msm/a6xx: Evaluate adreno_is_a650_family in
+ pdc_in_aop check
+
+A650 family includes A660 family (they've got a big family), A650
+itself, and some more A6XX_GEN3 SKUs, all of which should fall into
+the same branch of the if-condition. Simplify that.
+
+Signed-off-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/605206/
+Signed-off-by: Rob Clark <robdclark@chromium.org>
+Link: https://lore.kernel.org/lkml/20240828-topic-a621-v2-1-1882c6b57432@kernel.org/
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git  1b3975efc1a923327577dbf77476688674fcffb7]
+---
+ drivers/gpu/drm/msm/adreno/a6xx_gmu.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/msm/adreno/a6xx_gmu.c b/drivers/gpu/drm/msm/adreno/a6xx_gmu.c
+index 91b1eaaf9038..a2d3b0366aa0 100644
+--- a/drivers/gpu/drm/msm/adreno/a6xx_gmu.c
++++ b/drivers/gpu/drm/msm/adreno/a6xx_gmu.c
+@@ -536,7 +536,7 @@ static void a6xx_gmu_rpmh_init(struct a6xx_gmu *gmu)
+ 	if (IS_ERR(pdcptr))
+ 		goto err;
+ 
+-	if (adreno_is_a650(adreno_gpu) || adreno_is_a660_family(adreno_gpu))
++	if (adreno_is_a650_family(adreno_gpu) || adreno_is_a660_family(adreno_gpu))
+ 		pdc_in_aop = true;
+ 	else if (adreno_is_a618(adreno_gpu) || adreno_is_a640_family(adreno_gpu))
+ 		pdc_address_offset = 0x30090;
+-- 
+2.34.1
+

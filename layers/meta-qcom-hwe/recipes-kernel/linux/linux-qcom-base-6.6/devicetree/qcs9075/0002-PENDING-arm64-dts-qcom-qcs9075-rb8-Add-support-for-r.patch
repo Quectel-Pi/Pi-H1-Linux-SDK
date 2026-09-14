@@ -1,0 +1,53 @@
+From 9402cd04f3745914fac05dbf5f42178c92c15db9 Mon Sep 17 00:00:00 2001
+From: Wasim Nazir <quic_wasimn@quicinc.com>
+Date: Fri, 1 Nov 2024 13:43:02 +0530
+Subject: [PATCH 2/3] PENDING: arm64: dts: qcom: qcs9075-rb8: Add support for
+ remoteproc instances
+
+Enable remoteproc for adsp/cdsp/gdsp in qcs9075-rb8.
+
+Signed-off-by: Wasim Nazir <quic_wasimn@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/qcs9075-rb8.dts | 25 ++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts b/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
+index f9feb3e042be..b27966cfdf7b 100644
+--- a/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
++++ b/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
+@@ -402,6 +402,31 @@ &qupv3_id_3 {
+ 	status = "okay";
+ };
+ 
++&remoteproc_adsp {
++	firmware-name = "qcom/sa8775p/adsp.mbn";
++	status = "okay";
++};
++
++&remoteproc_cdsp0 {
++	firmware-name = "qcom/sa8775p/cdsp0.mbn";
++	status = "okay";
++};
++
++&remoteproc_cdsp1 {
++	firmware-name = "qcom/sa8775p/cdsp1.mbn";
++	status = "okay";
++};
++
++&remoteproc_gpdsp0 {
++	firmware-name = "qcom/sa8775p/gpdsp0.mbn";
++	status = "okay";
++};
++
++&remoteproc_gpdsp1 {
++	firmware-name = "qcom/sa8775p/gpdsp1.mbn";
++	status = "okay";
++};
++
+ &sleep_clk {
+ 	clock-frequency = <32768>;
+ };
+-- 
+2.48.1
+

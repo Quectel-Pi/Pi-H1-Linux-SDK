@@ -1,0 +1,23 @@
+inherit qprebuilt
+
+LICENSE          = "Qualcomm-Technologies-Inc.-Proprietary"
+LIC_FILES_CHKSUM = "file://${QCOM_COMMON_LICENSE_DIR}${LICENSE};md5=58d50a3d36f27f1a1e6089308a49b403"
+
+DESCRIPTION = "Camx"
+
+QCS9100_SHA256SUM = "d7f8198aceaf59bfcbc96e650dc0c9984b238af1581a0d925c8bb60da0650e93"
+QCS8300_SHA256SUM = "7156b526cd6789b4b747de0a5c25d8dd99b6388bb6c6f1933e71ff981f2c67a1"
+QCS615_SHA256SUM = "5ce87645b4429f484c35c88f057a940b011b033e1372f4202f14462870fe57f4"
+
+SRC_URI[qcs9100.sha256sum] = "${QCS9100_SHA256SUM}"
+SRC_URI[qcs8300.sha256sum] = "${QCS8300_SHA256SUM}"
+SRC_URI[qcs615.sha256sum] = "${QCS615_SHA256SUM}"
+
+SRC_URI = "${PBT_ARTIFACTORY}/${PBT_BUILD_ID}/${PBT_BIN_PATH}/${BPN}_${PV}_${PBT_ARCH}.tar.gz;name=${PBT_ARCH}"
+
+FILES:${PN}-dev = "/usr/include/*"
+
+#Skips check for .so symlinks
+INSANE_SKIP = "1"
+INSANE_SKIP:${PN} = "already-stripped"
+

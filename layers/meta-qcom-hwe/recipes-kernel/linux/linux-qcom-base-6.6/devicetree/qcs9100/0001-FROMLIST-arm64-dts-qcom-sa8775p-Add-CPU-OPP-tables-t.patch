@@ -1,0 +1,312 @@
+From bb4449c4a7ddea16e3f05f0f5fc327978b9edd28 Mon Sep 17 00:00:00 2001
+From: Jagadeesh Kona <quic_jkona@quicinc.com>
+Date: Wed, 5 Feb 2025 18:27:43 +0000
+Subject: [PATCH 1/6] FROMLIST: arm64: dts: qcom: sa8775p: Add CPU OPP tables
+ to scale DDR/L3
+
+Add OPP tables required to scale DDR and L3 per freq-domain
+on SA8775P platform.
+
+If a single OPP table is used for both CPU domains, then
+_allocate_opp_table() won't be invoked for CPU4 but instead
+CPU4 will be added as device under the CPU0 OPP table. Due
+to this, dev_pm_opp_of_find_icc_paths() won't be invoked for
+CPU4 device and hence CPU4 won't be able to independently scale
+it's interconnects. Both CPU0 and CPU4 devices will scale the
+same ICC path which can lead to one device overwriting the BW
+vote placed by other device. Hence CPU0 and CPU4 require separate
+OPP tables to allow independent scaling of DDR and L3 frequencies
+for each CPU domain, with the final DDR and L3 frequencies being
+an aggregate of both.
+
+Co-developed-by: Shivnandan Kumar <quic_kshivnan@quicinc.com>
+Signed-off-by: Shivnandan Kumar <quic_kshivnan@quicinc.com>
+Signed-off-by: Jagadeesh Kona <quic_jkona@quicinc.com>
+Signed-off-by: Raviteja Laggyshetty <quic_rlaggysh@quicinc.com>
+Link: https://lore.kernel.org/all/20250205182743.915-8-quic_rlaggysh@quicinc.com/
+Upstream-Status: Submitted
+[https://lore.kernel.org/all/20250205182743.915-8-quic_rlaggysh@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/sa8775p.dtsi | 210 ++++++++++++++++++++++++++
+ 1 file changed, 210 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sa8775p.dtsi b/arch/arm64/boot/dts/qcom/sa8775p.dtsi
+index 79b53c5af5bf..ae0eb9748fe1 100644
+--- a/arch/arm64/boot/dts/qcom/sa8775p.dtsi
++++ b/arch/arm64/boot/dts/qcom/sa8775p.dtsi
+@@ -51,6 +51,11 @@ CPU0: cpu@0 {
+ 			next-level-cache = <&L2_0>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu0_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl0 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl0 SLAVE_EPSS_L3_SHARED>;
+ 			L2_0: l2-cache {
+ 				compatible = "cache";
+ 				cache-level = <2>;
+@@ -75,6 +80,11 @@ CPU1: cpu@100 {
+ 			next-level-cache = <&L2_1>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu0_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl0 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl0 SLAVE_EPSS_L3_SHARED>;
+ 			L2_1: l2-cache {
+ 				compatible = "cache";
+ 				cache-level = <2>;
+@@ -94,6 +104,11 @@ CPU2: cpu@200 {
+ 			next-level-cache = <&L2_2>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu0_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl0 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl0 SLAVE_EPSS_L3_SHARED>;
+ 			L2_2: l2-cache {
+ 				compatible = "cache";
+ 				cache-level = <2>;
+@@ -113,6 +128,11 @@ CPU3: cpu@300 {
+ 			next-level-cache = <&L2_3>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu0_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl0 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl0 SLAVE_EPSS_L3_SHARED>;
+ 			L2_3: l2-cache {
+ 				compatible = "cache";
+ 				cache-level = <2>;
+@@ -132,6 +152,11 @@ CPU4: cpu@10000 {
+ 			next-level-cache = <&L2_4>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu4_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl1 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl1 SLAVE_EPSS_L3_SHARED>;
+ 			L2_4: l2-cache {
+ 				compatible = "cache";
+ 				cache-level = <2>;
+@@ -157,6 +182,11 @@ CPU5: cpu@10100 {
+ 			next-level-cache = <&L2_5>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu4_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl1 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl1 SLAVE_EPSS_L3_SHARED>;
+ 			L2_5: l2-cache {
+ 				compatible = "cache";
+ 				cache-level = <2>;
+@@ -176,6 +206,11 @@ CPU6: cpu@10200 {
+ 			next-level-cache = <&L2_6>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu4_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl1 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl1 SLAVE_EPSS_L3_SHARED>;
+ 			L2_6: l2-cache {
+ 				compatible = "cache";
+ 				cache-level = <2>;
+@@ -195,6 +230,11 @@ CPU7: cpu@10300 {
+ 			next-level-cache = <&L2_7>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu4_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl1 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl1 SLAVE_EPSS_L3_SHARED>;
+ 			L2_7: l2-cache {
+ 				compatible = "cache";
+ 				cache-level = <2>;
+@@ -284,6 +324,176 @@ CLUSTER_SLEEP_APSS_RSC_PC: cluster-sleep-1 {
+ 		};
+ 	};
+ 
++	cpu0_opp_table: opp-table-cpu0 {
++		compatible = "operating-points-v2";
++		opp-shared;
++
++		cpu0_opp_1267mhz: opp-1267200000 {
++			opp-hz = /bits/ 64 <1267200000>;
++			opp-peak-kBps = <6220800 29491200>;
++		};
++
++		cpu0_opp_1363mhz: opp-1363200000 {
++			opp-hz = /bits/ 64 <1363200000>;
++			opp-peak-kBps = <6220800 29491200>;
++		};
++
++		cpu0_opp_1459mhz: opp-1459200000 {
++			opp-hz = /bits/ 64 <1459200000>;
++			opp-peak-kBps = <6220800 29491200>;
++		};
++
++		cpu0_opp_1536mhz: opp-1536000000 {
++			opp-hz = /bits/ 64 <1536000000>;
++			opp-peak-kBps = <6220800 29491200>;
++		};
++
++		cpu0_opp_1632mhz: opp-1632000000 {
++			opp-hz = /bits/ 64 <1632000000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu0_opp_1708mhz: opp-1708800000 {
++			opp-hz = /bits/ 64 <1708800000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu0_opp_1785mhz: opp-1785600000 {
++			opp-hz = /bits/ 64 <1785600000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu0_opp_1862mhz: opp-1862400000 {
++			opp-hz = /bits/ 64 <1862400000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu0_opp_1939mhz: opp-1939200000 {
++			opp-hz = /bits/ 64 <1939200000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu0_opp_2016mhz: opp-2016000000 {
++			opp-hz = /bits/ 64 <2016000000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu0_opp_2112mhz: opp-2112000000 {
++			opp-hz = /bits/ 64 <2112000000>;
++			opp-peak-kBps = <8371200 49766400>;
++		};
++
++		cpu0_opp_2188mhz: opp-2188800000 {
++			opp-hz = /bits/ 64 <2188800000>;
++			opp-peak-kBps = <8371200 49766400>;
++		};
++
++		cpu0_opp_2265mhz: opp-2265600000 {
++			opp-hz = /bits/ 64 <2265600000>;
++			opp-peak-kBps = <8371200 49766400>;
++		};
++
++		cpu0_opp_2361mhz: opp-2361600000 {
++			opp-hz = /bits/ 64 <2361600000>;
++			opp-peak-kBps = <12787200 51609600>;
++		};
++
++		cpu0_opp_2457mhz: opp-2457600000 {
++			opp-hz = /bits/ 64 <2457600000>;
++			opp-peak-kBps = <12787200 51609600>;
++		};
++
++		cpu0_opp_2553mhz: opp-2553600000 {
++			opp-hz = /bits/ 64 <2553600000>;
++			opp-peak-kBps = <12787200 54681600>;
++		};
++	};
++
++	cpu4_opp_table: opp-table-cpu4 {
++		compatible = "operating-points-v2";
++		opp-shared;
++
++		cpu4_opp_1267mhz: opp-1267200000 {
++			opp-hz = /bits/ 64 <1267200000>;
++			opp-peak-kBps = <6220800 29491200>;
++		};
++
++		cpu4_opp_1363mhz: opp-1363200000 {
++			opp-hz = /bits/ 64 <1363200000>;
++			opp-peak-kBps = <6220800 29491200>;
++		};
++
++		cpu4_opp_1459mhz: opp-1459200000 {
++			opp-hz = /bits/ 64 <1459200000>;
++			opp-peak-kBps = <6220800 29491200>;
++		};
++
++		cpu4_opp_1536mhz: opp-1536000000 {
++			opp-hz = /bits/ 64 <1536000000>;
++			opp-peak-kBps = <6220800 29491200>;
++		};
++
++		cpu4_opp_1632mhz: opp-1632000000 {
++			opp-hz = /bits/ 64 <1632000000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu4_opp_1708mhz: opp-1708800000 {
++			opp-hz = /bits/ 64 <1708800000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu4_opp_1785mhz: opp-1785600000 {
++			opp-hz = /bits/ 64 <1785600000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu4_opp_1862mhz: opp-1862400000 {
++			opp-hz = /bits/ 64 <1862400000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu4_opp_1939mhz: opp-1939200000 {
++			opp-hz = /bits/ 64 <1939200000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu4_opp_2016mhz: opp-2016000000 {
++			opp-hz = /bits/ 64 <2016000000>;
++			opp-peak-kBps = <6835200 39321600>;
++		};
++
++		cpu4_opp_2112mhz: opp-2112000000 {
++			opp-hz = /bits/ 64 <2112000000>;
++			opp-peak-kBps = <8371200 49766400>;
++		};
++
++		cpu4_opp_2188mhz: opp-2188800000 {
++			opp-hz = /bits/ 64 <2188800000>;
++			opp-peak-kBps = <8371200 49766400>;
++		};
++
++		cpu4_opp_2265mhz: opp-2265600000 {
++			opp-hz = /bits/ 64 <2265600000>;
++			opp-peak-kBps = <8371200 49766400>;
++		};
++
++		cpu4_opp_2361mhz: opp-2361600000 {
++			opp-hz = /bits/ 64 <2361600000>;
++			opp-peak-kBps = <12787200 51609600>;
++		};
++
++		cpu4_opp_2457mhz: opp-2457600000 {
++			opp-hz = /bits/ 64 <2457600000>;
++			opp-peak-kBps = <12787200 51609600>;
++		};
++
++		cpu4_opp_2553mhz: opp-2553600000 {
++			opp-hz = /bits/ 64 <2553600000>;
++			opp-peak-kBps = <12787200 54681600>;
++		};
++	};
++
+ 	dummy-sink {
+ 		compatible = "arm,coresight-dummy-sink";
+ 
+-- 
+2.34.1
+

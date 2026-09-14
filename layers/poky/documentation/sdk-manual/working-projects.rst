@@ -11,14 +11,15 @@ Autotools-Based Projects
 ========================
 
 Once you have a suitable :ref:`sdk-manual/intro:the cross-development toolchain`
-installed, it is very easy to develop a project using the `GNU
-Autotools-based <https://en.wikipedia.org/wiki/GNU_Build_System>`__
-workflow, which is outside of the :term:`OpenEmbedded Build System`.
+installed, it is very easy to develop a project using the :wikipedia:`GNU
+Autotools-based <GNU_Build_System>` workflow, which is outside of the
+:term:`OpenEmbedded Build System`.
 
 The following figure presents a simple Autotools workflow.
 
 .. image:: figures/sdk-autotools-flow.png
    :align: center
+   :width: 70%
 
 Follow these steps to create a simple Autotools-based "Hello World"
 project:
@@ -30,10 +31,9 @@ project:
    GNOME Developer
    site.
 
-1. *Create a Working Directory and Populate It:* Create a clean
+#. *Create a Working Directory and Populate It:* Create a clean
    directory for your project and then make that directory your working
-   location.
-   ::
+   location::
 
       $ mkdir $HOME/helloworld
       $ cd $HOME/helloworld
@@ -56,9 +56,10 @@ project:
 
          #include <stdio.h>
 
-         main()
+         int main()
              {
                  printf("Hello World!\n");
+                 return 0;
              }
 
    -  ``configure.ac``::
@@ -74,7 +75,7 @@ project:
          bin_PROGRAMS = hello
          hello_SOURCES = hello.c
 
-2. *Source the Cross-Toolchain Environment Setup File:* As described
+#. *Source the Cross-Toolchain Environment Setup File:* As described
    earlier in the manual, installing the cross-toolchain creates a
    cross-toolchain environment setup script in the directory that the
    SDK was installed. Before you can use the tools to develop your
@@ -87,9 +88,13 @@ project:
 
       $ source /opt/poky/&DISTRO;/environment-setup-i586-poky-linux
 
-3. *Create the configure Script:* Use the ``autoreconf`` command to
-   generate the ``configure`` script.
-   ::
+   Another example is sourcing the environment setup directly in a Yocto
+   build::
+
+      $ source tmp/deploy/images/qemux86-64/environment-setup-core2-64-poky-linux
+
+#. *Create the configure Script:* Use the ``autoreconf`` command to
+   generate the ``configure`` script::
 
       $ autoreconf
 
@@ -104,7 +109,7 @@ project:
       which ensures missing auxiliary files are copied to the build
       host.
 
-4. *Cross-Compile the Project:* This command compiles the project using
+#. *Cross-Compile the Project:* This command compiles the project using
    the cross-compiler. The
    :term:`CONFIGURE_FLAGS`
    environment variable provides the minimal arguments for GNU
@@ -125,7 +130,7 @@ project:
 
      $ ./configure --host=armv5te-poky-linux-gnueabi --with-libtool-sysroot=sysroot_dir
 
-5. *Make and Install the Project:* These two commands generate and
+#. *Make and Install the Project:* These two commands generate and
    install the project into the destination directory::
 
       $ make
@@ -141,12 +146,11 @@ project:
    This next command is a simple way to verify the installation of your
    project. Running the command prints the architecture on which the
    binary file can run. This architecture should be the same
-   architecture that the installed cross-toolchain supports.
-   ::
+   architecture that the installed cross-toolchain supports::
 
       $ file ./tmp/usr/local/bin/hello
 
-6. *Execute Your Project:* To execute the project, you would need to run
+#. *Execute Your Project:* To execute the project, you would need to run
    it on your target hardware. If your target hardware happens to be
    your build host, you could run the project as follows::
 
@@ -168,6 +172,7 @@ variables and Makefile variables during development.
 
 .. image:: figures/sdk-makefile-flow.png
    :align: center
+   :width: 70%
 
 The main point of this section is to explain the following three cases
 regarding variable behavior:
@@ -204,8 +209,7 @@ demonstrates these variable behaviors.
 In a new shell environment variables are not established for the SDK
 until you run the setup script. For example, the following commands show
 a null value for the compiler variable (i.e.
-:term:`CC`).
-::
+:term:`CC`)::
 
    $ echo ${CC}
 
@@ -224,10 +228,9 @@ established through the script::
 To illustrate variable use, work through this simple "Hello World!"
 example:
 
-1. *Create a Working Directory and Populate It:* Create a clean
+#. *Create a Working Directory and Populate It:* Create a clean
    directory for your project and then make that directory your working
-   location.
-   ::
+   location::
 
       $ mkdir $HOME/helloworld
       $ cd $HOME/helloworld
@@ -264,7 +267,7 @@ example:
              printf("\n");
          }
 
-2. *Source the Cross-Toolchain Environment Setup File:* As described
+#. *Source the Cross-Toolchain Environment Setup File:* As described
    earlier in the manual, installing the cross-toolchain creates a
    cross-toolchain environment setup script in the directory that the
    SDK was installed. Before you can use the tools to develop your
@@ -277,7 +280,12 @@ example:
 
       $ source /opt/poky/&DISTRO;/environment-setup-i586-poky-linux
 
-3. *Create the Makefile:* For this example, the Makefile contains
+   Another example is sourcing the environment setup directly in a Yocto
+   build::
+
+      $ source tmp/deploy/images/qemux86-64/environment-setup-core2-64-poky-linux
+
+#. *Create the Makefile:* For this example, the Makefile contains
    two lines that can be used to set the :term:`CC` variable. One line is
    identical to the value that is set when you run the SDK environment
    setup script, and the other line sets :term:`CC` to "gcc", the default
@@ -289,13 +297,13 @@ example:
         ${CC} main.o module.o -o target_bin
       main.o: main.c module.h
         ${CC} -I . -c main.c
-      module.o: module.c
-        module.h ${CC} -I . -c module.c
+      module.o: module.c module.h
+        ${CC} -I . -c module.c
       clean:
         rm -rf *.o
         rm target_bin
 
-4. *Make the Project:* Use the ``make`` command to create the binary
+#. *Make the Project:* Use the ``make`` command to create the binary
    output file. Because variables are commented out in the Makefile, the
    value used for :term:`CC` is the value set when the SDK environment setup
    file was run::
@@ -311,8 +319,7 @@ example:
 
    You can override the :term:`CC` environment variable with the same
    variable as set from the Makefile by uncommenting the line in the
-   Makefile and running ``make`` again.
-   ::
+   Makefile and running ``make`` again::
 
       $ make clean
       rm -rf *.o
@@ -381,7 +388,7 @@ example:
    use the SDK environment variables regardless of the values in the
    Makefile.
 
-5. *Execute Your Project:* To execute the project (i.e. ``target_bin``),
+#. *Execute Your Project:* To execute the project (i.e. ``target_bin``),
    use the following command::
 
       $ ./target_bin

@@ -6,11 +6,11 @@ LIC_FILES_CHKSUM = "\
 
 HOMEPAGE = "http://www.libimobiledevice.org/"
 
-DEPENDS = "libirecovery libimobiledevice libzip curl"
+DEPENDS = "libirecovery libimobiledevice libzip curl libimobiledevice-glue openssl"
 
-PV = "1.0.1+git${SRCPV}"
+PV = "1.0.1+git"
 
-SRCREV = "280575bb95977241e240ed081a2602d68746443e"
+SRCREV = "ecae6c6e8ca6b6bad080a1c73f10ffd0e67d75a7"
 SRC_URI = "git://github.com/libimobiledevice/idevicerestore;protocol=https;branch=master"
 
 S = "${WORKDIR}/git"

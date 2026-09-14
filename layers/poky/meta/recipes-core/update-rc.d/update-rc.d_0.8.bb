@@ -6,8 +6,9 @@ SECTION = "base"
 LICENSE = "GPL-2.0-or-later"
 LIC_FILES_CHKSUM = "file://update-rc.d;beginline=5;endline=15;md5=d40a07c27f535425934bb5001f2037d9"
 
-SRC_URI = "git://git.yoctoproject.org/update-rc.d;branch=master"
-SRCREV = "8636cf478d426b568c1be11dbd9346f67e03adac"
+SRC_URI = "git://git.yoctoproject.org/update-rc.d;branch=master;protocol=https"
+SRCREV = "b8f950105010270a768aa12245d6abf166346015"
+PV .= "+git"
 
 UPSTREAM_CHECK_COMMITS = "1"
 

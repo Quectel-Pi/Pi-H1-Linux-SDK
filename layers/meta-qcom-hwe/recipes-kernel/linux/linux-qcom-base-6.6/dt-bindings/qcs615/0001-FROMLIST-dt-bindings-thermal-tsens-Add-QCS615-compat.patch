@@ -1,0 +1,30 @@
+From 7cef6fdac44efa899fe62c23263429b465ca4cad Mon Sep 17 00:00:00 2001
+From: Gaurav Kohli <quic_gkohli@quicinc.com>
+Date: Fri, 25 Apr 2025 10:47:23 +0530
+Subject: [PATCH 1/2] FROMLIST: dt-bindings: thermal: tsens: Add QCS615
+ compatible
+
+Add compatibility string for the thermal sensors on QCS615 platform.
+
+Change-Id: I47d65b4059f55a20cc506b7bbf3f23b19df9f42c
+Signed-off-by: Gaurav Kohli <quic_gkohli@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-devicetree/cover.1744292501.git.quic_gkohli@quicinc.com/]
+---
+ Documentation/devicetree/bindings/thermal/qcom-tsens.yaml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/thermal/qcom-tsens.yaml b/Documentation/devicetree/bindings/thermal/qcom-tsens.yaml
+index 27e9e16e6455..ab9e44635d59 100644
+--- a/Documentation/devicetree/bindings/thermal/qcom-tsens.yaml
++++ b/Documentation/devicetree/bindings/thermal/qcom-tsens.yaml
+@@ -51,6 +51,7 @@ properties:
+               - qcom,msm8996-tsens
+               - qcom,msm8998-tsens
+               - qcom,qcm2290-tsens
++              - qcom,qcs615-tsens
+               - qcom,sc7180-tsens
+               - qcom,sc7280-tsens
+               - qcom,sc8180x-tsens
+-- 
+2.34.1
+

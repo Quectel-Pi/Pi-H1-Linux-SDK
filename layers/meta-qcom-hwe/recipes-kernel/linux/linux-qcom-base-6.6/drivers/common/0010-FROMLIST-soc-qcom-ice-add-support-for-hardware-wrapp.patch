@@ -1,0 +1,256 @@
+From 405486cfb02723b637b7af2fc10f22f34ca976fe Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <brgl@bgdev.pl>
+Date: Sun, 1 Dec 2024 21:53:04 +0530
+Subject: [PATCH 1/1] FROMLIST: soc: qcom: ice: add support for hardware
+ wrapped keys
+
+Now that HWKM support has been added to ICE, extend the ICE driver to
+support hardware wrapped keys programming coming in from the storage
+controllers (UFS and eMMC). This is similar to raw keys where the call is
+forwarded to Trustzone, however we also need to clear and re-enable
+CFGE before and after programming the key.
+
+Derive software secret support is also added by forwarding the call to
+the corresponding SCM API.
+
+Wrapped keys are only used if the new module parameter is set AND the
+architecture supports HWKM.
+
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org>
+Reviewed-by: Om Prakash Singh <quic_omprsing@quicinc.com>
+Signed-off-by: Gaurav Kashyap <quic_gaurkash@quicinc.com>
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241011-wrapped-keys-v7-10-e3f7a752059b@linaro.org/]
+---
+ drivers/soc/qcom/ice.c | 128 +++++++++++++++++++++++++++++++++++++----
+ include/soc/qcom/ice.h |   4 ++
+ 2 files changed, 121 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/soc/qcom/ice.c b/drivers/soc/qcom/ice.c
+index 60bbbb492b3c..01ce20c21281 100644
+--- a/drivers/soc/qcom/ice.c
++++ b/drivers/soc/qcom/ice.c
+@@ -28,6 +28,8 @@
+ #define QCOM_ICE_REG_BIST_STATUS		0x0070
+ #define QCOM_ICE_REG_ADVANCED_CONTROL		0x1000
+ #define QCOM_ICE_REG_CONTROL			0x0
++#define QCOM_ICE_LUT_KEYS_CRYPTOCFG_R16		0x4040
++
+ /* QCOM ICE HWKM registers */
+ #define QCOM_ICE_REG_HWKM_TZ_KM_CTL			0x1000
+ #define QCOM_ICE_REG_HWKM_TZ_KM_STATUS			0x1004
+@@ -62,6 +64,8 @@
+ #define QCOM_ICE_HWKM_DISABLE_CRC_CHECKS_VAL	(BIT(1) | BIT(2))
+ #define QCOM_ICE_HWKM_RSP_FIFO_CLEAR_VAL	BIT(3)
+ 
++#define QCOM_ICE_HWKM_CFG_ENABLE_VAL		BIT(7)
++
+ /* BIST ("built-in self-test") status flags */
+ #define QCOM_ICE_BIST_STATUS_MASK		GENMASK(31, 28)
+ 
+@@ -69,6 +73,8 @@
+ #define QCOM_ICE_FORCE_HW_KEY0_SETTING_MASK	0x2
+ #define QCOM_ICE_FORCE_HW_KEY1_SETTING_MASK	0x4
+ 
++#define QCOM_ICE_LUT_KEYS_CRYPTOCFG_OFFSET	0x80
++
+ #define QCOM_ICE_HWKM_REG_OFFSET	0x8000
+ #define HWKM_OFFSET(reg)		((reg) + QCOM_ICE_HWKM_REG_OFFSET)
+ 
+@@ -78,6 +84,15 @@
+ #define qcom_ice_readl(engine, reg)	\
+ 	readl((engine)->base + (reg))
+ 
++#define QCOM_ICE_LUT_CRYPTOCFG_SLOT_OFFSET(slot) \
++	(QCOM_ICE_LUT_KEYS_CRYPTOCFG_R16 + \
++	 QCOM_ICE_LUT_KEYS_CRYPTOCFG_OFFSET * slot)
++
++static bool ufs_qcom_use_wrapped_keys;
++module_param_named(use_wrapped_keys, ufs_qcom_use_wrapped_keys, bool, 0660);
++MODULE_PARM_DESC(use_wrapped_keys,
++"Use HWKM for wrapped keys support if available on the platform");
++
+ struct qcom_ice {
+ 	struct device *dev;
+ 	void __iomem *base;
+@@ -89,6 +104,16 @@ struct qcom_ice {
+ 	bool hwkm_init_complete;
+ };
+ 
++union crypto_cfg {
++	__le32 regval;
++	struct {
++		u8 dusize;
++		u8 capidx;
++		u8 reserved;
++		u8 cfge;
++	};
++};
++
+ static bool qcom_ice_check_supported(struct qcom_ice *ice)
+ {
+ 	u32 regval = qcom_ice_readl(ice, QCOM_ICE_REG_VERSION);
+@@ -299,6 +324,46 @@ int qcom_ice_suspend(struct qcom_ice *ice)
+ }
+ EXPORT_SYMBOL_GPL(qcom_ice_suspend);
+ 
++/*
++ * For v1 the ICE slot will be calculated in the trustzone.
++ */
++static int translate_hwkm_slot(struct qcom_ice *ice, int slot)
++{
++	return (ice->hwkm_version == 1) ? slot : (slot * 2);
++}
++
++static int qcom_ice_program_wrapped_key(struct qcom_ice *ice,
++					const struct blk_crypto_key *key,
++					u8 data_unit_size, int slot)
++{
++	union crypto_cfg cfg = {
++		.dusize = data_unit_size,
++		.capidx = QCOM_SCM_ICE_CIPHER_AES_256_XTS,
++		.cfge = QCOM_ICE_HWKM_CFG_ENABLE_VAL,
++	};
++	int hwkm_slot;
++	int err;
++
++	hwkm_slot = translate_hwkm_slot(ice, slot);
++
++	/* Clear CFGE */
++	qcom_ice_writel(ice, 0x0, QCOM_ICE_LUT_CRYPTOCFG_SLOT_OFFSET(slot));
++
++	/* Call trustzone to program the wrapped key using hwkm */
++	err = qcom_scm_ice_set_key(hwkm_slot, key->raw, key->size,
++				   QCOM_SCM_ICE_CIPHER_AES_256_XTS, data_unit_size);
++	if (err) {
++		pr_err("%s:SCM call Error: 0x%x slot %d\n", __func__, err,
++		       slot);
++		return err;
++	}
++
++	/* Enable CFGE after programming key */
++	qcom_ice_writel(ice, cfg.regval, QCOM_ICE_LUT_CRYPTOCFG_SLOT_OFFSET(slot));
++
++	return err;
++}
++
+ int qcom_ice_program_key(struct qcom_ice *ice,
+ 			 u8 algorithm_id, u8 key_size,
+ 			 const struct blk_crypto_key *bkey,
+@@ -314,24 +379,40 @@ int qcom_ice_program_key(struct qcom_ice *ice,
+ 
+ 	/* Only AES-256-XTS has been tested so far. */
+ 	if (algorithm_id != QCOM_ICE_CRYPTO_ALG_AES_XTS ||
+-	    key_size != QCOM_ICE_CRYPTO_KEY_SIZE_256) {
++	    (key_size != QCOM_ICE_CRYPTO_KEY_SIZE_256 &&
++	    key_size != QCOM_ICE_CRYPTO_KEY_SIZE_WRAPPED)) {
+ 		dev_err_ratelimited(dev,
+ 				    "Unhandled crypto capability; algorithm_id=%d, key_size=%d\n",
+ 				    algorithm_id, key_size);
+ 		return -EINVAL;
+ 	}
+ 
+-	memcpy(key.bytes, bkey->raw, AES_256_XTS_KEY_SIZE);
+-
+-	/* The SCM call requires that the key words are encoded in big endian */
+-	for (i = 0; i < ARRAY_SIZE(key.words); i++)
+-		__cpu_to_be32s(&key.words[i]);
++	if (ufs_qcom_use_wrapped_keys &&
++	    (bkey->crypto_cfg.key_type == BLK_CRYPTO_KEY_TYPE_HW_WRAPPED)) {
++		/* It is expected that HWKM init has completed before programming wrapped keys */
++		if (!ice->use_hwkm || !ice->hwkm_init_complete) {
++			dev_err_ratelimited(dev, "HWKM not currently used or initialized\n");
++			return -EINVAL;
++		}
++		err = qcom_ice_program_wrapped_key(ice, bkey, data_unit_size,
++						   slot);
++	} else {
++		if (bkey->size != QCOM_ICE_CRYPTO_KEY_SIZE_256)
++			dev_err_ratelimited(dev,
++					    "Incorrect key size; bkey->size=%d\n",
++					    algorithm_id);
++		return -EINVAL;
++		memcpy(key.bytes, bkey->raw, AES_256_XTS_KEY_SIZE);
+ 
+-	err = qcom_scm_ice_set_key(slot, key.bytes, AES_256_XTS_KEY_SIZE,
+-				   QCOM_SCM_ICE_CIPHER_AES_256_XTS,
+-				   data_unit_size);
++		/* The SCM call requires that the key words are encoded in big endian */
++		for (i = 0; i < ARRAY_SIZE(key.words); i++)
++			__cpu_to_be32s(&key.words[i]);
+ 
+-	memzero_explicit(&key, sizeof(key));
++		err = qcom_scm_ice_set_key(slot, key.bytes, AES_256_XTS_KEY_SIZE,
++					   QCOM_SCM_ICE_CIPHER_AES_256_XTS,
++					   data_unit_size);
++		memzero_explicit(&key, sizeof(key));
++	}
+ 
+ 	return err;
+ }
+@@ -339,7 +420,23 @@ EXPORT_SYMBOL_GPL(qcom_ice_program_key);
+ 
+ int qcom_ice_evict_key(struct qcom_ice *ice, int slot)
+ {
+-	return qcom_scm_ice_invalidate_key(slot);
++	int hwkm_slot = slot;
++
++	if (ice->use_hwkm) {
++		hwkm_slot = translate_hwkm_slot(ice, slot);
++
++		/*
++		 * Ignore calls to evict key when HWKM is supported and hwkm
++		 * init is not yet done. This is to avoid the clearing all
++		 * slots call during a storage reset when ICE is still in
++		 * legacy mode. HWKM slave in ICE takes care of zeroing out
++		 * the keytable on reset.
++		 */
++		if (!ice->hwkm_init_complete)
++			return 0;
++	}
++
++	return qcom_scm_ice_invalidate_key(hwkm_slot);
+ }
+ EXPORT_SYMBOL_GPL(qcom_ice_evict_key);
+ 
+@@ -349,6 +446,15 @@ bool qcom_ice_hwkm_supported(struct qcom_ice *ice)
+ }
+ EXPORT_SYMBOL_GPL(qcom_ice_hwkm_supported);
+ 
++int qcom_ice_derive_sw_secret(struct qcom_ice *ice, const u8 wkey[],
++			      unsigned int wkey_size,
++			      u8 sw_secret[BLK_CRYPTO_SW_SECRET_SIZE])
++{
++	return qcom_scm_derive_sw_secret(wkey, wkey_size,
++					 sw_secret, BLK_CRYPTO_SW_SECRET_SIZE);
++}
++EXPORT_SYMBOL_GPL(qcom_ice_derive_sw_secret);
++
+ static struct qcom_ice *qcom_ice_create(struct device *dev,
+ 					void __iomem *base)
+ {
+diff --git a/include/soc/qcom/ice.h b/include/soc/qcom/ice.h
+index 0e4d96896a5f..fe9c2223ca23 100644
+--- a/include/soc/qcom/ice.h
++++ b/include/soc/qcom/ice.h
+@@ -17,6 +17,7 @@ enum qcom_ice_crypto_key_size {
+ 	QCOM_ICE_CRYPTO_KEY_SIZE_192		= 0x2,
+ 	QCOM_ICE_CRYPTO_KEY_SIZE_256		= 0x3,
+ 	QCOM_ICE_CRYPTO_KEY_SIZE_512		= 0x4,
++	QCOM_ICE_CRYPTO_KEY_SIZE_WRAPPED	= 0x5,
+ };
+ 
+ enum qcom_ice_crypto_alg {
+@@ -35,6 +36,9 @@ int qcom_ice_program_key(struct qcom_ice *ice,
+ 			 u8 data_unit_size, int slot);
+ int qcom_ice_evict_key(struct qcom_ice *ice, int slot);
+ bool qcom_ice_hwkm_supported(struct qcom_ice *ice);
++int qcom_ice_derive_sw_secret(struct qcom_ice *ice, const u8 wkey[],
++			      unsigned int wkey_size,
++			      u8 sw_secret[BLK_CRYPTO_SW_SECRET_SIZE]);
+ struct qcom_ice *of_qcom_ice_get(struct device *dev);
+ struct qcom_ice *devm_of_qcom_ice_get(struct device *dev);
+ 
+-- 
+2.25.1
+

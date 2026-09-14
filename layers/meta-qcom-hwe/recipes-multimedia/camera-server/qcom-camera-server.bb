@@ -8,22 +8,20 @@ SSTATE_ALLOW_OVERLAP_FILES = "/"
 
 DEPENDS += "glib-2.0"
 DEPENDS += "gtest"
-DEPENDS += "gbm"
-DEPENDS += "property-vault syslog-plumber protobuf-native protobuf-c protobuf-c-native camxapi-kt"
+DEPENDS += "property-vault syslog-plumber protobuf-native protobuf-c protobuf-c-native"
 DEPENDS:append:qcm6490 = " camx-kt"
 DEPENDS:append:qcs9100 = " camx"
 DEPENDS:append:qcs8300 = " camx"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/vendor/qcom-opensource/le-services.git;protocol=https"
 SRCBRANCH  = "le-services.lnx.1.0.r1-rel"
-SRCREV     = "d6ebee13e44cc0d5ebf1fbd7751cb613567eb164"
+SRCREV     = "d65504bcd96a88bd00580e72234657123e201010"
 
 SRC_URI  = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=le-camera-server \
-            file://cam-server-env"
+            file://cam-server-env \
+            file://0001-le-cam-server-add-support-for-new-system-event.patch"
 
 S = "${WORKDIR}/le-camera-server"
-
-RDEPENDS:${PN} += "gbm"
 
 GBM_FREE_FD := "FALSE"
 

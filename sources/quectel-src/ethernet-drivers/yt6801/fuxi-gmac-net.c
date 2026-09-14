@@ -374,6 +374,9 @@ static void fxgmac_phy_process(struct fxgmac_pdata *pdata)
 				MGMT_EPHY_CTRL_STA_EPHY_DUPLEX_LEN);
 			hw_ops->config_mac_speed(pdata);
 
+			/* 按协商速率配置 RJ45 双色 LED (千兆黄/百兆绿) */
+			hw_ops->led_under_speed(pdata, pdata->phy_speed);
+
 			hw_ops->enable_rx(pdata);
 			hw_ops->enable_tx(pdata);
 			netif_carrier_on(pdata->netdev);
@@ -434,11 +437,33 @@ static irqreturn_t fxgmac_isr(int irq, void *data)
 	struct fxgmac_hw_ops *hw_ops = &pdata->hw_ops;
 	unsigned int i, ti, ri;
 	u32 val;
+	bool has_dma_evt = false;
 
 	dma_isr = readreg(pdata->pAdapter, pdata->mac_regs + DMA_ISR);
 
 	val = readreg(pdata->pAdapter, pdata->base_mem + MGMT_INT_CTRL0);
-	if (!(val & MGMT_INT_CTRL0_INT_STATUS_RXTXPHY_MASK))
+
+	/*
+	 * [FIX] MSI 为边沿触发: MGMT_INT_CTRL0 汇总位与 DMA_CH_SR 的
+	 * TI/RI 位可能不同步。若仅凭汇总位判断而提前 return, 会丢失
+	 * TX/RX 完成中断 (边沿不再重发), 导致 TX 描述符堆积耗尽、
+	 * 触发 tx_timeout, 并进一步与 restart 竞争产生 UAF。
+	 * 因此只要任一 DMA 通道有 TI/RI, 就必须进入 NAPI 处理。
+	 */
+	for (i = 0; i < pdata->channel_count; i++) {
+		channel = pdata->channel_head + i;
+		dma_ch_isr = readl(FXGMAC_DMA_REG(channel, DMA_CH_SR));
+		ti = FXGMAC_GET_REG_BITS(dma_ch_isr, DMA_CH_SR_TI_POS,
+					 DMA_CH_SR_TI_LEN);
+		ri = FXGMAC_GET_REG_BITS(dma_ch_isr, DMA_CH_SR_RI_POS,
+					 DMA_CH_SR_RI_LEN);
+		if (ti || ri) {
+			has_dma_evt = true;
+			break;
+		}
+	}
+
+	if (!(val & MGMT_INT_CTRL0_INT_STATUS_RXTXPHY_MASK) && !has_dma_evt)
 		return IRQ_HANDLED;
 
 	hw_ops->disable_mgm_interrupt(pdata);
@@ -1181,6 +1206,18 @@ void fxgmac_restart_dev(struct fxgmac_pdata *pdata)
 		return;
 
 	pdata->expansion.current_state = CURRENT_STATE_RESTART;
+
+	/*
+	 * [FIX] restart 与 xmit 无锁并发会导致 UAF:
+	 * fxgmac_stop()->free_tx_data()/free_rx_data() 会 dma_unmap +
+	 * dev_kfree_skb_any 释放描述符, 而 fxgmac_xmit 正在
+	 * map_tx_skb/dev_xmit 时并不持 rtnl_lock, 可能正在使用
+	 * 即将被释放的 skb/DMA 映射, 造成 use-after-free -> panic。
+	 * netif_tx_disable() 同步等待正在执行的 xmit 返回后再停止,
+	 * 必须在 rtnl_lock 下调用 (restart_work 已持锁)。
+	 */
+	netif_tx_disable(pdata->netdev);
+
 	fxgmac_stop(pdata);
 
 	fxgmac_free_tx_data(pdata);
@@ -1189,7 +1226,11 @@ void fxgmac_restart_dev(struct fxgmac_pdata *pdata)
 	ret = fxgmac_start(pdata);
 	if (ret) {
 		printk("fxgmac_restart_dev: fxgmac_start failed.\n");
+		return;
 	}
+
+	/* restart 完成后恢复 TX 队列 (link up 时 phy_process 还会再 wake) */
+	netif_tx_wake_all_queues(pdata->netdev);
 }
 
 static void fxgmac_restart(struct work_struct *work)
@@ -1978,6 +2019,7 @@ static int fxgmac_rx_poll(struct fxgmac_channel *channel, int budget)
 	struct sk_buff *skb;
 	int packet_count = 0;
 	u32 ipce, iphe;
+	int read_again_cnt = 0;
 
 	hw_ops = &pdata->hw_ops;
 
@@ -2000,6 +2042,16 @@ static int fxgmac_rx_poll(struct fxgmac_channel *channel, int budget)
 		len = 0;
 
 read_again:
+		/*
+		 * [FIX] DMA 异常时 context/incomplete 描述符链可能无限
+		 * 循环 (ring->cur 不停前进) 导致 soft lockup。加上限防御。
+		 */
+		if (++read_again_cnt > 128) {
+			if (net_ratelimit())
+				netdev_err(pdata->netdev,
+					   "rx poll: too many context/incomplete descs, abort\n");
+			break;
+		}
 		desc_data = FXGMAC_GET_DESC_DATA(ring, ring->cur);
 
 		if (fxgmac_rx_dirty_desc(ring) > FXGMAC_RX_DESC_MAX_DIRTY)

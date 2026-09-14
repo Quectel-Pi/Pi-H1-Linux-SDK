@@ -1,0 +1,144 @@
+From 9ecab8c3544e7d4200cea1d9d57ead26d83d04f9 Mon Sep 17 00:00:00 2001
+From: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Date: Wed, 6 Dec 2023 13:25:00 +0100
+Subject: [PATCH 34/42] UPSTREAM: media: qcom: camss: Add support for named
+ power-domains
+
+Right now we use fixed indexes to assign power-domains, with a
+requirement for the TOP GDSC to come last in the list.
+
+Adding support for named power-domains means the declaration in the dtsi
+can come in any order.
+
+After this change we continue to support the old indexing - if a SoC
+resource declaration or the in-use dtb doesn't declare power-domain names
+we fall back to the default legacy indexing.
+
+From this point on though new SoC additions should contain named
+power-domains, eventually we will drop support for legacy indexing.
+
+Tested-by: Matti Lehtimäki <matti.lehtimaki@gmail.com>
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git d89751c61279f692684fe82a416dffef7f243cbe]
+---
+ drivers/media/platform/qcom/camss/camss-vfe.c | 25 +++++++++++++--
+ drivers/media/platform/qcom/camss/camss-vfe.h |  1 +
+ drivers/media/platform/qcom/camss/camss.c     | 31 +++++++++++++++----
+ drivers/media/platform/qcom/camss/camss.h     |  1 +
+ 4 files changed, 50 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.c b/drivers/media/platform/qcom/camss/camss-vfe.c
+index ab6cb766f43d..c076c777aece 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c
+@@ -1493,7 +1493,29 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
+ 		return -EINVAL;
+ 
+ 	vfe->res = &res->vfe;
+-	if (res->has_pd) {
++
++	/* Power domain */
++	if (res->pd_name) {
++		vfe->genpd = dev_pm_domain_attach_by_name(camss->dev,
++							  res->pd_name);
++		if (IS_ERR(vfe->genpd)) {
++			ret = PTR_ERR(vfe->genpd);
++			return ret;
++		}
++	}
++
++	if (!vfe->genpd && res->has_pd) {
++		/*
++		 * Legacy magic index.
++		 * Requires
++		 * power-domain = <VFE_X>,
++		 *                <VFE_Y>,
++		 *                <TITAN_TOP>
++		 * id must correspondng to the index of the VFE which must
++		 * come before the TOP GDSC. VFE Lite has no individually
++		 * collapasible domain which is why id < vfe_num is a valid
++		 * check.
++		 */
+ 		vfe->genpd = dev_pm_domain_attach_by_id(camss->dev, id);
+ 		if (IS_ERR(vfe->genpd))
+ 			return PTR_ERR(vfe->genpd);
+@@ -1503,7 +1525,6 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
+ 	vfe->res->hw_ops->subdev_init(dev, vfe);
+ 
+ 	/* Memory */
+-
+ 	vfe->base = devm_platform_ioremap_resource_byname(pdev, res->reg[0]);
+ 	if (IS_ERR(vfe->base)) {
+ 		dev_err(dev, "could not map memory\n");
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.h b/drivers/media/platform/qcom/camss/camss-vfe.h
+index 8918faf773c9..5cec128ba4c0 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.h
++++ b/drivers/media/platform/qcom/camss/camss-vfe.h
+@@ -130,6 +130,7 @@ struct vfe_subdev_resources {
+ 	u8 line_num;
+ 	bool is_lite;
+ 	bool has_pd;
++	char *pd_name;
+ 	const struct vfe_hw_ops *hw_ops;
+ 	const struct camss_formats *formats_rdi;
+ 	const struct camss_formats *formats_pix;
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 06bec9eda447..5f081f86d409 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1734,13 +1734,32 @@ static int camss_configure_pd(struct camss *camss)
+ 		return 0;
+ 
+ 	/*
+-	 * VFE power domains are in the beginning of the list, and while all
+-	 * power domains should be attached, only if TITAN_TOP power domain is
+-	 * found in the list, it should be linked over here.
++	 * If a power-domain name is defined try to use it.
++	 * It is possible we are running a new kernel with an old dtb so
++	 * fallback to indexes even if a pd_name is defined but not found.
+ 	 */
+-	camss->genpd = dev_pm_domain_attach_by_id(camss->dev, camss->genpd_num - 1);
+-	if (IS_ERR(camss->genpd)) {
+-		ret = PTR_ERR(camss->genpd);
++	if (camss->res->pd_name) {
++		camss->genpd = dev_pm_domain_attach_by_name(camss->dev,
++							    camss->res->pd_name);
++		if (IS_ERR(camss->genpd)) {
++			ret = PTR_ERR(camss->genpd);
++			goto fail_pm;
++		}
++	}
++
++	if (!camss->genpd) {
++		/*
++		 * Legacy magic index. TITAN_TOP GDSC must be the last
++		 * item in the power-domain list.
++		 */
++		camss->genpd = dev_pm_domain_attach_by_id(camss->dev,
++							  camss->genpd_num - 1);
++	}
++	if (IS_ERR_OR_NULL(camss->genpd)) {
++		if (!camss->genpd)
++			ret = -ENODEV;
++		else
++			ret = PTR_ERR(camss->genpd);
+ 		goto fail_pm;
+ 	}
+ 	camss->genpd_link = device_link_add(camss->dev, camss->genpd,
+diff --git a/drivers/media/platform/qcom/camss/camss.h b/drivers/media/platform/qcom/camss/camss.h
+index d88b6f0f2202..79d790dda80f 100644
+--- a/drivers/media/platform/qcom/camss/camss.h
++++ b/drivers/media/platform/qcom/camss/camss.h
+@@ -95,6 +95,7 @@ enum icc_count {
+ 
+ struct camss_resources {
+ 	enum camss_version version;
++	const char *pd_name;
+ 	const struct camss_subdev_resources *csiphy_res;
+ 	const struct camss_subdev_resources *csid_res;
+ 	const struct camss_subdev_resources *ispif_res;
+-- 
+2.25.1
+

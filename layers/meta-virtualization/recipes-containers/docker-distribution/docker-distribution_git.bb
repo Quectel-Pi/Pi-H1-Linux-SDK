@@ -3,17 +3,17 @@ SUMMARY = "The Docker toolset to pack, ship, store, and deliver content"
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=d2794c0df5b907fdace235a619d80314"
 
-SRCREV_distribution= "b5ca020cfbe998e5af3457fda087444cf5116496"
+SRCREV_distribution= "d607c6ccb9372e05556624f973119a23d3a42987"
 SRC_URI = "git://github.com/docker/distribution.git;branch=release/2.8;name=distribution;destsuffix=git/src/github.com/docker/distribution;protocol=https \
            file://docker-registry.service \
            file://0001-build-use-to-use-cross-go-compiler.patch \
-           file://0001-Fix-runaway-allocation-on-v2-_catalog.patch \
            file://0001-panicwrap-Use-dup3-on-riscv64-linux.patch \
+           file://0001-Fix-registry-token-authentication-bug.patch \
           "
 
 PACKAGES =+ "docker-registry"
 
-PV = "v2.8.1+git${SRCPV}"
+PV = "v2.8.3+git"
 S = "${WORKDIR}/git/src/github.com/docker/distribution"
 
 GO_IMPORT = "import"
@@ -37,6 +37,7 @@ do_compile() {
 	export GO_GCFLAGS=""
 	export CGO_LDFLAGS="${TARGET_LDFLAGS}"
 	export GO111MODULE=off
+	export GO_BUILD_FLAGS="-trimpath"
 
 	cd ${S}
 

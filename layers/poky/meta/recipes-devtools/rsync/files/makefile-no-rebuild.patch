@@ -18,8 +18,8 @@ index 3cde955..d963a70 100644
 --- a/Makefile.in
 +++ b/Makefile.in
 @@ -190,60 +190,6 @@ gensend: gen
-	fi
-	rsync -aic $(GENFILES) git-version.h $${SAMBA_HOST-samba.org}:/home/ftp/pub/rsync/generated-files/ || true
+ 	fi
+ 	rsync -aic $(GENFILES) git-version.h $${SAMBA_HOST-samba.org}:/home/ftp/pub/rsync/generated-files/ || true
  
 -aclocal.m4: $(srcdir)/m4/*.m4
 -	aclocal -I $(srcdir)/m4

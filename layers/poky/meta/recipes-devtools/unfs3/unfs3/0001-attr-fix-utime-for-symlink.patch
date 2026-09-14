@@ -1,6 +1,6 @@
-From 3f4fcb62661059bad77a2e957b4621137797bc2f Mon Sep 17 00:00:00 2001
+From 7e789895919d57d573ebb8faa147d1286104cd01 Mon Sep 17 00:00:00 2001
 From: Rui Wang <rui.wang@windriver.com>
-Date: Fri, 15 Jun 2018 14:19:10 +0800
+Date: Mon, 24 Apr 2023 02:57:57 -0700
 Subject: [PATCH] attr: fix utime for symlink
 
 unfs3 has an old defect that it can not change the timestamps of a
@@ -15,9 +15,9 @@ Making unfs3 support lutimes(), which can modify the symlink file
 itself. Considering not every system support this function, so a
 function checking is necessary.
 
-Upstream-Status: Submitted [https://sourceforge.net/p/unfs3/bugs/12/]
+Upstream-Status: Submitted [https://github.com/unfs3/unfs3/pull/35]
 
-Signed-off-by: Rui Wang <rui.wang@windriver.com>
+Signed-off-by: Chen Qi <Qi.Chen@windriver.com>
 ---
  attr.c         | 15 +++++++++++----
  backend_unix.h |  2 ++
@@ -25,22 +25,22 @@ Signed-off-by: Rui Wang <rui.wang@windriver.com>
  3 files changed, 14 insertions(+), 4 deletions(-)
 
 diff --git a/attr.c b/attr.c
-index 73e5c75..427d0e2 100644
+index 0ce9375..930ce6e 100644
 --- a/attr.c
 +++ b/attr.c
-@@ -280,7 +280,7 @@ post_op_attr get_post_cached(struct svc_req * req)
+@@ -285,7 +285,7 @@ post_op_attr get_post_cached(struct svc_req * req)
  static nfsstat3 set_time(const char *path, backend_statstruct buf, sattr3 new)
  {
      time_t new_atime, new_mtime;
 -    struct utimbuf utim;
 +    struct timeval stamps[2];
      int res;
-
+ 
      /* set atime and mtime */
-@@ -302,10 +302,17 @@ static nfsstat3 set_time(const char *path, backend_statstruct buf, sattr3 new)
-	else			       /* DONT_CHANGE */
-	    new_mtime = buf.st_mtime;
-
+@@ -307,10 +307,17 @@ static nfsstat3 set_time(const char *path, backend_statstruct buf, sattr3 new)
+ 	else			       /* DONT_CHANGE */
+ 	    new_mtime = buf.st_mtime;
+ 
 -	utim.actime = new_atime;
 -	utim.modtime = new_mtime;
 +	stamps[0].tv_sec = new_atime;
@@ -53,13 +53,13 @@ index 73e5c75..427d0e2 100644
 +#else
 +	res = backend_utimes(path, stamps);
 +#endif
-
+ 
 -	res = backend_utime(path, &utim);
-	if (res == -1)
-	    return setattr_err();
+ 	if (res == -1)
+ 	    return setattr_err();
      }
 diff --git a/backend_unix.h b/backend_unix.h
-index fbc2af3..813ffd3 100644
+index 4db72ae..9cce9ab 100644
 --- a/backend_unix.h
 +++ b/backend_unix.h
 @@ -61,6 +61,8 @@
@@ -72,14 +72,17 @@ index fbc2af3..813ffd3 100644
  #define backend_dirstream DIR
  #define backend_statvfsstruct struct statvfs
 diff --git a/configure.ac b/configure.ac
-index aeec598..ea7f167 100644
+index d46c905..c21afe3 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -37,6 +37,7 @@ AC_CHECK_FUNCS(setresuid setresgid)
+@@ -32,6 +32,7 @@ AC_CHECK_FUNCS(setresuid setresgid)
  AC_CHECK_FUNCS(vsyslog)
  AC_CHECK_FUNCS(lchown)
  AC_CHECK_FUNCS(setgroups)
 +AC_CHECK_FUNCS(lutimes)
- UNFS3_SOLARIS_RPC
- UNFS3_PORTMAP_DEFINE
  UNFS3_COMPILE_WARNINGS
+ 
+ PKG_CHECK_MODULES([TIRPC], [libtirpc])
+-- 
+2.40.0
+

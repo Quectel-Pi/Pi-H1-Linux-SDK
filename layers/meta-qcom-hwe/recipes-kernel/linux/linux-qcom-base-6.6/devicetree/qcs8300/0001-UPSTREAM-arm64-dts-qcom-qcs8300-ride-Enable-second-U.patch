@@ -1,0 +1,99 @@
+From 4fe2b6556a12fdd0545a2bce52bb47aeffa1da57 Mon Sep 17 00:00:00 2001
+From: Manish Nagar <quic_mnagar@quicinc.com>
+Date: Tue, 25 Mar 2025 14:35:37 +0530
+Subject: [PATCH] UPSTREAM: arm64: dts: qcom: qcs8300-ride: Enable second USB
+ controller on QCS8300 Ride
+
+Enable secondary USB controller on QCS8300 Ride platform. Since it is a
+Type-A port, the dr_mode has been set to "host". The VBUS to connected
+peripherals is provided by TPS2559QWDRCTQ1 regulator connected to the
+port. The regulator has an enable pin controlled by PMM8650. Model it as
+fixed regulator and keep it Always-On at boot, since the regulator is
+GPIO controlled regulator.
+
+Co-developed-by: Krishna Kurapati <krishna.kurapati@oss.qualcomm.com>
+Signed-off-by: Krishna Kurapati <krishna.kurapati@oss.qualcomm.com>
+Signed-off-by: Manish Nagar <quic_mnagar@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/174198247897.1604753.4791864107731175321.b4-ty@kernel.org/ ]
+---
+ arch/arm64/boot/dts/qcom/qcs8300-ride.dts | 37 ++++++++++++++++++++++-
+ 1 file changed, 36 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+index 941eb55174a4..325ad32fc473 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
++++ b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+@@ -1,6 +1,6 @@
+ // SPDX-License-Identifier: BSD-3-Clause
+ /*
+- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ 
+ /dts-v1/;
+@@ -122,6 +122,16 @@ vreg_pmu_pcie_1p8: ldo9 {
+ 			};
+ 		};
+ 	};
++
++	regulator-usb2-vbus {
++		compatible = "regulator-fixed";
++		regulator-name = "USB2_VBUS";
++		gpio = <&pmm8650au_1_gpios 7 GPIO_ACTIVE_HIGH>;
++		pinctrl-0 = <&usb2_en>;
++		pinctrl-names = "default";
++		enable-active-high;
++		regulator-always-on;
++	};
+ };
+ 
+ &apps_rsc {
+@@ -495,6 +505,15 @@ &gpu_zap_shader {
+ 	firmware-name = "qcom/qcs8300/a623_zap.mbn";
+ };
+ 
++&pmm8650au_1_gpios {
++	usb2_en: usb2-en-state {
++		pins = "gpio7";
++		function = "normal";
++		output-enable;
++		power-source = <0>;
++	};
++};
++
+ &qupv3_id_0 {
+ 	status = "okay";
+ };
+@@ -653,6 +672,14 @@ &usb_1_hsphy {
+ 	status = "okay";
+ };
+ 
++&usb_2_hsphy {
++	vdda-pll-supply = <&vreg_l7a>;
++	vdda18-supply = <&vreg_l7c>;
++	vdda33-supply = <&vreg_l9a>;
++
++	status = "okay";
++};
++
+ &usb_qmpphy {
+ 	vdda-phy-supply = <&vreg_l7a>;
+ 	vdda-pll-supply = <&vreg_l5a>;
+@@ -668,6 +695,14 @@ &usb_1_dwc3 {
+ 	dr_mode = "peripheral";
+ };
+ 
++&usb_2 {
++	status = "okay";
++};
++
++&usb_2_dwc3 {
++	dr_mode = "host";
++};
++
+ &watchdog {
+ 	clocks = <&sleep_clk>;
+ };
+-- 
+2.25.1
+

@@ -86,11 +86,13 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-custom-inherit \
     ${@bb.utils.contains_any('FORTRAN', [',fortran',',f77'], 'python3-cvxopt', '', d)} \
     python3-cycler \
+    python3-cytoolz \
     python3-dateparser \
     python3-dateutil \
     python3-dbus-next \
     python3-dbussy \
     python3-decorator \
+    python3-decouple \
     python3-defusedxml \
     python3-dill \
     python3-diskcache \
@@ -104,10 +106,19 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-dominate \
     python3-dynamic-dispatch \
     python3-ecdsa \
+    python3-editables \
     python3-editor \
     python3-email-validator \
     python3-engineio \
     python3-et-xmlfile \
+    python3-eth-abi \
+    python3-eth-account \
+    python3-eth-hash \
+    python3-eth-keyfile \
+    python3-eth-keys \
+    python3-eth-rlp \
+    python3-eth-typing \
+    python3-eth-utils \
     python3-evdev \
     python3-execnet \
     python3-fann2 \
@@ -126,7 +137,6 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-flask-nav \
     python3-flask-pymongo \
     python3-flask-restful \
-    python3-flask-script \
     python3-flask-sijax \
     python3-flask-socketio \
     python3-flask-sqlalchemy \
@@ -146,6 +156,7 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-gmqtt \
     python3-gnupg \
     python3-google-api-python-client \
+    python3-gpiod \
     python3-gpsd-py3 \
     python3-graphviz \
     python3-greenlet \
@@ -157,6 +168,7 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-h11 \
     python3-h2 \
     python3-h5py \
+    python3-hatchling \
     python3-haversine \
     python3-hpack \
     python3-html2text \
@@ -176,6 +188,7 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-imgtool \
     python3-incremental \
     python3-inflection \
+    python3-inotify \
     python3-intelhex \
     python3-intervals \
     python3-ipaddress \
@@ -197,7 +210,6 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-jsonpath-rw \
     python3-jsonpointer \
     python3-jsonref \
-    python3-jsonrpcserver \
     python3-jsonschema \
     python3-jstyleson \
     python3-kconfiglib \
@@ -209,9 +221,11 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-lazy-object-proxy \
     python3-libconf \
     python3-license-expression \
+    python3-ldap \
     python3-lockfile \
     python3-lorem \
     python3-lrparsing \
+    python3-lru-dict \
     python3-luma-core \
     python3-luma-oled \
     python3-lxml \
@@ -252,9 +266,11 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-paramiko \
     python3-parse \
     python3-parse-type \
+    python3-parsimonious \
     python3-parso \
     python3-passlib \
     python3-pastedeploy \
+    python3-pathspec \
     python3-pathtools3 \
     python3-pep8 \
     python3-periphery \
@@ -296,15 +312,14 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-pyconnman \
     python3-pycurl \
     python3-pydbus \
-    python3-pydbus-manager \
     python3-pydicti \
     python3-pyephem \
     python3-pyexpect \
+    python3-pyfanotify \
     python3-pyfirmata \
     python3-pyflakes \
     python3-pyhamcrest \
     python3-pyiface \
-    python3-pyinotify \
     python3-pyjks \
     python3-pyjwt \
     python3-pykickstart \
@@ -334,7 +349,7 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-pytest-forked \
     python3-pytest-helpers-namespace \
     python3-pytest-html \
-    python3-pytest-lazy-fixture \
+    python3-pytest-lazy-fixtures \
     python3-pytest-metadata \
     python3-pytest-tempdir \
     python3-pytest-timeout \
@@ -343,7 +358,6 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-python-vlc \
     python3-pytoml \
     python3-pytun \
-    python3-pytz-deprecation-shim \
     python3-pyudev \
     python3-pyusb \
     python3-pywbem \
@@ -363,6 +377,7 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-rfc3339-validator \
     python3-rfc3986-validator \
     python3-rfc3987 \
+    python3-rlp \
     python3-robotframework \
     python3-robotframework-seriallibrary \
     python3-rsa \
@@ -373,6 +388,8 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-send2trash \
     python3-sentry-sdk \
     python3-serpent \
+    python3-service-identity \
+    python3-setuptools-declarative-requirements \
     python3-sh \
     python3-sijax \
     python3-simpleeval \
@@ -392,7 +409,6 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-sqlparse \
     python3-sqlsoup \
     python3-stevedore \
-    python3-strict-rfc3339 \
     python3-supervisor \
     python3-sympy \
     python3-tabulate \
@@ -403,11 +419,13 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-thrift \
     python3-tinyrecord \
     python3-tornado \
+    python3-toolz \
     python3-tqdm \
     python3-trafaret \
     python3-trafaret-config \
     python3-traitlets \
     python3-transitions \
+    python3-trustme \
     python3-twine \
     python3-twisted \
     python3-twitter \
@@ -415,7 +433,6 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-txaio \
     python3-txdbus \
     python3-txws \
-    python3-typed-ast \
     python3-typeguard \
     python3-tzlocal \
     python3-u-msgpack-python \
@@ -423,14 +440,16 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-unidiff \
     python3-uritemplate \
     python3-vcversioner \
+    python3-versioneer \
     python3-versiontools \
     python3-visitor \
     python3-waitress \
     python3-watchdog \
+    python3-watchdogdev \
+    python3-web3 \
     python3-webcolors \
     python3-webencodings \
     python3-websocket-client \
-    python3-websockets \
     python3-werkzeug \
     python3-werkzeug \
     python3-whoosh \
@@ -438,7 +457,6 @@ RDEPENDS:packagegroup-meta-python3 = "\
     python3-wtforms \
     python3-xlrd \
     python3-xlsxwriter \
-    python3-xmlrunner \
     python3-xmltodict \
     python3-xmodem \
     python3-xstatic \
@@ -464,6 +482,7 @@ RDEPENDS:packagegroup-meta-python3-ptest = "\
     python3-dominate-ptest \
     python3-geojson-ptest \
     python3-gunicorn-ptest \
+    python3-hexbytes \
     python3-html2text-ptest \
     python3-inflection-ptest \
     python3-intervals-ptest \
@@ -488,8 +507,8 @@ RDEPENDS:packagegroup-meta-python3-ptest = "\
     python3-pyasn1-modules-ptest \
     python3-pyroute2-ptest \
     python3-pyserial-ptest \
-    python3-pytest-lazy-fixture-ptest \
     python3-pytoml-ptest \
+    python3-pyzmq-ptest \
     python3-requests-file-ptest \
     python3-requests-toolbelt-ptest \
     python3-scrypt-ptest \

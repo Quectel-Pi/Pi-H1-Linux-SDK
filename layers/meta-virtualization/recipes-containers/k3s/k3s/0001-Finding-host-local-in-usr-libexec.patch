@@ -3,7 +3,7 @@ From: Erik Jansson <erikja@axis.com>
 Date: Wed, 16 Oct 2019 15:07:48 +0200
 Subject: [PATCH] Finding host-local in /usr/libexec
 
-Upstream-status: Inappropriate [embedded specific]
+Upstream-Status: Inappropriate [embedded specific]
 Signed-off-by: <erikja@axis.com>
 ---
  pkg/agent/config/config.go | 2 +-
@@ -13,9 +13,9 @@ Index: import/pkg/agent/config/config.go
 ===================================================================
 --- import.orig/pkg/agent/config/config.go
 +++ import/pkg/agent/config/config.go
-@@ -445,7 +445,7 @@
- 	}
+@@ -577,7 +577,7 @@ func get(ctx context.Context, envInfo *c
  
+ 	nodeConfig.NoFlannel = nodeConfig.FlannelBackend == config.FlannelBackendNone
  	if !nodeConfig.NoFlannel {
 -		hostLocal, err := exec.LookPath("host-local")
 +		hostLocal, err := exec.LookPath("/usr/libexec/cni/host-local")

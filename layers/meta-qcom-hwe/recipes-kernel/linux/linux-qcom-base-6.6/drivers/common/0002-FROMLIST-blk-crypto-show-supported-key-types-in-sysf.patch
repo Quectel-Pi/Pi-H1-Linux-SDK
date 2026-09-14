@@ -1,0 +1,95 @@
+From 6e04f45b623dbc90d582c7f102d47a0abb7211a9 Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <brgl@bgdev.pl>
+Date: Sun, 1 Dec 2024 21:41:13 +0530
+Subject: [PATCH 02/17] FROMLIST: blk-crypto: show supported key types in sysfs
+
+Add sysfs files that indicate which type(s) of keys are supported by the
+inline encryption hardware associated with a particular request queue:
+
+	/sys/block/$disk/queue/crypto/hw_wrapped_keys
+	/sys/block/$disk/queue/crypto/standard_keys
+
+Userspace can use the presence or absence of these files to decide what
+encyption settings to use.
+
+Don't use a single key_type file, as devices might support both key
+types at the same time.
+
+Signed-off-by: Eric Biggers <ebiggers@google.com>
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241011-wrapped-keys-v7-2-e3f7a752059b@linaro.org/]
+---
+ Documentation/ABI/stable/sysfs-block |  18 ++++++++++++++++++
+ block/blk-crypto-sysfs.c             |  35 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 53 insertions(+)
+
+diff --git a/block/blk-crypto-sysfs.c b/block/blk-crypto-sysfs.c
+index a304434489ba..acab50493f2c 100644
+--- a/block/blk-crypto-sysfs.c
++++ b/block/blk-crypto-sysfs.c
+@@ -31,6 +31,13 @@ static struct blk_crypto_attr *attr_to_crypto_attr(struct attribute *attr)
+ 	return container_of(attr, struct blk_crypto_attr, attr);
+ }
+
++static ssize_t hw_wrapped_keys_show(struct blk_crypto_profile *profile,
++				    struct blk_crypto_attr *attr, char *page)
++{
++	/* Always show supported, since the file doesn't exist otherwise. */
++	return sysfs_emit(page, "supported\n");
++}
++
+ static ssize_t max_dun_bits_show(struct blk_crypto_profile *profile,
+ 				 struct blk_crypto_attr *attr, char *page)
+ {
+@@ -43,20 +50,48 @@ static ssize_t num_keyslots_show(struct blk_crypto_profile *profile,
+ 	return sysfs_emit(page, "%u\n", profile->num_slots);
+ }
+
++static ssize_t standard_keys_show(struct blk_crypto_profile *profile,
++				  struct blk_crypto_attr *attr, char *page)
++{
++	/* Always show supported, since the file doesn't exist otherwise. */
++	return sysfs_emit(page, "supported\n");
++}
++
+ #define BLK_CRYPTO_RO_ATTR(_name) \
+ 	static struct blk_crypto_attr _name##_attr = __ATTR_RO(_name)
+
++BLK_CRYPTO_RO_ATTR(hw_wrapped_keys);
+ BLK_CRYPTO_RO_ATTR(max_dun_bits);
+ BLK_CRYPTO_RO_ATTR(num_keyslots);
++BLK_CRYPTO_RO_ATTR(standard_keys);
++
++static umode_t blk_crypto_is_visible(struct kobject *kobj,
++				     struct attribute *attr, int n)
++{
++	struct blk_crypto_profile *profile = kobj_to_crypto_profile(kobj);
++	struct blk_crypto_attr *a = attr_to_crypto_attr(attr);
++
++	if (a == &hw_wrapped_keys_attr &&
++	    !(profile->key_types_supported & BLK_CRYPTO_KEY_TYPE_HW_WRAPPED))
++		return 0;
++	if (a == &standard_keys_attr &&
++	    !(profile->key_types_supported & BLK_CRYPTO_KEY_TYPE_STANDARD))
++		return 0;
++
++	return 0444;
++}
+
+ static struct attribute *blk_crypto_attrs[] = {
++	&hw_wrapped_keys_attr.attr,
+ 	&max_dun_bits_attr.attr,
+ 	&num_keyslots_attr.attr,
++	&standard_keys_attr.attr,
+ 	NULL,
+ };
+
+ static const struct attribute_group blk_crypto_attr_group = {
+ 	.attrs = blk_crypto_attrs,
++	.is_visible = blk_crypto_is_visible,
+ };
+
+ /*
+--
+2.34.1
+

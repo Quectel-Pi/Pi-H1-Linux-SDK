@@ -28,8 +28,8 @@
 #define GOODIX_GPIO_INT_NAME		"irq"
 #define GOODIX_GPIO_RST_NAME		"reset"
 
-#define GOODIX_MAX_HEIGHT		800
-#define GOODIX_MAX_WIDTH		1280
+#define GOODIX_MAX_HEIGHT		4096
+#define GOODIX_MAX_WIDTH		4096
 #define GOODIX_INT_TRIGGER		1
 #define GOODIX_CONTACT_SIZE		8
 #define GOODIX_MAX_CONTACT_SIZE		9
@@ -403,15 +403,10 @@ static void goodix_ts_report_pen_up(struct goodix_ts_data *ts)
 
 static void goodix_ts_report_touch_8b(struct goodix_ts_data *ts, u8 *coor_data)
 {
-	int temp = 0;
 	int id = coor_data[0] & 0x0F;
 	int input_x = get_unaligned_le16(&coor_data[1]);
 	int input_y = get_unaligned_le16(&coor_data[3]);
 	int input_w = get_unaligned_le16(&coor_data[5]);
-
-	temp = input_y;
-	input_y = 800 - input_x;
-	input_x = temp;
 
 	input_mt_slot(ts->input_dev, id);
 	input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, true);
@@ -1114,14 +1109,11 @@ static void goodix_read_config(struct goodix_ts_data *ts)
 	}
 
 	ts->int_trigger_type = ts->config[TRIGGER_LOC] & 0x03;
-	ts->max_touch_num = ts->config[MAX_CONTACTS_LOC] & 0x0f;
+	ts->max_touch_num = min(ts->config[MAX_CONTACTS_LOC] & 0x0f,
+				GOODIX_MAX_CONTACTS);
 
 	x_max = get_unaligned_le16(&ts->config[RESOLUTION_LOC]);
 	y_max = get_unaligned_le16(&ts->config[RESOLUTION_LOC + 2]);
-
-	x_max = 1280;
-	y_max = 800;
-
 	if (x_max && y_max) {
 		input_abs_set_max(ts->input_dev, ABS_MT_POSITION_X, x_max - 1);
 		input_abs_set_max(ts->input_dev, ABS_MT_POSITION_Y, y_max - 1);
@@ -1152,7 +1144,7 @@ static int goodix_read_version(struct goodix_ts_data *ts)
 	ts->version = get_unaligned_le16(&buf[4]);
 
 	dev_info(&ts->client->dev, "ID %s, version: %04x\n", ts->id,
-                ts->version);
+		 ts->version);
 
 	return 0;
 }
@@ -1203,7 +1195,10 @@ static int goodix_configure_dev(struct goodix_ts_data *ts)
 		return -ENOMEM;
 	}
 
-	ts->input_dev->name = "Goodix Capacitive TouchScreen";
+	snprintf(ts->name, GOODIX_NAME_MAX_LEN, "%s Goodix Capacitive TouchScreen",
+		 dev_name(&ts->client->dev));
+
+	ts->input_dev->name = ts->name;
 	ts->input_dev->phys = "input/ts";
 	ts->input_dev->id.bustype = BUS_I2C;
 	ts->input_dev->id.vendor = 0x0416;
@@ -1360,7 +1355,7 @@ static int goodix_ts_probe(struct i2c_client *client)
 	const char *cfg_name;
 	int error;
 
-	pr_info("I2C Address: 0x%02x\n", client->addr);
+	dev_dbg(&client->dev, "I2C Address: 0x%02x\n", client->addr);
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		dev_err(&client->dev, "I2C check functionality failed.\n");
@@ -1476,6 +1471,18 @@ static void goodix_ts_remove(struct i2c_client *client)
 
 	if (ts->load_cfg_from_disk)
 		wait_for_completion(&ts->firmware_loading_complete);
+}
+
+static void goodix_ts_shutdown(struct i2c_client *client)
+{
+	struct goodix_ts_data *ts = i2c_get_clientdata(client);
+
+	/* polling mode: stop timer/work before I2C bus goes away at
+	 * poweroff/reboot, otherwise goodix_i2c_* on dead adapter crashes */
+	if (ts && !client->irq) {
+		del_timer_sync(&ts->timer);
+		cancel_work_sync(&ts->work_i2c_poll);
+	}
 }
 
 static int goodix_suspend(struct device *dev)
@@ -1616,6 +1623,7 @@ MODULE_DEVICE_TABLE(of, goodix_of_match);
 static struct i2c_driver goodix_ts_driver = {
 	.probe = goodix_ts_probe,
 	.remove = goodix_ts_remove,
+	.shutdown = goodix_ts_shutdown,
 	.id_table = goodix_ts_id,
 	.driver = {
 		.name = "Goodix-TS",

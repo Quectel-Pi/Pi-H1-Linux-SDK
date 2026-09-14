@@ -1,0 +1,1379 @@
+From a81aa0a699506c07475e664f54589c55c4940de9 Mon Sep 17 00:00:00 2001
+From: Radoslav Tsvetkov <quic_rtsvetko@quicinc.com>
+Date: Thu, 23 Nov 2023 15:42:55 +0200
+Subject: [PATCH 20/42] UPSTREAM: media: qcom: camss: Attach formats to CSID
+ resources
+
+Following the example of VFE, move all formats of the decoder
+to camss-csid.c and attach them to the subdevices resources.
+
+Signed-off-by: Radoslav Tsvetkov <quic_rtsvetko@quicinc.com>
+Signed-off-by: Gjorgji Rosikopulos <quic_grosikop@quicinc.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Tested-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org> #sc8280xp/sm8250/sdm845/apq8016
+Acked-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+[quic_vikramsa@quicinc.com: resolve trivial merge conflicts]
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 57cf33cc204bffab75a79b98a5932b48a6653d12]
+---
+ .../platform/qcom/camss/camss-csid-4-1.c      | 132 +----
+ .../platform/qcom/camss/camss-csid-4-7.c      | 160 +-----
+ .../platform/qcom/camss/camss-csid-gen2.c     | 164 +-----
+ .../media/platform/qcom/camss/camss-csid.c    | 474 +++++++++++++++++-
+ .../media/platform/qcom/camss/camss-csid.h    |  24 +-
+ drivers/media/platform/qcom/camss/camss.c     |  51 +-
+ 6 files changed, 522 insertions(+), 483 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csid-4-1.c b/drivers/media/platform/qcom/camss/camss-csid-4-1.c
+index dd49a40e6a70..c95861420502 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid-4-1.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-4-1.c
+@@ -45,128 +45,6 @@
+ #define CAMSS_CSID_TG_DT_n_CGG_1(n)	(0x0b0 + 0xc * (n))
+ #define CAMSS_CSID_TG_DT_n_CGG_2(n)	(0x0b4 + 0xc * (n))
+ 
+-static const struct csid_format csid_formats[] = {
+-	{
+-		MEDIA_BUS_FMT_UYVY8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_VYUY8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_YUYV8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_YVYU8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SBGGR8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGBRG8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGRBG8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SRGGB8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SBGGR10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGBRG10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGRBG10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SRGGB10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SBGGR12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGBRG12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGRBG12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SRGGB12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_Y10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-};
+-
+ static void csid_configure_stream(struct csid_device *csid, u8 enable)
+ {
+ 	struct csid_testgen_config *tg = &csid->testgen;
+@@ -174,7 +52,7 @@ static void csid_configure_stream(struct csid_device *csid, u8 enable)
+ 
+ 	if (enable) {
+ 		struct v4l2_mbus_framefmt *input_format;
+-		const struct csid_format *format;
++		const struct csid_format_info *format;
+ 		u8 vc = 0; /* Virtual Channel 0 */
+ 		u8 cid = vc * 4; /* id of Virtual Channel and Data Type set */
+ 		u8 dt_shift;
+@@ -184,7 +62,8 @@ static void csid_configure_stream(struct csid_device *csid, u8 enable)
+ 			u32 num_lines, num_bytes_per_line;
+ 
+ 			input_format = &csid->fmt[MSM_CSID_PAD_SRC];
+-			format = csid_get_fmt_entry(csid->formats, csid->nformats,
++			format = csid_get_fmt_entry(csid->res->formats->formats,
++						    csid->res->formats->nformats,
+ 						    input_format->code);
+ 			num_bytes_per_line = input_format->width * format->bpp * format->spp / 8;
+ 			num_lines = input_format->height;
+@@ -211,7 +90,8 @@ static void csid_configure_stream(struct csid_device *csid, u8 enable)
+ 			struct csid_phy_config *phy = &csid->phy;
+ 
+ 			input_format = &csid->fmt[MSM_CSID_PAD_SINK];
+-			format = csid_get_fmt_entry(csid->formats, csid->nformats,
++			format = csid_get_fmt_entry(csid->res->formats->formats,
++						    csid->res->formats->nformats,
+ 						    input_format->code);
+ 
+ 			val = phy->lane_cnt - 1;
+@@ -311,8 +191,6 @@ static u32 csid_src_pad_code(struct csid_device *csid, u32 sink_code,
+ 
+ static void csid_subdev_init(struct csid_device *csid)
+ {
+-	csid->formats = csid_formats;
+-	csid->nformats = ARRAY_SIZE(csid_formats);
+ 	csid->testgen.modes = csid_testgen_modes;
+ 	csid->testgen.nmodes = CSID_PAYLOAD_MODE_NUM_SUPPORTED_GEN1;
+ }
+diff --git a/drivers/media/platform/qcom/camss/camss-csid-4-7.c b/drivers/media/platform/qcom/camss/camss-csid-4-7.c
+index 6b26e036294e..08578a143688 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid-4-7.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-4-7.c
+@@ -44,156 +44,6 @@
+ #define CAMSS_CSID_TG_DT_n_CGG_1(n)	(0x0b8 + 0xc * (n))
+ #define CAMSS_CSID_TG_DT_n_CGG_2(n)	(0x0bc + 0xc * (n))
+ 
+-static const struct csid_format csid_formats[] = {
+-	{
+-		MEDIA_BUS_FMT_UYVY8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_VYUY8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_YUYV8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_YVYU8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SBGGR8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGBRG8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGRBG8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SRGGB8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SBGGR10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGBRG10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGRBG10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SRGGB10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SBGGR12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGBRG12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGRBG12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SRGGB12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SBGGR14_1X14,
+-		DATA_TYPE_RAW_14BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
+-		14,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGBRG14_1X14,
+-		DATA_TYPE_RAW_14BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
+-		14,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGRBG14_1X14,
+-		DATA_TYPE_RAW_14BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
+-		14,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SRGGB14_1X14,
+-		DATA_TYPE_RAW_14BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
+-		14,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_Y10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-};
+-
+ static void csid_configure_stream(struct csid_device *csid, u8 enable)
+ {
+ 	struct csid_testgen_config *tg = &csid->testgen;
+@@ -203,7 +53,7 @@ static void csid_configure_stream(struct csid_device *csid, u8 enable)
+ 
+ 	if (enable) {
+ 		struct v4l2_mbus_framefmt *input_format;
+-		const struct csid_format *format;
++		const struct csid_format_info *format;
+ 		u8 vc = 0; /* Virtual Channel 0 */
+ 		u8 cid = vc * 4; /* id of Virtual Channel and Data Type set */
+ 		u8 dt_shift;
+@@ -213,7 +63,8 @@ static void csid_configure_stream(struct csid_device *csid, u8 enable)
+ 			u32 num_bytes_per_line, num_lines;
+ 
+ 			input_format = &csid->fmt[MSM_CSID_PAD_SRC];
+-			format = csid_get_fmt_entry(csid->formats, csid->nformats,
++			format = csid_get_fmt_entry(csid->res->formats->formats,
++						    csid->res->formats->nformats,
+ 						    input_format->code);
+ 			num_bytes_per_line = input_format->width * format->bpp * format->spp / 8;
+ 			num_lines = input_format->height;
+@@ -240,7 +91,8 @@ static void csid_configure_stream(struct csid_device *csid, u8 enable)
+ 			struct csid_phy_config *phy = &csid->phy;
+ 
+ 			input_format = &csid->fmt[MSM_CSID_PAD_SINK];
+-			format = csid_get_fmt_entry(csid->formats, csid->nformats,
++			format = csid_get_fmt_entry(csid->res->formats->formats,
++						    csid->res->formats->nformats,
+ 						    input_format->code);
+ 
+ 			val = phy->lane_cnt - 1;
+@@ -387,8 +239,6 @@ static u32 csid_src_pad_code(struct csid_device *csid, u32 sink_code,
+ 
+ static void csid_subdev_init(struct csid_device *csid)
+ {
+-	csid->formats = csid_formats;
+-	csid->nformats = ARRAY_SIZE(csid_formats);
+ 	csid->testgen.modes = csid_testgen_modes;
+ 	csid->testgen.nmodes = CSID_PAYLOAD_MODE_NUM_SUPPORTED_GEN1;
+ }
+diff --git a/drivers/media/platform/qcom/camss/camss-csid-gen2.c b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+index 05ff5fa8095a..70f2fde6fb31 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+@@ -177,163 +177,6 @@
+ #define		TPG_COLOR_BOX_CFG_MODE		0
+ #define		TPG_COLOR_BOX_PATTERN_SEL	2
+ 
+-static const struct csid_format csid_formats[] = {
+-	{
+-		MEDIA_BUS_FMT_UYVY8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_VYUY8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_YUYV8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_YVYU8_1X16,
+-		DATA_TYPE_YUV422_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		2,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SBGGR8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGBRG8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGRBG8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SRGGB8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SBGGR10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGBRG10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGRBG10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SRGGB10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_Y8_1X8,
+-		DATA_TYPE_RAW_8BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
+-		8,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_Y10_1X10,
+-		DATA_TYPE_RAW_10BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
+-		10,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SBGGR12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGBRG12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGRBG12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SRGGB12_1X12,
+-		DATA_TYPE_RAW_12BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
+-		12,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SBGGR14_1X14,
+-		DATA_TYPE_RAW_14BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
+-		14,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGBRG14_1X14,
+-		DATA_TYPE_RAW_14BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
+-		14,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SGRBG14_1X14,
+-		DATA_TYPE_RAW_14BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
+-		14,
+-		1,
+-	},
+-	{
+-		MEDIA_BUS_FMT_SRGGB14_1X14,
+-		DATA_TYPE_RAW_14BIT,
+-		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
+-		14,
+-		1,
+-	},
+-};
+-
+ static void __csid_configure_stream(struct csid_device *csid, u8 enable, u8 vc)
+ {
+ 	struct csid_testgen_config *tg = &csid->testgen;
+@@ -342,8 +185,9 @@ static void __csid_configure_stream(struct csid_device *csid, u8 enable, u8 vc)
+ 	u8 lane_cnt = csid->phy.lane_cnt;
+ 	/* Source pads matching RDI channels on hardware. Pad 1 -> RDI0, Pad 2 -> RDI1, etc. */
+ 	struct v4l2_mbus_framefmt *input_format = &csid->fmt[MSM_CSID_PAD_FIRST_SRC + vc];
+-	const struct csid_format *format = csid_get_fmt_entry(csid->formats, csid->nformats,
+-							      input_format->code);
++	const struct csid_format_info *format = csid_get_fmt_entry(csid->res->formats->formats,
++								   csid->res->formats->nformats,
++								   input_format->code);
+ 
+ 	if (!lane_cnt)
+ 		lane_cnt = 4;
+@@ -613,8 +457,6 @@ static u32 csid_src_pad_code(struct csid_device *csid, u32 sink_code,
+ 
+ static void csid_subdev_init(struct csid_device *csid)
+ {
+-	csid->formats = csid_formats;
+-	csid->nformats = ARRAY_SIZE(csid_formats);
+ 	csid->testgen.modes = csid_testgen_modes;
+ 	csid->testgen.nmodes = CSID_PAYLOAD_MODE_NUM_SUPPORTED_GEN2;
+ }
+diff --git a/drivers/media/platform/qcom/camss/camss-csid.c b/drivers/media/platform/qcom/camss/camss-csid.c
+index b725b8086b05..ac4ce1d0d9cc 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid.c
++++ b/drivers/media/platform/qcom/camss/camss-csid.c
+@@ -45,6 +45,450 @@ const char * const csid_testgen_modes[] = {
+ 	NULL
+ };
+ 
++static const struct csid_format_info formats_4_1[] = {
++	{
++		MEDIA_BUS_FMT_UYVY8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_VYUY8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_YUYV8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_YVYU8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_Y10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++};
++
++static const struct csid_format_info formats_4_7[] = {
++	{
++		MEDIA_BUS_FMT_UYVY8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_VYUY8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_YUYV8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_YVYU8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR14_1X14,
++		DATA_TYPE_RAW_14BIT,
++		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
++		14,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG14_1X14,
++		DATA_TYPE_RAW_14BIT,
++		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
++		14,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG14_1X14,
++		DATA_TYPE_RAW_14BIT,
++		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
++		14,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB14_1X14,
++		DATA_TYPE_RAW_14BIT,
++		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
++		14,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_Y10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++};
++
++static const struct csid_format_info formats_gen2[] = {
++	{
++		MEDIA_BUS_FMT_UYVY8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_VYUY8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_YUYV8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_YVYU8_1X16,
++		DATA_TYPE_YUV422_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		2,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_Y8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		DECODE_FORMAT_UNCOMPRESSED_8_BIT,
++		8,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_Y10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		DECODE_FORMAT_UNCOMPRESSED_10_BIT,
++		10,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		DECODE_FORMAT_UNCOMPRESSED_12_BIT,
++		12,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR14_1X14,
++		DATA_TYPE_RAW_14BIT,
++		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
++		14,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG14_1X14,
++		DATA_TYPE_RAW_14BIT,
++		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
++		14,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG14_1X14,
++		DATA_TYPE_RAW_14BIT,
++		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
++		14,
++		1,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB14_1X14,
++		DATA_TYPE_RAW_14BIT,
++		DECODE_FORMAT_UNCOMPRESSED_14_BIT,
++		14,
++		1,
++	},
++};
++
++const struct csid_formats csid_formats_4_1 = {
++	.nformats = ARRAY_SIZE(formats_4_1),
++	.formats = formats_4_1
++};
++
++const struct csid_formats csid_formats_4_7 = {
++	.nformats = ARRAY_SIZE(formats_4_7),
++	.formats = formats_4_7
++};
++
++const struct csid_formats csid_formats_gen2 = {
++	.nformats = ARRAY_SIZE(formats_gen2),
++	.formats = formats_gen2
++};
++
+ u32 csid_find_code(u32 *codes, unsigned int ncodes,
+ 		   unsigned int match_format_idx, u32 match_code)
+ {
+@@ -65,9 +509,9 @@ u32 csid_find_code(u32 *codes, unsigned int ncodes,
+ 	return codes[0];
+ }
+ 
+-const struct csid_format *csid_get_fmt_entry(const struct csid_format *formats,
+-					     unsigned int nformats,
+-					     u32 code)
++const struct csid_format_info *csid_get_fmt_entry(const struct csid_format_info *formats,
++						  unsigned int nformats,
++						  u32 code)
+ {
+ 	unsigned int i;
+ 
+@@ -87,12 +531,12 @@ const struct csid_format *csid_get_fmt_entry(const struct csid_format *formats,
+ static int csid_set_clock_rates(struct csid_device *csid)
+ {
+ 	struct device *dev = csid->camss->dev;
+-	const struct csid_format *fmt;
++	const struct csid_format_info *fmt;
+ 	s64 link_freq;
+ 	int i, j;
+ 	int ret;
+ 
+-	fmt = csid_get_fmt_entry(csid->formats, csid->nformats,
++	fmt = csid_get_fmt_entry(csid->res->formats->formats, csid->res->formats->nformats,
+ 				 csid->fmt[MSM_CSIPHY_PAD_SINK].code);
+ 	link_freq = camss_get_link_freq(&csid->subdev.entity, fmt->bpp,
+ 					csid->phy.lane_cnt);
+@@ -304,12 +748,12 @@ static void csid_try_format(struct csid_device *csid,
+ 	case MSM_CSID_PAD_SINK:
+ 		/* Set format on sink pad */
+ 
+-		for (i = 0; i < csid->nformats; i++)
+-			if (fmt->code == csid->formats[i].code)
++		for (i = 0; i < csid->res->formats->nformats; i++)
++			if (fmt->code == csid->res->formats->formats[i].code)
+ 				break;
+ 
+ 		/* If not found, use UYVY as default */
+-		if (i >= csid->nformats)
++		if (i >= csid->res->formats->nformats)
+ 			fmt->code = MEDIA_BUS_FMT_UYVY8_1X16;
+ 
+ 		fmt->width = clamp_t(u32, fmt->width, 1, 8191);
+@@ -334,12 +778,12 @@ static void csid_try_format(struct csid_device *csid,
+ 			/* Test generator is enabled, set format on source */
+ 			/* pad to allow test generator usage */
+ 
+-			for (i = 0; i < csid->nformats; i++)
+-				if (csid->formats[i].code == fmt->code)
++			for (i = 0; i < csid->res->formats->nformats; i++)
++				if (csid->res->formats->formats[i].code == fmt->code)
+ 					break;
+ 
+ 			/* If not found, use UYVY as default */
+-			if (i >= csid->nformats)
++			if (i >= csid->res->formats->nformats)
+ 				fmt->code = MEDIA_BUS_FMT_UYVY8_1X16;
+ 
+ 			fmt->width = clamp_t(u32, fmt->width, 1, 8191);
+@@ -367,10 +811,10 @@ static int csid_enum_mbus_code(struct v4l2_subdev *sd,
+ 	struct csid_device *csid = v4l2_get_subdevdata(sd);
+ 
+ 	if (code->pad == MSM_CSID_PAD_SINK) {
+-		if (code->index >= csid->nformats)
++		if (code->index >= csid->res->formats->nformats)
+ 			return -EINVAL;
+ 
+-		code->code = csid->formats[code->index].code;
++		code->code = csid->res->formats->formats[code->index].code;
+ 	} else {
+ 		if (csid->testgen.nmodes == CSID_PAYLOAD_MODE_DISABLED ||
+ 		    csid->testgen_mode->cur.val == 0) {
+@@ -385,10 +829,10 @@ static int csid_enum_mbus_code(struct v4l2_subdev *sd,
+ 			if (!code->code)
+ 				return -EINVAL;
+ 		} else {
+-			if (code->index >= csid->nformats)
++			if (code->index >= csid->res->formats->nformats)
+ 				return -EINVAL;
+ 
+-			code->code = csid->formats[code->index].code;
++			code->code = csid->res->formats->formats[code->index].code;
+ 		}
+ 	}
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss-csid.h b/drivers/media/platform/qcom/camss/camss-csid.h
+index 1d5e6ef11499..e8413801f30a 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid.h
++++ b/drivers/media/platform/qcom/camss/camss-csid.h
+@@ -67,7 +67,7 @@ enum csid_testgen_mode {
+ 	CSID_PAYLOAD_MODE_NUM_SUPPORTED_GEN2 = 9, /* excluding disabled */
+ };
+ 
+-struct csid_format {
++struct csid_format_info {
+ 	u32 code;
+ 	u8 data_type;
+ 	u8 decode_format;
+@@ -75,6 +75,11 @@ struct csid_format {
+ 	u8 spp; /* bus samples per pixel */
+ };
+ 
++struct csid_formats {
++	unsigned int nformats;
++	const struct csid_format_info *formats;
++};
++
+ struct csid_testgen_config {
+ 	enum csid_testgen_mode mode;
+ 	const char * const*modes;
+@@ -151,6 +156,7 @@ struct csid_hw_ops {
+ 
+ struct csid_subdev_resources {
+ 	const struct csid_hw_ops *hw_ops;
++	const struct csid_formats *formats;
+ };
+ 
+ struct csid_device {
+@@ -171,8 +177,6 @@ struct csid_device {
+ 	struct v4l2_mbus_framefmt fmt[MSM_CSID_PADS_NUM];
+ 	struct v4l2_ctrl_handler ctrls;
+ 	struct v4l2_ctrl *testgen_mode;
+-	const struct csid_format *formats;
+-	unsigned int nformats;
+ 	const struct csid_subdev_resources *res;
+ };
+ 
+@@ -192,16 +196,16 @@ u32 csid_find_code(u32 *codes, unsigned int ncode,
+ 		   unsigned int match_format_idx, u32 match_code);
+ 
+ /*
+- * csid_get_fmt_entry - Find csid_format entry with matching format code
+- * @formats: Array of format csid_format entries
++ * csid_get_fmt_entry - Find csid_format_info entry with matching format code
++ * @formats: Array of format csid_format_info entries
+  * @nformats: Length of @nformats array
+  * @code: Desired format code
+  *
+  * Return formats[0] on failure to find code
+  */
+-const struct csid_format *csid_get_fmt_entry(const struct csid_format *formats,
+-					     unsigned int nformats,
+-					     u32 code);
++const struct csid_format_info *csid_get_fmt_entry(const struct csid_format_info *formats,
++						  unsigned int nformats,
++						  u32 code);
+ 
+ int msm_csid_subdev_init(struct camss *camss, struct csid_device *csid,
+ 			 const struct camss_subdev_resources *res, u8 id);
+@@ -215,6 +219,10 @@ void msm_csid_get_csid_id(struct media_entity *entity, u8 *id);
+ 
+ extern const char * const csid_testgen_modes[];
+ 
++extern const struct csid_formats csid_formats_4_1;
++extern const struct csid_formats csid_formats_4_7;
++extern const struct csid_formats csid_formats_gen2;
++
+ extern const struct csid_hw_ops csid_ops_4_1;
+ extern const struct csid_hw_ops csid_ops_4_7;
+ extern const struct csid_hw_ops csid_ops_gen2;
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index d8713c477a06..2d865273a1a4 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -84,7 +84,8 @@ static const struct camss_subdev_resources csid_res_8x16[] = {
+ 		.interrupt = { "csid0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_4_1
++			.hw_ops = &csid_ops_4_1,
++			.formats = &csid_formats_4_1
+ 		}
+ 	},
+ 
+@@ -105,7 +106,8 @@ static const struct camss_subdev_resources csid_res_8x16[] = {
+ 		.interrupt = { "csid1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_4_1
++			.hw_ops = &csid_ops_4_1,
++			.formats = &csid_formats_4_1
+ 		}
+ 	},
+ };
+@@ -218,7 +220,8 @@ static const struct camss_subdev_resources csid_res_8x96[] = {
+ 		.interrupt = { "csid0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_4_7
++			.hw_ops = &csid_ops_4_7,
++			.formats = &csid_formats_4_7
+ 		}
+ 	},
+ 
+@@ -239,7 +242,8 @@ static const struct camss_subdev_resources csid_res_8x96[] = {
+ 		.interrupt = { "csid1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_4_7
++			.hw_ops = &csid_ops_4_7,
++			.formats = &csid_formats_4_7
+ 		}
+ 	},
+ 
+@@ -260,7 +264,8 @@ static const struct camss_subdev_resources csid_res_8x96[] = {
+ 		.interrupt = { "csid2" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_4_7
++			.hw_ops = &csid_ops_4_7,
++			.formats = &csid_formats_4_7
+ 		}
+ 	},
+ 
+@@ -281,7 +286,8 @@ static const struct camss_subdev_resources csid_res_8x96[] = {
+ 		.interrupt = { "csid3" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_4_7
++			.hw_ops = &csid_ops_4_7,
++			.formats = &csid_formats_4_7
+ 		}
+ 	}
+ };
+@@ -428,7 +434,8 @@ static const struct camss_subdev_resources csid_res_660[] = {
+ 		.interrupt = { "csid0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_4_7
++			.hw_ops = &csid_ops_4_7,
++			.formats = &csid_formats_4_7
+ 		}
+ 	},
+ 
+@@ -452,7 +459,8 @@ static const struct camss_subdev_resources csid_res_660[] = {
+ 		.interrupt = { "csid1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_4_7
++			.hw_ops = &csid_ops_4_7,
++			.formats = &csid_formats_4_7
+ 		}
+ 	},
+ 
+@@ -476,7 +484,8 @@ static const struct camss_subdev_resources csid_res_660[] = {
+ 		.interrupt = { "csid2" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_4_7
++			.hw_ops = &csid_ops_4_7,
++			.formats = &csid_formats_4_7
+ 		}
+ 	},
+ 
+@@ -500,7 +509,8 @@ static const struct camss_subdev_resources csid_res_660[] = {
+ 		.interrupt = { "csid3" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_4_7
++			.hw_ops = &csid_ops_4_7,
++			.formats = &csid_formats_4_7
+ 		}
+ 	}
+ };
+@@ -687,7 +697,8 @@ static const struct camss_subdev_resources csid_res_845[] = {
+ 		.interrupt = { "csid0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_gen2
++			.hw_ops = &csid_ops_gen2,
++			.formats = &csid_formats_gen2
+ 		}
+ 	},
+ 
+@@ -711,7 +722,8 @@ static const struct camss_subdev_resources csid_res_845[] = {
+ 		.interrupt = { "csid1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_gen2
++			.hw_ops = &csid_ops_gen2,
++			.formats = &csid_formats_gen2
+ 		}
+ 	},
+ 
+@@ -735,7 +747,8 @@ static const struct camss_subdev_resources csid_res_845[] = {
+ 		.interrupt = { "csid2" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_gen2
++			.hw_ops = &csid_ops_gen2,
++			.formats = &csid_formats_gen2
+ 		}
+ 	}
+ };
+@@ -917,7 +930,8 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 		.interrupt = { "csid0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_gen2
++			.hw_ops = &csid_ops_gen2,
++			.formats = &csid_formats_gen2
+ 		}
+ 	},
+ 	/* CSID1 */
+@@ -933,7 +947,8 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 		.interrupt = { "csid1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_gen2
++			.hw_ops = &csid_ops_gen2,
++			.formats = &csid_formats_gen2
+ 		}
+ 	},
+ 	/* CSID2 */
+@@ -948,7 +963,8 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 		.interrupt = { "csid2" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_gen2
++			.hw_ops = &csid_ops_gen2,
++			.formats = &csid_formats_gen2
+ 		}
+ 	},
+ 	/* CSID3 */
+@@ -963,7 +979,8 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 		.interrupt = { "csid3" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.hw_ops = &csid_ops_gen2
++			.hw_ops = &csid_ops_gen2,
++			.formats = &csid_formats_gen2
+ 		}
+ 	}
+ };
+-- 
+2.25.1
+

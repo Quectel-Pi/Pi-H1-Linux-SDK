@@ -154,6 +154,7 @@ class SQLTable(collections.abc.MutableMapping):
 
     def __exit__(self, *excinfo):
         self.connection.__exit__(*excinfo)
+        self.connection.close()
 
     @_Decorators.retry()
     @_Decorators.transaction
@@ -249,4 +250,23 @@ def persist(domain, d):
 
     bb.utils.mkdirhier(cachedir)
     cachefile = os.path.join(cachedir, "bb_persist_data.sqlite3")
-    return SQLTable(cachefile, domain)
+
+    try:
+        return SQLTable(cachefile, domain)
+    except sqlite3.OperationalError:
+        # Sqlite fails to open database when its path is too long.
+        # After testing, 504 is the biggest path length that can be opened by
+        # sqlite.
+        # Note: This code is called before sanity.bbclass and its path length
+        # check
+        max_len = 504
+        if len(cachefile) > max_len:
+            logger.critical("The path of the cache file is too long "
+                    "({0} chars > {1}) to be opened by sqlite! "
+                    "Your cache file is \"{2}\"".format(
+                        len(cachefile),
+                        max_len,
+                        cachefile))
+            sys.exit(1)
+        else:
+            raise

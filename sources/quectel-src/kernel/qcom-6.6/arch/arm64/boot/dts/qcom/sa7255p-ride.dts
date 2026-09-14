@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 /dts-v1/;
@@ -9,6 +10,7 @@
 
 #include "sa7255p.dtsi"
 #include "sa7255p-scmi.dtsi"
+#include "sa8255p-pmics.dtsi"
 
 / {
 	model = "Qualcomm Technologies, Inc. SA7255P Ride";
@@ -19,7 +21,10 @@
 	aliases {
 		i2c8 = &i2c8;
 		i2c15 = &i2c15;
+		mmc0 = &sdhc_1;
 		serial0 = &uart7;
+		serial1 = &uart12;
+		serial2 = &uart2;
 		spi10 = &spi10;
 		scmichannels = &scmichannels;
 		ufshc1 = &ufs_mem_hc;
@@ -36,6 +41,10 @@
 	status = "okay";
 };
 
+&gpll0_board_clk {
+	clock-frequency = <300000000>;
+};
+
 &i2c8 {
 	clock-frequency = <400000>;
 	power-domains = <&scmi9_pd 8>;
@@ -48,6 +57,114 @@
 	power-domains = <&scmi9_pd 15>;
 
 	status = "okay";
+};
+
+&pcie0 {
+	power-domains = <&scmi5_pd 0>;
+	power-domain-names = "power";
+	status = "okay";
+};
+
+&pcie1 {
+	power-domains = <&scmi6_pd 0>;
+	power-domain-names = "power";
+	status = "okay";
+};
+
+&pcie0_ep {
+	#dma-cells = <1>;
+	dmas = <&pcie0_ep 0>, <&pcie0_ep 1>;
+	dma-names = "rx", "tx";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie0_ep_clkreq_default &pcie0_ep_perst_default
+		    &pcie0_ep_wake_default>;
+
+	reset-gpio = <&tlmm 2 GPIO_ACTIVE_LOW>;
+	wake-gpios = <&tlmm 0 GPIO_ACTIVE_HIGH>;
+
+	power-domains = <&scmi5_pd 1>;
+	power-domain-names = "power";
+
+	status = "disabled";
+};
+
+&pcie1_ep {
+	#dma-cells = <1>;
+	dmas = <&pcie1_ep 0>, <&pcie1_ep 1>;
+	dma-names = "rx", "tx";
+
+	pinctrl-names = "default";
+	pinctrl-0 = <&pcie1_ep_clkreq_default &pcie1_ep_perst_default
+		    &pcie1_ep_wake_default>;
+
+	reset-gpio = <&tlmm 23 GPIO_ACTIVE_LOW>;
+	wake-gpios = <&tlmm 21 GPIO_ACTIVE_HIGH>;
+
+	power-domains = <&scmi6_pd 1>;
+	power-domain-names = "power";
+
+	status = "disabled";
+};
+
+&pmm8654au_0_thermal {
+	thermal-sensors = <&scmi23_sensor 0>;
+};
+
+&pmm8654au_1_thermal {
+	thermal-sensors = <&scmi23_sensor 1>;
+};
+
+&pmm8654au_2_thermal {
+	thermal-sensors = <&scmi23_sensor 2>;
+};
+
+&pmm8654au_3_thermal {
+	thermal-sensors = <&scmi23_sensor 3>;
+};
+
+&tlmm {
+		pcie0_ep_perst_default: pcie-ep-perst-default-state {
+			pins = "gpio2";
+			function = "gpio";
+			drive-strength = <16>;
+			bias-pull-down;
+		};
+
+		pcie0_ep_wake_default: pcie-ep-wake-default-state {
+			pins = "gpio0";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+		};
+
+		pcie0_ep_clkreq_default: pcie-ep-clkreq-default-state {
+			pins = "gpio1";
+			function = "pcie0_clkreq";
+			drive-strength = <2>;
+			bias-disable;
+		};
+
+		pcie1_ep_perst_default: pcie-ep-perst-default-state {
+			pins = "gpio23";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-pull-down;
+		};
+
+		pcie1_ep_wake_default: pcie-ep-wake-default-state {
+			pins = "gpio21";
+			function = "gpio";
+			drive-strength = <2>;
+			bias-disable;
+		};
+
+		pcie1_ep_clkreq_default: pcie-ep-clkreq-default-state {
+			pins = "gpio22";
+			function = "pcie1_clkreq";
+			drive-strength = <2>;
+			bias-disable;
+		};
 };
 
 &qupv3_id_0 {
@@ -71,6 +188,14 @@
 };
 
 &scmi3 {
+	status = "okay";
+};
+
+&scmi5 {
+	status = "okay";
+};
+
+&scmi6 {
 	status = "okay";
 };
 
@@ -98,6 +223,21 @@
 	status = "okay";
 };
 
+&scmi23 {
+	status = "okay";
+};
+
+&scmi34 {
+	status = "disabled";
+};
+
+&sdhc_1 {
+	power-domains = <&scmi34_pd 0>, <&scmi34_dvfs 0>;
+	power-domain-names = "power", "perf";
+
+	status = "disabled";
+};
+
 &sleep_clk {
 	clock-frequency = <32000>;
 };
@@ -109,8 +249,22 @@
 	status = "okay";
 };
 
+&uart2 {
+	power-domains = <&scmi11_pd 2>, <&scmi11_dvfs 2>;
+	power-domain-names = "power", "perf";
+
+	status = "okay";
+};
+
 &uart7 {
 	power-domains = <&scmi11_pd 7>, <&scmi11_dvfs 7>;
+	power-domain-names = "power", "perf";
+
+	status = "okay";
+};
+
+&uart12 {
+	power-domains = <&scmi11_pd 12>, <&scmi11_dvfs 12>;
 	power-domain-names = "power", "perf";
 
 	status = "okay";

@@ -1,0 +1,32 @@
+From: QuecPi <dev@quectel.com>
+Subject: [PATCH] PAL: make DP endpoint configuration failure non-fatal
+
+On QCS6490 with the DP output (PAL_DEVICE_OUT_AUX_DIGITAL), the DP
+audio stream could not start: configureDpEndpoint() calls getMIID()
+which reads the "getTaggedInfo" mixer control from the AGM service.
+That control only contains the HW endpoint tag (c0000004) after the
+graph has been opened, but configureDpEndpoint() runs inside
+DisplayPort::start() which is invoked before Device::start()/graph
+open.  On a fresh session the tag lookup therefore fails with -EINVAL
+and the whole stream is aborted with "Endpoint Configuration Failed"
+(status -22), so no audio reaches the DisplayPort output.
+
+The DP endpoint payload is only used for the DP channel allocation
+custom payload; the graph can still be opened and audio can flow
+without it.  Make the failure non-fatal so the stream start proceeds.
+
+Signed-off-by: QuecPi <dev@quectel.com>
+---
+ device/src/DisplayPortUpstream.cpp | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/device/src/DisplayPortUpstream.cpp b/device/src/DisplayPortUpstream.cpp
+--- a/device/src/DisplayPortUpstream.cpp
++++ b/device/src/DisplayPortUpstream.cpp
+@@ -230,7 +230,6 @@ int DisplayPort::start()
+         status = configureDpEndpoint();
+         if (status != 0) {
+             PAL_ERR(LOG_TAG,"Endpoint Configuration Failed");
+-            return status;
+         }
+     }

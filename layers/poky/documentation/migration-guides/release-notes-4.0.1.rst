@@ -1,14 +1,16 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Release notes for 4.0.1 (kirkstone)
 -----------------------------------
 
 Security Fixes in 4.0.1
 ~~~~~~~~~~~~~~~~~~~~~~~
 
--  linux-yocto/5.15: fix :cve:`2022-28796`
--  python3: ignore :cve:`2015-20107`
--  e2fsprogs: fix :cve:`2022-1304`
--  lua: fix :cve:`2022-28805`
--  busybox: fix :cve:`2022-28391`
+-  linux-yocto/5.15: fix :cve_nist:`2022-28796`
+-  python3: ignore :cve_nist:`2015-20107`
+-  e2fsprogs: fix :cve_nist:`2022-1304`
+-  lua: fix :cve_nist:`2022-28805`
+-  busybox: fix :cve_nist:`2022-28391`
 
 Fixes in 4.0.1
 ~~~~~~~~~~~~~~
@@ -39,7 +41,7 @@ Fixes in 4.0.1
 -  docs: migration-guides: migration-3.4: mention that hardcoded password are supported if hashed
 -  docs: migration-guides: release-notes-4.0: fix risc-v typo
 -  docs: migration-guides: release-notes-4.0: replace kernel placeholder with correct recipe name
--  docs: ref-manual: variables: add hashed password example in EXTRA_USERS_PARAMS
+-  docs: ref-manual: variables: add hashed password example in :term:`EXTRA_USERS_PARAMS`
 -  docs: set_versions.py: add information about obsolescence of a release
 -  docs: set_versions.py: fix latest release of a branch being shown twice in switchers.js
 -  docs: set_versions.py: fix latest version of an active release shown as obsolete
@@ -81,15 +83,15 @@ Fixes in 4.0.1
 -  linux-yocto/5.15: update to v5.15.36
 -  linux-yocto: enable powerpc-debug fragment
 -  mdadm: Drop clang specific cflags
--  migration-3.4: add missing entry on EXTRA_USERS_PARAMS
+-  migration-3.4: add missing entry on :term:`EXTRA_USERS_PARAMS`
 -  migration-guides: add release notes for 4.0
 -  migration-guides: complete migration guide for 4.0
--  migration-guides: release-notes-4.0: mention LTS release
+-  migration-guides: release-notes-4.0: mention :term:`LTS` release
 -  migration-guides: release-notes-4.0: update 'Repositories / Downloads' section
 -  migration-guides: stop including documents with ".. include"
 -  musl: Fix build when usrmerge distro feature is enabled
 -  ncurses: use COPYING file
--  neard: Switch SRC_URI to git repo
+-  neard: Switch :term:`SRC_URI` to git repo
 -  oeqa/selftest: add test for git working correctly inside pseudo
 -  openssl: minor security upgrade 3.0.2 -> 3.0.3
 -  package.bbclass: Prevent perform_packagecopy from removing /sysroot-only
@@ -99,14 +101,14 @@ Fixes in 4.0.1
 -  poky.conf: bump version for 4.0.1 release
 -  qemu.bbclass: Extend ppc/ppc64 extra options
 -  qemuarm64: use virtio pci interfaces
--  qemuarmv5: use arm-versatile-926ejs KMACHINE
--  ref-manual: Add XZ_THREADS and XZ_MEMLIMIT
--  ref-manual: add KERNEL_DEBUG_TIMESTAMPS
--  ref-manual: add ZSTD_THREADS
+-  qemuarmv5: use arm-versatile-926ejs :term:`KMACHINE`
+-  ref-manual: Add :term:`XZ_THREADS` and :term:`XZ_MEMLIMIT`
+-  ref-manual: add :term:`KERNEL_DEBUG_TIMESTAMPS`
+-  ref-manual: add :term:`ZSTD_THREADS`
 -  ref-manual: add a note about hard-coded passwords
 -  ref-manual: add empty-dirs QA check and QA_EMPTY_DIRS*
--  ref-manual: add mention of vendor filtering to CVE_PRODUCT
--  ref-manual: mention wildcarding support in INCOMPATIBLE_LICENSE
+-  ref-manual: add mention of vendor filtering to :term:`CVE_PRODUCT`
+-  ref-manual: mention wildcarding support in :term:`INCOMPATIBLE_LICENSE`
 -  releases: update for yocto 4.0
 -  rootfs-postcommands: fix symlinks where link and output path are equal
 -  ruby: upgrade 3.1.1 -> 3.1.2
@@ -122,7 +124,7 @@ Fixes in 4.0.1
 -  systemd-boot: remove outdated EFI_LD comment
 -  systemtap: Fix build with gcc-12
 -  terminal.py: Restore error output from Terminal
--  u-boot: Correct the SRC_URI
+-  u-boot: Correct the :term:`SRC_URI`
 -  u-boot: Inherit pkgconfig
 -  update_udev_hwdb: fix multilib issue with systemd
 -  util-linux: Create u-a symlink for findfs utility
@@ -174,15 +176,15 @@ Contributors to 4.0.1
 -  Ross Burton
 -  Russ Dill
 -  Steve Sakoman
--  wangmy
--  zhengruoqin
+-  Wang Mingyu
+-  Zheng Ruoqin
 
 Repositories / Downloads for 4.0.1
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 poky
 
--  Repository Location: https://git.yoctoproject.org/git/poky
+-  Repository Location: :yocto_git:`/poky`
 -  Branch: :yocto_git:`kirkstone </poky/log/?h=kirkstone>`
 -  Tag: :yocto_git:`yocto-4.0.1 </poky/tag/?h=yocto-4.0.1>`
 -  Git Revision: :yocto_git:`8c489602f218bcf21de0d3c9f8cf620ea5f06430 </poky/commit/?id=8c489602f218bcf21de0d3c9f8cf620ea5f06430>`
@@ -206,7 +208,7 @@ openembedded-core
 
 meta-mingw
 
--  Repository Location: https://git.yoctoproject.org/git/meta-mingw
+-  Repository Location: :yocto_git:`/meta-mingw`
 -  Branch: :yocto_git:`kirkstone </meta-mingw/log/?h=kirkstone>`
 -  Tag: :yocto_git:`yocto-4.0.1 </meta-mingw/tag/?h=yocto-4.0.1>`
 -  Git Revision: :yocto_git:`a90614a6498c3345704e9611f2842eb933dc51c1 </meta-mingw/commit/?id=a90614a6498c3345704e9611f2842eb933dc51c1>`
@@ -218,7 +220,7 @@ meta-mingw
 
 meta-gplv2
 
--  Repository Location: https://git.yoctoproject.org/git/meta-gplv2
+-  Repository Location: :yocto_git:`/meta-gplv2`
 -  Branch: :yocto_git:`kirkstone </meta-gplv2/log/?h=kirkstone>`
 -  Tag: :yocto_git:`yocto-4.0.1 </meta-gplv2/tag/?h=yocto-4.0.1>`
 -  Git Revision: :yocto_git:`d2f8b5cdb285b72a4ed93450f6703ca27aa42e8a </meta-mingw/commit/?id=d2f8b5cdb285b72a4ed93450f6703ca27aa42e8a>`
@@ -242,7 +244,7 @@ bitbake
 
 yocto-docs
 
--  Repository Location: https://git.yoctoproject.org/git/yocto-docs
+-  Repository Location: :yocto_git:`/yocto-docs`
 -  Branch: :yocto_git:`kirkstone </yocto-docs/log/?h=kirkstone>`
 -  Tag: :yocto_git:`yocto-4.0.1 </yocto-docs/tag/?h=yocto-4.0>`
 -  Git Revision: :yocto_git:`4ec9df3336a425719a9a35532504731ce56984ca </yocto-docs/commit/?id=4ec9df3336a425719a9a35532504731ce56984ca>`

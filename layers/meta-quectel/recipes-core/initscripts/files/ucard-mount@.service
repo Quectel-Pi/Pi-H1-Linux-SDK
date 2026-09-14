@@ -1,0 +1,31 @@
+[Unit]
+Description=Mount USB Drive %i
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+
+# 解析参数：1-sdi1 → port=1, device=sdi1
+# GNOME 系统跳过自动挂载，交由 udisks2/GNOME 文件管理器管理。
+# 注意：不能用 pgrep -x gnome-shell 做唯一判断——开机时 U 盘已插着、
+# GNOME 尚未启动的窗口期内 udev 触发本服务时检测不到 gnome-shell，
+# 会抢先 mount 到 /mnt/sdcardN，导致 GNOME 起来后 udisks2 认为分区
+# 已被挂载而不展示。因此以"系统是否安装 gnome-shell"（持久标志）为
+# 准，全时段生效，无竞态窗口；udisks2 启动时会自动挂载已插着的 U 盘。
+ExecStart=/bin/sh -c ' \
+  PORT=$$(echo %i | cut -d"-" -f1); \
+  DEVICE=$$(echo %i | cut -d"-" -f2); \
+  if [ -x /usr/bin/gnome-shell ] || pgrep -x gnome-shell >/dev/null 2>&1; then \
+    echo "GNOME system, skip automount /dev/$$DEVICE (udisks2 will handle)"; \
+    exit 0; \
+  fi; \
+  /bin/mkdir -p /mnt/sdcard$$PORT; \
+  /bin/mount /dev/$$DEVICE /mnt/sdcard$$PORT \
+'
+
+ExecStop=/bin/sh -c ' \
+  PORT=$$(echo %i | cut -d"-" -f1); \
+  /bin/umount -l /mnt/sdcard$$PORT; \
+  /bin/rmdir /mnt/sdcard$$PORT \
+'

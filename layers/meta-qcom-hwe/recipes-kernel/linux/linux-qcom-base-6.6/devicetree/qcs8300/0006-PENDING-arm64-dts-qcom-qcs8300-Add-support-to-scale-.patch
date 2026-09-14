@@ -1,0 +1,117 @@
+From f2a6b04b93c3180bbd10842d24cb677e683f795f Mon Sep 17 00:00:00 2001
+From: Imran Shaik <quic_imrashai@quicinc.com>
+Date: Tue, 26 Nov 2024 10:47:37 +0530
+Subject: [PATCH 6/6] PENDING: arm64: dts: qcom: qcs8300: Add support to scale
+ DDR/L3
+
+Add support to scale DDR/L3 based on CPU frequencies on QCS8300 platform.
+
+Signed-off-by: Imran Shaik <quic_imrashai@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 40 +++++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index 32bab77793f8..6b511788cf30 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -73,6 +73,11 @@ cpu0: cpu@0 {
+ 			qcom,freq-domain = <&cpufreq_hw 0>;
+ 			capacity-dmips-mhz = <1946>;
+ 			dynamic-power-coefficient = <472>;
++			operating-points-v2 = <&cpu0_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl0 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl0 SLAVE_EPSS_L3_SHARED>;
+ 
+ 			l2_0: l2-cache {
+ 				compatible = "cache";
+@@ -93,6 +98,11 @@ cpu1: cpu@100 {
+ 			qcom,freq-domain = <&cpufreq_hw 0>;
+ 			capacity-dmips-mhz = <1946>;
+ 			dynamic-power-coefficient = <472>;
++			operating-points-v2 = <&cpu0_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl0 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl0 SLAVE_EPSS_L3_SHARED>;
+ 
+ 			l2_1: l2-cache {
+ 				compatible = "cache";
+@@ -113,6 +123,11 @@ cpu2: cpu@200 {
+ 			qcom,freq-domain = <&cpufreq_hw 1>;
+ 			capacity-dmips-mhz = <1946>;
+ 			dynamic-power-coefficient = <507>;
++			operating-points-v2 = <&cpu2_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl0 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl0 SLAVE_EPSS_L3_SHARED>;
+ 
+ 			l2_2: l2-cache {
+ 				compatible = "cache";
+@@ -133,6 +148,11 @@ cpu3: cpu@300 {
+ 			qcom,freq-domain = <&cpufreq_hw 1>;
+ 			capacity-dmips-mhz = <1946>;
+ 			dynamic-power-coefficient = <507>;
++			operating-points-v2 = <&cpu2_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl0 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl0 SLAVE_EPSS_L3_SHARED>;
+ 
+ 			l2_3: l2-cache {
+ 				compatible = "cache";
+@@ -153,6 +173,11 @@ cpu4: cpu@10000 {
+ 			qcom,freq-domain = <&cpufreq_hw 2>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu4_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl1 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl1 SLAVE_EPSS_L3_SHARED>;
+ 
+ 			l2_4: l2-cache {
+ 				compatible = "cache";
+@@ -173,6 +198,11 @@ cpu5: cpu@10100 {
+ 			qcom,freq-domain = <&cpufreq_hw 2>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu4_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl1 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl1 SLAVE_EPSS_L3_SHARED>;
+ 
+ 			l2_5: l2-cache {
+ 				compatible = "cache";
+@@ -193,6 +223,11 @@ cpu6: cpu@10200 {
+ 			qcom,freq-domain = <&cpufreq_hw 2>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu4_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl1 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl1 SLAVE_EPSS_L3_SHARED>;
+ 
+ 			l2_6: l2-cache {
+ 				compatible = "cache";
+@@ -213,6 +248,11 @@ cpu7: cpu@10300 {
+ 			qcom,freq-domain = <&cpufreq_hw 2>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
++			operating-points-v2 = <&cpu4_opp_table>;
++			interconnects = <&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ACTIVE_ONLY
++					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ACTIVE_ONLY>,
++					<&epss_l3_cl1 MASTER_EPSS_L3_APPS
++					 &epss_l3_cl1 SLAVE_EPSS_L3_SHARED>;
+ 
+ 			l2_7: l2-cache {
+ 				compatible = "cache";
+-- 
+2.34.1
+

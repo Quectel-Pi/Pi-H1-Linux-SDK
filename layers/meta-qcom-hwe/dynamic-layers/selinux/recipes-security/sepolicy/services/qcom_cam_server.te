@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 policy_module(qcom_cam_server, 1.0)
@@ -26,6 +26,7 @@ qcom_manage_cam_server_sock_file(qcom_cam_server_t)
 allow qcom_cam_server_t self:capability sys_time;
 allow qcom_cam_server_t self:process { getsched signal };
 allow qcom_cam_server_t self:qipcrtr_socket { connected_socket_perms };
+allow qcom_cam_server_t self:tcp_socket { create bind accept listen };
 
 dev_rw_dri(qcom_cam_server_t)
 qcom_cdsp_rw(qcom_cam_server_t)
@@ -49,6 +50,15 @@ qcom_connect_perf_hal_socket(qcom_cam_server_t)
 
 unconfined_stream_connect(qcom_cam_server_t)
 
-read_lnk_files_pattern(qcom_cam_server_t, etc_t, etc_t)
+files_read_etc_symlinks(qcom_cam_server_t)
 
 miscfiles_rw_localization(qcom_cam_server_t)
+
+dockerd_connect_to_stream_socket(qcom_cam_server_t)
+
+corenet_tcp_bind_all_unreserved_ports(qcom_cam_server_t)
+corenet_tcp_bind_all_nodes(qcom_cam_server_t)
+
+qcom_system_alloc_buf_rw(qcom_cam_server_t)
+
+container_stream_connect_spc(qcom_cam_server_t)

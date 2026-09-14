@@ -1,5 +1,9 @@
 #!/bin/sh
 
+SPEED=$1
+DEVICE=$2
+TERM=$3
+
 # busybox' getty does this itself, util-linux' agetty needs extra help
 getty="/sbin/getty"
 case $(readlink -f "${getty}") in
@@ -9,12 +13,8 @@ case $(readlink -f "${getty}") in
         if [ -x "/usr/bin/setsid" ] ; then
             setsid="/usr/bin/setsid"
         fi
+        options=""
         ;;
 esac
 
-if [ -e /sys/class/tty/$2 -a -c /dev/$2 ]; then
-	${setsid:-} ${getty} -L $1 $2 $3
-else
-    # Prevent respawning to fast error if /dev entry does not exist
-    sleep 1000
-fi
+${setsid:-} ${getty} ${options:-} -L $SPEED $DEVICE $TERM

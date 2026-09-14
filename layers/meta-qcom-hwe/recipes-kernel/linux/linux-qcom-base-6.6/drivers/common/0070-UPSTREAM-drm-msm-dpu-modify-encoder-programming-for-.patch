@@ -1,0 +1,222 @@
+From 5ca35f4a71a3aad78369c81013d09b3940e8a6b2 Mon Sep 17 00:00:00 2001
+From: Paloma Arellano <quic_parellan@quicinc.com>
+Date: Thu, 22 Feb 2024 11:40:01 -0800
+Subject: [PATCH 070/146] UPSTREAM: drm/msm/dpu: modify encoder programming for
+ CDM over DP
+
+Adjust the encoder format programming in the case of video mode for DP
+to accommodate CDM related changes.
+
+Changes in v4:
+	- Remove hw_cdm check in dpu_encoder_needs_periph_flush()
+	- Remove hw_cdm check when getting the fmt_fourcc in
+	  dpu_encoder_phys_vid_enable()
+
+Changes in v2:
+	- Move timing engine programming to a separate patch from this
+	  one
+	- Move update_pending_flush_periph() invocation completely to
+	  this patch
+	- Change the logic of dpu_encoder_get_drm_fmt() so that it only
+	  calls drm_mode_is_420_only() instead of doing additional
+	  unnecessary checks
+	- Create new functions msm_dp_needs_periph_flush() and it's
+	  supporting function dpu_encoder_needs_periph_flush() to check
+	  if the mode is YUV420 and VSC SDP is enabled before doing a
+	  peripheral flush
+
+Signed-off-by: Paloma Arellano <quic_parellan@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/579641/
+Link: https://lore.kernel.org/r/20240222194025.25329-17-quic_parellan@quicinc.com
+Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git b40c8377d792cfae38e7b82dca03aae147de6585]
+---
+ drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c   | 35 +++++++++++++++++++
+ .../gpu/drm/msm/disp/dpu1/dpu_encoder_phys.h  | 13 +++++++
+ .../drm/msm/disp/dpu1/dpu_encoder_phys_vid.c  | 16 +++++++++
+ drivers/gpu/drm/msm/dp/dp_display.c           | 18 ++++++++++
+ drivers/gpu/drm/msm/msm_drv.h                 | 17 ++++++++-
+ 5 files changed, 98 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
+index 7e15bd00ea95..c63f670358e3 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
+@@ -223,6 +223,41 @@ static u32 dither_matrix[DITHER_MATRIX_SZ] = {
+ 	15, 7, 13, 5, 3, 11, 1, 9, 12, 4, 14, 6, 0, 8, 2, 10
+ };
+ 
++u32 dpu_encoder_get_drm_fmt(struct dpu_encoder_phys *phys_enc)
++{
++	struct drm_encoder *drm_enc;
++	struct dpu_encoder_virt *dpu_enc;
++	struct drm_display_info *info;
++	struct drm_display_mode *mode;
++
++	drm_enc = phys_enc->parent;
++	dpu_enc = to_dpu_encoder_virt(drm_enc);
++	info = &dpu_enc->connector->display_info;
++	mode = &phys_enc->cached_mode;
++
++	if (drm_mode_is_420_only(info, mode))
++		return DRM_FORMAT_YUV420;
++
++	return DRM_FORMAT_RGB888;
++}
++
++bool dpu_encoder_needs_periph_flush(struct dpu_encoder_phys *phys_enc)
++{
++	struct drm_encoder *drm_enc;
++	struct dpu_encoder_virt *dpu_enc;
++	struct msm_display_info *disp_info;
++	struct msm_drm_private *priv;
++	struct drm_display_mode *mode;
++
++	drm_enc = phys_enc->parent;
++	dpu_enc = to_dpu_encoder_virt(drm_enc);
++	disp_info = &dpu_enc->disp_info;
++	priv = drm_enc->dev->dev_private;
++	mode = &phys_enc->cached_mode;
++
++	return phys_enc->hw_intf->cap->type == INTF_DP &&
++	       msm_dp_needs_periph_flush(priv->dp[disp_info->h_tile_instance[0]], mode);
++}
+ 
+ bool dpu_encoder_is_widebus_enabled(const struct drm_encoder *drm_enc)
+ {
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys.h b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys.h
+index 840a7068b50b..0fbe00ac94a6 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys.h
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys.h
+@@ -341,6 +341,19 @@ static inline enum dpu_3d_blend_mode dpu_encoder_helper_get_3d_blend_mode(
+  */
+ unsigned int dpu_encoder_helper_get_dsc(struct dpu_encoder_phys *phys_enc);
+ 
++/**
++ * dpu_encoder_get_drm_fmt - return DRM fourcc format
++ * @phys_enc: Pointer to physical encoder structure
++ */
++u32 dpu_encoder_get_drm_fmt(struct dpu_encoder_phys *phys_enc);
++
++/**
++ * dpu_encoder_needs_periph_flush - return true if physical encoder requires
++ *	peripheral flush
++ * @phys_enc: Pointer to physical encoder structure
++ */
++bool dpu_encoder_needs_periph_flush(struct dpu_encoder_phys *phys_enc);
++
+ /**
+  * dpu_encoder_helper_split_config - split display configuration helper function
+  *	This helper function may be used by physical encoders to configure
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_vid.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_vid.c
+index 20c8b9af7a21..ed1d9cabf52e 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_vid.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_vid.c
+@@ -406,8 +406,12 @@ static int dpu_encoder_phys_vid_control_vblank_irq(
+ static void dpu_encoder_phys_vid_enable(struct dpu_encoder_phys *phys_enc)
+ {
+ 	struct dpu_hw_ctl *ctl;
++	const struct dpu_format *fmt;
++	u32 fmt_fourcc;
+ 
+ 	ctl = phys_enc->hw_ctl;
++	fmt_fourcc = dpu_encoder_get_drm_fmt(phys_enc);
++	fmt = dpu_get_dpu_format(fmt_fourcc);
+ 
+ 	DPU_DEBUG_VIDENC(phys_enc, "\n");
+ 
+@@ -416,6 +420,8 @@ static void dpu_encoder_phys_vid_enable(struct dpu_encoder_phys *phys_enc)
+ 
+ 	dpu_encoder_helper_split_config(phys_enc, phys_enc->hw_intf->idx);
+ 
++	dpu_encoder_helper_phys_setup_cdm(phys_enc, fmt, CDM_CDWN_OUTPUT_HDMI);
++
+ 	dpu_encoder_phys_vid_setup_timing_engine(phys_enc);
+ 
+ 	/*
+@@ -431,6 +437,16 @@ static void dpu_encoder_phys_vid_enable(struct dpu_encoder_phys *phys_enc)
+ 	if (ctl->ops.update_pending_flush_merge_3d && phys_enc->hw_pp->merge_3d)
+ 		ctl->ops.update_pending_flush_merge_3d(ctl, phys_enc->hw_pp->merge_3d->idx);
+ 
++	if (ctl->ops.update_pending_flush_cdm && phys_enc->hw_cdm)
++		ctl->ops.update_pending_flush_cdm(ctl, phys_enc->hw_cdm->idx);
++
++	/*
++	 * Peripheral flush must be updated whenever flushing SDP packets is needed.
++	 * SDP packets are required for any YUV format (YUV420, YUV422, YUV444).
++	 */
++	if (ctl->ops.update_pending_flush_periph && dpu_encoder_needs_periph_flush(phys_enc))
++		ctl->ops.update_pending_flush_periph(ctl, phys_enc->hw_intf->idx);
++
+ skip_flush:
+ 	DPU_DEBUG_VIDENC(phys_enc,
+ 		"update pending flush ctl %d intf %d\n",
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 96c6868a7f78..4d952f464193 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -1435,6 +1435,24 @@ void __exit msm_dp_unregister(void)
+ 	platform_driver_unregister(&dp_display_driver);
+ }
+ 
++bool msm_dp_is_yuv_420_enabled(const struct msm_dp *dp_display,
++			       const struct drm_display_mode *mode)
++{
++	struct dp_display_private *dp;
++	const struct drm_display_info *info;
++
++	dp = container_of(dp_display, struct dp_display_private, dp_display);
++	info = &dp_display->connector->display_info;
++
++	return dp->panel->vsc_sdp_supported && drm_mode_is_420_only(info, mode);
++}
++
++bool msm_dp_needs_periph_flush(const struct msm_dp *dp_display,
++			       const struct drm_display_mode *mode)
++{
++	return msm_dp_is_yuv_420_enabled(dp_display, mode);
++}
++
+ bool msm_dp_wide_bus_available(const struct msm_dp *dp_display)
+ {
+ 	struct dp_display_private *dp;
+diff --git a/drivers/gpu/drm/msm/msm_drv.h b/drivers/gpu/drm/msm/msm_drv.h
+index 0745bed29547..44aaa66a0540 100644
+--- a/drivers/gpu/drm/msm/msm_drv.h
++++ b/drivers/gpu/drm/msm/msm_drv.h
+@@ -380,7 +380,10 @@ void __exit msm_dp_unregister(void);
+ int msm_dp_modeset_init(struct msm_dp *dp_display, struct drm_device *dev,
+ 			 struct drm_encoder *encoder);
+ void msm_dp_snapshot(struct msm_disp_state *disp_state, struct msm_dp *dp_display);
+-
++bool msm_dp_is_yuv_420_enabled(const struct msm_dp *dp_display,
++			       const struct drm_display_mode *mode);
++bool msm_dp_needs_periph_flush(const struct msm_dp *dp_display,
++			       const struct drm_display_mode *mode);
+ bool msm_dp_wide_bus_available(const struct msm_dp *dp_display);
+ 
+ #else
+@@ -402,6 +405,18 @@ static inline void msm_dp_snapshot(struct msm_disp_state *disp_state, struct msm
+ {
+ }
+ 
++static inline bool msm_dp_is_yuv_420_enabled(const struct msm_dp *dp_display,
++					     const struct drm_display_mode *mode)
++{
++	return false;
++}
++
++static inline bool msm_dp_needs_periph_flush(const struct msm_dp *dp_display,
++					     const struct drm_display_mode *mode)
++{
++	return false;
++}
++
+ static inline bool msm_dp_wide_bus_available(const struct msm_dp *dp_display)
+ {
+ 	return false;
+-- 
+2.34.1
+

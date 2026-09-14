@@ -1,0 +1,30 @@
+From 016e6775e50202a8587a2b386c7e21d4266b1d73 Mon Sep 17 00:00:00 2001
+From: Wasim Nazir <quic_wasimn@quicinc.com>
+Date: Tue, 19 Nov 2024 23:19:50 +0530
+Subject: [PATCH v4 1/7] FROMLIST: dt-bindings: arm: qcom,ids: add SoC ID for QCS9075
+
+Add the unique ID for Qualcomm QCS9075 SoC.
+This value is used to differentiate the SoC across qcom targets.
+
+Acked-by: Rob Herring (Arm) <robh@kernel.org>
+Signed-off-by: Wasim Nazir <quic_wasimn@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241217064856.2772305-2-quic_wasimn@quicinc.com/]
+---
+ include/dt-bindings/arm/qcom,ids.h | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/include/dt-bindings/arm/qcom,ids.h b/include/dt-bindings/arm/qcom,ids.h
+index 08376fa82717..4da726023a0d 100644
+--- a/include/dt-bindings/arm/qcom,ids.h
++++ b/include/dt-bindings/arm/qcom,ids.h
+@@ -261,6 +261,7 @@
+ #define QCOM_ID_IPQ5302			595
+ #define QCOM_ID_IPQ5300			624
+ #define QCOM_ID_QCS9100			667
++#define QCOM_ID_QCS9075			676
+ #define QCOM_ID_QCS615			680
+ /*
+  * The board type and revision information, used by Qualcomm bootloaders and
+--
+2.47.0
+

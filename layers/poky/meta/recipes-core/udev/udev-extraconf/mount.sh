@@ -36,6 +36,16 @@ do
 	fi
 done
 
+is_filesystem_supported() {
+    while read -r fs; do
+       if [ "${fs#nodev}" = "$1" ];
+       then
+           return 0
+       fi
+    done < "/proc/filesystems"
+    return 1
+}
+
 automount_systemd() {
     name="`basename "$DEVNAME"`"
 
@@ -63,6 +73,11 @@ automount_systemd() {
         tmp="$n=$tmp"
         grep "^[[:space:]]*$tmp" /etc/fstab && return
     done
+
+    if ! is_filesystem_supported $ID_FS_TYPE; then
+        logger "mount.sh/automount" "Filesystem '$ID_FS_TYPE' on '${DEVNAME}' is unsupported"
+        return
+    fi
 
     [ -d "$MOUNT_BASE/$name" ] || mkdir -p "$MOUNT_BASE/$name"
 
@@ -196,7 +211,7 @@ if [ "$ACTION" = "remove" ] || [ "$ACTION" = "change" ] && [ -x "$UMOUNT" ] && [
         logger "mount.sh/remove" "cleaning up $DEVNAME, was mounted by the auto-mounter"
         for mnt in `cat /proc/mounts | grep "$DEVNAME" | cut -f 2 -d " " `
         do
-                $UMOUNT $mnt
+                $UMOUNT "`printf $mnt`"
         done
         # Remove mount directory created by the auto-mounter
         # and clean up our tmp cache file

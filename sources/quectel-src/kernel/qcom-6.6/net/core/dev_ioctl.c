@@ -202,6 +202,7 @@ static int net_hwtstamp_validate(const struct kernel_hwtstamp_config *cfg)
 	case HWTSTAMP_TX_ON:
 	case HWTSTAMP_TX_ONESTEP_SYNC:
 	case HWTSTAMP_TX_ONESTEP_P2P:
+	case HWTSTAMP_TX_EXTERNAL_TIME_SRC:
 		tx_type_valid = 1;
 		break;
 	case __HWTSTAMP_TX_CNT:

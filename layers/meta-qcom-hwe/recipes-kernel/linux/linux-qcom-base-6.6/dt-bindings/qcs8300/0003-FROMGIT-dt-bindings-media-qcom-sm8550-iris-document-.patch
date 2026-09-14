@@ -1,0 +1,41 @@
+From 80831f9b20e3035de0251757217551184303d3a1 Mon Sep 17 00:00:00 2001
+From: Vikash Garodia <quic_vgarodia@quicinc.com>
+Date: Thu, 24 Apr 2025 14:20:45 +0530
+Subject: [PATCH 1/5] FROMGIT: dt-bindings: media: qcom,sm8550-iris: document QCS8300
+ IRIS accelerator
+
+Document the IRIS video decoder/encoder accelerator found in the QCS8300
+platform. It belongs to same iris v3 family as that of SM8550 but is a
+downscaled version of SM8550. It has 2 frame processing hardware blocks
+while SM8550 has 4. Thereby QCS8300 have fewer capabilities than those
+of SM8550.
+
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Acked-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Signed-off-by: Bryan O'Donoghue <bod@kernel.org>
+Signed-off-by: Hans Verkuil <hverkuil@xs4all.nl>
+Link: https://lore.kernel.org/linux-media/20250424-qcs8300_iris-v5-1-f118f505c300@quicinc.com
+Git-repo: https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
+Git-commit: 6aa5f5887df3b2eaca45ad263acb301540e52802
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/ 6aa5f5887df3b2eaca45ad263acb301540e52802]
+---
+ Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml b/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml
+index f567f84bd60d..c79bf2101812 100644
+--- a/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml
++++ b/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml
+@@ -22,6 +22,7 @@ properties:
+               - qcom,sa8775p-iris
+           - const: qcom,sm8550-iris
+       - enum:
++          - qcom,qcs8300-iris
+           - qcom,sm8550-iris
+           - qcom,sm8650-iris
+ 
+-- 
+2.34.1
+

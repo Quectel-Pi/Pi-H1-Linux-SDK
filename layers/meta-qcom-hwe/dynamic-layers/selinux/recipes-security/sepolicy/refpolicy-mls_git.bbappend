@@ -13,8 +13,6 @@ FILES:${PN} += " \
         ${QCOM_STORE_ROOT}/${POLICY_NAME}/ \
 "
 
-SRC_URI:remove:qcom = "file://0042-policy-modules-system-systemd-systemd-user-fixes.patch"
-
 #Patches
 SRC_URI:append:qcom = " file://0070-PENDING-allow-logging-domains-to-execute-busybox.patch \
             file://0071-PENDING-Add-net_admin-capability-to-modutils.patch \
@@ -27,13 +25,13 @@ SRC_URI:append:qcom = " file://0070-PENDING-allow-logging-domains-to-execute-bus
             file://0078-PENDING-add-sepolicies-for-modem-manager.patch \
             file://0079-PENDING-Add-sepolicy-for-systemd-networkd-wait-online.patch \
             file://0080-PENDING-Add-sepolicy-rules-for-hostapd-hostapd_cli.patch \
-            file://0081-PENDING-SEPolicy-changes-to-allow-read-write-to-dbus-and-bl.patch \
-            file://0082-PENDING-sepolicy-for-bluez-to-access-uhid.patch \
             file://0083-PENDING-Add-Docker-related-policies.patch \
             file://0084-PENDING-Allow-SE-policy-read-and-write-access-to-dbu.patch \
             file://0085-PENDING-Adding-rules-for-dnsmasq.patch \
             file://0086-PENDING-networkmanager-allow-access-tmpfs.patch \
             file://0087-PENDING-Fix-bluetoothctl-not-working-in-shell.patch \
+            file://0091-UPSTREAM-Adding-SE-Policy-rules-to-allow-usage-of-un.patch \
+            file://0092-PENDING-Add-sepolicy-rules-for-brctl-to-add-remove-b.patch \
 "
 
 #Policy folders
@@ -54,14 +52,25 @@ RDEPENDS:${PN} += "\
 ENABLE_TEST_SEPOLICY ?= "y"
 SRC_URI:append:qcom = "\
             ${@bb.utils.contains('ENABLE_TEST_SEPOLICY', 'y', 'file://test/', '', d)} \
+            file://0995-QCLINUX-selinux-Add-se_debug-macro.patch \
             file://0996-QCLINUX-file_contexts.subs_dist-set-aliases-for-var-lib-seli.patch \
             file://0997-QCLINIUX-sepolicy-update-file_contexts.subs_dist-for-support.patch \
             file://0998-refpolicy-config-update-ssh-to-login-in-sysadmin-rol.patch \
-            file://0999-Move-root-user-to-unconfined-context.patch \
 "
 
 EXTRA_OEMAKE += "tc_usrsbindir=${STAGING_SBINDIR_NATIVE}"
 EXTRA_OEMAKE += "tc_sbindir=${STAGING_DIR_NATIVE}${base_sbindir_native}"
+
+#
+#se_debug is intended only for debug purpose, should be disabled in prod build.
+#Sepolicies required for debug and testing should be kept inside se_debug.
+#usage:
+#    se_debug(`
+#         <policy rules to be added>
+#     ')
+#To Disable se_debug, Comment the below line.
+#
+EXTRA_OEMAKE += "SE_DEBUG=y"
 
 do_compile:qcom() {
         if [ -f "${WORKDIR}/modules.conf" ] ; then
@@ -129,7 +138,7 @@ EOF
         rm -rf ${D}${QCOM_STORE_ROOT}/final
 }
 
-COMPATIBLE_MACHINE = "qcm6490|qcs9100|qcs8300|qcs615"
+COMPATIBLE_MACHINE = "qcm6490|qcs9100|qcs8300|qcs615|sa535m"
 
 def get_machine(d):
     need_machine = (d.getVar('COMPATIBLE_MACHINE') or "").split("|")

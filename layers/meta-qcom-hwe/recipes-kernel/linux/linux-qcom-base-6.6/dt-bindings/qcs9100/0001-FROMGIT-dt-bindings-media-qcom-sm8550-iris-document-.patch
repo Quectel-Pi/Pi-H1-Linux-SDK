@@ -1,0 +1,50 @@
+From 6462abe5a31831a955cac1a7b0a4fd72e0b17fc2 Mon Sep 17 00:00:00 2001
+From: Vikash Garodia <quic_vgarodia@quicinc.com>
+Date: Fri, 21 Mar 2025 08:49:00 +0530
+Subject: [PATCH 1/3] FROMGIT: dt-bindings: media: qcom,sm8550-iris:
+ document SA8775p IRIS accelerator
+
+Document the IRIS video decoder and encoder accelerator found in the
+SA8775p platform. SA8775p and SM8550 are irisv3 with same core and
+bindings, hence SA8775p is made fallback to SM8550.
+QCS8300 is a downscaled version of irisv3 and have different hardware
+capabilities. SM8650 is an irisv3 with different (higher) number of
+reset lines compared to SM8550. QCS8300 is yet to come in future
+posting, while SM8650 is posted as
+https://lore.kernel.org/all/20250305-topic-sm8x50-iris-v10-v2-1-bd65a3fc099e@linaro.org/
+
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Reviewed-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Signed-off-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Signed-off-by: Bryan O'Donoghue <bod@kernel.org>
+Signed-off-by: Hans Verkuil <hverkuil@xs4all.nl>
+Link: https://lore.kernel.org/linux-media/20250421-dtbinding-v5-1-363c1c05bc80@quicinc.com
+Git-repo: https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
+Git-commit: bf462ef8c5ad61616b54751915f3dd1d3301a505
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/ bf462ef8c5ad61616b54751915f3dd1d3301a505]
+---
+ .../devicetree/bindings/media/qcom,sm8550-iris.yaml        | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml b/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml
+index e424ea84c211..6a89e9e38087 100644
+--- a/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml
++++ b/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml
+@@ -19,7 +19,12 @@ allOf:
+ 
+ properties:
+   compatible:
+-    const: qcom,sm8550-iris
++    oneOf:
++      - items:
++          - enum:
++              - qcom,sa8775p-iris
++          - const: qcom,sm8550-iris
++      - const: qcom,sm8550-iris
+ 
+   power-domains:
+     maxItems: 4
+-- 
+2.34.1
+

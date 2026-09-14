@@ -19,6 +19,8 @@ SRC_URI += "file://run-ptest \
 # bpf was added in 4.10 with: https://github.com/torvalds/linux/commit/5aa5bd14c5f8660c64ceedf14a549781be47e53d
 # if you have older kernel than that you need to remove it from PACKAGECONFIG
 PACKAGECONFIG ??= "firmware"
+# bpf needs working clang compiler anyway
+PACKAGECONFIG:append:toolchain-clang:x86-64 = " bpf"
 PACKAGECONFIG:remove:x86 = "bpf"
 PACKAGECONFIG:remove:arm = "bpf vm"
 # host ptrace.h is used to compile BPF target but mips ptrace.h is needed
@@ -28,34 +30,43 @@ PACKAGECONFIG:remove:arm = "bpf vm"
 PACKAGECONFIG:remove:qemumips = "bpf vm"
 
 # riscv does not support libhugetlbfs yet
-PACKAGECONFIG:remove:riscv64 = "vm"
-PACKAGECONFIG:remove:riscv32 = "vm"
+PACKAGECONFIG:remove:riscv64 = "bpf vm"
+PACKAGECONFIG:remove:riscv32 = "bpf vm"
 
-PACKAGECONFIG[bpf] = ",,elfutils libcap libcap-ng rsync-native,"
+PACKAGECONFIG[bpf] = ",,elfutils elfutils-native libcap libcap-ng rsync-native python3-docutils-native,"
 PACKAGECONFIG[firmware] = ",,libcap, bash"
 PACKAGECONFIG[vm] = ",,libcap libhugetlbfs,libgcc bash"
 
 do_patch[depends] += "virtual/kernel:do_shared_workdir"
+do_compile[depends] += "virtual/kernel:do_install"
 
-inherit linux-kernel-base kernel-arch ptest
+inherit linux-kernel-base module-base kernel-arch ptest siteinfo
 
 S = "${WORKDIR}/${BP}"
+
+DEBUG_PREFIX_MAP:remove = "-fcanon-prefix-map"
 
 TEST_LIST = "\
     ${@bb.utils.filter('PACKAGECONFIG', 'bpf firmware vm', d)} \
     rtc \
+    ptp \
+    timers \
 "
-
 EXTRA_OEMAKE = '\
     CROSS_COMPILE=${TARGET_PREFIX} \
     ARCH=${ARCH} \
-    CC="${CC}" \
-    CLANG="clang -fno-stack-protector -target ${TARGET_ARCH} ${TOOLCHAIN_OPTIONS}" \
+    CC="${CC} ${DEBUG_PREFIX_MAP}" \
     AR="${AR}" \
     LD="${LD}" \
+    CLANG="clang -fno-stack-protector -target ${TARGET_ARCH} ${TOOLCHAIN_OPTIONS} -isystem ${S} -D__WORDSIZE=\'64\' -Wno-error=unused-command-line-argument" \
     DESTDIR="${D}" \
-    MACHINE="${ARCH}" \
+    V=1 \
 '
+EXTRA_OEMAKE:append:toolchain-clang = "\
+    LLVM=1 CONFIG_CC_IS_GCC= CONFIG_CC_IS_CLANG=y CONFIG_CC_IMPLICIT_FALLTHROUGH= \
+    HOSTCC="clang -unwindlib=libgcc -rtlib=libgcc -stdlib=libstdc++ ${BUILD_CFLAGS} ${BUILD_LDFLAGS} -Wno-error=unused-command-line-argument" \
+    HOSTLD="clang ${BUILD_LDFLAGS} -unwindlib=libgcc -rtlib=libgcc -stdlib=libstdc++" \
+"
 
 KERNEL_SELFTEST_SRC ?= "Makefile \
                         include \
@@ -66,7 +77,6 @@ KERNEL_SELFTEST_SRC ?= "Makefile \
                         arch \
                         LICENSES \
 "
-
 do_compile() {
     if [ ${@bb.utils.contains('PACKAGECONFIG', 'bpf', 'True', 'False', d)} = 'True' ]; then
     if [ ${@bb.utils.contains('DEPENDS', 'clang-native', 'True', 'False', d)} = 'False' ]; then
@@ -74,26 +84,25 @@ do_compile() {
 either install it and add it to HOSTTOOLS, or add clang-native from meta-clang to dependency"
     fi
     fi
-
-    for i in ${TEST_LIST}
-    do
-        oe_runmake -C ${S}/tools/testing/selftests/${i}
-    done
+    mkdir -p ${S}/include/config ${S}/bits
+    install -Dm 0644 ${STAGING_KERNEL_BUILDDIR}/.config ${S}/include/config/auto.conf
+    if [ "${SITEINFO_BITS}" != "32" ]; then
+        for f in long-double endianness floatn struct_rwlock; do
+            cp ${RECIPE_SYSROOT}${includedir}/bits/$f-64.h ${S}/bits/$f-32.h
+        done
+    fi
+    oe_runmake -C ${S} headers
+    sed -i -e 's|^all: docs|all:|' ${S}/tools/testing/selftests/bpf/Makefile
+    sed -i -e '/mrecord-mcount/d' ${S}/Makefile
+    sed -i -e '/Wno-alloc-size-larger-than/d' ${S}/Makefile
+    sed -i -e '/Wno-alloc-size-larger-than/d' ${S}/scripts/Makefile.*
+    oe_runmake -C ${S}/tools/testing/selftests TARGETS="${TEST_LIST}"
 }
 
 do_install() {
-    for i in ${TEST_LIST}
-    do
-        oe_runmake -C ${S}/tools/testing/selftests/${i} INSTALL_PATH=${D}/usr/kernel-selftest/${i} install
-        # Install kselftest-list.txt that required by kselftest runner.
-        oe_runmake -s --no-print-directory COLLECTION=${i} -C ${S}/tools/testing/selftests/${i} emit_tests \
-            >> ${D}/usr/kernel-selftest/kselftest-list.txt
-    done
-    # Install kselftest runner.
-    install -m 0755 ${S}/tools/testing/selftests/run_kselftest.sh ${D}/usr/kernel-selftest/
-    cp -R --no-dereference --preserve=mode,links -v ${S}/tools/testing/selftests/kselftest ${D}/usr/kernel-selftest/
+    oe_runmake -C ${S}/tools/testing/selftests INSTALL_PATH=${D}/usr/kernel-selftest TARGETS="${TEST_LIST}" install
     if [ -e ${D}/usr/kernel-selftest/bpf/test_offload.py ]; then
-	sed -i -e '1s,#!.*python3,#! /usr/bin/env python3,' ${D}/usr/kernel-selftest/bpf/test_offload.py
+        sed -i -e '1s,#!.*python3,#! /usr/bin/env python3,' ${D}/usr/kernel-selftest/bpf/test_offload.py
     fi
     chown root:root  -R ${D}/usr/kernel-selftest
 }
@@ -133,9 +142,15 @@ PACKAGE_ARCH = "${MACHINE_ARCH}"
 INHIBIT_PACKAGE_DEBUG_SPLIT="1"
 FILES:${PN} += "/usr/kernel-selftest"
 
-RDEPENDS:${PN} += "python3 perl"
-# tools/testing/selftests/vm/Makefile doesn't respect LDFLAGS and tools/testing/selftests/Makefile explicitly overrides to empty
+RDEPENDS:${PN} += "python3 perl perl-module-io-handle"
+
+INSANE_SKIP:${PN} += "libdir"
+
+# A few of the selftests set compile flags that trip up the "ldflags" and
+# "already-stripped" QA checks.  As this is mainly a testing package and
+# not really meant for user level execution, disable these two checks.
 INSANE_SKIP:${PN} += "ldflags"
+INSANE_SKIP:${PN} += "already-stripped"
 
 SECURITY_CFLAGS = ""
 COMPATIBLE_HOST:libc-musl = 'null'

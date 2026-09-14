@@ -58,6 +58,12 @@ int drm_of_get_data_lanes_count_ep(const struct device_node *port,
 				   int port_reg, int reg,
 				   const unsigned int min,
 				   const unsigned int max);
+int drm_of_get_lane_mapping(const struct device_node *port,
+				   const char *propname,
+				   int port_reg, int reg,
+				   const unsigned int min,
+				   const unsigned int max,
+				   unsigned int *lanes);
 #else
 static inline uint32_t drm_of_crtc_port_mask(struct drm_device *dev,
 					  struct device_node *port)
@@ -126,6 +132,17 @@ drm_of_get_data_lanes_count_ep(const struct device_node *port,
 			       int port_reg, int reg,
 			       const unsigned int min,
 			       const unsigned int max)
+{
+	return -EINVAL;
+}
+
+static inline int
+drm_of_get_lane_mapping(const struct device_node *port,
+			       const char *propname,
+			       int port_reg, int reg,
+			       const unsigned int min,
+			       const unsigned int max,
+			       unsigned int *lanes);
 {
 	return -EINVAL;
 }

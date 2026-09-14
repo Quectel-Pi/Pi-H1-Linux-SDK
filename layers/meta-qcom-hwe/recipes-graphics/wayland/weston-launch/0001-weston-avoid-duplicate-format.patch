@@ -1,0 +1,54 @@
+#This patch file is from Qualcomm Innovation Center, Inc. and is provided under the following license:
+#
+#Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+#SPDX-License-Identifier: BSD-3-Clause-Clear
+From 45f8341ccb1fa40ba7bd757b239604b2b797c43c Mon Sep 17 00:00:00 2001
+From: Devanshi Bansal <quic_devanshi@quicinc.com>
+Date: Fri, 20 Dec 2024 17:06:13 +0530
+Subject: [PATCH] weston avoid duplicate format
+
+Upstream-Status: Inappropriate [Downstream]
+Signed-off-by: Devanshi Bansal <quic_devanshi@quicinc.com>
+---
+ libweston/drm-formats.c | 24 +++++++++++++-----------
+ 1 file changed, 13 insertions(+), 11 deletions(-)
+
+diff --git a/libweston/drm-formats.c b/libweston/drm-formats.c
+index 6bc08b5..5e55bbe 100644
+--- a/libweston/drm-formats.c
++++ b/libweston/drm-formats.c
+@@ -128,18 +128,20 @@ weston_drm_format_array_add_format(struct weston_drm_format_array *formats,
+ 	struct weston_drm_format *fmt;
+ 
+ 	/* We should not try to add repeated formats to an array. */
+-	assert(!weston_drm_format_array_find_format(formats, format));
+-
+-	fmt = wl_array_add(&formats->arr, sizeof(*fmt));
+-	if (!fmt) {
+-		weston_log("%s: out of memory\n", __func__);
+-		return NULL;
++        if(!weston_drm_format_array_find_format(formats, format)) {
++		fmt = wl_array_add(&formats->arr, sizeof(*fmt));
++		if (!fmt) {
++			weston_log("%s: out of memory\n", __func__);
++			return NULL;
++		}
++ 
++		fmt->format = format;
++		wl_array_init(&fmt->modifiers);
++	} else {
++		fmt = weston_drm_format_array_find_format(formats, format);
+ 	}
+-
+-	fmt->format = format;
+-	wl_array_init(&fmt->modifiers);
+-
+-	return fmt;
++ 
++        return fmt;
+ }
+ 
+ /**
+-- 
+2.34.1
+

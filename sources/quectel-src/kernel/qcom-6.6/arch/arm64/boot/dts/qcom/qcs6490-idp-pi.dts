@@ -39,10 +39,53 @@
 		bluetooth0 = &bluetooth;
 		serial1 = &uart7;
 		serial2 = &uart12;
+		hsuart0 = &uart4;
 	};
 
 	chosen {
 		stdout-path = "serial0:115200n8";
+	};
+
+	/*
+	 * Shared audio codec node for LT9611 HDMI output.
+	 * Whichever LT9611 variant (UXC or UXD) is populated on the board
+	 * sets its audio platform device's of_node to this node, so the
+	 * sound card binds to the correct codec automatically.
+	 */
+	hdmi_audio: hdmi-audio-codec {
+		#sound-dai-cells = <0>;
+	};
+
+	dp-connector {
+		compatible = "dp-connector";
+		label = "DP";
+		type = "mini";
+
+		port {
+			dp_connector_in: endpoint {
+				remote-endpoint = <&mdss_edp_out>;
+			};
+		};
+	};
+
+
+	hdmi-connector {
+		compatible = "hdmi-connector";
+		type = "a";
+
+		port {
+			hdmi_con: endpoint {
+				remote-endpoint = <&lt9611_out>;
+			};
+		};
+	};
+
+	lt9611_1v2: lt9611-vdd12-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "LT9611_1V2";
+
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
 	};
 
 	pmic-glink {
@@ -66,7 +109,7 @@
 					reg = <0>;
 
 					pmic_glink_hs_in: endpoint {
-						remote-endpoint = <&usb_1_dwc3_hs>;
+						remote-endpoint = <&eud_con>;
 					};
 				};
 
@@ -98,6 +141,7 @@
 			//"SpkrRight IN", "WSA_SPK2 OUT",
 			"IN1_HPHL", "HPHL_OUT",
 			"IN2_HPHR", "HPHR_OUT",
+			"IN3_AUX", "AUX_OUT",
 			"AMIC2", "MIC BIAS2",
 			"TX DMIC0", "MIC BIAS1",
 			"TX DMIC1", "MIC BIAS2",
@@ -173,6 +217,37 @@
 			};
 		};
 */
+		dp-dai-link {
+			link-name = "DISPLAY_PORT-RX";
+
+			cpu {
+				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_0>;
+			};
+
+			codec {
+				sound-dai = <&mdss_dp>;
+			};
+		};
+
+		hdmi-dai-link {
+			link-name = "MI2S-LPAIF-RX-PRIMARY";
+			/*
+			 * 可选链路：hdmi_audio codec 由 LT9611 桥驱动注册。
+			 * 接 LCD panel 时 LT9611 不 probe（DSI 被 panel 占用），
+			 * 此链路被跳过，避免整个声卡 probe defer 导致无声卡。
+			 * 不接 panel 时 LT9611 正常注册 codec，链路照常工作。
+			 */
+			qcom,optional-dai-link;
+
+			cpu {
+				sound-dai = <&q6apmbedai PRIMARY_MI2S_RX>;
+			};
+
+			codec {
+				sound-dai = <&hdmi_audio>;
+			};
+		};
+
 	};
 
 	thermal-zones {
@@ -223,13 +298,13 @@
 		compatible = "qcom,wcd9370-codec";
 
 		pinctrl-names = "default", "sleep";
-		pinctrl-0 = <&wcd_reset_n>;
-		pinctrl-1 = <&wcd_reset_n_sleep>;
+		pinctrl-0 = <&wcd_reset_n>, <&wcd_power_ctl>,<&us_euro_hs_sel>;
+		pinctrl-1 = <&wcd_reset_n_sleep>, <&wcd_power_ctl>, <&us_euro_hs_sel>;
 
 		reset-gpios = <&tlmm 83 GPIO_ACTIVE_LOW>;
-		pa-gpios = <&tlmm 142 GPIO_ACTIVE_HIGH>;
-		headset1-gpios = <&tlmm 8 GPIO_ACTIVE_HIGH>;
-		headset2-gpios = <&tlmm 68 GPIO_ACTIVE_HIGH>;
+		
+		us-euro-gpios = <&tlmm 8 GPIO_ACTIVE_HIGH>;
+		power-gpios = <&tlmm 68 GPIO_ACTIVE_HIGH>;
 
 		vdd-buck-supply = <&vreg_l17b_1p7>;
 		vdd-rxtx-supply = <&vreg_l18b_1p8>;
@@ -244,6 +319,7 @@
 		qcom,tx-device = <&wcd937x_tx>;
 
 		#sound-dai-cells = <1>;
+		status = "okay";
 	};
 
 	gpio-keys {
@@ -574,6 +650,19 @@
 	status = "okay";
 };
 
+&eud {
+	usb-role-switch;
+	status = "okay";
+};
+
+&eud_con {
+	remote-endpoint = <&pmic_glink_hs_in>;
+};
+
+&eud_ep {
+	remote-endpoint = <&usb_1_dwc3_hs>;
+};
+
 &gcc {
 	protected-clocks = <GCC_QSPI_CNOC_PERIPH_AHB_CLK>, <GCC_QSPI_CORE_CLK>,
 			<GCC_QSPI_CORE_CLK_SRC>, <GCC_CFG_NOC_LPASS_CLK>,
@@ -584,39 +673,151 @@
 			<GCC_WPSS_AHB_BDG_MST_CLK>, <GCC_WPSS_RSCP_CLK>;
 };
 
+&gpu {
+	status = "okay";
+};
+
+&gpu_zap_shader {
+	firmware-name = "qcom/qcs6490/a660_zap.mbn";
+};
+
+&gpi_dma0 {
+	status = "okay";
+};
+
+&gpi_dma1 {
+	status = "okay";
+};
+
+&lpass_rx_macro {
+	pa-gpios = <&tlmm 142 GPIO_ACTIVE_HIGH>;
+	status = "okay";
+};
+
+&i2c0 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	lt9611_codec: hdmi-bridge@2b {
+		compatible = "lontium,lt9611uxc";
+		reg = <0x2b>;
+		#sound-dai-cells = <1>;
+
+		interrupts-extended = <&tlmm 44 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&tlmm 158 0>;
+		enable-gpios = <&tlmm 7 0>; //LT9611_5V_EN GPIO_ACTIVE_HIGH
+
+		vcc-supply = <&lt9611_3v3_vreg>;
+		vdd-supply = <&lt9611_1v2_vreg>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				lt9611_uxc_in: endpoint {
+					remote-endpoint = <&mdss_dsi1_out>;
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+
+				lt9611_out: endpoint {
+					remote-endpoint = <&hdmi_con>;
+				};
+			};
+		};
+	};
+
+	lt9611_uxd_codec: hdmi-bridge@41 {
+		compatible = "lontium,lt9611uxd";
+		reg = <0x41>;
+		#sound-dai-cells = <1>;
+
+		interrupts-extended = <&tlmm 44 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&tlmm 158 0>;
+		enable-gpios = <&tlmm 7 0>; //LT9611_5V_EN GPIO_ACTIVE_HIGH
+
+		vcc-supply = <&lt9611_3v3_vreg>;
+		vdd-supply = <&lt9611_1v2_vreg>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&lt9611_irq_pin &lt9611_rst_pin>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				lt9611_uxd_in: endpoint {
+					remote-endpoint = <&mdss_dsi2_out>;
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+
+				lt9611_uxd_out: endpoint {
+					remote-endpoint = <&hdmi_con>;
+				};
+			};
+		};
+	};
+
+};
+
+
 &i2c3 {
        clock-frequency = <100000>;
        status = "okay";
 
        panel_ws: waveshare-panel@45 {
                reg = <0x45>;
+			   pinctrl-names = "default";
+			   pinctrl-0 = <&lcd_touch_default>;
                compatible = "waveshare,8.0inch-panel";
                vddio_i2c-supply = <&vreg_l18b_1p8>;
                switch-gpio = <&tlmm 6 0>;
 			   power-gpio = <&tlmm 54 0>;
 			   dsi-gpio = <&tlmm 15 0>;
 			   status = "okay";
+			   port {
+					panel_in: endpoint {
+						remote-endpoint = <&mdss_dsi0_out>;
+					};
+			   };
        };
 
        touch_gt: goodix-ts@14 {
             reg = <0x14>;
             compatible = "goodix,gt911";
             VDDIO-supply = <&vreg_l18b_1p8>;
+			//interrupts-extended = <&tlmm 81 IRQ_TYPE_EDGE_BOTH>;
+			touchscreen-size-x = <800>;
+			touchscreen-size-y = <1280>;
+			touchscreen-max-touch-num = <5>;
+			touchscreen-inverted-x;
+    		touchscreen-swapped-x-y;
 			status = "okay";
        };
 		touch_ii: ilitek@41 {
 			compatible = "ilitek,ili251x";
+			//interrupts-extended = <&tlmm 81 IRQ_TYPE_EDGE_BOTH>;
 			reg = <0x41>;
-			status = "okay";
+			status = "disabled";
 			phandle = <0x05>;
 		};
 		touch_gt2:	gt911@5d {
 			compatible = "goodix,gt911";
 			reg = <0x5d>;
 			VDDIO-supply = <&vreg_l18b_1p8>;
-			touchscreen-swapped-x-y;
-			touchscreen-inverted-y;     
-			status = "okay";
+			//interrupts-extended = <&tlmm 81 IRQ_TYPE_EDGE_BOTH>;
+			status = "disabled";
 		};
 };
 
@@ -708,6 +909,66 @@
 	slew-rate = <1>;
 	bias-bus-hold;
 };
+
+&mdss {
+	status = "okay";
+};
+
+&mdss_dp {
+	status = "okay";
+};
+
+&mdss_dp_out {
+	data-lanes = <0 1>;
+	remote-endpoint = <&usb_1_qmpphy_dp_in>;
+};
+
+&mdss_dsi {
+	vdda-supply = <&vreg_l6b_1p2>;
+	status = "okay";
+	ports {
+		port@1 {
+			reg = <1>;
+			mdss_dsi1_out: endpoint@1 {
+				reg = <1>;
+				remote-endpoint = <&lt9611_uxc_in>;
+				data-lanes = <0 1 2 3>;
+			};
+			mdss_dsi2_out: endpoint@2 {
+				reg = <2>;
+				remote-endpoint = <&lt9611_uxd_in>;
+				data-lanes = <0 1 2 3>;
+			};
+		};
+	};
+};
+
+&mdss_dsi0_out {
+	reg = <0>;
+	remote-endpoint = <&panel_in>;
+	data-lanes = <0 1 2 3>;
+};
+
+&mdss_dsi_phy {
+	vdds-supply = <&vreg_l10c_0p88>;
+	status = "okay";
+};
+
+&mdss_edp {
+	status = "okay";
+};
+
+&mdss_edp_out {
+	data-lanes = <0 1 2 3>;
+	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
+
+	remote-endpoint = <&dp_connector_in>;
+};
+
+&mdss_edp_phy {
+	status = "okay";
+};
+
 
 &pm7325_gpios {
 	key_vol_up_default: key-vol-up-state {
@@ -865,6 +1126,24 @@
 		status = "okay";
 		regulator-enable-ramp-delay = <10000>;
 	};
+	lt9611_1v2_vreg: lt9611-1v2-vreg {
+			compatible = "regulator-fixed";
+			regulator-name = "lt9611_1v2_vreg";
+			gpio = <&tlmm 121 0>;
+			regulator-min-microvolt = <1200000>;
+			regulator-max-microvolt = <1200000>;
+			enable-active-high;
+			vin-supply = <&vreg_l17b_1p7>; //need by U1902 SGM4568YTQG20G
+        };
+
+    lt9611_3v3_vreg: lt9611-3v3-vreg {
+			compatible = "regulator-fixed";
+			regulator-name = "lt9611_3v3_vreg";
+            gpio = <&tlmm 46 0>;
+            regulator-min-microvolt = <3300000>;
+            regulator-max-microvolt = <3300000>;
+            enable-active-high;
+        };
 };
 
 &pcie1 {
@@ -896,6 +1175,67 @@
 	vdda-pll-supply = <&vreg_l6b_1p2>;
 
 	status = "okay";
+};
+
+&edp_hot_plug_det {
+	bias-disable;
+};
+
+&tlmm {
+	/* Primary MI2S pins for LT9611 HDMI audio */
+	pinctrl-names = "default";
+	/* Default to MI2S function so HDMI I2S is always routed to LT9611 */
+	pinctrl-0 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>, <&mi2s0_ws>;
+
+	mi2s0_data0_sleep: mi2s0-data0-sleep {
+		pins = "gpio98";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+	mi2s0_data1_sleep: mi2s0-data1-sleep {
+		pins = "gpio99";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+	mi2s0_mclk_sleep: mi2s0-mclk-sleep {
+		pins = "gpio96";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+	mi2s0_sclk_sleep: mi2s0-sclk-sleep {
+		pins = "gpio97";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+	mi2s0_ws_sleep: mi2s0-ws-sleep {
+		pins = "gpio100";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	lt9611_rst_pin: lt9611-rst-state {
+		pins = "gpio158";
+		function = "gpio";
+
+		output-high;
+	};
+
+	lt9611_irq_pin: lt9611-irq {
+		pins = "gpio44";
+		function = "gpio";
+		drive-strength = <8>;
+		bias-disable;
+	};
 };
 
 &qup_uart5_rx {
@@ -942,10 +1282,12 @@
 };
 
 &qupv3_id_0 {
+    firmware-name = "qcom/qcs6490/qupv3fw.elf";
 	status = "okay";
 };
 
 &qupv3_id_1 {
+    firmware-name = "qcom/qcs6490/qupv3fw.elf";
 	status = "okay";
 };
 
@@ -960,11 +1302,13 @@
 };
 
 &remoteproc_mpss {
-	status = "disabled";
+	firmware-name = "qcom/qcs6490/modem.mdt";
+	status = "okay";
 };
 
 &remoteproc_wpss {
-	status = "disabled";
+	firmware-name = "qcom/qcs6490/wpss.mbn";
+	status = "okay";
 };
 
 &wifi{
@@ -1061,6 +1405,7 @@
 		compatible = "sdw20217010a00";
 		reg = <0 4>;
 		qcom,rx-port-mapping = <1 2 3 4 5>;
+		phandle = <0x21b>;
 	};
 };
 
@@ -1138,6 +1483,21 @@
 		bias-disable;
 	};
 
+	/* Fan tach input pin (SoC GPIO112) */
+	fanfan_tach_default: fanfan-tach-state {
+		pins = "gpio112";
+		function = "gpio";
+		input-enable;
+		bias-disable;
+	};
+
+	lcd_touch_default: lcd-touch-default {
+		pins = "gpio81";
+		function = "gpio";
+		input-enable;
+		bias-disable;
+	};
+
 	qup_uart7_sleep_cts: qup-uart7-sleep-cts-state {
 		pins = "gpio28";
 		function = "gpio";
@@ -1208,6 +1568,19 @@
 		drive-strength = <8>;
 		bias-disable;
 	};
+
+	wcd_power_ctl: wcd-power-ctl {
+		pins = "gpio68";
+		function = "gpio";
+		drive-strength = <8>;
+	};	
+
+	us_euro_hs_sel: us-euro-hs-sel-state {
+		pins = "gpio8";
+		function = "gpio";
+		bias-pull-down;
+		drive-strength = <2>;
+	};	
 };
 
 &uart5 {
@@ -1319,7 +1692,7 @@
 };
 
 &usb_1_dwc3_hs {
-	remote-endpoint = <&pmic_glink_hs_in>;
+	remote-endpoint = <&eud_ep>;
 };
 
 &usb_1_hsphy {
@@ -1333,6 +1706,7 @@
 &usb_1_qmpphy {
 	vdda-phy-supply = <&vreg_l6b_1p2>;
 	vdda-pll-supply = <&vreg_l1b_0p912>;
+    vdda-aux-supply = <&vreg_l7c_3p0>;
 
 	orientation-switch;
 	status = "okay";
@@ -1340,6 +1714,10 @@
 
 &usb_1_qmpphy_out {
 	remote-endpoint = <&pmic_glink_ss_in>;
+};
+
+&usb_1_qmpphy_dp_in {
+	remote-endpoint = <&mdss_dp_out>;
 };
 
 &vreg_l7b_2p952 {
@@ -1373,7 +1751,7 @@
 	clock-frequency = <100000>;
 };
 
-/delete-node/ &eud;
+///delete-node/ &eud;
 
 &usb_2 {
 	reg = <0x0 0x08c00000 0x0 0x100000>;
@@ -1558,6 +1936,22 @@
 &i2c13 { //PIN28_I2C1_SCL
 	status = "okay";
 	clock-frequency = <100000>;
+
+	lsm6dso: lsm6dso@6a {
+		compatible = "st,lsm6dso";
+		reg = <0x6b>;
+		interrupts-extended = <&tlmm 48 IRQ_TYPE_LEVEL_LOW>;
+		st,drdy-int-pin = <2>;
+		vdd-supply = <&vreg_l18b_1p8>;
+		vddio-supply = <&vreg_l18b_1p8>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&lsm6dso_int_default>;
+		status = "disabled";
+	};
+};
+
+&uart4 { // QUP0_SE4: GPIO16/17/18/19 UART04 CTS/RTS/TX/RX
+	status = "disabled";
 };
 
 &uart12 { //PIN8_UART_TXD PIN10_UART_RXD PIN29_GPIO49 PIN31_GPIO48
@@ -1566,6 +1960,14 @@
 
 &tlmm {
 	/delete-property/gpio-reserved-ranges;
+
+	lsm6dso_int_default: lsm6dso_int_default {
+		pins = "gpio48";
+		function = "gpio";
+		input-enable;
+		bias-pull-up;
+		drive-strength = <2>;
+	};
 };
 
 &pm8350c_gpios {
@@ -1581,16 +1983,17 @@
 };
 
 &soc {
-	pwm-leds {
-		compatible = "pwm-leds";
+	fanfan: pwm-fan {
+		compatible = "pwm-fan";
 		pinctrl-names = "default";
-		pinctrl-0 = <&fanfan_pwm_ctrl_default>;
+		pinctrl-0 = <&fanfan_pwm_ctrl_default>, <&fanfan_tach_default>;
+		pwms = <&pm8350c_pwm 3 65535>;
+		interrupt-parent = <&tlmm>;
+		interrupts = <112 IRQ_TYPE_EDGE_FALLING>;
+		pulses-per-revolution = <2>;
+		cooling-levels = <0 85 128 170 212 255>;
+		#cooling-cells = <2>;
 		status = "okay";
-		fanfan {
-			label = "fanfan";
-			pwms = <&pm8350c_pwm 3 65535 PWM_POLARITY_INVERTED>;
-			max-brightness = <511>;
-		};
 	};
 };
 
@@ -1646,4 +2049,162 @@
 };
 #endif
 
+&spmi_bus {
+	pmic@PM7250B_SID {
+		pm7250b_bcl: bcl@1d00 {
+			compatible = "qcom,bcl-v5";
+			reg = <0x1d00>;
+			interrupts = <PM7250B_SID 0x1d 0x0 IRQ_TYPE_EDGE_RISING>,
+					<PM7250B_SID 0x1d 0x1 IRQ_TYPE_EDGE_RISING>,
+					<PM7250B_SID 0x1d 0x2 IRQ_TYPE_EDGE_RISING>;
+			interrupt-names = "bcl-lvl0",
+						"bcl-lvl1",
+						"bcl-lvl2";
+			#thermal-sensor-cells = <1>;
+		};
+	};
+};
+
+&thermal_zones {
+	pm7250b-ibat-lvl0 {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm7250b_bcl 0>;
+
+		trips {
+			ibat_lvl0: ibat-lvl0 {
+				temperature = <6000>;
+				hysteresis = <200>;
+				type = "passive";
+			};
+		};
+	};
+
+	pm7250b-ibat-lvl1 {
+		polling-delay-passive = <0>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm7250b_bcl 1>;
+
+		trips {
+			ibat_lvl1: ibat-lvl1 {
+				temperature = <7500>;
+				hysteresis = <200>;
+				type = "passive";
+			};
+		};
+	};
+
+	pm7250b-bcl-lvl0 {
+		polling-delay-passive = <100>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm7250b_bcl 5>;
+
+		trips {
+			b_bcl_lvl0: b-bcl-lvl0 {
+				temperature = <1>;
+				hysteresis = <1>;
+				type = "passive";
+			};
+		};
+
+		cooling-maps {
+			map0 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&CPU4_idle 100 100>;
+			};
+
+			map1 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&CPU5_idle 100 100>;
+			};
+
+			map2 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&CPU6_idle 100 100>;
+			};
+
+			map3 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&CPU7_idle 100 100>;
+			};
+
+			map4 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+			};
+
+			map5 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&modem_pa 2 2>;
+			};
+
+			map6 {
+				trip = <&b_bcl_lvl0>;
+				cooling-device = <&modem_tj 1 1>;
+			};
+		};
+	};
+
+	pm7250b-bcl-lvl1 {
+		polling-delay-passive = <100>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm7250b_bcl 6>;
+
+		trips {
+			b_bcl_lvl1: b-bcl-lvl1 {
+				temperature = <1>;
+				hysteresis = <1>;
+				type = "passive";
+			};
+		};
+
+		cooling-maps {
+			map0 {
+				trip = <&b_bcl_lvl1>;
+				cooling-device = <&msm_gpu 5 THERMAL_NO_LIMIT>;
+			};
+
+			map1 {
+				trip = <&b_bcl_lvl1>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+			};
+
+			map2 {
+				trip = <&b_bcl_lvl1>;
+				cooling-device = <&modem_tj 3 3>;
+			};
+		};
+	};
+
+	pm7250b-bcl-lvl2 {
+		polling-delay-passive = <100>;
+		polling-delay = <0>;
+		thermal-sensors = <&pm7250b_bcl 7>;
+
+		trips {
+			b_bcl_lvl2: b-bcl-lvl2 {
+				temperature = <1>;
+				hysteresis = <1>;
+				type = "passive";
+			};
+		};
+
+		cooling-maps {
+			map0 {
+				trip = <&b_bcl_lvl2>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+			};
+		};
+	};
+};
+
 #include "qcm6490-addons.dtsi"
+
+/* MI2S codec pinctrl for LT9611 HDMI audio */
+&msm_stub_codec {
+	qcom,sd-lines = <0>;  /* LT9611 I2S data on SD0 (gpio98) */
+	pinctrl-0 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>, <&mi2s0_ws>;
+	pinctrl-1 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>, <&mi2s0_ws>;
+	pinctrl-2 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>, <&mi2s0_ws>;
+	pinctrl-names = "default", "mi2s_aud_active", "mi2s_aud_sleep";
+};

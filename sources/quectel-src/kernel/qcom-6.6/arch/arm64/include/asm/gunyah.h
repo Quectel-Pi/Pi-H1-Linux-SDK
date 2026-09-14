@@ -1,11 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef _ASM_GUNYAH_H
 #define _ASM_GUNYAH_H
 
 #include <linux/irq.h>
+#include <linux/irqdomain.h>
 #include <dt-bindings/interrupt-controller/arm-gic.h>
 
 static inline int arch_gh_fill_irq_fwspec_params(u32 virq, struct irq_fwspec *fwspec)

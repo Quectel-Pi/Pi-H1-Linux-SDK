@@ -1,0 +1,46 @@
+From 4d84b9cd4580cefcb73d2a68d6ae261eda28a589 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@eng.windriver.com>
+Date: Fri, 1 Mar 2024 00:41:25 -0800
+Subject: [PATCH] build api_gen_binary_target as host tools
+
+For cross compiling, build api_gen_binary_target as target tools will
+cause load target library failed.
+
+$ bazel-out/aarch64-opt/bin/tensorflow/create_tensorflow.python_api_tf_python_api_gen_v2 --root_init_template=tensorflow/api_template.__init__.py --apidir=bazel-out/aarch64-opt/bin/tensorflow/_api/v2/ --apiname=tensorflow --apiversion=2  --compat_apiversion=1 --compat_apiversion=2  --compat_init_template=tensorflow/compat_template_v1.__init__.py --compat_init_template=tensorflow/compat_template.__init__.py --packages=tensorflow.python,tensorflow.dtensor.python.accelerator_util,tensorflow.dtensor.python.api,tensorflow.dtensor.python.config,tensorflow.dtensor.python.d_checkpoint,tensorflow.dtensor.python.d_variable,tensorflow.dtensor.python.input_util,tensorflow.dtensor.python.layout,tensorflow.dtensor.python.mesh_util,tensorflow.dtensor.python.tpu_util,tensorflow.dtensor.python.save_restore,tensorflow.lite.python.analyzer,tensorflow.lite.python.lite,tensorflow.lite.python.authoring.authoring,tensorflow.python.modules_with_exports --output_package=tensorflow._api.v2 --use_relative_imports=True --loading=default bazel-out/aarch64-opt/bin/tensorflow/tf_python_api_gen_v2.params
+
+Traceback (most recent call last):
+  File "/buildarea/raid0/hjia/wrlinux-23/lat_cd_091209/build-ts-14-v2/tmp-glibc/work/cortexa57-wrs-linux/tensorflow/2.14.0/bazel/output_base/execroot/org_tensorflow/bazel-out/aarch64-opt/bin/tensorflow/create_tensorflow.python_api_tf_python_api_gen_v2.runfiles/org_tensorflow/tensorflow/python/tools/api/generator/create_python_api.py", line 22, in <module>
+    from tensorflow.python.tools.api.generator import doc_srcs
+  File "/buildarea/raid0/hjia/wrlinux-23/lat_cd_091209/build-ts-14-v2/tmp-glibc/work/cortexa57-wrs-linux/tensorflow/2.14.0/bazel/output_base/execroot/org_tensorflow/bazel-out/aarch64-opt/bin/tensorflow/create_tensorflow.python_api_tf_python_api_gen_v2.runfiles/org_tensorflow/tensorflow/python/__init__.py", line 36, in <module>
+    from tensorflow.python import pywrap_tensorflow as _pywrap_tensorflow
+  File "/buildarea/raid0/hjia/wrlinux-23/lat_cd_091209/build-ts-14-v2/tmp-glibc/work/cortexa57-wrs-linux/tensorflow/2.14.0/bazel/output_base/execroot/org_tensorflow/bazel-out/aarch64-opt/bin/tensorflow/create_tensorflow.python_api_tf_python_api_gen_v2.runfiles/org_tensorflow/tensorflow/python/pywrap_tensorflow.py", line 26, in <module>
+    self_check.preload_check()
+  File "/buildarea/raid0/hjia/wrlinux-23/lat_cd_091209/build-ts-14-v2/tmp-glibc/work/cortexa57-wrs-linux/tensorflow/2.14.0/bazel/output_base/execroot/org_tensorflow/bazel-out/aarch64-opt/bin/tensorflow/create_tensorflow.python_api_tf_python_api_gen_v2.runfiles/org_tensorflow/tensorflow/python/platform/self_check.py", line 63, in preload_check
+    from tensorflow.python.platform import _pywrap_cpu_feature_guard
+ImportError: /buildarea/raid0/hjia/wrlinux-23/lat_cd_091209/build-ts-14-v2/tmp-glibc/work/cortexa57-wrs-linux/tensorflow/2.14.0/bazel/output_base/execroot/org_tensorflow/bazel-out/aarch64-opt/bin/tensorflow/create_tensorflow.python_api_tf_python_api_gen_v2.runfiles/org_tensorflow/tensorflow/python/platform/_pywrap_cpu_feature_guard.so: cannot open shared object file: No such file or directory
+
+Build api_gen_binary_target as host tools and load native library
+at build time
+
+Upstream-Status: Inappropriate [oe specific]
+
+Rebase to 2.16
+
+Signed-off-by: Hongxu Jia <hongxu.jia@eng.windriver.com>
+---
+ tensorflow/python/tools/api/generator/api_gen.bzl | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tensorflow/python/tools/api/generator/api_gen.bzl b/tensorflow/python/tools/api/generator/api_gen.bzl
+index c41aeecc476..a087557ad0f 100644
+--- a/tensorflow/python/tools/api/generator/api_gen.bzl
++++ b/tensorflow/python/tools/api/generator/api_gen.bzl
+@@ -267,7 +267,7 @@ api_gen_rule = rule(
+         "outs": attr.output_list(mandatory = True),
+         "srcs": attr.label_list(allow_files = True),
+         "flags": attr.string_list(),
+-        "api_gen_binary_target": attr.label(executable = True, cfg = if_oss("target", "exec"), mandatory = True),
++        "api_gen_binary_target": attr.label(executable = True, cfg = "exec", mandatory = True),
+         "loading_value": attr.string(mandatory = True),
+         "api_packages_path": attr.output(),
+     },

@@ -1,4 +1,4 @@
-From b19700ef0103f9414416b9a779a64d6138c58b1f Mon Sep 17 00:00:00 2001
+From 7608e93ab97e8c33e3b14323d0cabc651926e403 Mon Sep 17 00:00:00 2001
 From: Khem Raj <raj.khem@gmail.com>
 Date: Fri, 29 Mar 2013 09:29:11 +0400
 Subject: [PATCH] libtool
@@ -15,9 +15,8 @@ to filter the zero case.
 
 RP 2012/8/24
 
+Upstream-Status: Submitted [https://lists.gnu.org/archive/html/libtool-patches/2023-04/msg00000.html]
 Signed-off-by: Khem Raj <raj.khem@gmail.com>
-
-Upstream-Status: Pending
 ---
  ltmain.sh | 4 ++++
  1 file changed, 4 insertions(+)

@@ -1,0 +1,180 @@
+From 7259a196528d1ca9ec72499cd4f1e830b909b8fd Mon Sep 17 00:00:00 2001
+From: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Date: Mon, 25 Sep 2023 16:46:58 +0100
+Subject: [PATCH 09/42] UPSTREAM: media: qcom: camss: Assign the correct number
+ of RDIs per VFE
+
+Each Video Front End - VFE - has a variable number of Raw Data Interfaces -
+RDIs associated with it.
+
+The CAMSS code started from a naive implementation where a fixed define was
+used as a control in a for(){} loop iterating through RDIs.
+
+That model scales badly. An attempt was made with  VFE_LINE_NUM_GEN2 and
+VFE_LINE_NUM_GEN1 to differentiate between SoCs but, the problem with that
+is "gen1" and "gen2" have no meaning in the silicon. There is no fixed
+constraint in the silicon between VFE and RDI, it is entirely up to the SoC
+designers how many VFEs are populated and how many RDIs to associate with
+each VFE.
+
+As an example sdm845 has VFE version 175 and sm8250 VFE version 480.
+sdm845 has 2 VFEs with 4 RDIs and 1 VFE Lite with 4 RDIs.
+sm8250 has 2 VFEs with 3 RDIs and 2 VFE Lite with 4 RDIs.
+
+Clearly then we need a more granular model to capture the necessary data.
+
+The defines have gone away to be replaced with per-SoC data but, we haven't
+populated the parameter data with the real values.
+
+Let's call those values out now
+
+msm8916:
+1 x VFE
+3 x RDI per VFE (not 4)
+
+msm8996:
+2 x VFE
+3 x RDI per VFE (not 4)
+
+sdm660:
+2 x VFE
+3 x RDI per VFE (not 4)
+
+sdm845:
+2 x VFE
+4 x RDI per VFE (not 3)
+1 x VFE Lite
+4 x RDI per VFE Lite (not 3)
+
+sm8250:
+2 x VFE
+3 x RDI per VFE (not 4)
+2 x VFE Lite
+4 x RDI per VFE Lite
+
+This more complex and correct mapping was not possible prior to passing
+values via driver data. Now that we have that change in place we can
+correctly map VFEs to RDIs for each VFE.
+
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Acked-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Reviewed-by: Laurent Pinchart <laurent.pinchart@ideasonboard.com>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Suresh Vankadara <quic_svankada@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 7c1340e4c2964d1839c0f9c2e0a4397ab4278b84]
+---
+ drivers/media/platform/qcom/camss/camss-vfe.h |  2 --
+ drivers/media/platform/qcom/camss/camss.c     | 20 +++++++++----------
+ 2 files changed, 10 insertions(+), 12 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.h b/drivers/media/platform/qcom/camss/camss-vfe.h
+index b4bae9f65c68..4783afa73a36 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.h
++++ b/drivers/media/platform/qcom/camss/camss-vfe.h
+@@ -52,9 +52,7 @@ enum vfe_line_id {
+ 	VFE_LINE_RDI0 = 0,
+ 	VFE_LINE_RDI1 = 1,
+ 	VFE_LINE_RDI2 = 2,
+-	VFE_LINE_NUM_GEN2 = 3,
+ 	VFE_LINE_PIX = 3,
+-	VFE_LINE_NUM_GEN1 = 4,
+ 	VFE_LINE_NUM_MAX = 4
+ };
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 763965189b04..e87b8aa33a50 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -128,7 +128,7 @@ static const struct camss_subdev_resources vfe_res_8x16[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe0" },
+ 		.interrupt = { "vfe0" },
+-		.line_num = VFE_LINE_NUM_GEN1,
++		.line_num = 3,
+ 		.ops = &vfe_ops_4_1
+ 	}
+ };
+@@ -277,7 +277,7 @@ static const struct camss_subdev_resources vfe_res_8x96[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe0" },
+ 		.interrupt = { "vfe0" },
+-		.line_num = VFE_LINE_NUM_GEN1,
++		.line_num = 3,
+ 		.ops = &vfe_ops_4_7
+ 	},
+ 
+@@ -297,7 +297,7 @@ static const struct camss_subdev_resources vfe_res_8x96[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe1" },
+ 		.interrupt = { "vfe1" },
+-		.line_num = VFE_LINE_NUM_GEN1,
++		.line_num = 3,
+ 		.ops = &vfe_ops_4_7
+ 	}
+ };
+@@ -467,7 +467,7 @@ static const struct camss_subdev_resources vfe_res_660[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe0" },
+ 		.interrupt = { "vfe0" },
+-		.line_num = VFE_LINE_NUM_GEN1,
++		.line_num = 3,
+ 		.ops = &vfe_ops_4_8
+ 	},
+ 
+@@ -490,7 +490,7 @@ static const struct camss_subdev_resources vfe_res_660[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe1" },
+ 		.interrupt = { "vfe1" },
+-		.line_num = VFE_LINE_NUM_GEN1,
++		.line_num = 3,
+ 		.ops = &vfe_ops_4_8
+ 	}
+ };
+@@ -657,7 +657,7 @@ static const struct camss_subdev_resources vfe_res_845[] = {
+ 				{ 384000000 } },
+ 		.reg = { "vfe0" },
+ 		.interrupt = { "vfe0" },
+-		.line_num = VFE_LINE_NUM_GEN2,
++		.line_num = 4,
+ 		.ops = &vfe_ops_170
+ 	},
+ 
+@@ -679,7 +679,7 @@ static const struct camss_subdev_resources vfe_res_845[] = {
+ 				{ 384000000 } },
+ 		.reg = { "vfe1" },
+ 		.interrupt = { "vfe1" },
+-		.line_num = VFE_LINE_NUM_GEN2,
++		.line_num = 4,
+ 		.ops = &vfe_ops_170
+ 	},
+ 
+@@ -700,7 +700,7 @@ static const struct camss_subdev_resources vfe_res_845[] = {
+ 				{ 384000000 } },
+ 		.reg = { "vfe_lite" },
+ 		.interrupt = { "vfe_lite" },
+-		.line_num = VFE_LINE_NUM_GEN2,
++		.line_num = 4,
+ 		.ops = &vfe_ops_170
+ 	}
+ };
+@@ -839,7 +839,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe0" },
+ 		.interrupt = { "vfe0" },
+-		.line_num = 4,
++		.line_num = 3,
+ 		.ops = &vfe_ops_480
+ 	},
+ 	/* VFE1 */
+@@ -859,7 +859,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe1" },
+ 		.interrupt = { "vfe1" },
+-		.line_num = 4,
++		.line_num = 3,
+ 		.ops = &vfe_ops_480
+ 	},
+ 	/* VFE2 (lite) */
+-- 
+2.25.1
+

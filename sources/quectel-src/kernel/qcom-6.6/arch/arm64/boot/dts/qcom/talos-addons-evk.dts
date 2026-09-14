@@ -1,0 +1,13 @@
+// SPDX-License-Identifier: BSD-3-Clause
+/*
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ */
+/dts-v1/;
+
+#include "talos-evk.dts"
+#include "qcs615-addons.dtsi"
+
+/ {
+	model = "Qualcomm QCS615 Talos IQ 615 EVK addons";
+	compatible = "qcom,talos-addons-evk", "qcom,qcs615";
+};

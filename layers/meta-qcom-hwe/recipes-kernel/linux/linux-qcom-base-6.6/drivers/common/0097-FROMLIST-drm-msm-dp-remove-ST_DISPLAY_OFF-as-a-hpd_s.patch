@@ -1,0 +1,58 @@
+From a0fc97b819a43c5b743840c3a6e5019d6bc35ee9 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Mon, 2 Dec 2024 16:39:03 -0800
+Subject: [PATCH 097/146] FROMLIST: drm/msm/dp: remove ST_DISPLAY_OFF as a
+ hpd_state
+
+ST_DISPLAY_OFF check in msm_dp_bridge_atomic_enable() is used to check
+that if the display was disabled while still hotplugged, phy needs
+to be re-initialized. This can be replaced with a different check as
+it just means the hpd_state was still ST_CONNECTED but without display
+being powered on. Replace the ST_DISPLAY_OFF check with a combination
+of connected and power_on checks.
+
+Since all consumers of ST_DISPLAY_OFF have now been removed,
+drop ST_DISPLAY_OFF from the list of hpd_states as technically
+this was never a 'hpd' state anyway.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241202-hpd_display_off-v1-4-8d0551847753@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 5 +----
+ 1 file changed, 1 insertion(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 542ce836449d..893c74281a21 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -48,7 +48,6 @@ enum {
+ 	ST_MAINLINK_READY,
+ 	ST_CONNECTED,
+ 	ST_DISCONNECT_PENDING,
+-	ST_DISPLAY_OFF,
+ };
+ 
+ enum {
+@@ -1528,7 +1527,7 @@ void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
+ 
+ 	state =  msm_dp_display->hpd_state;
+ 
+-	if (state == ST_DISPLAY_OFF) {
++	if (state == ST_CONNECTED && !dp->power_on) {
+ 		msm_dp_display_host_phy_init(msm_dp_display);
+ 		force_link_train = true;
+ 	}
+@@ -1586,8 +1585,6 @@ void msm_dp_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
+ 	if (state == ST_DISCONNECT_PENDING) {
+ 		/* completed disconnection */
+ 		msm_dp_display->hpd_state = ST_DISCONNECTED;
+-	} else {
+-		msm_dp_display->hpd_state = ST_DISPLAY_OFF;
+ 	}
+ 
+ 	drm_dbg_dp(dp->drm_dev, "type=%d Done\n", dp->connector_type);
+-- 
+2.34.1
+

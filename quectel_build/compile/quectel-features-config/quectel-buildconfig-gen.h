@@ -5,10 +5,11 @@
 
 /************Quectel autogen version************/
 
-#define QUECTEL_BUILD_TIME      "Jun 30 2025 04:49:34"
+#define QUECTEL_BUILD_TIME      "Mar 23 2026 10:09:32"
 #define QUECTEL_PROJECT_NAME    "QSM565DWF"
 #define QUECTEL_PROJECT_REV     "QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01"
 #define QUECTEL_CUSTOM_NAME     "STD"
+#define QUECTEL_GIT_COMMIT      "ce5a45acb54cb8c015e0d284f2150fffeffb2ebb"
 /************Quectel Macro************/
 
 #define __QUECTEL_PROJECT_QSM565DWF__     1

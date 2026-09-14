@@ -1,4 +1,4 @@
-From 9a1e1c7b65cb3f5ab97ce05463ca02a3eaa57d86 Mon Sep 17 00:00:00 2001
+From df2801c3f9689d6c173dca05ee970756ba3b3d04 Mon Sep 17 00:00:00 2001
 From: Joe MacDonald <joe_macdonald@mentor.com>
 Date: Thu, 28 Mar 2019 21:43:53 -0400
 Subject: [PATCH] fc/login: apply login context to login.shadow
@@ -12,11 +12,11 @@ Signed-off-by: Yi Zhao <yi.zhao@windriver.com>
  1 file changed, 1 insertion(+)
 
 diff --git a/policy/modules/system/authlogin.fc b/policy/modules/system/authlogin.fc
-index 50efcff7b..5cb48882c 100644
+index adb53a05a..a25a9d607 100644
 --- a/policy/modules/system/authlogin.fc
 +++ b/policy/modules/system/authlogin.fc
-@@ -6,6 +6,7 @@
- /etc/tcb(/.*)?		--	gen_context(system_u:object_r:shadow_t,s0)
+@@ -8,6 +8,7 @@
+ /etc/security/opasswd\.old	--	gen_context(system_u:object_r:shadow_history_t,s0)
  
  /usr/bin/login		--	gen_context(system_u:object_r:login_exec_t,s0)
 +/usr/bin/login\.shadow		--	gen_context(system_u:object_r:login_exec_t,s0)
@@ -24,5 +24,5 @@ index 50efcff7b..5cb48882c 100644
  /usr/bin/pam_timestamp_check	--	gen_context(system_u:object_r:pam_exec_t,s0)
  /usr/bin/tcb_convert		--	gen_context(system_u:object_r:updpwd_exec_t,s0)
 -- 
-2.17.1
+2.25.1
 

@@ -1,0 +1,130 @@
+From 1e261a60e61e0e0aaa5f8dcfa29edd781e14d2a1 Mon Sep 17 00:00:00 2001
+From: Lijuan Gao <quic_lijuang@quicinc.com>
+Date: Wed, 7 May 2025 18:26:15 +0800
+Subject: [PATCH 5/6] FROMLIST: arm64: dts: qcom: qcs615: add ADSP and CDSP
+ nodes
+
+Add nodes for remoteprocs: ADSP and CDSP for QCS615 SoC to enable proper
+remoteproc functionality.
+
+Link: https://lore.kernel.org/all/20250507-add_qcs615_remoteproc_support-v2-5-52ac6cb43a39@quicinc.com/
+Signed-off-by: Lijuan Gao <quic_lijuang@quicinc.com>
+Upstream-Status: Submitted[https://lore.kernel.org/all/20250507-add_qcs615_remoteproc_support-v2-5-52ac6cb43a39@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs615.dtsi | 86 ++++++++++++++++++++++++++++
+ 1 file changed, 86 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs615.dtsi b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+index 0a2d12971da0..439ead4f1028 100644
+--- a/arch/arm64/boot/dts/qcom/qcs615.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+@@ -520,6 +520,16 @@ pil_gpu_mem: pil-gpu@97715000 {
+ 			reg = <0x0 0x97715000 0x0 0x2000>;
+ 			no-map;
+ 		};
++
++		rproc_cdsp_mem: rproc-cdsp@93b00000 {
++			reg = <0x0 0x93b00000 0x0 0x1e00000>;
++			no-map;
++		};
++
++		rproc_adsp_mem: rproc-adsp@95900000 {
++			reg = <0x0 0x95900000 0x0 0x1e00000>;
++			no-map;
++		};
+ 	};
+ 
+ 	soc: soc@0 {
+@@ -3161,6 +3171,44 @@ cti@7900000 {
+ 			clock-names = "apb_pclk";
+ 		};
+ 
++		remoteproc_cdsp: remoteproc@8300000 {
++			compatible = "qcom,qcs615-cdsp-pas", "qcom,sm8150-cdsp-pas";
++			reg = <0x0 0x08300000 0x0 0x4040>;
++
++			interrupts-extended = <&intc GIC_SPI 578 IRQ_TYPE_EDGE_RISING>,
++					      <&cdsp_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
++					      <&cdsp_smp2p_in 1 IRQ_TYPE_EDGE_RISING>,
++					      <&cdsp_smp2p_in 2 IRQ_TYPE_EDGE_RISING>,
++					      <&cdsp_smp2p_in 3 IRQ_TYPE_EDGE_RISING>;
++			interrupt-names = "wdog",
++					  "fatal",
++					  "ready",
++					  "handover",
++					  "stop-ack";
++
++			clocks = <&rpmhcc RPMH_CXO_CLK>;
++			clock-names = "xo";
++
++			power-domains = <&rpmhpd RPMHPD_CX>;
++			power-domain-names = "cx";
++
++			memory-region = <&rproc_cdsp_mem>;
++
++			qcom,qmp = <&aoss_qmp>;
++
++			qcom,smem-states = <&cdsp_smp2p_out 0>;
++			qcom,smem-state-names = "stop";
++
++			status = "disabled";
++
++			glink-edge {
++				interrupts = <GIC_SPI 574 IRQ_TYPE_EDGE_RISING>;
++				mboxes = <&apss_shared 4>;
++				label = "cdsp";
++				qcom,remote-pid = <5>;
++			};
++		};
++
+ 		venus: video-codec@aa00000 {
+ 			compatible = "qcom,qcs615-venus";
+ 			reg = <0x0 0xaa00000 0x0 0x100000>;
+@@ -4428,6 +4476,44 @@ pcie_phy: phy@1c0e000 {
+ 		status = "disabled";
+ 	};
+ 
++	remoteproc_adsp: remoteproc@62400000 {
++		compatible = "qcom,qcs615-adsp-pas", "qcom,sm8150-adsp-pas";
++		reg = <0x0 0x62400000 0x0 0x4040>;
++
++		interrupts-extended = <&intc GIC_SPI 162 IRQ_TYPE_EDGE_RISING>,
++				      <&adsp_smp2p_in 0 IRQ_TYPE_EDGE_RISING>,
++				      <&adsp_smp2p_in 1 IRQ_TYPE_EDGE_RISING>,
++				      <&adsp_smp2p_in 2 IRQ_TYPE_EDGE_RISING>,
++				      <&adsp_smp2p_in 3 IRQ_TYPE_EDGE_RISING>;
++		interrupt-names = "wdog",
++				  "fatal",
++				  "ready",
++				  "handover",
++				  "stop-ack";
++
++		clocks = <&rpmhcc RPMH_CXO_CLK>;
++		clock-names = "xo";
++
++		power-domains = <&rpmhpd RPMHPD_CX>;
++		power-domain-names = "cx";
++
++		memory-region = <&rproc_adsp_mem>;
++
++		qcom,qmp = <&aoss_qmp>;
++
++		qcom,smem-states = <&adsp_smp2p_out 0>;
++		qcom,smem-state-names = "stop";
++
++		status = "disabled";
++
++		glink_edge: glink-edge {
++			interrupts = <GIC_SPI 170 IRQ_TYPE_EDGE_RISING>;
++			mboxes = <&apss_shared 24>;
++			label = "lpass";
++			qcom,remote-pid = <2>;
++		};
++	};
++
+ 	arch_timer: timer {
+ 		compatible = "arm,armv8-timer";
+ 		interrupts = <GIC_PPI 1 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+-- 
+2.34.1
+

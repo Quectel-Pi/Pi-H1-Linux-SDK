@@ -1,4 +1,4 @@
-From e14e81191a680ea22b29b5ae5f1145823ba58c58 Mon Sep 17 00:00:00 2001
+From b537150ed2cc0365678b92e2ec7bbc859460f065 Mon Sep 17 00:00:00 2001
 From: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
 Date: Fri, 23 Aug 2024 17:37:49 +0530
 Subject: [PATCH] BACKPORT: arm64: defconfig: enable SHM Bridge support for the
@@ -32,5 +32,5 @@ index 60af93c04b45..19f27ebda396 100644
  CONFIG_GNSS_MTK_SERIAL=m
  CONFIG_MTD=y
 -- 
-2.25.1
+2.17.1
 

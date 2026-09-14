@@ -4423,6 +4423,31 @@ void fxgmac_release_phy(struct fxgmac_pdata *pdata)
 			      REG_MII_EXT_ANALOG_CFG8_LED_VALUE);
 
 	if (EFUSE_LED_COMMON_SOLUTION != value) {
+		/*
+		 * Quectel PI H1: eFuse LED solution index = 0x0A, which is
+		 * not in 0~4 nor 0x1F (invalid). The original code falls
+		 * into the default (SOLUTION0) branch where LED2_CFG=0x00
+		 * disables the yellow LED, so the RJ45 LEDs stay dark.
+		 *
+		 * Board-verified register encoding (tested on hardware via
+		 * PHY ext reg 0xA00C/0xA00E with a gigabit link):
+		 *   0x1800 = gigabit match (solid on)
+		 *   0x2600 = non-gigabit (100M/10M) match
+		 * RJ45 green LED is driven by LED0, yellow LED by LED2.
+		 * So: green LED0 -> 0x1800 (gigabit), yellow LED2 -> 0x2600
+		 * (100M/10M). LED1 is not routed to any visible LED on this
+		 * board, keep it off.
+		 */
+		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
+				      REG_MII_EXT_COMMON_LED0_CFG);
+		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x1800);
+		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
+				      REG_MII_EXT_COMMON_LED1_CFG);
+		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x00);
+		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
+				      REG_MII_EXT_COMMON_LED2_CFG);
+		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x2600);
+		goto led_done;
 		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
 				      REG_MII_EXT_COMMON_LED0_CFG);
 		switch (value) {
@@ -4511,6 +4536,7 @@ void fxgmac_release_phy(struct fxgmac_pdata *pdata)
 				pdata, REG_MII_EXT_DATA,
 				REG_MII_EXT_COMMON_LED_BLINK_CFG_SOLUTION2);
 		}
+led_done:
 	}
 #endif
 }
@@ -4614,6 +4640,50 @@ static void fxgmac_close_phy_led(struct fxgmac_pdata *pdata)
 	fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
 			      REG_MII_EXT_COMMON_LED2_CFG);
 	fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x00);
+}
+
+/*
+ * Quectel PI H1: 按链路速率动态配置 RJ45 双色 LED.
+ * 板上实测编码 (经 PHY ext reg 0xA00C/0xA00E 验证):
+ *   0x1800 = 千兆匹配 (常亮)
+ *   0x2600 = 非千兆(100M/10M)匹配 (常亮)
+ *   0x06   = 活动闪烁 (bit1 收发闪烁, 无常亮)
+ * 灯-引脚映射: 绿灯 = LED0, 黄灯 = LED2, LED1 板上未接.
+ * 目标行为:
+ *   千兆: 黄灯常亮 + 绿灯随数据闪
+ *   百兆: 绿灯常亮 + 黄灯随数据闪
+ */
+#define FXGMAC_LED_VAL_GIGA    0x1800
+#define FXGMAC_LED_VAL_OTHER   0x2600
+#define FXGMAC_LED_VAL_ACTIVITY 0x06
+
+static void fxgmac_config_led_under_speed(struct fxgmac_pdata *pdata,
+					  int speed)
+{
+	u32 green, yellow;
+
+	if (speed == SPEED_1000) {
+		/* 千兆: 黄灯常亮, 绿灯活动闪 */
+		green = FXGMAC_LED_VAL_ACTIVITY;
+		yellow = FXGMAC_LED_VAL_GIGA;
+	} else {
+		/* 百兆/10M: 绿灯常亮, 黄灯活动闪 */
+		green = FXGMAC_LED_VAL_OTHER;
+		yellow = FXGMAC_LED_VAL_ACTIVITY;
+	}
+
+	fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
+			      REG_MII_EXT_COMMON_LED0_CFG);
+	fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, green);
+	fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
+			      REG_MII_EXT_COMMON_LED1_CFG);
+	fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x00);
+	fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
+			      REG_MII_EXT_COMMON_LED2_CFG);
+	fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, yellow);
+
+	DPRINTK("fxgmac led under speed %d: led0=0x%04x led2=0x%04x\n",
+		speed, green, yellow);
 }
 
 static void fxmgac_config_led_under_active(struct fxgmac_pdata *pdata)
@@ -6200,6 +6270,7 @@ void fxgmac_init_hw_ops(struct fxgmac_hw_ops *hw_ops)
 	hw_ops->phy_config = fxgmac_phy_config;
 	hw_ops->close_phy_led = fxgmac_close_phy_led;
 	hw_ops->led_under_active = fxmgac_config_led_under_active;
+	hw_ops->led_under_speed = fxgmac_config_led_under_speed;
 	hw_ops->led_under_sleep = fxgmac_config_led_under_sleep;
 	hw_ops->led_under_shutdown = fxgmac_config_led_under_shutdown;
 	hw_ops->led_under_disable = fxgmac_config_led_under_disable;

@@ -1,7 +1,7 @@
-SRCREV = "338843c1ee157ae5d990c6f544f66b447b24fa8b"
-PV = "2.3"
+SRCREV = "217cd8518c5f7777d490892aa9c765a6b2782cb5"
+PV = "2.6"
 PE = "1"
 
-SRC_URI = "git://git.kernel.org/pub/scm/utils/rt-tests/rt-tests.git;branch=main"
+SRC_URI = "git://git.kernel.org/pub/scm/utils/rt-tests/rt-tests.git;branch=main;protocol=https"
 
 S = "${WORKDIR}/git"

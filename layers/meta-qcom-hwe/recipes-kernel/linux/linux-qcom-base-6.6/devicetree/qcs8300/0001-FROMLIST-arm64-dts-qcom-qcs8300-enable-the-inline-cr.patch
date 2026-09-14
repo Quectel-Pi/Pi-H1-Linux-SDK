@@ -1,0 +1,44 @@
+From bde20f0a9db35bc1ea7756194b0f9d9e8e0f7091 Mon Sep 17 00:00:00 2001
+From: Yuvaraj Ranganathan <quic_yrangana@quicinc.com>
+Date: Sun, 1 Dec 2024 16:18:48 +0530
+Subject: [PATCH] FROMLIST: arm64: dts: qcom: qcs8300: enable the inline crypto
+ engine
+
+Add an ICE node to qcs8300 SoC description and enable it by adding a
+phandle to the UFS node.
+
+Signed-off-by: Yuvaraj Ranganathan <quic_yrangana@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241125065801.1751256-3-quic_yrangana@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index dcdeb0144af9..41214ce576c4 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -712,6 +712,7 @@ &mc_virt SLAVE_EBI1 0>,
+ 					<0 0>,
+ 					<0 0>,
+ 					<0 0>;
++			qcom,ice = <&ice>;
+ 			status = "disabled";
+ 		};
+
+@@ -737,6 +738,13 @@ ufs_mem_phy: phy@1d87000 {
+ 			status = "disabled";
+ 		};
+
++		ice: crypto@1d88000 {
++			compatible = "qcom,qcs8300-inline-crypto-engine",
++				     "qcom,inline-crypto-engine";
++			reg = <0x0 0x01d88000 0x0 0x18000>;
++			clocks = <&gcc GCC_UFS_PHY_ICE_CORE_CLK>;
++		};
++
+ 		cryptobam: dma-controller@1dc4000 {
+ 			compatible = "qcom,bam-v1.7.4", "qcom,bam-v1.7.0";
+ 			reg = <0x0 0x01dc4000 0x0 0x28000>;
+--
+2.34.1
+

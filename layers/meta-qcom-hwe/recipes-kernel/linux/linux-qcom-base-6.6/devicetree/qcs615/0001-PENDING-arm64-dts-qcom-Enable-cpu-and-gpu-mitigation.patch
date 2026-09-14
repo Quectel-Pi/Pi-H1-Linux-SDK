@@ -1,0 +1,356 @@
+From a17e991988d2303ec9d761a89e681280bba3ae9f Mon Sep 17 00:00:00 2001
+From: Gaurav Kohli <quic_gkohli@quicinc.com>
+Date: Fri, 25 Apr 2025 14:28:08 +0530
+Subject: [PATCH 1/1] PENDING: arm64: dts: qcom: Enable cpu and gpu mitigation
+ for QCS615
+
+Enable cpu idle injection and gpu cooling maps for all cpu/gpu tsens
+for QCS615 platforms.
+
+Change-Id: I877dafbbb029efc9fc7972935c536cd3c15ec336
+Signed-off-by: Gaurav Kohli <quic_gkohli@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/qcs615.dtsi | 123 +++++++++++++++++++++++++--
+ 1 file changed, 115 insertions(+), 8 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs615.dtsi b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+index 2de9b5b606f6..cefc80a939c9 100644
+--- a/arch/arm64/boot/dts/qcom/qcs615.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+@@ -18,6 +18,7 @@
+ #include <dt-bindings/power/qcom,rpmhpd.h>
+ #include <dt-bindings/soc/qcom,rpmh-rsc.h>
+ #include <dt-bindings/phy/phy-qcom-qmp.h>
++#include <dt-bindings/thermal/thermal.h>
+ 
+ / {
+ 	interrupt-parent = <&intc>;
+@@ -79,6 +80,7 @@ cpu1: cpu@100 {
+ 			next-level-cache = <&l2_100>;
+ 			clocks = <&cpufreq_hw 0>;
+ 			qcom,freq-domain = <&cpufreq_hw 0>;
++			#cooling-cells = <2>;
+ 
+ 			l2_100: l2-cache {
+ 			      compatible = "cache";
+@@ -86,6 +88,12 @@ l2_100: l2-cache {
+ 			      cache-unified;
+ 			      next-level-cache = <&l3_0>;
+ 			};
++
++			cpu1_idle: thermal-idle {
++				#cooling-cells = <2>;
++				duration-us = <800000>;
++				exit-latency-us = <10000>;
++			};
+ 		};
+ 
+ 		cpu2: cpu@200 {
+@@ -100,6 +108,7 @@ cpu2: cpu@200 {
+ 			next-level-cache = <&l2_200>;
+ 			clocks = <&cpufreq_hw 0>;
+ 			qcom,freq-domain = <&cpufreq_hw 0>;
++			#cooling-cells = <2>;
+ 
+ 			l2_200: l2-cache {
+ 			      compatible = "cache";
+@@ -107,6 +116,12 @@ l2_200: l2-cache {
+ 			      cache-unified;
+ 			      next-level-cache = <&l3_0>;
+ 			};
++
++			cpu2_idle: thermal-idle {
++				#cooling-cells = <2>;
++				duration-us = <800000>;
++				exit-latency-us = <10000>;
++			};
+ 		};
+ 
+ 		cpu3: cpu@300 {
+@@ -121,6 +136,7 @@ cpu3: cpu@300 {
+ 			next-level-cache = <&l2_300>;
+ 			clocks = <&cpufreq_hw 0>;
+ 			qcom,freq-domain = <&cpufreq_hw 0>;
++			#cooling-cells = <2>;
+ 
+ 			l2_300: l2-cache {
+ 			      compatible = "cache";
+@@ -128,6 +144,12 @@ l2_300: l2-cache {
+ 			      cache-unified;
+ 			      next-level-cache = <&l3_0>;
+ 			};
++
++			cpu3_idle: thermal-idle {
++				#cooling-cells = <2>;
++				duration-us = <800000>;
++				exit-latency-us = <10000>;
++			};
+ 		};
+ 
+ 		cpu4: cpu@400 {
+@@ -142,6 +164,7 @@ cpu4: cpu@400 {
+ 			next-level-cache = <&l2_400>;
+ 			clocks = <&cpufreq_hw 0>;
+ 			qcom,freq-domain = <&cpufreq_hw 0>;
++			#cooling-cells = <2>;
+ 
+ 			l2_400: l2-cache {
+ 			      compatible = "cache";
+@@ -149,6 +172,12 @@ l2_400: l2-cache {
+ 			      cache-unified;
+ 			      next-level-cache = <&l3_0>;
+ 			};
++
++			cpu4_idle: thermal-idle {
++				#cooling-cells = <2>;
++				duration-us = <800000>;
++				exit-latency-us = <10000>;
++			};
+ 		};
+ 
+ 		cpu5: cpu@500 {
+@@ -163,6 +192,7 @@ cpu5: cpu@500 {
+ 			next-level-cache = <&l2_500>;
+ 			clocks = <&cpufreq_hw 0>;
+ 			qcom,freq-domain = <&cpufreq_hw 0>;
++			#cooling-cells = <2>;
+ 
+ 			l2_500: l2-cache {
+ 			      compatible = "cache";
+@@ -170,6 +200,12 @@ l2_500: l2-cache {
+ 			      cache-unified;
+ 			      next-level-cache = <&l3_0>;
+ 			};
++
++			cpu5_idle: thermal-idle {
++				#cooling-cells = <2>;
++				duration-us = <800000>;
++				exit-latency-us = <10000>;
++			};
+ 		};
+ 
+ 		cpu6: cpu@600 {
+@@ -192,6 +228,12 @@ l2_600: l2-cache {
+ 			      cache-unified;
+ 			      next-level-cache = <&l3_0>;
+ 			};
++
++			cpu6_idle: thermal-idle {
++				#cooling-cells = <2>;
++				duration-us = <800000>;
++				exit-latency-us = <10000>;
++			};
+ 		};
+ 
+ 		cpu7: cpu@700 {
+@@ -206,6 +248,7 @@ cpu7: cpu@700 {
+ 			next-level-cache = <&l2_700>;
+ 			clocks = <&cpufreq_hw 1>;
+ 			qcom,freq-domain = <&cpufreq_hw 1>;
++			#cooling-cells = <2>;
+ 
+ 			l2_700: l2-cache {
+ 			      compatible = "cache";
+@@ -213,6 +256,12 @@ l2_700: l2-cache {
+ 			      cache-unified;
+ 			      next-level-cache = <&l3_0>;
+ 			};
++
++			cpu7_idle: thermal-idle {
++				#cooling-cells = <2>;
++				duration-us = <800000>;
++				exit-latency-us = <10000>;
++			};
+ 		};
+ 
+ 		cpu-map {
+@@ -4409,7 +4458,7 @@ cpuss-0-thermal {
+ 
+ 			trips {
+ 
+-				trip-point0 {
++				cpuss_0_alert0: trip-point0 {
+ 					temperature = <115000>;
+ 					hysteresis = <5000>;
+ 					type = "passive";
+@@ -4422,6 +4471,13 @@ trip-point1 {
+ 				};
+ 			};
+ 
++			cooling-maps {
++				map0 {
++					trip = <&cpuss_0_alert0>;
++					cooling-device = <&cpu4_idle 100 100>,
++							 <&cpu5_idle 100 100>;
++				};
++			};
+ 		};
+ 
+ 		cpuss-1-thermal {
+@@ -4429,7 +4485,7 @@ cpuss-1-thermal {
+ 
+ 			trips {
+ 
+-				trip-point0 {
++				cpuss_1_alert0: trip-point0 {
+ 					temperature = <115000>;
+ 					hysteresis = <5000>;
+ 					type = "passive";
+@@ -4442,6 +4498,14 @@ trip-point1 {
+ 				};
+ 			};
+ 
++
++			cooling-maps {
++				map0 {
++					trip = <&cpuss_1_alert0>;
++					cooling-device = <&cpu2_idle 100 100>,
++							 <&cpu3_idle 100 100>;
++				};
++			};
+ 		};
+ 
+ 		cpuss-2-thermal {
+@@ -4449,7 +4513,7 @@ cpuss-2-thermal {
+ 
+ 			trips {
+ 
+-				trip-point0 {
++				cpuss_2_alert0: trip-point0 {
+ 					temperature = <115000>;
+ 					hysteresis = <5000>;
+ 					type = "passive";
+@@ -4461,6 +4525,13 @@ trip-point1 {
+ 					type = "passive";
+ 				};
+ 			};
++
++			cooling-maps {
++				map0 {
++					trip = <&cpuss_2_alert0>;
++					cooling-device = <&cpu1_idle 100 100>;
++				};
++			};
+ 		};
+ 
+ 		cpuss-3-thermal {
+@@ -4487,7 +4558,7 @@ cpu-1-0-thermal {
+ 
+ 			trips {
+ 
+-				trip-point0 {
++				cpu_1_0_alert0: trip-point0 {
+ 					temperature = <115000>;
+ 					hysteresis = <5000>;
+ 					type = "passive";
+@@ -4499,6 +4570,13 @@ trip-point1 {
+ 					type = "passive";
+ 				};
+ 			};
++
++			cooling-maps {
++				map0 {
++					trip = <&cpu_1_0_alert0>;
++					cooling-device = <&cpu6_idle 100 100>;
++				};
++			};
+ 		};
+ 
+ 		cpu-1-1-thermal {
+@@ -4506,7 +4584,7 @@ cpu-1-1-thermal {
+ 
+ 			trips {
+ 
+-				trip-point0 {
++				cpu_1_1_alert0: trip-point0 {
+ 					temperature = <115000>;
+ 					hysteresis = <5000>;
+ 					type = "passive";
+@@ -4519,6 +4597,13 @@ trip-point1 {
+ 				};
+ 			};
+ 
++
++			cooling-maps {
++				map0 {
++					trip = <&cpu_1_1_alert0>;
++					cooling-device = <&cpu6_idle 100 100>;
++				};
++			};
+ 		};
+ 
+ 		cpu-1-2-thermal {
+@@ -4526,7 +4611,7 @@ cpu-1-2-thermal {
+ 
+ 			trips {
+ 
+-				trip-point0 {
++				cpu_1_2_alert0: trip-point0 {
+ 					temperature = <115000>;
+ 					hysteresis = <5000>;
+ 					type = "passive";
+@@ -4538,6 +4623,13 @@ trip-point1 {
+ 					type = "passive";
+ 				};
+ 			};
++
++			cooling-maps {
++				map0 {
++					trip = <&cpu_1_2_alert0>;
++					cooling-device = <&cpu7_idle 100 100>;
++				};
++			};
+ 		};
+ 
+ 		cpu-1-3-thermal {
+@@ -4545,7 +4637,7 @@ cpu-1-3-thermal {
+ 
+ 			trips {
+ 
+-				trip-point0 {
++				cpu_1_3_alert0: trip-point0 {
+ 					temperature = <115000>;
+ 					hysteresis = <5000>;
+ 					type = "passive";
+@@ -4558,14 +4650,22 @@ trip-point1 {
+ 				};
+ 			};
+ 
++			cooling-maps {
++				map0 {
++					trip = <&cpu_1_3_alert0>;
++					cooling-device = <&cpu7_idle 100 100>;
++				};
++
++			};
+ 		};
+ 
+ 		gpu-thermal {
++			polling-delay-passive = <10>;
+ 			thermal-sensors = <&tsens0 9>;
+ 
+ 			trips {
+ 
+-				trip-point0 {
++				gpu_trip: trip-point0 {
+ 					temperature = <105000>;
+ 					hysteresis = <5000>;
+ 					type = "passive";
+@@ -4578,6 +4678,13 @@ trip-point1 {
+ 				};
+ 			};
+ 
++			cooling-maps {
++				map0 {
++					trip = <&gpu_trip>;
++					cooling-device = <&gpu THERMAL_NO_LIMIT
++								THERMAL_NO_LIMIT>;
++				};
++			};
+ 		};
+ 
+ 		q6-hvx-thermal {
+-- 
+2.34.1
+

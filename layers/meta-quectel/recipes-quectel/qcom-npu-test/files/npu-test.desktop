@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=NPU 测试
+Name[en]=NPU Test
+Comment=Qualcomm NPU (Hexagon DSP/HTP) 推理测试工具
+Comment[en]=Qualcomm NPU Inference Test Tool (SNPE/QNN)
+Exec=qcom-npu-test
+Icon=npu-test
+Terminal=false
+Type=Application
+Categories=Development;
+Keywords=npu;dsp;htp;snpe;qnn;qualcomm;ai;inference;
+StartupNotify=true

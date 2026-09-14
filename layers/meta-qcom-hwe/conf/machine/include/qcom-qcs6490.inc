@@ -5,15 +5,16 @@ SOC_FAMILY = "qcm6490"
 require conf/machine/include/qcom-base.inc
 
 # Additional Kernel cmdline parameters for debug builds
-DBG_CMDLINE = "${@oe.utils.conditional('DEBUG_BUILD','1','earlycon page_owner=on qcom_scm.download_mode=1 slub_debug=FZP,zs_handle,zspage;FZPU','',d)}"
+DBG_CMDLINE = "${@oe.utils.conditional('DEBUG_BUILD','1','earlycon page_owner=on qcom_scm.download_mode=1 slub_debug=FZP,zs_handle,zspage;FZPU nokaslr','',d)}"
 
-KERNEL_CMDLINE_EXTRA ?= "pcie_pme=nomsi kernel.sched_pelt_multiplier=4 rcupdate.rcu_expedited=1 rcu_nocbs=0-7 kpti=off kasan=off kasan.stacktrace=off no-steal-acc ${DBG_CMDLINE} swiotlb=128 mitigations=auto net.ifnames=0"
+KERNEL_CMDLINE_EXTRA ?= "pcie_pme=nomsi rcupdate.rcu_expedited=1 rcu_nocbs=0-7 kpti=off kasan=off kasan.stacktrace=off no-steal-acc nokaslr ${DBG_CMDLINE} swiotlb=128 mitigations=auto net.ifnames=0"
 
 MACHINE_ESSENTIAL_EXTRA_RRECOMMENDS += " \
     fastrpc \
     kernel-modules \
     modemmanager \
     networkmanager-nmcli \
+    networkmanager-wifi \
     pd-mapper \
 "
 
@@ -29,6 +30,5 @@ MACHINE_EXTRA_RRECOMMENDS:append:qcom-custom-bsp = " \
     qcom-subsystem-ramdump \
     securedsp-example \
     wlan-conf \
+    remote-debug-agent \
 "
-QUECTEL_WIFI_CHIPS = "qca1023"
-MACHINE_EXTRA_RRECOMMENDS:remove = "${@bb.utils.contains('QUECTEL_WIFI_CHIPS', 'qca6490', '', 'kernel-module-wlan-platform kernel-module-qcacld-wlan kernel-module-qca6490 wlan-conf wpa-supplicant wpa-supplicant-cli hostap-daemon', d)}"

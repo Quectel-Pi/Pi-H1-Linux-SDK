@@ -1,0 +1,69 @@
+From f0b94a7a62dc7f958346c50a9efa94a96218ebdd Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:31:36 -0800
+Subject: [PATCH 102/146] FROMLIST: drm/msm/dp: add a helper to read mst caps
+ for dp_panel
+
+Add a helper to check whether a dp_panel is mst capable.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-5-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_aux.h   |  1 +
+ drivers/gpu/drm/msm/dp/dp_panel.c | 14 ++++++++++++++
+ drivers/gpu/drm/msm/dp/dp_panel.h |  1 +
+ 3 files changed, 16 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_aux.h b/drivers/gpu/drm/msm/dp/dp_aux.h
+index 39c5b4c8596a..cb97a73cdd6e 100644
+--- a/drivers/gpu/drm/msm/dp/dp_aux.h
++++ b/drivers/gpu/drm/msm/dp/dp_aux.h
+@@ -8,6 +8,7 @@
+ 
+ #include "dp_catalog.h"
+ #include <drm/display/drm_dp_helper.h>
++#include <drm/display/drm_dp_mst_helper.h>
+ 
+ int msm_dp_aux_register(struct drm_dp_aux *msm_dp_aux);
+ void msm_dp_aux_unregister(struct drm_dp_aux *msm_dp_aux);
+diff --git a/drivers/gpu/drm/msm/dp/dp_panel.c b/drivers/gpu/drm/msm/dp/dp_panel.c
+index d277e9b2cbc0..172de804dec4 100644
+--- a/drivers/gpu/drm/msm/dp/dp_panel.c
++++ b/drivers/gpu/drm/msm/dp/dp_panel.c
+@@ -108,6 +108,20 @@ static u32 msm_dp_panel_get_supported_bpp(struct msm_dp_panel *msm_dp_panel,
+ 	return min_supported_bpp;
+ }
+ 
++bool msm_dp_panel_read_mst_cap(struct msm_dp_panel *msm_dp_panel)
++{
++	struct msm_dp_panel_private *panel;
++
++	if (!msm_dp_panel) {
++		DRM_ERROR("invalid input\n");
++		return 0;
++	}
++
++	panel = container_of(msm_dp_panel, struct msm_dp_panel_private, msm_dp_panel);
++
++	return drm_dp_read_mst_cap(panel->aux, msm_dp_panel->dpcd);
++}
++
+ int msm_dp_panel_read_link_caps(struct msm_dp_panel *msm_dp_panel,
+ 				struct drm_connector *connector)
+ {
+diff --git a/drivers/gpu/drm/msm/dp/dp_panel.h b/drivers/gpu/drm/msm/dp/dp_panel.h
+index 7a38655c443a..363b416e4cbe 100644
+--- a/drivers/gpu/drm/msm/dp/dp_panel.h
++++ b/drivers/gpu/drm/msm/dp/dp_panel.h
+@@ -67,6 +67,7 @@ int msm_dp_panel_get_modes(struct msm_dp_panel *msm_dp_panel,
+ 		struct drm_connector *connector);
+ void msm_dp_panel_handle_sink_request(struct msm_dp_panel *msm_dp_panel);
+ void msm_dp_panel_tpg_config(struct msm_dp_panel *msm_dp_panel, bool enable);
++bool msm_dp_panel_read_mst_cap(struct msm_dp_panel *dp_panel);
+ 
+ /**
+  * is_link_rate_valid() - validates the link rate
+-- 
+2.34.1
+

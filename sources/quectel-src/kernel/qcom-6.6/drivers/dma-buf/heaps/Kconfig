@@ -76,3 +76,16 @@ config QCOM_DMABUF_HEAPS_CARVEOUT
 	help
 	  Choose this option to build the QCOM DMA-BUF Carveout heap.
 	  If in doubt, say Y here.
+
+config QCOM_DMABUF_HEAPS_CARVEOUT_DEFER_ZERO
+	bool "Enable deferred zeroing for QCOM Carveout Heap"
+	depends on QCOM_DMABUF_HEAPS && QCOM_DMABUF_HEAPS_CARVEOUT
+	help
+	  This option enables deferred zeroing for the QCOM DMA-BUF
+	  Carveout heap. Deferred zeroing postpones  memory zeroing
+	  operation until allocation time, which can significantly
+	  reduce heap initialization time during system boot. this
+	  may introduce additional latency during memory allocation.
+	  Say Y here if boot time optimization is critical and allocation
+	  latency is acceptable.
+

@@ -17,13 +17,18 @@ SRCREV = "b8d573e11ec149da695d695c81a156232b89a949"
 S = "${WORKDIR}/git"
 
 inherit ptest setuptools3
-PIP_INSTALL_PACKAGE = "xlrd"
-PIP_INSTALL_DIST_PATH = "${S}/dist"
 
-RDEPENDS:${PN} += "${PYTHON_PN}-compression ${PYTHON_PN}-io ${PYTHON_PN}-pprint ${PYTHON_PN}-shell"
+RDEPENDS:${PN} += " \
+    python3-compression \
+    python3-io \
+    python3-mmap \
+    python3-pprint \
+    python3-shell \
+"
 
 RDEPENDS:${PN}-ptest += " \
-    ${PYTHON_PN}-pytest \
+    python3-pytest \
+    python3-unittest-automake-output \
 "
 
 do_install_ptest() {

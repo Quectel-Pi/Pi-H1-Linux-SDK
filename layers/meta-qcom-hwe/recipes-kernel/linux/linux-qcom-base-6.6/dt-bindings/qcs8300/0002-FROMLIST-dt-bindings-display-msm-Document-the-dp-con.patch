@@ -1,0 +1,37 @@
+From 73de80897420adb80f8ad80665262f2e2bf1a446 Mon Sep 17 00:00:00 2001
+From: Yongxing Mou <quic_yongmou@quicinc.com>
+Date: Mon, 20 Jan 2025 11:49:19 +0800
+Subject: [PATCH 2/7] FROMLIST: dt-bindings: display/msm: Document the
+ dp-controller for QCS8300
+
+Add compatible string for the DisplayPort controller found on the
+Qualcomm QCS8300 platform.QCS8300 only support one DisplayPort
+controller and have the same base offset with sm8650, so we reuse
+the sm8650 DisplayPort driver.
+
+Reviewed-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Signed-off-by: Mahadevan <quic_mahap@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250120-mdssdt_qcs8300-v4-2-1687e7842125@quicinc.com/]
+---
+ .../devicetree/bindings/display/msm/dp-controller.yaml        | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/display/msm/dp-controller.yaml b/Documentation/devicetree/bindings/display/msm/dp-controller.yaml
+index 3e3433dc274f..3e91482ef239 100644
+--- a/Documentation/devicetree/bindings/display/msm/dp-controller.yaml
++++ b/Documentation/devicetree/bindings/display/msm/dp-controller.yaml
+@@ -34,6 +34,10 @@ properties:
+               - qcom,sm8450-dp
+               - qcom,sm8550-dp
+           - const: qcom,sm8350-dp
++      - items:
++          - enum:
++              - qcom,qcs8300-dp
++          - const: qcom,sm8650-dp
+ 
+   reg:
+     minItems: 4
+-- 
+2.34.1
+

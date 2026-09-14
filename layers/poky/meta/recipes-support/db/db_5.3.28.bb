@@ -18,7 +18,6 @@ RCONFLICTS:${PN} = "db3"
 CVE_PRODUCT = "oracle_berkeley_db berkeley_db"
 CVE_VERSION = "11.2.${PV}"
 
-PR = "r1"
 PE = "1"
 
 SRC_URI = "https://download.oracle.com/berkeley-db/db-${PV}.tar.gz"
@@ -117,3 +116,7 @@ INSANE_SKIP:${PN} = "dev-so"
 INSANE_SKIP:${PN}-cxx = "dev-so"
 
 BBCLASSEXTEND = "native nativesdk"
+
+# many configure tests are failing with gcc-14
+CFLAGS += "-Wno-error=implicit-int -Wno-error=implicit-function-declaration"
+BUILD_CFLAGS += "-Wno-error=implicit-int -Wno-error=implicit-function-declaration"

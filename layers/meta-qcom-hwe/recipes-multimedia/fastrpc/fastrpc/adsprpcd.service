@@ -2,6 +2,9 @@
 Description=aDSP RPC daemon
 
 [Service]
+User=fastrpc
+Group=fastrpc
+SupplementaryGroups=kmem
 Type=exec
 Restart=always
 ExecStart=/usr/bin/adsprpcd

@@ -1,0 +1,98 @@
+From 0530d7ac3db13c5a354dac3c53eab4a4dd1a80e5 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:31:56 -0800
+Subject: [PATCH 122/146] FROMLIST: drm/msm/dp: move link related operations to
+ dp_display_unprepare()
+
+Move the link related operations to dp_display_unprepare() and keep
+only stream related operations in dp_display_disable().
+
+Make dp_display_unprepare() available to other clients such as DP MST.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-25-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 31 +++++++++++++++--------------
+ drivers/gpu/drm/msm/dp/dp_display.h |  2 ++
+ 2 files changed, 18 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 1c6e5d1ab5b7..9ffd9cfbd665 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -942,20 +942,8 @@ static int msm_dp_display_disable(struct msm_dp_display_private *dp,
+ 
+ 	msm_dp_ctrl_clear_vsc_sdp_pkt(dp->ctrl, msm_dp_panel);
+ 
+-	/* dongle is still connected but sinks are disconnected */
+-	if (dp->link->sink_count == 0)
+-		msm_dp_ctrl_psm_config(dp->ctrl);
+-
+ 	msm_dp_ctrl_stream_clk_off(dp->ctrl, msm_dp_panel);
+ 
+-	msm_dp_ctrl_off_link(dp->ctrl);
+-
+-	/* re-init the PHY so that we can listen to Dongle disconnect */
+-	if (dp->link->sink_count == 0)
+-		msm_dp_ctrl_reinit_phy(dp->ctrl);
+-	else
+-		msm_dp_display_host_phy_exit(dp);
+-
+ 	msm_dp_display->power_on = false;
+ 
+ 	drm_dbg_dp(dp->drm_dev, "sink count: %d\n", dp->link->sink_count);
+@@ -1684,15 +1672,28 @@ void msm_dp_display_atomic_disable(struct msm_dp *msm_dp)
+ 	msm_dp_display_disable_helper(msm_dp, msm_dp_display->panel);
+ }
+ 
+-static void msm_dp_display_unprepare(struct msm_dp_display_private *msm_dp_display_priv)
++void msm_dp_display_unprepare(struct msm_dp *msm_dp)
+ {
+-	struct msm_dp *msm_dp = &msm_dp_display_priv->msm_dp_display;
++	struct msm_dp_display_private *msm_dp_display;
+ 
++	msm_dp_display = container_of(msm_dp, struct msm_dp_display_private, msm_dp_display);
+ 	if (!msm_dp->prepared) {
+ 		drm_dbg_dp(msm_dp->drm_dev, "Link already setup, return\n");
+ 		return;
+ 	}
+ 
++	/* dongle is still connected but sinks are disconnected */
++	if (msm_dp_display->link->sink_count == 0)
++		msm_dp_ctrl_psm_config(msm_dp_display->ctrl);
++
++	msm_dp_ctrl_off_link(msm_dp_display->ctrl);
++
++	/* re-init the PHY so that we can listen to Dongle disconnect */
++	if (msm_dp_display->link->sink_count == 0)
++		msm_dp_ctrl_reinit_phy(msm_dp_display->ctrl);
++	else
++		msm_dp_display_host_phy_exit(msm_dp_display);
++
+ 	pm_runtime_put_sync(&msm_dp->pdev->dev);
+ 
+ 	msm_dp->prepared = false;
+@@ -1738,7 +1739,7 @@ void msm_dp_display_atomic_post_disable(struct msm_dp *msm_dp)
+ 
+ 	msm_dp_display_atomic_post_disable_helper(msm_dp, msm_dp_display->panel);
+ 
+-	msm_dp_display_unprepare(msm_dp_display);
++	msm_dp_display_unprepare(msm_dp);
+ }
+ 
+ void msm_dp_display_mode_set_helper(struct msm_dp *msm_dp,
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.h b/drivers/gpu/drm/msm/dp/dp_display.h
+index 2b23f2bf7535..82eb1c6ed146 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.h
++++ b/drivers/gpu/drm/msm/dp/dp_display.h
+@@ -65,4 +65,6 @@ void msm_dp_display_mode_set_helper(struct msm_dp *msm_dp,
+ void msm_dp_display_atomic_post_disable_helper(struct msm_dp *msm_dp,
+ 					       struct msm_dp_panel *msm_dp_panel);
+ 
++void msm_dp_display_unprepare(struct msm_dp *dp);
++
+ #endif /* _DP_DISPLAY_H_ */
+-- 
+2.34.1
+

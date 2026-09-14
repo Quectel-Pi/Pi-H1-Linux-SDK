@@ -1,0 +1,33 @@
+From da5846c096cd1006d512bbdbc466fc46a61417b8 Mon Sep 17 00:00:00 2001
+From: Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+Date: Tue, 1 Apr 2025 09:46:11 -0400
+Subject: [PATCH] dbus: Fix condition for invalidating path
+
+This fixes the condition introduced in cdd02afbb7ef
+("dbus: Fix add invalid memory during interface removal") which was
+reversed while applying the original fix.
+
+Fixes: https://github.com/bluez/bluez/issues/1155
+
+Upstream-Status: Backport [https://web.git.kernel.org/pub/scm/bluetooth/bluez.git/commit/?id=da5846c096cd1006d512bbdbc466fc46a61417b8]
+Signed-off-by: Pavani Manjula <quic_pmanjula@quicinc.com>
+---
+ gdbus/object.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/gdbus/object.c b/gdbus/object.c
+index 54e04b983..f8c694aaf 100644
+--- a/gdbus/object.c
++++ b/gdbus/object.c
+@@ -810,7 +810,7 @@ static struct generic_data *invalidate_parent_data(DBusConnection *conn,
+ 	if (child == NULL || g_slist_find(data->objects, child) != NULL)
+ 		goto done;
+ 
+-	if (!g_slist_find(parent->objects, child))
++	if (g_slist_find(parent->objects, child))
+ 		goto done;
+ 
+ 	data->objects = g_slist_prepend(data->objects, child);
+-- 
+2.30.2
+

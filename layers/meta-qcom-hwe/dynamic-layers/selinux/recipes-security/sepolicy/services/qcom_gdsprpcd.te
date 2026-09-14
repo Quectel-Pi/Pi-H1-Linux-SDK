@@ -1,0 +1,23 @@
+# Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+policy_module(qcom_gdsprpcd, 1.0)
+
+
+type qcom_gdsprpcd_t;
+type qcom_gdsprpcd_exec_t;
+
+init_daemon_domain(qcom_gdsprpcd_t, qcom_gdsprpcd_exec_t)
+
+allow qcom_gdsprpcd_t self:unix_dgram_socket { create_socket_perms };
+qcom_gdsp_secure_read_device(qcom_gdsprpcd_t);
+dev_read_system_dmabuf(qcom_gdsprpcd_t)
+
+init_search_runtime(qcom_gdsprpcd_t)
+logging_send_syslog_msg(qcom_gdsprpcd_t)
+
+dev_watch_dev_dirs(qcom_gdsprpcd_t)
+libs_watch_shared_libs_dirs(qcom_gdsprpcd_t)
+
+miscfiles_read_localization(qcom_gdsprpcd_t)
+

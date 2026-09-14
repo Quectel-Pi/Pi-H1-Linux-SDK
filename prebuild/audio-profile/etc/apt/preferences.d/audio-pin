@@ -1,0 +1,4 @@
+Package: alsa-utils alsa-base alsa-ucm-conf alsa-topology-conf pipewire-alsa pipewire-bin libasound2-data
+Pin: release *
+Pin-Priority: -1
+

@@ -7,7 +7,7 @@ DESCRIPTION = "VUI Interface plugin"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/vendor/qcom/opensource/arpal-lx.git;protocol=https"
 SRCBRANCH  = "audio-core.lnx.1.0.r1-rel"
-SRCREV     = "9254849d3dc20f1c84dbc1af99ba5c37bd9188e3"
+SRCREV     = "3e5cf712f22f9e15a3b4c389a6c0970e33033db8"
 
 SRC_URI    =  "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=audio/opensource/arpal-lx"
 
@@ -17,6 +17,6 @@ DEPENDS = "qcom-pal-headers qcom-kvh2xml qcom-vui-interface-header qcom-args"
 
 EXTRA_OECONF += " --with-glib"
 
-SOLIBS = ".so"
+SOLIBS = ".so*"
 FILES_SOLIBSDEV = ""
-
+INSANE_SKIP:${PN} = "dev-so"

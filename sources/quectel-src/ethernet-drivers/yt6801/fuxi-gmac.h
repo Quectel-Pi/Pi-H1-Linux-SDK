@@ -638,6 +638,7 @@ struct fxgmac_hw_ops {
 	int (*phy_config)(struct fxgmac_pdata *pdata);
 	void (*close_phy_led)(struct fxgmac_pdata *pdata);
 	void (*led_under_active)(struct fxgmac_pdata *pdata);
+	void (*led_under_speed)(struct fxgmac_pdata *pdata, int speed);
 	void (*led_under_sleep)(struct fxgmac_pdata *pdata);
 	void (*led_under_shutdown)(struct fxgmac_pdata *pdata);
 	void (*led_under_disable)(struct fxgmac_pdata *pdata);

@@ -1,4 +1,4 @@
-From 8a5c96057cf305bbeac0d6e0e59ee24fbb9497fe Mon Sep 17 00:00:00 2001
+From d17ae0ef31c3c186766a338e8c40c87d1b98820e Mon Sep 17 00:00:00 2001
 From: Joe Slater <jslater@windriver.com>
 Date: Wed, 25 Jan 2017 13:52:59 -0800
 Subject: [PATCH] gnutls: account for ARM_EABI
@@ -9,16 +9,15 @@ reference to them.
 Upstream-Status: Pending
 
 Signed-off-by: Joe Slater <jslater@windriver.com>
-
 ---
  tests/seccomp.c | 2 ++
  1 file changed, 2 insertions(+)
 
 diff --git a/tests/seccomp.c b/tests/seccomp.c
-index ed14d00..3c5b726 100644
+index 881f0bb..5f9204a 100644
 --- a/tests/seccomp.c
 +++ b/tests/seccomp.c
-@@ -53,7 +53,9 @@ int disable_system_calls(void)
+@@ -55,7 +55,9 @@ int disable_system_calls(void)
  
  	ADD_SYSCALL(nanosleep, 0);
  	ADD_SYSCALL(clock_nanosleep, 0);

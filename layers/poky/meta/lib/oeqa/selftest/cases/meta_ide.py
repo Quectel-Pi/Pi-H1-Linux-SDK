@@ -1,4 +1,6 @@
 #
+# Copyright OpenEmbedded Contributors
+#
 # SPDX-License-Identifier: MIT
 #
 
@@ -16,13 +18,15 @@ class MetaIDE(OESelftestTestCase):
     def setUpClass(cls):
         super(MetaIDE, cls).setUpClass()
         bitbake('meta-ide-support')
-        bb_vars = get_bb_vars(['MULTIMACH_TARGET_SYS', 'TMPDIR', 'COREBASE'])
-        cls.environment_script = 'environment-setup-%s' % bb_vars['MULTIMACH_TARGET_SYS']
-        cls.tmpdir = bb_vars['TMPDIR']
-        cls.environment_script_path = '%s/%s' % (cls.tmpdir, cls.environment_script)
+        bitbake('build-sysroots -c build_native_sysroot')
+        bitbake('build-sysroots -c build_target_sysroot')
+        bb_vars = get_bb_vars(['MACHINE_ARCH', 'TARGET_VENDOR', 'TARGET_OS', 'DEPLOY_DIR_IMAGE', 'COREBASE'])
+        cls.environment_script = 'environment-setup-%s%s-%s' % (bb_vars['MACHINE_ARCH'], bb_vars['TARGET_VENDOR'], bb_vars['TARGET_OS'])
+        cls.deploydir = bb_vars['DEPLOY_DIR_IMAGE']
+        cls.environment_script_path = '%s/%s' % (cls.deploydir, cls.environment_script)
         cls.corebasedir = bb_vars['COREBASE']
         cls.tmpdir_metaideQA = tempfile.mkdtemp(prefix='metaide')
-        
+
     @classmethod
     def tearDownClass(cls):
         shutil.rmtree(cls.tmpdir_metaideQA, ignore_errors=True)
@@ -40,12 +44,17 @@ class MetaIDE(OESelftestTestCase):
     def test_meta_ide_can_build_cpio_project(self):
         dl_dir = self.td.get('DL_DIR', None)
         self.project = SDKBuildProject(self.tmpdir_metaideQA + "/cpio/", self.environment_script_path,
-                        "https://ftp.gnu.org/gnu/cpio/cpio-2.13.tar.gz",
+                        "https://ftpmirror.gnu.org/gnu/cpio/cpio-2.15.tar.gz",
                         self.tmpdir_metaideQA, self.td['DATETIME'], dl_dir=dl_dir)
         self.project.download_archive()
-        self.assertEqual(self.project.run_configure('$CONFIGURE_FLAGS --disable-maintainer-mode','sed -i -e "/char \*program_name/d" src/global.c;'), 0,
+        self.assertEqual(self.project.run_configure('$CONFIGURE_FLAGS'), 0,
                         msg="Running configure failed")
         self.assertEqual(self.project.run_make(), 0,
                         msg="Running make failed")
         self.assertEqual(self.project.run_install(), 0,
                         msg="Running make install failed")
+
+    def test_meta_ide_can_run_sdk_tests(self):
+        bitbake('-c populate_sysroot gtk+3')
+        bitbake('build-sysroots -c build_target_sysroot')
+        bitbake('-c testsdk meta-ide-support')

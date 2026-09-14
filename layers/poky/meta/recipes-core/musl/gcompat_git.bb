@@ -5,15 +5,16 @@ SUMMARY = "A library which provides glibc-compatible APIs for use on musl libc s
 HOMEPAGE = "https://git.adelielinux.org/adelie/gcompat"
 
 LICENSE = "NCSA"
-LIC_FILES_CHKSUM = "file://LICENSE;md5=eb33ef4af05a9c7602843afb7adfe792"
+LIC_FILES_CHKSUM = "file://LICENSE;md5=802b1aed7330d90086be4de63a3188e3"
 
 SRC_URI = "git://git.adelielinux.org/adelie/gcompat.git;protocol=https;branch=current \
-          "
+           file://0001-Add-fcntl64-wrapper.patch \
+           "
 SRC_URI:append:powerpc = "\
            file://0001-make-Static-PIE-does-not-work-on-musl-ppc.patch \
            "
-PV = "1.0.0+1.1+git${SRCPV}"
-SRCREV = "4d6a5156a6eb7f56b30d93853a872e36dadde81b"
+PV = "1.1.0"
+SRCREV = "b7bfe0b08c52fdc72e0c1d9d4dcb2129f1642bd6"
 
 S = "${WORKDIR}/git"
 
@@ -42,6 +43,8 @@ do_install () {
 		install -d ${D}${nonarch_base_libdir}${SITEINFO_BITS}
 		ln -rs ${D}${GLIBC_LDSO} ${D}${nonarch_base_libdir}${SITEINFO_BITS}/`basename ${GLIBC_LDSO}`
 	fi
+	install -d ${D}${libdir}
+	ln -sf ${base_libdir}/libgcompat.so.0 ${D}${libdir}/libgcompat.so
 }
 
 FILES:${PN} += "${nonarch_base_libdir}${SITEINFO_BITS}"

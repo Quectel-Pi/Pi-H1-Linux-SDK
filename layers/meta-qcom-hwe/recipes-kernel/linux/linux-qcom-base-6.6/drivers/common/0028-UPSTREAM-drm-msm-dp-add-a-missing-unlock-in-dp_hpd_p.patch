@@ -1,0 +1,35 @@
+From 41a1eba7fe317e0084c1080a9a9ee1f803c05c87 Mon Sep 17 00:00:00 2001
+From: Harshit Mogalapalli <harshit.m.mogalapalli@oracle.com>
+Date: Mon, 4 Dec 2023 09:13:14 -0800
+Subject: [PATCH 028/146] UPSTREAM: drm/msm/dp: add a missing unlock in
+ dp_hpd_plug_handle()
+
+When pm_runtime_resume_and_get() fails, unlock before returning.
+
+Fixes: 5814b8bf086a ("drm/msm/dp: incorporate pm_runtime framework into DP driver")
+Signed-off-by: Harshit Mogalapalli <harshit.m.mogalapalli@oracle.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/570395/
+Link: https://lore.kernel.org/r/20231204171317.192427-1-harshit.m.mogalapalli@oracle.com
+Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 801207c18834e289960c515bc41d243aa623763b]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index d8750120eb93..73c6ee977203 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -590,6 +590,7 @@ static int dp_hpd_plug_handle(struct dp_display_private *dp, u32 data)
+ 	ret = pm_runtime_resume_and_get(&pdev->dev);
+ 	if (ret) {
+ 		DRM_ERROR("failed to pm_runtime_resume\n");
++		mutex_unlock(&dp->event_mutex);
+ 		return ret;
+ 	}
+ 
+-- 
+2.34.1
+

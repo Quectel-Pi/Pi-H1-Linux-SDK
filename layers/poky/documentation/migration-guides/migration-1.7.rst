@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Release 1.7 (dizzy)
 ===================
 
@@ -39,13 +41,11 @@ section for more information.
 Autotools Class Changes
 -----------------------
 
-The following :ref:`autotools <ref-classes-autotools>` class changes
-occurred:
+The following :ref:`ref-classes-autotools` class changes occurred:
 
--  *A separate build directory is now used by default:* The
-   :ref:`autotools <ref-classes-autotools>` class has been
-   changed to use a directory for building
-   (:term:`B`), which is separate from the source directory
+-  *A separate :term:`Build Directory` is now used by default:* The
+   :ref:`ref-classes-autotools` class has been changed to use a directory for
+   building (:term:`B`), which is separate from the source directory
    (:term:`S`). This is commonly referred to as ``B != S``, or
    an out-of-tree build.
 
@@ -54,9 +54,8 @@ occurred:
    However, if the software is not capable of being built in this
    manner, you will need to either patch the software so that it can
    build separately, or you will need to change the recipe to inherit
-   the :ref:`autotools-brokensep <ref-classes-autotools>` class
-   instead of the :ref:`autotools <ref-classes-autotools>`
-   or ``autotools_stage`` classes.
+   the :ref:`autotools-brokensep <ref-classes-autotools>` class instead
+   of the :ref:`ref-classes-autotools` or ``autotools_stage`` classes.
 
 -  The ``--foreign`` option is no longer passed to ``automake`` when
    running ``autoconf``: This option tells ``automake`` that a
@@ -165,7 +164,7 @@ The following changes have occurred to the QA check process:
    more parallel execution. This change is unlikely to be an issue
    except for highly customized recipes that disable packaging tasks
    themselves by marking them as ``noexec``. For those packages, you
-   will need to disable the ``do_package_qa`` task as well.
+   will need to disable the :ref:`ref-tasks-package_qa` task as well.
 
 -  Files being overwritten during the
    :ref:`ref-tasks-populate_sysroot` task now

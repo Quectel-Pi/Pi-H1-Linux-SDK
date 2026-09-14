@@ -186,6 +186,16 @@ class skipIfNotQemu(OETestDecorator):
             self.case.skipTest('Test only runs on qemu machines')
 
 @registerDecorator
+class skipIfNotQemuUsermode(OETestDecorator):
+    """
+    Skip test if MACHINE_FEATURES does not contain qemu-usermode
+    """
+    def setUpDecorator(self):
+        self.logger.debug("Checking if MACHINE_FEATURES does not contain qemu-usermode")
+        if 'qemu-usermode' not in self.case.td.get('MACHINE_FEATURES', '').split():
+            self.case.skipTest('Test requires qemu-usermode in MACHINE_FEATURES')
+
+@registerDecorator
 class skipIfQemu(OETestDecorator):
     """
     Skip test if MACHINE is qemu*
@@ -194,3 +204,27 @@ class skipIfQemu(OETestDecorator):
         self.logger.debug("Checking if qemu MACHINE")
         if self.case.td.get('MACHINE', '').startswith('qemu'):
              self.case.skipTest('Test only runs on real hardware')
+
+@registerDecorator
+class skipIfArch(OETestDecorator):
+    """
+    Skip test if HOST_ARCH is present in the tuple specified.
+    """
+
+    attrs = ('archs',)
+    def setUpDecorator(self):
+        arch = self.case.td['HOST_ARCH']
+        if arch in self.archs:
+             self.case.skipTest('Test skipped on %s' % arch)
+
+@registerDecorator
+class skipIfNotArch(OETestDecorator):
+    """
+    Skip test if HOST_ARCH is not present in the tuple specified.
+    """
+
+    attrs = ('archs',)
+    def setUpDecorator(self):
+        arch = self.case.td['HOST_ARCH']
+        if arch not in self.archs:
+             self.case.skipTest('Test skipped on %s' % arch)

@@ -1,0 +1,119 @@
+From 236ce47a0cf6386ebf025f8a2ef919bf9d2ecebc Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@eng.windriver.com>
+Date: Fri, 1 Mar 2024 00:28:25 -0800
+Subject: [PATCH] support 32 bit x64 and arm for yocto
+
+Upstream-Status: Inappropriate [oe specific]
+
+Rebase to 2.14.0
+
+Signed-off-by: Hongxu Jia <hongxu.jia@eng.windriver.com>
+---
+ tensorflow/BUILD                              |  3 ---
+ tensorflow/workspace2.bzl                     |  2 ++
+ .../0001-XNNPACK-support-32-bit-x86.patch     | 27 +++++++++++++++++++
+ .../0001-cpuinfo-support-32-bit-x86.patch     | 27 +++++++++++++++++++
+ 4 files changed, 56 insertions(+), 3 deletions(-)
+ create mode 100644 third_party/0001-XNNPACK-support-32-bit-x86.patch
+ create mode 100644 third_party/0001-cpuinfo-support-32-bit-x86.patch
+
+diff --git a/tensorflow/BUILD b/tensorflow/BUILD
+index fc4f0314429..1e540ba64b0 100644
+--- a/tensorflow/BUILD
++++ b/tensorflow/BUILD
+@@ -275,9 +275,6 @@ config_setting(
+         [],
+     ),
+     values = dict(
+-        if_oss(
+-            {"crosstool_top": "//external:android/crosstool"},
+-        ),
+         cpu = "x86",
+     ),
+     visibility = ["//visibility:public"],
+diff --git a/tensorflow/workspace2.bzl b/tensorflow/workspace2.bzl
+index 9e4c2da9fe2..0aed90f6203 100644
+--- a/tensorflow/workspace2.bzl
++++ b/tensorflow/workspace2.bzl
+@@ -160,6 +160,7 @@ def _tf_repositories():
+         name = "XNNPACK",
+         sha256 = "434fe914cb52da3e66ba920082af969f527f23729fff182aecd87ac5324e9f90",
+         strip_prefix = "XNNPACK-dcbfffb80fb4f6fcfcfb5b3723854ec8797fa546",
++        patch_file = ["//third_party:0001-XNNPACK-support-32-bit-x86.patch"],
+         urls = tf_mirror_urls("https://github.com/google/XNNPACK/archive/dcbfffb80fb4f6fcfcfb5b3723854ec8797fa546.zip"),
+     )
+     # LINT.ThenChange(//tensorflow/lite/tools/cmake/modules/xnnpack.cmake)
+@@ -182,6 +183,7 @@ def _tf_repositories():
+         name = "cpuinfo",
+         strip_prefix = "cpuinfo-ef634603954d88d2643d5809011288b890ac126e",
+         sha256 = "e07512a11e1c71687359a133f49d60583d7465b737fe5dbe11f461c9aaa72a2b",
++        patch_file = ["//third_party:0001-cpuinfo-support-32-bit-x86.patch"],
+         urls = tf_mirror_urls("https://github.com/pytorch/cpuinfo/archive/ef634603954d88d2643d5809011288b890ac126e.zip"),
+     )
+ 
+diff --git a/third_party/0001-XNNPACK-support-32-bit-x86.patch b/third_party/0001-XNNPACK-support-32-bit-x86.patch
+new file mode 100644
+index 00000000000..397405a74c1
+--- /dev/null
++++ b/third_party/0001-XNNPACK-support-32-bit-x86.patch
+@@ -0,0 +1,27 @@
++From 13f013db421c5aefa021f3b75d9d8554ad4fde52 Mon Sep 17 00:00:00 2001
++From: Hongxu Jia <hongxu.jia@eng.windriver.com>
++Date: Fri, 1 Mar 2024 00:35:18 -0800
++Subject: [PATCH] XNNPACK: support 32 bit x86
++
++Use android_x86 as a workaround to support 32 bit x86
++
++Signed-off-by: Hongxu Jia <hongxu.jia@eng.windriver.com>
++---
++ build_config/BUILD.bazel | 1 -
++ 1 file changed, 1 deletion(-)
++
++diff --git a/build_config/BUILD.bazel b/build_config/BUILD.bazel
++index d0b8902..75dfb79 100644
++--- a/build_config/BUILD.bazel
+++++ b/build_config/BUILD.bazel
++@@ -73,7 +73,6 @@ config_setting(
++ config_setting(
++     name = "android_x86",
++     values = {
++-        "crosstool_top": "//external:android/crosstool",
++         "cpu": "x86",
++     },
++ )
++-- 
++2.42.0
++
+diff --git a/third_party/0001-cpuinfo-support-32-bit-x86.patch b/third_party/0001-cpuinfo-support-32-bit-x86.patch
+new file mode 100644
+index 00000000000..cd6b27eaea3
+--- /dev/null
++++ b/third_party/0001-cpuinfo-support-32-bit-x86.patch
+@@ -0,0 +1,27 @@
++From f5e52b2db5516954dab9026e4f386982c4c3c3a4 Mon Sep 17 00:00:00 2001
++From: Hongxu Jia <hongxu.jia@windriver.com>
++Date: Mon, 19 Sep 2022 00:10:18 -0700
++Subject: [PATCH] cpuinfo: support 32 bit x86
++
++Use android_x86 as a workaround to support 32 bit x86
++
++Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
++---
++ BUILD.bazel | 1 -
++ 1 file changed, 1 deletion(-)
++
++diff --git a/BUILD.bazel b/BUILD.bazel
++index 7c002fe..68fd5b5 100644
++--- a/BUILD.bazel
+++++ b/BUILD.bazel
++@@ -274,7 +274,6 @@ config_setting(
++ config_setting(
++     name = "android_x86",
++     values = {
++-        "crosstool_top": "//external:android/crosstool",
++         "cpu": "x86",
++     },
++     visibility = ["//visibility:public"],
++-- 
++2.37.1
++

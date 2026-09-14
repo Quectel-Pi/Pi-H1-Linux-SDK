@@ -2,7 +2,7 @@ include conf/machine/include/x86/x86-base.inc
 require conf/machine/include/x86/qemuboot-x86.inc
 MACHINE_FEATURES += "wifi efi pcbios"
 
-PREFERRED_VERSION_linux-yocto ?= "5.15%"
+PREFERRED_VERSION_linux-yocto ?= "6.6%"
 PREFERRED_PROVIDER_virtual/kernel ?= "linux-yocto"
 PREFERRED_PROVIDER_virtual/xserver ?= "xserver-xorg"
 XSERVER ?= "${XSERVER_X86_BASE} \
@@ -15,10 +15,6 @@ XSERVER ?= "${XSERVER_X86_BASE} \
            "
 
 MACHINE_EXTRA_RRECOMMENDS += "kernel-modules linux-firmware"
-
-GLIBC_ADDONS = "nptl"
-
-EXTRA_OECONF:append:pn-matchbox-panel-2 = " --with-battery=acpi"
 
 IMAGE_FSTYPES += "wic wic.bmap"
 WKS_FILE ?= "genericx86.wks.in"

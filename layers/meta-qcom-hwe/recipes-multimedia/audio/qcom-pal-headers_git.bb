@@ -3,11 +3,11 @@ inherit autotools pkgconfig
 DESCRIPTION = "Common mm-audio headers installation"
 
 LICENSE = "BSD-3-Clause & BSD-3-Clause-Clear"
-LIC_FILES_CHKSUM += "file://PalDefs.h;beginline=30;endline=31;md5=e733afaf233fbcbc22769d0a9bda0b3e"
+LIC_FILES_CHKSUM += "file://PalDefs.h;beginline=30;endline=31;md5=c83ea7207cf32b515967896ac7a5f0bc"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/vendor/qcom/opensource/arpal-lx.git;protocol=https"
 SRCBRANCH  = "audio-core.lnx.1.0.r1-rel"
-SRCREV     = "9254849d3dc20f1c84dbc1af99ba5c37bd9188e3"
+SRCREV     = "3e5cf712f22f9e15a3b4c389a6c0970e33033db8"
 
 SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=audio/opensource/arpal-lx"
 

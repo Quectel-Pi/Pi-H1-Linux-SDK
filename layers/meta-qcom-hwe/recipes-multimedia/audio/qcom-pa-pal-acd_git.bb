@@ -7,7 +7,7 @@ DESCRIPTION = "ACD UI test app"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/vendor/qcom-opensource/pulseaudio-plugin.git;protocol=https"
 SRCBRANCH  = "audio-algos.lnx.1.0.r1-rel"
-SRCREV     = "5d133b0475e01da3334a59ae329b555958e239fd"
+SRCREV     = "73866a4ce325a381d263bff22954a83066f166d3"
 
 SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=audio/opensource/pulseaudio-plugins"
 
@@ -20,6 +20,6 @@ do_install:append:qcm6490() {
     mkdir -p -m 0755 ${D}${sysconfdir}/models/acd/
 }
 
-SOLIBS = ".so"
+SOLIBS = ".so*"
 FILES_SOLIBSDEV = ""
-
+INSANE_SKIP:${PN} = "dev-so"

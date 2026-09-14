@@ -1,9 +1,11 @@
-From 511c51061fd93b339a6d98a187b6b9709a5e555d Mon Sep 17 00:00:00 2001
+From ab90448c2552d64ac78f7b1940a99a126811f7b4 Mon Sep 17 00:00:00 2001
 From: jianbinz <quic_jianbinz@quicinc.com>
-Date: Thu, 11 Jan 2024 16:27:56 +0800
+Date: Wed, 25 Sep 2024 14:54:17 +0530
 Subject: [PATCH] PENDING: Add sepolicy for systemd failure services
 
 Add sepolicy for systemd failure services
+
+Upstream-Status: Pending
 
 Signed-off-by: jianbinz <quic_jianbinz@quicinc.com>
 ---
@@ -12,14 +14,13 @@ Signed-off-by: jianbinz <quic_jianbinz@quicinc.com>
  2 files changed, 38 insertions(+)
 
 diff --git a/policy/modules/system/init.if b/policy/modules/system/init.if
-index 2f57eb339..cf9e79c6a 100644
+index a76eb37e2..d208294ce 100644
 --- a/policy/modules/system/init.if
 +++ b/policy/modules/system/init.if
-@@ -3658,3 +3658,39 @@ interface(`init_getrlimit',`
- 
- 	allow $1 init_t:process getrlimit;
+@@ -22,6 +22,42 @@ interface(`init_mountpoint',`
+ 	typeattribute $1 init_mountpoint_type;
  ')
-+
+ 
 +########################################
 +## <summary>
 +##      Allow connectto initrc_t unix_stream_socket
@@ -55,17 +56,22 @@ index 2f57eb339..cf9e79c6a 100644
 +
 +	allow $1 initrc_devpts_t:chr_file { read write getattr };
 +')
++
+ ########################################
+ ## <summary>
+ ##	Create a file type monitored by a systemd path unit.
 diff --git a/policy/modules/system/systemd.te b/policy/modules/system/systemd.te
-index 0bd8d340a..c0bd9e263 100644
+index 2962e521e..8fe4df664 100644
 --- a/policy/modules/system/systemd.te
 +++ b/policy/modules/system/systemd.te
-@@ -618,6 +618,8 @@ allow systemd_logind_t self:netlink_kobject_uevent_socket create_socket_perms;
- allow systemd_logind_t self:unix_dgram_socket create_socket_perms;
- allow systemd_logind_t self:fifo_file rw_fifo_file_perms;
- 
+@@ -2161,6 +2161,8 @@ chronyd_getattr_init_script_file(systemd_generator_t)
+ rpcbind_getattr_init_script_file(systemd_generator_t)
+ rpcd_getattr_init_unit_file(systemd_generator_t)
+ init_read_generic_units_files(systemd_generator_t)
 +init_connectto_stream_socket(systemd_logind_t)
 +init_read_write_getattr_chr_file(systemd_passwd_agent_t)
- allow systemd_logind_t systemd_logind_var_lib_t:dir manage_dir_perms;
- allow systemd_logind_t systemd_logind_var_lib_t:file manage_file_perms;
- init_var_lib_filetrans(systemd_logind_t, systemd_logind_var_lib_t, dir)
-
+ optional_policy(`
+ 	dbus_system_bus_client(systemd_user_runtime_dir_t)
+ ')
+-- 
+2.25.1

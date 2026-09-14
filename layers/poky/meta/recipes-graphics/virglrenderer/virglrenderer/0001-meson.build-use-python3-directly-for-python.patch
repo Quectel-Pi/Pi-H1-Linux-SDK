@@ -1,4 +1,4 @@
-From 63788c63ed39a3ce9994f4315d8997e1a9300d4d Mon Sep 17 00:00:00 2001
+From dec8cca59124d7f8796b54902482ceb295a71b51 Mon Sep 17 00:00:00 2001
 From: Alexander Kanavin <alex.kanavin@gmail.com>
 Date: Mon, 6 Jan 2020 12:44:42 +0100
 Subject: [PATCH] meson.build: use 'python3' directly for python
@@ -8,20 +8,21 @@ its configuration).
 
 Upstream-Status: Inappropriate [oe-core specific]
 Signed-off-by: Alexander Kanavin <alex.kanavin@gmail.com>
+
 ---
  meson.build | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/meson.build b/meson.build
-index 682d7c8..19d2eae 100644
+index 9f91ff2f..2391f89d 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -60,7 +60,7 @@ foreach w : warnings
-    endif
- endforeach
+@@ -74,7 +74,7 @@ flags = [
+ 
+ add_project_arguments(cc.get_supported_arguments(flags), language : 'c')
  
 -prog_python = import('python').find_installation('python3')
 +prog_python = 'python3'
  
- libdrm_dep = dependency('libdrm', version : '>=2.4.50')
- thread_dep = dependency('threads')
+ not_found = dependency('', required: false)
+ libdrm_dep = dependency('libdrm', version : '>=2.4.50', required: get_option('drm').enabled() or get_option('venus'))

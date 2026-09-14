@@ -1,4 +1,8 @@
+#
+# Copyright OpenEmbedded Contributors
+#
 # SPDX-License-Identifier: MIT
+#
 import os
 import sys
 import tempfile
@@ -26,7 +30,7 @@ def unfs_server(directory, logger = None, udp = True):
 
         nenv = dict(os.environ)
         nenv['PATH'] = "{0}/sbin:{0}/usr/sbin:{0}/usr/bin:".format(unfs_sysroot) + nenv.get('PATH', '')
-        cmd = Command(["unfsd", "-d", "-p", "-N", "-e", exports.name, "-n", str(nfsport), "-m", str(mountport)],
+        cmd = Command(["unfsd", "-d", "-p", "-e", exports.name, "-n", str(nfsport), "-m", str(mountport)],
                 bg = True, env = nenv, output_log = logger)
         cmd.run()
         yield nfsport, mountport

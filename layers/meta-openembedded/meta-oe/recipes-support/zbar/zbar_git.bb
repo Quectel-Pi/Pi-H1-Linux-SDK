@@ -16,7 +16,7 @@ SRC_URI = "git://github.com/mchehab/zbar.git;branch=master;protocol=https \
 SRCREV = "89e7900d85dd54ef351a7ed582aec6a5a5d7fa37"
 
 S = "${WORKDIR}/git"
-PV = "0.23.1+git${SRCPV}"
+PV = "0.23.1+git"
 
 DEPENDS += "xmlto-native"
 
@@ -24,7 +24,7 @@ PACKAGECONFIG ??= "\
     ${@bb.utils.contains('DISTRO_FEATURES', 'x11', 'x11', '', d)} \
 "
 
-PACKAGECONFIG ??= "video python3"
+PACKAGECONFIG ??= "video"
 
 inherit autotools pkgconfig gettext \
     ${@bb.utils.contains('PACKAGECONFIG', 'python3', 'python3native', '', d)} \

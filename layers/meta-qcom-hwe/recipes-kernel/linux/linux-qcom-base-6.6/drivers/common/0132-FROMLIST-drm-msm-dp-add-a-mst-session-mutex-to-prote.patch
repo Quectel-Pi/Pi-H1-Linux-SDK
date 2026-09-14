@@ -1,0 +1,139 @@
+From 71c7fd2ced8ae0dbc37188e8b25b9d4c6c7f6283 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:32:06 -0800
+Subject: [PATCH 132/146] FROMLIST: drm/msm/dp: add a mst session mutex to
+ protect bridge ops
+
+To protect against concurrent access of the dp mst bridges
+introduce a session mutex.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-35-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_mst_drm.c | 20 ++++++++++++++++++++
+ drivers/gpu/drm/msm/dp/dp_mst_drm.h |  1 +
+ 2 files changed, 21 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_mst_drm.c b/drivers/gpu/drm/msm/dp/dp_mst_drm.c
+index 9748dea13edd..c5e4d674bd3d 100644
+--- a/drivers/gpu/drm/msm/dp/dp_mst_drm.c
++++ b/drivers/gpu/drm/msm/dp/dp_mst_drm.c
+@@ -327,6 +327,7 @@ static void msm_dp_mst_bridge_atomic_pre_enable(struct drm_bridge *drm_bridge,
+ 	struct msm_dp_mst_bridge *bridge;
+ 	struct msm_dp *dp;
+ 	struct msm_dp_mst_bridge_state *msm_dp_bridge_state;
++	struct msm_dp_mst *dp_mst;
+ 
+ 	if (!drm_bridge) {
+ 		DRM_ERROR("Invalid params\n");
+@@ -336,6 +337,7 @@ static void msm_dp_mst_bridge_atomic_pre_enable(struct drm_bridge *drm_bridge,
+ 	bridge = to_msm_dp_mst_bridge(drm_bridge);
+ 	msm_dp_bridge_state = to_msm_dp_mst_bridge_state(bridge);
+ 	dp = bridge->display;
++	dp_mst = dp->msm_dp_mst;
+ 
+ 	/* to cover cases of bridge_disable/bridge_enable without modeset */
+ 	bridge->connector = msm_dp_bridge_state->connector;
+@@ -346,12 +348,14 @@ static void msm_dp_mst_bridge_atomic_pre_enable(struct drm_bridge *drm_bridge,
+ 		return;
+ 	}
+ 
++	mutex_lock(&dp_mst->mst_lock);
+ 	msm_dp_display_atomic_prepare(dp);
+ 
+ 	rc = _msm_dp_mst_bridge_pre_enable_part1(bridge);
+ 	if (rc) {
+ 		DRM_ERROR("[%d] DP display pre-enable failed, rc=%d\n", bridge->id, rc);
+ 		msm_dp_display_unprepare(dp);
++		mutex_unlock(&dp_mst->mst_lock);
+ 		return;
+ 	}
+ 
+@@ -364,6 +368,8 @@ static void msm_dp_mst_bridge_atomic_pre_enable(struct drm_bridge *drm_bridge,
+ 		   drm_mode_vrefresh(&bridge->drm_mode),
+ 		   bridge->vcpi, bridge->start_slot,
+ 		   bridge->start_slot + bridge->num_slots);
++
++	mutex_unlock(&dp_mst->mst_lock);
+ }
+ 
+ static void msm_dp_mst_bridge_atomic_disable(struct drm_bridge *drm_bridge,
+@@ -371,6 +377,7 @@ static void msm_dp_mst_bridge_atomic_disable(struct drm_bridge *drm_bridge,
+ {
+ 	struct msm_dp_mst_bridge *bridge;
+ 	struct msm_dp *dp;
++	struct msm_dp_mst *mst;
+ 
+ 	if (!drm_bridge) {
+ 		DRM_ERROR("Invalid params\n");
+@@ -384,6 +391,9 @@ static void msm_dp_mst_bridge_atomic_disable(struct drm_bridge *drm_bridge,
+ 	}
+ 
+ 	dp = bridge->display;
++	mst = dp->msm_dp_mst;
++
++	mutex_lock(&mst->mst_lock);
+ 
+ 	_msm_dp_mst_bridge_pre_disable_part1(bridge);
+ 
+@@ -393,6 +403,8 @@ static void msm_dp_mst_bridge_atomic_disable(struct drm_bridge *drm_bridge,
+ 
+ 	drm_dbg_dp(dp->drm_dev, "mst bridge:%d conn:%d disable complete\n", bridge->id,
+ 		   DP_MST_CONN_ID(bridge));
++
++	mutex_unlock(&mst->mst_lock);
+ }
+ 
+ static void msm_dp_mst_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
+@@ -401,6 +413,7 @@ static void msm_dp_mst_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
+ 	int conn = 0;
+ 	struct msm_dp_mst_bridge *bridge;
+ 	struct msm_dp *dp;
++	struct msm_dp_mst *mst;
+ 
+ 	if (!drm_bridge) {
+ 		DRM_ERROR("Invalid params\n");
+@@ -416,6 +429,9 @@ static void msm_dp_mst_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
+ 	conn = DP_MST_CONN_ID(bridge);
+ 
+ 	dp = bridge->display;
++	mst = dp->msm_dp_mst;
++
++	mutex_lock(&mst->mst_lock);
+ 
+ 	msm_dp_display_atomic_post_disable_helper(dp, bridge->msm_dp_panel);
+ 
+@@ -427,6 +443,8 @@ static void msm_dp_mst_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
+ 
+ 	drm_dbg_dp(dp->drm_dev, "mst bridge:%d conn:%d post disable complete\n",
+ 		   bridge->id, conn);
++
++	mutex_unlock(&mst->mst_lock);
+ }
+ 
+ static void msm_dp_mst_bridge_mode_set(struct drm_bridge *drm_bridge,
+@@ -1055,6 +1073,8 @@ int msm_dp_mst_init(struct msm_dp *dp_display, u32 max_streams, u32 max_dpcd_tra
+ 
+ 	dp_display->msm_dp_mst = msm_dp_mst;
+ 
++	mutex_init(&msm_dp_mst->mst_lock);
++
+ 	msm_dp_mst->mst_initialized = true;
+ 
+ 	drm_dbg_dp(dp_display->drm_dev, "dp drm mst topology manager init completed\n");
+diff --git a/drivers/gpu/drm/msm/dp/dp_mst_drm.h b/drivers/gpu/drm/msm/dp/dp_mst_drm.h
+index 5fe5dc759608..b1adb8a61115 100644
+--- a/drivers/gpu/drm/msm/dp/dp_mst_drm.h
++++ b/drivers/gpu/drm/msm/dp/dp_mst_drm.h
+@@ -80,6 +80,7 @@ struct msm_dp_mst {
+ 	struct drm_dp_aux *dp_aux;
+ 	bool mst_session_hpd_state;
+ 	u32 max_streams;
++	struct mutex mst_lock;
+ };
+ 
+ struct msm_dp_mst_connector {
+-- 
+2.34.1
+

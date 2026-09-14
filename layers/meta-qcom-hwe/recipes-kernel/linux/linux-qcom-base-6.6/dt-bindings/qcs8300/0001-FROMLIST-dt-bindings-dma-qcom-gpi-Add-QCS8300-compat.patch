@@ -1,0 +1,32 @@
+From 9e3ad6a64e498b50b72799042b7d8868393b4437 Mon Sep 17 00:00:00 2001
+From: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Date: Sun, 17 Nov 2024 13:10:26 +0530
+Subject: [PATCH 1/2] FROMLIST: dt-bindings: dma: qcom,gpi: Add QCS8300
+ compatible
+
+Document compatible for GPI DMA controller on QCS8300 platform.
+
+Change-Id: I87d803b5fd803df85dfd48a2fca464ce0b8516ff
+Acked-by: Rob Herring (Arm) <robh@kernel.org>
+Signed-off-by: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Link: https://lore.kernel.org/dmaengine/173143224769.1393359.18393815958875552790.robh@kernel.org/T/
+Upstream-Status: Submitted [https://lore.kernel.org/dmaengine/173143224769.1393359.18393815958875552790.robh@kernel.org/T/]
+---
+ Documentation/devicetree/bindings/dma/qcom,gpi.yaml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/dma/qcom,gpi.yaml b/Documentation/devicetree/bindings/dma/qcom,gpi.yaml
+index f61145c91b6d..6a204a595e48 100644
+--- a/Documentation/devicetree/bindings/dma/qcom,gpi.yaml
++++ b/Documentation/devicetree/bindings/dma/qcom,gpi.yaml
+@@ -25,6 +25,7 @@ properties:
+       - items:
+           - enum:
+               - qcom,qcm2290-gpi-dma
++              - qcom,qcs8300-gpi-dma
+               - qcom,qdu1000-gpi-dma
+               - qcom,sc7280-gpi-dma
+               - qcom,sm6115-gpi-dma
+-- 
+2.34.1
+

@@ -1,0 +1,245 @@
+From 760af6d6aedc2227c5521dc2e772fda81055332b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matti=20Lehtim=C3=A4ki?= <matti.lehtimaki@gmail.com>
+Date: Thu, 23 Nov 2023 17:03:05 +0000
+Subject: [PATCH 35/42] UPSTREAM: media: qcom: camss: Flag VFE-lites to support
+ more VFEs
+
+Some platforms such as SC7280 have three VFEs and two VFE-lites. Current
+code has hard-coded two as the maximum number of VFEs. Remove the
+hard-coded maximum number of VFEs to handle all possible combinations of
+VFEs and VFE-lites.
+
+Signed-off-by: Matti Lehtimäki <matti.lehtimaki@gmail.com>
+Reviewed-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Reported-by: kernel test robot <lkp@intel.com>
+Closes: https://lore.kernel.org/oe-kbuild-all/202311200405.h6G4L9oe-lkp@intel.com
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 6997278ae5f0ad09400750977ddc08aa5543ff86]
+---
+ .../media/platform/qcom/camss/camss-vfe-480.c | 34 +++++++++----------
+ drivers/media/platform/qcom/camss/camss-vfe.c |  5 +++
+ drivers/media/platform/qcom/camss/camss-vfe.h | 10 ++++++
+ drivers/media/platform/qcom/camss/camss.c     | 21 +++++-------
+ drivers/media/platform/qcom/camss/camss.h     |  2 --
+ 5 files changed, 40 insertions(+), 32 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe-480.c b/drivers/media/platform/qcom/camss/camss-vfe-480.c
+index d51d57108d5e..7227cf61d606 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe-480.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe-480.c
+@@ -15,31 +15,29 @@
+ #include "camss.h"
+ #include "camss-vfe.h"
+ 
+-/* VFE 2/3 are lite and have a different register layout */
+-#define IS_LITE		(vfe->res->is_lite)
+-
+ #define VFE_HW_VERSION			(0x00)
+ 
+-#define VFE_GLOBAL_RESET_CMD		(IS_LITE ? 0x0c : 0x1c)
+-#define	    GLOBAL_RESET_HW_AND_REG	(IS_LITE ? BIT(1) : BIT(0))
+ 
+-#define VFE_REG_UPDATE_CMD		(IS_LITE ? 0x20 : 0x34)
++#define VFE_GLOBAL_RESET_CMD		(vfe_is_lite(vfe) ? 0x0c : 0x1c)
++#define	    GLOBAL_RESET_HW_AND_REG	(vfe_is_lite(vfe) ? BIT(1) : BIT(0))
++
++#define VFE_REG_UPDATE_CMD		(vfe_is_lite(vfe) ? 0x20 : 0x34)
+ static inline int reg_update_rdi(struct vfe_device *vfe, int n)
+ {
+-	return IS_LITE ? BIT(n) : BIT(1 + (n));
++	return vfe_is_lite(vfe) ? BIT(n) : BIT(1 + (n));
+ }
+ 
+ #define	    REG_UPDATE_RDI		reg_update_rdi
+-#define VFE_IRQ_CMD			(IS_LITE ? 0x24 : 0x38)
++#define VFE_IRQ_CMD			(vfe_is_lite(vfe) ? 0x24 : 0x38)
+ #define     IRQ_CMD_GLOBAL_CLEAR	BIT(0)
+ 
+-#define VFE_IRQ_MASK(n)			((IS_LITE ? 0x28 : 0x3c) + (n) * 4)
+-#define	    IRQ_MASK_0_RESET_ACK	(IS_LITE ? BIT(17) : BIT(0))
+-#define	    IRQ_MASK_0_BUS_TOP_IRQ	(IS_LITE ? BIT(4) : BIT(7))
+-#define VFE_IRQ_CLEAR(n)		((IS_LITE ? 0x34 : 0x48) + (n) * 4)
+-#define VFE_IRQ_STATUS(n)		((IS_LITE ? 0x40 : 0x54) + (n) * 4)
++#define VFE_IRQ_MASK(n)			((vfe_is_lite(vfe) ? 0x28 : 0x3c) + (n) * 4)
++#define	    IRQ_MASK_0_RESET_ACK	(vfe_is_lite(vfe) ? BIT(17) : BIT(0))
++#define	    IRQ_MASK_0_BUS_TOP_IRQ	(vfe_is_lite(vfe) ? BIT(4) : BIT(7))
++#define VFE_IRQ_CLEAR(n)		((vfe_is_lite(vfe) ? 0x34 : 0x48) + (n) * 4)
++#define VFE_IRQ_STATUS(n)		((vfe_is_lite(vfe) ? 0x40 : 0x54) + (n) * 4)
+ 
+-#define BUS_REG_BASE			(IS_LITE ? 0x1a00 : 0xaa00)
++#define BUS_REG_BASE			(vfe_is_lite(vfe) ? 0x1a00 : 0xaa00)
+ 
+ #define VFE_BUS_WM_CGC_OVERRIDE		(BUS_REG_BASE + 0x08)
+ #define		WM_CGC_OVERRIDE_ALL	(0x3FFFFFF)
+@@ -49,13 +47,13 @@ static inline int reg_update_rdi(struct vfe_device *vfe, int n)
+ #define VFE_BUS_IRQ_MASK(n)		(BUS_REG_BASE + 0x18 + (n) * 4)
+ static inline int bus_irq_mask_0_rdi_rup(struct vfe_device *vfe, int n)
+ {
+-	return IS_LITE ? BIT(n) : BIT(3 + (n));
++	return vfe_is_lite(vfe) ? BIT(n) : BIT(3 + (n));
+ }
+ 
+ #define     BUS_IRQ_MASK_0_RDI_RUP	bus_irq_mask_0_rdi_rup
+ static inline int bus_irq_mask_0_comp_done(struct vfe_device *vfe, int n)
+ {
+-	return IS_LITE ? BIT(4 + (n)) : BIT(6 + (n));
++	return vfe_is_lite(vfe) ? BIT(4 + (n)) : BIT(6 + (n));
+ }
+ 
+ #define     BUS_IRQ_MASK_0_COMP_DONE	bus_irq_mask_0_comp_done
+@@ -90,8 +88,8 @@ static inline int bus_irq_mask_0_comp_done(struct vfe_device *vfe, int n)
+ /* for titan 480, each bus client is hardcoded to a specific path
+  * and each bus client is part of a hardcoded "comp group"
+  */
+-#define RDI_WM(n)			((IS_LITE ? 0 : 23) + (n))
+-#define RDI_COMP_GROUP(n)		((IS_LITE ? 0 : 11) + (n))
++#define RDI_WM(n)			((vfe_is_lite(vfe) ? 0 : 23) + (n))
++#define RDI_COMP_GROUP(n)		((vfe_is_lite(vfe) ? 0 : 11) + (n))
+ 
+ #define MAX_VFE_OUTPUT_LINES	4
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.c b/drivers/media/platform/qcom/camss/camss-vfe.c
+index c076c777aece..200abf878dae 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c
+@@ -1833,3 +1833,8 @@ void msm_vfe_unregister_entities(struct vfe_device *vfe)
+ 		media_entity_cleanup(&sd->entity);
+ 	}
+ }
++
++bool vfe_is_lite(struct vfe_device *vfe)
++{
++	return vfe->camss->res->vfe_res[vfe->id].is_lite;
++}
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.h b/drivers/media/platform/qcom/camss/camss-vfe.h
+index 5cec128ba4c0..1f5ba01f426b 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.h
++++ b/drivers/media/platform/qcom/camss/camss-vfe.h
+@@ -242,4 +242,14 @@ extern const struct vfe_hw_ops vfe_ops_480;
+ int vfe_get(struct vfe_device *vfe);
+ void vfe_put(struct vfe_device *vfe);
+ 
++/*
++ * vfe_is_lite - Return if VFE is VFE lite.
++ * @vfe: VFE Device
++ *
++ * Some VFE lites have a different register layout.
++ *
++ * Return whether VFE is VFE lite
++ */
++bool vfe_is_lite(struct vfe_device *vfe);
++
+ #endif /* QC_MSM_CAMSS_VFE_H */
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 5f081f86d409..efd8355ea360 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1407,7 +1407,7 @@ static int camss_init_subdevices(struct camss *camss)
+ 	}
+ 
+ 	/* note: SM8250 requires VFE to be initialized before CSID */
+-	for (i = 0; i < camss->vfe_total_num; i++) {
++	for (i = 0; i < camss->res->vfe_num; i++) {
+ 		ret = msm_vfe_subdev_init(camss, &camss->vfe[i],
+ 					  &res->vfe_res[i], i);
+ 		if (ret < 0) {
+@@ -1508,7 +1508,7 @@ static int camss_link_entities(struct camss *camss)
+ 				}
+ 	} else {
+ 		for (i = 0; i < camss->res->csid_num; i++)
+-			for (k = 0; k < camss->vfe_total_num; k++)
++			for (k = 0; k < camss->res->vfe_num; k++)
+ 				for (j = 0; j < camss->vfe[k].res->line_num; j++) {
+ 					struct v4l2_subdev *csid = &camss->csid[i].subdev;
+ 					struct v4l2_subdev *vfe = &camss->vfe[k].line[j].subdev;
+@@ -1572,7 +1572,7 @@ static int camss_register_entities(struct camss *camss)
+ 		goto err_reg_ispif;
+ 	}
+ 
+-	for (i = 0; i < camss->vfe_total_num; i++) {
++	for (i = 0; i < camss->res->vfe_num; i++) {
+ 		ret = msm_vfe_register_entities(&camss->vfe[i],
+ 						&camss->v4l2_dev);
+ 		if (ret < 0) {
+@@ -1623,7 +1623,7 @@ static void camss_unregister_entities(struct camss *camss)
+ 
+ 	msm_ispif_unregister_entities(camss->ispif);
+ 
+-	for (i = 0; i < camss->vfe_total_num; i++)
++	for (i = 0; i < camss->res->vfe_num; i++)
+ 		msm_vfe_unregister_entities(&camss->vfe[i]);
+ }
+ 
+@@ -1721,7 +1721,7 @@ static int camss_configure_pd(struct camss *camss)
+ 		return 0;
+ 
+ 	/* count the # of VFEs which have flagged power-domain */
+-	for (vfepd_num = i = 0; i < camss->vfe_total_num; i++) {
++	for (vfepd_num = i = 0; i < camss->res->vfe_num; i++) {
+ 		if (res->vfe_res[i].has_pd)
+ 			vfepd_num++;
+ 	}
+@@ -1799,7 +1799,7 @@ static void camss_genpd_subdevice_cleanup(struct camss *camss)
+ {
+ 	int i;
+ 
+-	for (i = 0; i < camss->vfe_total_num; i++)
++	for (i = 0; i < camss->res->vfe_num; i++)
+ 		msm_vfe_genpd_cleanup(&camss->vfe[i]);
+ }
+ 
+@@ -1856,8 +1856,7 @@ static int camss_probe(struct platform_device *pdev)
+ 			return -ENOMEM;
+ 	}
+ 
+-	camss->vfe_total_num = camss->res->vfe_num + camss->res->vfe_lite_num;
+-	camss->vfe = devm_kcalloc(dev, camss->vfe_total_num,
++	camss->vfe = devm_kcalloc(dev, camss->res->vfe_num,
+ 				  sizeof(*camss->vfe), GFP_KERNEL);
+ 	if (!camss->vfe)
+ 		return -ENOMEM;
+@@ -2023,8 +2022,7 @@ static const struct camss_resources sdm845_resources = {
+ 	.vfe_res = vfe_res_845,
+ 	.csiphy_num = ARRAY_SIZE(csiphy_res_845),
+ 	.csid_num = ARRAY_SIZE(csid_res_845),
+-	.vfe_num = 2,
+-	.vfe_lite_num = 1,
++	.vfe_num = ARRAY_SIZE(vfe_res_845),
+ 	.link_entities = camss_link_entities
+ };
+ 
+@@ -2038,8 +2036,7 @@ static const struct camss_resources sm8250_resources = {
+ 	.icc_path_num = ARRAY_SIZE(icc_res_sm8250),
+ 	.csiphy_num = ARRAY_SIZE(csiphy_res_8250),
+ 	.csid_num = ARRAY_SIZE(csid_res_8250),
+-	.vfe_num = 2,
+-	.vfe_lite_num = 2,
++	.vfe_num = ARRAY_SIZE(vfe_res_8250),
+ 	.link_entities = camss_link_entities
+ };
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss.h b/drivers/media/platform/qcom/camss/camss.h
+index 79d790dda80f..fb997b94fd70 100644
+--- a/drivers/media/platform/qcom/camss/camss.h
++++ b/drivers/media/platform/qcom/camss/camss.h
+@@ -105,7 +105,6 @@ struct camss_resources {
+ 	const unsigned int csiphy_num;
+ 	const unsigned int csid_num;
+ 	const unsigned int vfe_num;
+-	const unsigned int vfe_lite_num;
+ 	int (*link_entities)(struct camss *camss);
+ };
+ 
+@@ -124,7 +123,6 @@ struct camss {
+ 	struct device_link *genpd_link;
+ 	struct icc_path *icc_path[ICC_SM8250_COUNT];
+ 	const struct camss_resources *res;
+-	unsigned int vfe_total_num;
+ };
+ 
+ struct camss_camera_interface {
+-- 
+2.25.1
+

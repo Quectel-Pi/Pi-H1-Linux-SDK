@@ -1,0 +1,49 @@
+From 35d10ad43e4ffaf4bf17d6e688ae2bf0b763ac79 Mon Sep 17 00:00:00 2001
+From: Yongxing Mou <quic_yongmou@quicinc.com>
+Date: Mon, 20 Jan 2025 11:49:21 +0800
+Subject: [PATCH 4/7] BACKPORT: FROMLIST: drm/msm: mdss: Add QCS8300 support
+
+Add Mobile Display Subsystem (MDSS) support for the QCS8300 platform.
+Due to different memory type, it use different mdss_data with SA8775P
+although using the same dpu.
+
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Signed-off-by: Mahadevan <quic_mahap@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250120-mdssdt_qcs8300-v4-4-1687e7842125@quicinc.com/]
+---
+ drivers/gpu/drm/msm/msm_mdss.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/msm_mdss.c b/drivers/gpu/drm/msm/msm_mdss.c
+index f9ab468d0642..7559d9049114 100644
+--- a/drivers/gpu/drm/msm/msm_mdss.c
++++ b/drivers/gpu/drm/msm/msm_mdss.c
+@@ -527,6 +527,16 @@ static const struct msm_mdss_data qcm2290_data = {
+ 	.reg_bus_bw = 76800,
+ };
+ 
++static const struct msm_mdss_data qcs8300_data = {
++	.ubwc_enc_version = UBWC_4_0,
++	.ubwc_dec_version = UBWC_4_0,
++	.ubwc_swizzle = 6,
++	.ubwc_static = 1,
++	.highest_bank_bit = 3,
++	.macrotile_mode = 1,
++	.reg_bus_bw = 74000,
++};
++
+ static const struct msm_mdss_data sa8775p_data = {
+ 	.ubwc_enc_version = UBWC_4_0,
+ 	.ubwc_dec_version = UBWC_4_0,
+@@ -656,6 +666,7 @@ static const struct of_device_id mdss_dt_match[] = {
+ 	{ .compatible = "qcom,mdss" },
+ 	{ .compatible = "qcom,msm8998-mdss", .data = &msm8998_data },
+ 	{ .compatible = "qcom,qcm2290-mdss", .data = &qcm2290_data },
++	{ .compatible = "qcom,qcs8300-mdss", .data = &qcs8300_data },
+ 	{ .compatible = "qcom,sa8775p-mdss", .data = &sa8775p_data},
+ 	{ .compatible = "qcom,sdm845-mdss", .data = &sdm845_data },
+ 	{ .compatible = "qcom,sc7180-mdss", .data = &sc7180_data },
+-- 
+2.34.1
+

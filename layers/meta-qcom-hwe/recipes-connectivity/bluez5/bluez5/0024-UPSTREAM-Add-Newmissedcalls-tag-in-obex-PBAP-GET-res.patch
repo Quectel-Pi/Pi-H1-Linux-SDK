@@ -1,0 +1,59 @@
+From 99b60e903a8bf4bb218ba683cb6de81b0c39fcb9 Mon Sep 17 00:00:00 2001
+From: Amisha Jain <quic_amisjain@quicinc.com>
+Date: Sat, 2 Nov 2024 17:01:38 +0530
+Subject: [PATCH] UPSTREAM: Add Newmissedcalls tag in obex PBAP GET response
+
+This fix is required for passing below PTS testcases:
+
+1. PBAP/PSE/PBD/BV-05-C
+2. PBAP/PSE/PBD/BV-17-C
+3. PBAP/PSE/PBB/BV-11-C
+
+Even if the new missed calls value is zero, send it in GET response.
+As per the PBAP spec, it is mandatory to include Newmissedcalls
+tag in response incase of object name is 'mch.vcf' or 'cch.vcf'.
+It will be better to include it in all GET response.
+
+Upstream-Status: Backport https://github.com/bluez/bluez/commit/639fb80032cd7eb4d59e4a71e5235c647edf2af5
+Signed-off-by: Amisha Jain <quic_amisjain@quicinc.com>
+---
+ obexd/plugins/pbap.c | 10 ++++------
+ 1 file changed, 4 insertions(+), 6 deletions(-)
+
+diff --git a/obexd/plugins/pbap.c b/obexd/plugins/pbap.c
+index b7d48f9..89826fa 100644
+--- a/obexd/plugins/pbap.c
++++ b/obexd/plugins/pbap.c
+@@ -184,12 +184,11 @@ static void phonebook_size_result(const char *buffer, size_t bufsize,
+ 
+ 	if (missed > 0)	{
+ 		DBG("missed %d", missed);
++	}
+ 
+-		pbap->obj->apparam = g_obex_apparam_set_uint16(
+-							pbap->obj->apparam,
++	pbap->obj->apparam = g_obex_apparam_set_uint16(pbap->obj->apparam,
+ 							NEWMISSEDCALLS_TAG,
+ 							missed);
+-	}
+ 
+ 	obex_object_set_io_flags(pbap->obj, G_IO_IN, 0);
+ }
+@@ -223,12 +222,11 @@ static void query_result(const char *buffer, size_t bufsize, int vcards,
+ 		DBG("missed %d", missed);
+ 
+ 		pbap->obj->firstpacket = TRUE;
++	}
+ 
+-		pbap->obj->apparam = g_obex_apparam_set_uint16(
+-							pbap->obj->apparam,
++	pbap->obj->apparam = g_obex_apparam_set_uint16(pbap->obj->apparam,
+ 							NEWMISSEDCALLS_TAG,
+ 							missed);
+-	}
+ 
+ 	obex_object_set_io_flags(pbap->obj, G_IO_IN, 0);
+ }
+-- 
+2.34.1
+

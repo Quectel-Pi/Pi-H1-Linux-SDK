@@ -590,7 +590,7 @@ Errors and Warnings
 - ``package contains desktop file with key 'MimeType' but does not inhert mime-xdg: <packagename> path '<file>' [mime-xdg]``
 
     The specified package contains a .desktop file with a 'MimeType' key
-    present, but does not inherit the :ref:`mime-xdg <ref-classes-mime-xdg>`
+    present, but does not inherit the :ref:`ref-classes-mime-xdg`
     class that is required in order for that to be activated. Either add
     ``inherit mime`` to the recipe or remove the files at the
     :ref:`ref-tasks-install` step if they are not needed.
@@ -752,21 +752,17 @@ Errors and Warnings
 
 .. _qa-check-patch-status:
 
-- ``Missing Upstream-Status in patch <patchfile> Please add according to <url> [patch-status-core/patch-status-noncore]``
+- ``Missing Upstream-Status in patch <patchfile> Please add according to <url> [patch-status]``
 
     The ``Upstream-Status`` value is missing in the specified patch file's header.
     This value is intended to track whether or not the patch has been sent
     upstream, whether or not it has been merged, etc.
 
-    There are two options for this same check - ``patch-status-core`` (for
-    recipes in OE-Core) and ``patch-status-noncore`` (for recipes in any other
-    layer).
-
     For more information, see the
     ":ref:`contributor-guide/recipe-style-guide:patch upstream status`"
     section in the Yocto Project and OpenEmbedded Contributor Guide.
 
-- ``Malformed Upstream-Status in patch <patchfile> Please correct according to <url> [patch-status-core/patch-status-noncore]``
+- ``Malformed Upstream-Status in patch <patchfile> Please correct according to <url> [patch-status]``
 
     The ``Upstream-Status`` value in the specified patch file's header is invalid -
     it must be a specific format. See the "Missing Upstream-Status" entry above
@@ -788,6 +784,25 @@ Errors and Warnings
     entering the output. Sometimes it may require adjusting scripts or code to
     use a relative path rather than an absolute one, or to pick up the path from
     runtime configuration or environment variables.
+
+.. _qa-check-unimplemented-ptest:
+
+- ``<tool> tests detected [unimplemented-ptest]``
+
+    This check will detect if the source of the package contains some
+    upstream-provided tests and, if so, that ptests are implemented for this
+    recipe.  See the ":ref:`test-manual/ptest:testing packages with ptest`"
+    section in the Yocto Project Development Tasks Manual. See also the
+    ":ref:`ref-classes-ptest`" section.
+
+.. _qa-check-virtual-slash:
+
+- ``<variable> is set to <value> but the substring 'virtual/' holds no meaning in this context. It only works for build time dependencies, not runtime ones. It is suggested to use 'VIRTUAL-RUNTIME_' variables instead.``
+
+    ``virtual/`` is a convention intended for use in the build context
+    (i.e. :term:`PROVIDES` and :term:`DEPENDS`) rather than the runtime
+    context (i.e. :term:`RPROVIDES` and :term:`RDEPENDS`). Use
+    :term:`VIRTUAL-RUNTIME` variables instead for the latter.
 
 
 Configuring and Disabling QA Checks

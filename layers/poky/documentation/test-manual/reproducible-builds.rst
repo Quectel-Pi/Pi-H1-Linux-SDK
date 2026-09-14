@@ -19,13 +19,13 @@ Why it matters
 ==============
 
 The project aligns with the `Reproducible Builds project
-<https://reproducible-builds.org/>`_, which shares information about why
+<https://reproducible-builds.org/>`__, which shares information about why
 reproducibility matters. The primary focus of the project is the ability to
 detect security issues being introduced. However, from a Yocto Project
 perspective, it is also hugely important that our builds are deterministic. When
 you build a given input set of metadata, we expect you to get consistent output.
-This has always been a key focus but, :yocto_docs:`since release 3.1 ("dunfell")
-</ref-manual/migration-3.1.html#reproducible-builds-now-enabled-by-default>`,
+This has always been a key focus but, :ref:`since release 3.1 ("dunfell")
+<migration-guides/migration-3.1:reproducible builds now enabled by default>`,
 it is now true down to the binary level including timestamps.
 
 For example, at some point in the future life of a product, you find that you
@@ -91,11 +91,21 @@ run::
 
    oe-selftest -r reproducible.ReproducibleTests.test_reproducible_builds
 
-This defaults to including a ``world`` build so, if other layers are added, it would
-also run the tests for recipes in the additional layers. The first build will be
-run using :ref:`Shared State <overview-manual/concepts:Shared State>` if
-available, the second build explicitly disables
-:ref:`Shared State <overview-manual/concepts:Shared State>` and builds on the
+This defaults to including a ``world`` build so, if other layers are added, it
+would also run the tests for recipes in the additional layers. Different build
+targets can be defined using the :term:`OEQA_REPRODUCIBLE_TEST_TARGET` variable
+in ``local.conf``. For example, running reproducibility tests for only the
+``python3-numpy`` recipe can be done by setting::
+
+   OEQA_REPRODUCIBLE_TEST_TARGET = "python3-numpy"
+
+in local.conf before running the ``oe-selftest`` command shown above.
+
+Reproducibility builds the target list twice. The first build will be run using
+:ref:`Shared State <overview-manual/concepts:Shared State>` if available, the
+second build explicitly disables :ref:`Shared State
+<overview-manual/concepts:Shared State>` except for recipes defined in the
+:term:`OEQA_REPRODUCIBLE_TEST_SSTATE_TARGETS` variable, and builds on the
 specific host the build is running on. This means we can test reproducibility
 builds between different host distributions over time on the Autobuilder.
 
@@ -103,18 +113,14 @@ If ``OEQA_DEBUGGING_SAVED_OUTPUT`` is set, any differing packages will be saved
 here. The test is also able to run the ``diffoscope`` command on the output to
 generate HTML files showing the differences between the packages, to aid
 debugging. On the Autobuilder, these appear under
-https://autobuilder.yocto.io/pub/repro-fail/ in the form ``oe-reproducible +
+https://valkyrie.yocto.io/pub/repro-fail/ in the form ``oe-reproducible +
 <date> + <random ID>``, e.g. ``oe-reproducible-20200202-1lm8o1th``.
 
 The project's current reproducibility status can be seen at
 :yocto_home:`/reproducible-build-results/`
 
-You can also check the reproducibility status on supported host distributions:
-
--  CentOS: :yocto_ab:`/typhoon/#/builders/reproducible-centos`
--  Debian: :yocto_ab:`/typhoon/#/builders/reproducible-debian`
--  Fedora: :yocto_ab:`/typhoon/#/builders/reproducible-fedora`
--  Ubuntu: :yocto_ab:`/typhoon/#/builders/reproducible-ubuntu`
+You can also check the reproducibility status on the Autobuilder:
+:yocto_ab:`/valkyrie/#/builders/reproducible`.
 
 ===============================
 Can I test my layer or recipes?

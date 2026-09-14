@@ -1,8 +1,10 @@
-# Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 [Unit]
 Description=Audio adsprpc Service
+Requires=dev-fastrpc\x2dadsp\x2dsecure.device
+After=dev-fastrpc\x2dadsp\x2dsecure.device
 SourcePath=/usr/bin/audioadsprpcd
 
 [Service]

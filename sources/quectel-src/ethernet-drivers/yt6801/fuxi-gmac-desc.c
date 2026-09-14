@@ -579,7 +579,14 @@ static int fxgmac_map_tx_skb(struct fxgmac_channel *channel,
 	return pkt_info->desc_count;
 
 err_out:
-	while (start_index < cur_index) {
+	/*
+	 * [FIX] 原条件 start_index < cur_index 在环形回绕
+	 * (start_index > cur_index) 时一个都不清理, 造成 DMA 映射泄漏。
+	 * 改为 != 并加上限防御 (xmit 前已保证 desc 充足, 不会满环)。
+	 */
+	i = 0;
+	while (start_index != cur_index &&
+	       i++ < ring->dma_desc_count) {
 		desc_data = FXGMAC_GET_DESC_DATA(ring, start_index);
 		start_index =
 			FXGMAC_GET_ENTRY(start_index, ring->dma_desc_count);

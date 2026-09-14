@@ -1,0 +1,87 @@
+From 55fbf7ac3df89fb887f29429e8b225bc8a0741a4 Mon Sep 17 00:00:00 2001
+From: Ziyue Zhang <quic_ziyuzhan@quicinc.com>
+Date: Mon, 10 Feb 2025 18:21:57 +0800
+Subject: [PATCH 8/8] FROMLIST: arm64: dts: qcom: qcs8300: enable pcie1 for qcs8300
+ platform
+
+Add configurations in devicetree for PCIe1, board related gpios,
+PMIC regulators, etc.
+
+Reviewed-by: Konrad Dybcio <konrad.dybcio@oss.qualcomm.com>
+Signed-off-by: Ziyue Zhang <quic_ziyuzhan@quicinc.com>
+Link: https://lore.kernel.org/all/20241220055239.2744024-9-quic_ziyuzhan@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241220055239.2744024-9-quic_ziyuzhan@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs8300-ride.dts | 42 ++++++++++++++++++++++-
+ 1 file changed, 41 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+index 1b1c1d7ed304..e841b74cc24e 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
++++ b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+@@ -233,7 +233,7 @@ &gcc {
+ 	clocks = <&rpmhcc RPMH_CXO_CLK>,
+ 		 <&sleep_clk>,
+ 		 <&pcie0_phy>,
+-		 <0>,
++		 <&pcie1_phy>,
+ 		 <0>,
+ 		 <0>,
+ 		 <0>,
+@@ -379,6 +379,23 @@ &pcie0_phy {
+ 	status = "okay";
+ };
+ 
++&pcie1 {
++	perst-gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
++	wake-gpios = <&tlmm 21 GPIO_ACTIVE_HIGH>;
++
++	pinctrl-0 = <&pcie1_default_state>;
++	pinctrl-names = "default";
++
++	status = "okay";
++};
++
++&pcie1_phy {
++	vdda-phy-supply = <&vreg_l6a>;
++	vdda-pll-supply = <&vreg_l5a>;
++
++	status = "okay";
++};
++
+ &qupv3_id_0 {
+ 	status = "okay";
+ };
+@@ -455,6 +472,29 @@ perst-pins {
+ 			bias-pull-down;
+ 		};
+ 	};
++
++	pcie1_default_state: pcie1-default-state {
++		wake-pins {
++			pins = "gpio21";
++			function = "gpio";
++			drive-strength = <2>;
++			bias-pull-up;
++		};
++
++		clkreq-pins {
++			pins = "gpio22";
++			function = "pcie1_clkreq";
++			drive-strength = <2>;
++			bias-pull-up;
++		};
++
++		perst-pins {
++			pins = "gpio23";
++			function = "gpio";
++			drive-strength = <2>;
++			bias-pull-down;
++		};
++	};
+ };
+ 
+ &uart7 {
+-- 
+2.25.1
+

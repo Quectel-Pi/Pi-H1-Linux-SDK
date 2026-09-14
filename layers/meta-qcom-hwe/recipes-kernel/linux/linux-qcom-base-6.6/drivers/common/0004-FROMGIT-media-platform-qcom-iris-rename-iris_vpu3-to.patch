@@ -1,0 +1,47 @@
+From 20bac1b3d3b64a7bb492490accfc94f42a5e228d Mon Sep 17 00:00:00 2001
+From: Neil Armstrong <neil.armstrong@linaro.org>
+Date: Thu, 17 Apr 2025 16:59:04 +0200
+Subject: [PATCH 4/7] FROMGIT: media: platform: qcom/iris: rename iris_vpu3
+ to iris_vpu3x
+
+The vpu33 HW is very close to vpu3, and shares most of the
+operations, so rename file to vpu3x since we'll handle all vpu3
+variants in it.
+
+Reviewed-by: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Tested-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org> # x1e Dell
+Reviewed-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Signed-off-by: Neil Armstrong <neil.armstrong@linaro.org>
+Signed-off-by: Bryan O'Donoghue <bod@kernel.org>
+Signed-off-by: Hans Verkuil <hverkuil@xs4all.nl>
+Link: https://lore.kernel.org/linux-media/20250417-topic-sm8x50-iris-v10-v7-4-f020cb1d0e98@linaro.org
+Git-repo: https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
+Git-commit: 9cd2b62c8c29a3316abff91bae23c54d06a63992
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/ 9cd2b62c8c29a3316abff91bae23c54d06a63992]
+---
+ drivers/media/platform/qcom/iris/Makefile                      | 2 +-
+ drivers/media/platform/qcom/iris/{iris_vpu3.c => iris_vpu3x.c} | 0
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+ rename drivers/media/platform/qcom/iris/{iris_vpu3.c => iris_vpu3x.c} (100%)
+
+diff --git a/drivers/media/platform/qcom/iris/Makefile b/drivers/media/platform/qcom/iris/Makefile
+index f6d22b88f6db..27a8ca27ac03 100644
+--- a/drivers/media/platform/qcom/iris/Makefile
++++ b/drivers/media/platform/qcom/iris/Makefile
+@@ -19,7 +19,7 @@ iris-objs += iris_buffer.o \
+              iris_vb2.o \
+              iris_vdec.o \
+              iris_vpu2.o \
+-             iris_vpu3.o \
++             iris_vpu3x.o \
+              iris_vpu_buffer.o \
+              iris_vpu_common.o \
+ 
+diff --git a/drivers/media/platform/qcom/iris/iris_vpu3.c b/drivers/media/platform/qcom/iris/iris_vpu3x.c
+similarity index 100%
+rename from drivers/media/platform/qcom/iris/iris_vpu3.c
+rename to drivers/media/platform/qcom/iris/iris_vpu3x.c
+-- 
+2.34.1
+

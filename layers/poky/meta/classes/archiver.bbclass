@@ -1,5 +1,9 @@
-# ex:ts=4:sw=4:sts=4:et
-# -*- tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*-
+#
+# Copyright OpenEmbedded Contributors
+#
+# SPDX-License-Identifier: MIT
+#
+
 #
 # This bbclass is used for creating archive for:
 #  1) original (or unpacked) source: ARCHIVER_MODE[src] = "original"
@@ -72,6 +76,28 @@ do_ar_original[dirs] = "${ARCHIVER_OUTDIR} ${ARCHIVER_WORKDIR}"
 
 # This is a convenience for the shell script to use it
 
+def include_package(d, pn):
+
+    included, reason = copyleft_should_include(d)
+    if not included:
+        bb.debug(1, 'archiver: %s is excluded: %s' % (pn, reason))
+        return False
+
+    else:
+        bb.debug(1, 'archiver: %s is included: %s' % (pn, reason))
+
+    # glibc-locale: do_fetch, do_unpack and do_patch tasks have been deleted,
+    # so avoid archiving source here.
+    if pn.startswith('glibc-locale'):
+        return False
+
+    # We just archive gcc-source for all the gcc related recipes
+    if d.getVar('BPN') in ['gcc', 'libgcc'] \
+            and not pn.startswith('gcc-source'):
+        bb.debug(1, 'archiver: %s is excluded, covered by gcc-source' % pn)
+        return False
+
+    return True
 
 python () {
     pn = d.getVar('PN')
@@ -82,23 +108,7 @@ python () {
                 pn = p
                 break
 
-    included, reason = copyleft_should_include(d)
-    if not included:
-        bb.debug(1, 'archiver: %s is excluded: %s' % (pn, reason))
-        return
-    else:
-        bb.debug(1, 'archiver: %s is included: %s' % (pn, reason))
-
-
-    # glibc-locale: do_fetch, do_unpack and do_patch tasks have been deleted,
-    # so avoid archiving source here.
-    if pn.startswith('glibc-locale'):
-        return
-
-    # We just archive gcc-source for all the gcc related recipes
-    if d.getVar('BPN') in ['gcc', 'libgcc'] \
-            and not pn.startswith('gcc-source'):
-        bb.debug(1, 'archiver: %s is excluded, covered by gcc-source' % pn)
+    if not include_package(d, pn):
         return
 
     # TARGET_SYS in ARCHIVER_ARCH will break the stamp for gcc-source in multiconfig
@@ -391,19 +401,11 @@ python do_ar_mirror() {
         subprocess.check_call(cmd, shell=True)
 }
 
-def exclude_useless_paths(tarinfo):
-    if tarinfo.isdir():
-        if tarinfo.name.endswith('/temp') or tarinfo.name.endswith('/patches') or tarinfo.name.endswith('/.pc'):
-            return None
-        elif tarinfo.name == 'temp' or tarinfo.name == 'patches' or tarinfo.name == '.pc':
-            return None
-    return tarinfo
-
 def create_tarball(d, srcdir, suffix, ar_outdir):
     """
     create the tarball from srcdir
     """
-    import tarfile
+    import subprocess
 
     # Make sure we are only creating a single tarball for gcc sources
     if (d.getVar('SRC_URI') == ""):
@@ -415,6 +417,16 @@ def create_tarball(d, srcdir, suffix, ar_outdir):
     srcdir = os.path.realpath(srcdir)
 
     compression_method = d.getVarFlag('ARCHIVER_MODE', 'compression')
+    if compression_method == "xz":
+        compression_cmd = "xz %s" % d.getVar('XZ_DEFAULTS')
+    # To keep compatibility with ARCHIVER_MODE[compression]
+    elif compression_method == "gz":
+        compression_cmd = "gzip"
+    elif compression_method == "bz2":
+        compression_cmd = "bzip2"
+    else:
+        bb.fatal("Unsupported compression_method: %s" % compression_method)
+
     bb.utils.mkdirhier(ar_outdir)
     if suffix:
         filename = '%s-%s.tar.%s' % (d.getVar('PF'), suffix, compression_method)
@@ -423,9 +435,11 @@ def create_tarball(d, srcdir, suffix, ar_outdir):
     tarname = os.path.join(ar_outdir, filename)
 
     bb.note('Creating %s' % tarname)
-    tar = tarfile.open(tarname, 'w:%s' % compression_method)
-    tar.add(srcdir, arcname=os.path.basename(srcdir), filter=exclude_useless_paths)
-    tar.close()
+    dirname = os.path.dirname(srcdir)
+    basename = os.path.basename(srcdir)
+    exclude = "--exclude=temp --exclude=patches --exclude='.pc'"
+    tar_cmd = "tar %s -cf - %s | %s > %s" % (exclude, basename, compression_cmd, tarname)
+    subprocess.check_call(tar_cmd, cwd=dirname, shell=True)
 
 # creating .diff.gz between source.orig and source
 def create_diff_gz(d, src_orig, src, ar_outdir):
@@ -458,10 +472,9 @@ def create_diff_gz(d, src_orig, src, ar_outdir):
         os.chdir(cwd)
 
 def is_work_shared(d):
-    pn = d.getVar('PN')
-    return pn.startswith('gcc-source') or \
-        bb.data.inherits_class('kernel', d) or \
-        (bb.data.inherits_class('kernelsrc', d) and d.expand("${TMPDIR}/work-shared") in d.getVar('S'))
+    sharedworkdir = os.path.join(d.getVar('TMPDIR'), 'work-shared')
+    sourcedir = os.path.realpath(d.getVar('S'))
+    return sourcedir.startswith(sharedworkdir)
 
 # Run do_unpack and do_patch
 python do_unpack_and_patch() {

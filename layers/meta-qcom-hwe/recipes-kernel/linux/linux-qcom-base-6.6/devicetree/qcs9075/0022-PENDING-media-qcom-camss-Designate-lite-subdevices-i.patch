@@ -1,0 +1,204 @@
+From fcbc34257a3fa50b3e36033bb84cb7a899ecdcbc Mon Sep 17 00:00:00 2001
+From: Milen Mitkov <quic_mmitkov@quicinc.com>
+Date: Thu, 23 Nov 2023 15:42:57 +0200
+Subject: [PATCH 22/42] PENDING: media: qcom: camss: Designate lite subdevices
+ in resources
+
+VFE/CSID may have full-fledged or lite versions. Use a variable
+in the subdev resources for differentiating between these,
+instead of figuring it out by id.
+
+Signed-off-by: Milen Mitkov <quic_mmitkov@quicinc.com>
+Signed-off-by: Radoslav Tsvetkov <quic_rtsvetko@quicinc.com>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Pending
+---
+ .../media/platform/qcom/camss/camss-csid-gen2.c    |  2 +-
+ drivers/media/platform/qcom/camss/camss-csid.h     |  1 +
+ drivers/media/platform/qcom/camss/camss-vfe-480.c  |  2 +-
+ drivers/media/platform/qcom/camss/camss-vfe.c      |  1 +
+ drivers/media/platform/qcom/camss/camss-vfe.h      |  1 +
+ drivers/media/platform/qcom/camss/camss.c          | 14 ++++++++++++++
+ 6 files changed, 19 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csid-gen2.c b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+index 70f2fde6fb31..a2bf6670ce08 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+@@ -21,7 +21,7 @@
+  * interface support. As a result of that it has an
+  * alternate register layout.
+  */
+-#define IS_LITE		(csid->id >= 2 ? 1 : 0)
++#define IS_LITE		(csid->res->is_lite)
+ 
+ #define CSID_HW_VERSION		0x0
+ #define		HW_VERSION_STEPPING	0
+diff --git a/drivers/media/platform/qcom/camss/camss-csid.h b/drivers/media/platform/qcom/camss/camss-csid.h
+index e8413801f30a..3e4d40404468 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid.h
++++ b/drivers/media/platform/qcom/camss/camss-csid.h
+@@ -155,6 +155,7 @@ struct csid_hw_ops {
+ };
+ 
+ struct csid_subdev_resources {
++	bool is_lite;
+ 	const struct csid_hw_ops *hw_ops;
+ 	const struct csid_formats *formats;
+ };
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe-480.c b/drivers/media/platform/qcom/camss/camss-vfe-480.c
+index f2368b77fc6d..9e21a6d394ee 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe-480.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe-480.c
+@@ -16,7 +16,7 @@
+ #include "camss-vfe.h"
+ 
+ /* VFE 2/3 are lite and have a different register layout */
+-#define IS_LITE		(vfe->id >= 2 ? 1 : 0)
++#define IS_LITE		(vfe->res->is_lite)
+ 
+ #define VFE_HW_VERSION			(0x00)
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.c b/drivers/media/platform/qcom/camss/camss-vfe.c
+index 54385abad963..99ca41a78bf1 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c
+@@ -1458,6 +1458,7 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
+ 		return -EINVAL;
+ 
+ 	vfe->res = &res->vfe;
++
+ 	vfe->res->hw_ops->subdev_init(dev, vfe);
+ 
+ 	/* Memory */
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.h b/drivers/media/platform/qcom/camss/camss-vfe.h
+index 52a6c99af9b8..b058fb4b4722 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.h
++++ b/drivers/media/platform/qcom/camss/camss-vfe.h
+@@ -128,6 +128,7 @@ struct vfe_isr_ops {
+ 
+ struct vfe_subdev_resources {
+ 	u8 line_num;
++	bool is_lite;
+ 	const struct vfe_hw_ops *hw_ops;
+ 	const struct camss_formats *formats_rdi;
+ 	const struct camss_formats *formats_pix;
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 2d865273a1a4..a5320b8ee8c5 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -697,6 +697,7 @@ static const struct camss_subdev_resources csid_res_845[] = {
+ 		.interrupt = { "csid0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
++			.is_lite = false,
+ 			.hw_ops = &csid_ops_gen2,
+ 			.formats = &csid_formats_gen2
+ 		}
+@@ -722,6 +723,7 @@ static const struct camss_subdev_resources csid_res_845[] = {
+ 		.interrupt = { "csid1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
++			.is_lite = false,
+ 			.hw_ops = &csid_ops_gen2,
+ 			.formats = &csid_formats_gen2
+ 		}
+@@ -747,6 +749,7 @@ static const struct camss_subdev_resources csid_res_845[] = {
+ 		.interrupt = { "csid2" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
++			.is_lite = true,
+ 			.hw_ops = &csid_ops_gen2,
+ 			.formats = &csid_formats_gen2
+ 		}
+@@ -775,6 +778,7 @@ static const struct camss_subdev_resources vfe_res_845[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 4,
++			.is_lite = false,
+ 			.hw_ops = &vfe_ops_170,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -802,6 +806,7 @@ static const struct camss_subdev_resources vfe_res_845[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 4,
++			.is_lite = false,
+ 			.hw_ops = &vfe_ops_170,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -828,6 +833,7 @@ static const struct camss_subdev_resources vfe_res_845[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 4,
++			.is_lite = true,
+ 			.hw_ops = &vfe_ops_170,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -930,6 +936,7 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 		.interrupt = { "csid0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
++			.is_lite = false,
+ 			.hw_ops = &csid_ops_gen2,
+ 			.formats = &csid_formats_gen2
+ 		}
+@@ -947,6 +954,7 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 		.interrupt = { "csid1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
++			.is_lite = false,
+ 			.hw_ops = &csid_ops_gen2,
+ 			.formats = &csid_formats_gen2
+ 		}
+@@ -963,6 +971,7 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 		.interrupt = { "csid2" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
++			.is_lite = true,
+ 			.hw_ops = &csid_ops_gen2,
+ 			.formats = &csid_formats_gen2
+ 		}
+@@ -979,6 +988,7 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 		.interrupt = { "csid3" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
++			.is_lite = true,
+ 			.hw_ops = &csid_ops_gen2,
+ 			.formats = &csid_formats_gen2
+ 		}
+@@ -1006,6 +1016,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
++			.is_lite = false,
+ 			.hw_ops = &vfe_ops_480,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -1031,6 +1042,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
++			.is_lite = false,
+ 			.hw_ops = &vfe_ops_480,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -1055,6 +1067,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 4,
++			.is_lite = true,
+ 			.hw_ops = &vfe_ops_480,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -1079,6 +1092,7 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 4,
++			.is_lite = true,
+ 			.hw_ops = &vfe_ops_480,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+-- 
+2.25.1
+

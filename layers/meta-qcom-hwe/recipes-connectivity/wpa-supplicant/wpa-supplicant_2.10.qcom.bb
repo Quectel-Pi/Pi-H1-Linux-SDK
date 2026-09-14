@@ -3,6 +3,10 @@ include wpa-supplicant.inc
 
 DEFAULT_PREFERENCE = "-1"
 
+LT_MAJOR = "1"
+LT_MINOR = "0"
+LT_PATCH = "0"
+
 FILESEXTRAPATHS:prepend := " ${THISDIR}/files:"
 
 DEPENDS += "glib-2.0 dbus libnl"
@@ -33,7 +37,7 @@ S = "${WORKDIR}/git/wpa_supplicant"
 
 PACKAGES:prepend = "wpa-supplicant-passphrase wpa-supplicant-cli "
 FILES:wpa-supplicant-passphrase = "${bindir}/wpa_passphrase"
-FILES:wpa-supplicant-cli = "${sbindir}/wpa_cli"
+FILES:wpa-supplicant-cli = "${bindir}/wpa_cli"
 FILES:${PN} += "${datadir}/dbus-1/system-services/* ${systemd_system_unitdir}/*"
 
 do_configure () {
@@ -50,6 +54,15 @@ do_configure () {
 
         # For rebuild
         rm -f *.d dbus/*.d
+
+        sed -i 's/libwpa_client.so/libwpa_client.so.${LT_MAJOR}.${LT_MINOR}.${LT_PATCH}/g' Makefile
+        sed -i '/\($(Q)$(CC) $(LDFLAGS) -o $@ $(CFLAGS) -shared -fPIC $^\)/  s/\(-shared\)/\1 -Wl,-soname,libwpa_client.so.${LT_MAJOR}/' Makefile
+        sed -i '/install -m 0644 -D ..\/src\/common\/wpa_ctrl.h $(DESTDIR)\/$(INCDIR)\/wpa_ctrl.h/ i\
+	ln -sf libwpa_client.so.${LT_MAJOR}.${LT_MINOR}.${LT_PATCH} $(DESTDIR)/$(LIBDIR)/libwpa_client.so.${LT_MAJOR}\
+	ln -sf libwpa_client.so.${LT_MAJOR}.${LT_MINOR}.${LT_PATCH} $(DESTDIR)/$(LIBDIR)/libwpa_client.so' Makefile
+        sed -i '/rm -f libwpa_test1 libwpa_test2/ i\
+	rm -f libwpa_client.so.${LT_MAJOR}\
+	rm -f libwpa_client.so' Makefile
 }
 
 export EXTRA_CFLAGS = "${CFLAGS}"
@@ -81,5 +94,9 @@ pkg_postinst:${PN} () {
         fi
 
 }
+
+SOLIBS = ".so*"
+FILES_SOLIBSDEV = ""
+INSANE_SKIP:${PN} = "dev-so"
 
 FILES:${PN} += "/usr/include/*"

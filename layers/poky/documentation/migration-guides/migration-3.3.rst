@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Release 3.3 (hardknott)
 =======================
 
@@ -61,13 +63,15 @@ need to update those.
 New ``python3targetconfig`` class
 ---------------------------------
 
-A new :ref:`python3targetconfig <ref-classes-python3targetconfig>` class has been
-created for situations where you would previously have inherited the
-:ref:`python3native <ref-classes-python3native>` class but need access to target configuration data (such as
-correct installation directories). Recipes where this situation applies should
-be changed to inherit ``python3targetconfig`` instead of ``python3native``. This
-also adds a dependency on target ``python3``, so it should only be used where
-appropriate in order to avoid unnecessarily lengthening builds.
+A new :ref:`ref-classes-python3targetconfig` class has
+been created for situations where you would previously have inherited the
+:ref:`ref-classes-python3native` class but need access to
+target configuration data (such as correct installation directories). Recipes
+where this situation applies should be changed to inherit
+:ref:`ref-classes-python3targetconfig` instead of
+:ref:`ref-classes-python3native`. This also adds a dependency
+on target ``python3``, so it should only be used where appropriate in order to
+avoid unnecessarily lengthening builds.
 
 Some example recipes where this change has been made: ``gpgme``, ``libcap-ng``,
 ``python3-pycairo``.
@@ -75,7 +79,7 @@ Some example recipes where this change has been made: ``gpgme``, ``libcap-ng``,
 
 .. _migration-3.3-distutils-path:
 
-``setup.py`` path for python modules
+``setup.py`` path for Python modules
 ------------------------------------
 
 In a Python module, sometimes ``setup.py`` can be buried deep in the
@@ -95,11 +99,10 @@ variable so that recipes can specify it explicitly, for example::
    S = "${WORKDIR}/git"
    DISTUTILS_SETUP_PATH = "${S}/python/pythonmodule"
 
-Recipes that inherit from ``distutils3`` (or
-:ref:`setuptools3 <ref-classes-setuptools3>` which itself inherits
-``distutils3``) that also set :term:`S` to
-point to a Python module within a subdirectory in the aforementioned
-manner should be changed to set ``DISTUTILS_SETUP_PATH`` instead.
+Recipes that inherit from ``distutils3`` (or :ref:`ref-classes-setuptools3`
+which itself inherits ``distutils3``) that also set :term:`S` to point to a
+Python module within a subdirectory in the aforementioned manner should be
+changed to set ``DISTUTILS_SETUP_PATH`` instead.
 
 
 .. _migration-3.3-bitbake:
@@ -132,7 +135,7 @@ unless you want to take advantage of the improved granularity:
 - ``procps``: split ``ps`` and ``sysctl`` into their own packages
 - ``rpm``: split build and extra functionality into separate packages
 - ``sudo``: split ``sudo`` binary into ``sudo-sudo`` and libs into ``sudo-lib``
-- ``systemtap``: examples, python scripts and runtime material split out
+- ``systemtap``: examples, Python scripts and runtime material split out
 - ``util-linux``: ``libuuid`` has been split out to its own
   ``util-linux-libuuid`` recipe (and corresponding packages) to avoid circular
   dependencies if ``libgcrypt`` support is enabled in ``util-linux``.

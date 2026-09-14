@@ -1,0 +1,134 @@
+From 9cda41dee3d2dd663ab341339f179a8331449aa4 Mon Sep 17 00:00:00 2001
+From: Paloma Arellano <quic_parellan@quicinc.com>
+Date: Thu, 22 Feb 2024 11:39:49 -0800
+Subject: [PATCH 067/146] UPSTREAM: drm/msm/dpu: allow
+ dpu_encoder_helper_phys_setup_cdm to work for DP
+
+Generalize dpu_encoder_helper_phys_setup_cdm to be compatible with DP.
+
+Changes in v2:
+	- Minor formatting changes
+	- Move the modification of the dimensions for CDM setup to a new
+	  patch
+
+Signed-off-by: Paloma Arellano <quic_parellan@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/579609/
+Link: https://lore.kernel.org/r/20240222194025.25329-5-quic_parellan@quicinc.com
+Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 7cde7ce5be3e0344d70a5ef8d27190b0a24aa6a0]
+---
+ .../gpu/drm/msm/disp/dpu1/dpu_encoder_phys.h  |  4 +--
+ .../drm/msm/disp/dpu1/dpu_encoder_phys_wb.c   | 27 ++++++++++---------
+ 2 files changed, 16 insertions(+), 15 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys.h b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys.h
+index 9bdcd095f118..b37e89194681 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys.h
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys.h
+@@ -156,6 +156,7 @@ enum dpu_intr_idx {
+  * @hw_wb:		Hardware interface to the wb registers
+  * @hw_cdm:		Hardware interface to the CDM registers
+  * @dpu_kms:		Pointer to the dpu_kms top level
++ * @cdm_cfg:		CDM block config needed to store WB/DP block's CDM configuration
+  * @cached_mode:	DRM mode cached at mode_set time, acted on in enable
+  * @enabled:		Whether the encoder has enabled and running a mode
+  * @split_role:		Role to play in a split-panel configuration
+@@ -185,6 +186,7 @@ struct dpu_encoder_phys {
+ 	struct dpu_hw_wb *hw_wb;
+ 	struct dpu_hw_cdm *hw_cdm;
+ 	struct dpu_kms *dpu_kms;
++	struct dpu_hw_cdm_cfg cdm_cfg;
+ 	struct drm_display_mode cached_mode;
+ 	enum dpu_enc_split_role split_role;
+ 	enum dpu_intf_mode intf_mode;
+@@ -213,7 +215,6 @@ static inline int dpu_encoder_phys_inc_pending(struct dpu_encoder_phys *phys)
+  * @wbirq_refcount:     Reference count of writeback interrupt
+  * @wb_done_timeout_cnt: number of wb done irq timeout errors
+  * @wb_cfg:  writeback block config to store fb related details
+- * @cdm_cfg: cdm block config needed to store writeback block's CDM configuration
+  * @wb_conn: backpointer to writeback connector
+  * @wb_job: backpointer to current writeback job
+  * @dest:   dpu buffer layout for current writeback output buffer
+@@ -223,7 +224,6 @@ struct dpu_encoder_phys_wb {
+ 	atomic_t wbirq_refcount;
+ 	int wb_done_timeout_cnt;
+ 	struct dpu_hw_wb_cfg wb_cfg;
+-	struct dpu_hw_cdm_cfg cdm_cfg;
+ 	struct drm_writeback_connector *wb_conn;
+ 	struct drm_writeback_job *wb_job;
+ 	struct dpu_hw_fmt_layout dest;
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_wb.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_wb.c
+index f32435a29f3c..96f30d6a2d29 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_wb.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder_phys_wb.c
+@@ -236,28 +236,21 @@ static void dpu_encoder_phys_wb_setup_ctl(struct dpu_encoder_phys *phys_enc)
+  *                                     This API does not handle DPU_CHROMA_H1V2.
+  * @phys_enc:Pointer to physical encoder
+  */
+-static void dpu_encoder_helper_phys_setup_cdm(struct dpu_encoder_phys *phys_enc)
++static void dpu_encoder_helper_phys_setup_cdm(struct dpu_encoder_phys *phys_enc,
++					      const struct dpu_format *dpu_fmt,
++					      u32 output_type)
+ {
+ 	struct dpu_hw_cdm *hw_cdm;
+ 	struct dpu_hw_cdm_cfg *cdm_cfg;
+ 	struct dpu_hw_pingpong *hw_pp;
+-	struct dpu_encoder_phys_wb *wb_enc;
+-	const struct msm_format *format;
+-	const struct dpu_format *dpu_fmt;
+-	struct drm_writeback_job *wb_job;
+ 	int ret;
+ 
+ 	if (!phys_enc)
+ 		return;
+ 
+-	wb_enc = to_dpu_encoder_phys_wb(phys_enc);
+-	cdm_cfg = &wb_enc->cdm_cfg;
++	cdm_cfg = &phys_enc->cdm_cfg;
+ 	hw_pp = phys_enc->hw_pp;
+ 	hw_cdm = phys_enc->hw_cdm;
+-	wb_job = wb_enc->wb_job;
+-
+-	format = msm_framebuffer_format(wb_enc->wb_job->fb);
+-	dpu_fmt = dpu_get_dpu_format_ext(format->pixel_format, wb_job->fb->modifier);
+ 
+ 	if (!hw_cdm)
+ 		return;
+@@ -276,7 +269,7 @@ static void dpu_encoder_helper_phys_setup_cdm(struct dpu_encoder_phys *phys_enc)
+ 	cdm_cfg->output_width = phys_enc->cached_mode.hdisplay;
+ 	cdm_cfg->output_height = phys_enc->cached_mode.vdisplay;
+ 	cdm_cfg->output_fmt = dpu_fmt;
+-	cdm_cfg->output_type = CDM_CDWN_OUTPUT_WB;
++	cdm_cfg->output_type = output_type;
+ 	cdm_cfg->output_bit_depth = DPU_FORMAT_IS_DX(dpu_fmt) ?
+ 			CDM_CDWN_OUTPUT_10BIT : CDM_CDWN_OUTPUT_8BIT;
+ 	cdm_cfg->csc_cfg = &dpu_csc10_rgb2yuv_601l;
+@@ -434,6 +427,14 @@ static void dpu_encoder_phys_wb_setup(
+ 	struct dpu_hw_wb *hw_wb = phys_enc->hw_wb;
+ 	struct drm_display_mode mode = phys_enc->cached_mode;
+ 	struct drm_framebuffer *fb = NULL;
++	struct dpu_encoder_phys_wb *wb_enc = to_dpu_encoder_phys_wb(phys_enc);
++	struct drm_writeback_job *wb_job;
++	const struct msm_format *format;
++	const struct dpu_format *dpu_fmt;
++
++	wb_job = wb_enc->wb_job;
++	format = msm_framebuffer_format(wb_enc->wb_job->fb);
++	dpu_fmt = dpu_get_dpu_format_ext(format->pixel_format, wb_job->fb->modifier);
+ 
+ 	DPU_DEBUG("[mode_set:%d, \"%s\",%d,%d]\n",
+ 			hw_wb->idx - WB_0, mode.name,
+@@ -447,7 +448,7 @@ static void dpu_encoder_phys_wb_setup(
+ 
+ 	dpu_encoder_phys_wb_setup_fb(phys_enc, fb);
+ 
+-	dpu_encoder_helper_phys_setup_cdm(phys_enc);
++	dpu_encoder_helper_phys_setup_cdm(phys_enc, dpu_fmt, CDM_CDWN_OUTPUT_WB);
+ 
+ 	dpu_encoder_phys_wb_setup_ctl(phys_enc);
+ }
+-- 
+2.34.1
+

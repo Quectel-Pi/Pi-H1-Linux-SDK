@@ -1,0 +1,33 @@
+From 7b97cb9a1e49199c3cfe471c771e21306d18dcd8 Mon Sep 17 00:00:00 2001
+From: Abhinaba Rakshit <quic_arakshit@quicinc.com>
+Date: Mon, 24 Feb 2025 20:42:24 +0530
+Subject: [PATCH] FROMLIST: arm64: dts: qcom: qcs615: add TRNG node
+
+The qcs615 SoC has a True Random Number Generator, add the node with
+the correct compatible set.
+
+Signed-off-by: Abhinaba Rakshit <quic_arakshit@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250224-enable-trng-for-qcs615-v1-2-3243eb7d345a@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs615.dtsi | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs615.dtsi b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+index 0177c51c3d73..59492da1a04b 100644
+--- a/arch/arm64/boot/dts/qcom/qcs615.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+@@ -1009,6 +1009,11 @@ uart7: serial@a8c000 {
+ 			};
+ 		};
+ 
++		rng@793000 {
++			compatible = "qcom,qcs615-trng", "qcom,trng";
++			reg = <0x0 0x00793000 0x0 0x1000>;
++		};
++
+ 		config_noc: interconnect@1500000 {
+ 			reg = <0x0 0x1500000 0x0 0x5080>;
+ 			compatible = "qcom,qcs615-config-noc";
+-- 
+2.34.1
+

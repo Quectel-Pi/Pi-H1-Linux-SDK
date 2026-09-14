@@ -3,7 +3,6 @@
 
 SUMMARY = "Basic task to get a device online"
 
-PR = "r13"
 
 PACKAGE_ARCH = "${MACHINE_ARCH}"
 inherit packagegroup
@@ -44,6 +43,7 @@ RRECOMMENDS:${PN} = "\
     ${@bb.utils.contains("MACHINE_FEATURES", "usbgadget", "kernel-module-g-ether kernel-module-g-serial kernel-module-g-mass-storage", "", d)} \
     \
     ${@bb.utils.contains("DISTRO_FEATURES", "bluetooth", "bluez5", "", d)} \
+    ${@bb.utils.contains("DISTRO_FEATURES", "wifi", "iw wpa-supplicant", "", d)} \
     \
     tzdata \
     \

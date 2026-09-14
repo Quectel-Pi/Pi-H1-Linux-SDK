@@ -1,0 +1,97 @@
+From 6d66f074f390b148d4c782fcee40d6ec7e8c85cc Mon Sep 17 00:00:00 2001
+From: Wangao Wang <quic_wangaow@quicinc.com>
+Date: Tue, 6 May 2025 10:56:21 +0800
+Subject: [PATCH 02/69] Revert "PENDING: arm64: dts: qcom: iris video driver
+ for sa8775p"
+
+This reverts commit 870718887e7072e9d601567eeff61664fbf849dd.
+
+Iris driver and sa8775p-iris dt need to update to the latest patch series.
+The existing dtb patch has dependencies that cause compilation errors.
+Currently, we are removing the iris node by reverting.
+
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Inappropriate [Revert]
+---
+ arch/arm64/boot/dts/qcom/sa8775p.dtsi | 65 ---------------------------
+ 1 file changed, 65 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/sa8775p.dtsi b/arch/arm64/boot/dts/qcom/sa8775p.dtsi
+index 9873232fe9dc..4326c065fb1f 100644
+--- a/arch/arm64/boot/dts/qcom/sa8775p.dtsi
++++ b/arch/arm64/boot/dts/qcom/sa8775p.dtsi
+@@ -3833,71 +3833,6 @@ llcc: system-cache-controller@9200000 {
+ 			interrupts = <GIC_SPI 580 IRQ_TYPE_LEVEL_HIGH>;
+ 		};
+ 
+-		iris: video-codec@aa00000 {
+-			compatible = "qcom,sa8775p-iris";
+-			status = "okay";
+-
+-			reg = <0 0x0aa00000 0 0xf0000>;
+-			interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
+-
+-			power-domains = <&videocc VIDEO_CC_MVS0C_GDSC>,
+-				<&videocc VIDEO_CC_MVS0_GDSC>,
+-				<&rpmhpd SA8775P_MXC>,
+-				<&rpmhpd SA8775P_MMCX>;
+-			power-domain-names = "venus", "vcodec0", "mxc", "mmcx";
+-			operating-points-v2 = <&iris_opp_table>;
+-
+-			clocks = <&gcc GCC_VIDEO_AXI0_CLK>,
+-				<&videocc VIDEO_CC_MVS0C_CLK>,
+-			<&videocc VIDEO_CC_MVS0_CLK>;
+-			clock-names = "iface", "core", "vcodec0_core";
+-
+-			interconnects =
+-				<&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS
+-					&config_noc SLAVE_VENUS_CFG QCOM_ICC_TAG_ALWAYS>,
+-				<&mmss_noc MASTER_VIDEO_P0 QCOM_ICC_TAG_ALWAYS
+-					&mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
+-			interconnect-names = "cpu-cfg", "video-mem";
+-
+-			/* FW load region */
+-			memory-region = <&pil_video_mem>;
+-
+-			resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>;
+-			reset-names = "bus";
+-
+-			iommus = <&apps_smmu 0x0880 0x0400>,
+-						<&apps_smmu 0x0887 0x0400>;
+-			dma-coherent;
+-
+-			iris_opp_table: opp-table {
+-				compatible = "operating-points-v2";
+-
+-				opp-366000000 {
+-					opp-hz = /bits/ 64 <366000000>;
+-					required-opps = <&rpmhpd_opp_svs_l1>,
+-						<&rpmhpd_opp_svs_l1>;
+-				};
+-
+-				opp-444000000 {
+-					opp-hz = /bits/ 64 <444000000>;
+-					required-opps = <&rpmhpd_opp_nom>,
+-						<&rpmhpd_opp_nom>;
+-				};
+-
+-				opp-533333334 {
+-					opp-hz = /bits/ 64 <533333334>;
+-					required-opps = <&rpmhpd_opp_turbo>,
+-						<&rpmhpd_opp_turbo>;
+-				};
+-
+-				opp-560000000 {
+-					opp-hz = /bits/ 64 <560000000>;
+-					required-opps = <&rpmhpd_opp_turbo_l1>,
+-						<&rpmhpd_opp_turbo_l1>;
+-				};
+-			};
+-		};
+-
+ 		videocc: clock-controller@abf0000 {
+ 			compatible = "qcom,sa8775p-videocc";
+ 			reg = <0x0 0x0abf0000 0x0 0x10000>;
+-- 
+2.34.1
+

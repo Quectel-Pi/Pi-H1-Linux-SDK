@@ -1,0 +1,55 @@
+From e8c39d796333b0567aa8a57718805d1b26e54c77 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:32:16 -0800
+Subject: [PATCH 142/146] FROMLIST: arm64: dts: qcom: add mst support for pixel
+ 1 stream clk for DP1
+
+Populate the pixel clock for stream 1 for DP1 for sa8775p DP controller.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-45-f8618d42a99a@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/sa8775p.dtsi | 14 +++++++++-----
+ 1 file changed, 9 insertions(+), 5 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/sa8775p.dtsi b/arch/arm64/boot/dts/qcom/sa8775p.dtsi
+index 83368c92a245..1beb125e2f1d 100644
+--- a/arch/arm64/boot/dts/qcom/sa8775p.dtsi
++++ b/arch/arm64/boot/dts/qcom/sa8775p.dtsi
+@@ -4160,7 +4160,8 @@ mdss0_dp1: displayport-controller@af5c000 {
+ 				reg = <0x0 0xaf5c000 0x0 0x104>,
+ 				      <0x0 0xaf5c200 0x0 0x0c0>,
+ 				      <0x0 0xaf5d000 0x0 0x770>,
+-				      <0x0 0xaf5e000 0x0 0x09c>;
++				      <0x0 0xaf5e000 0x0 0x09c>,
++				      <0x0 0xaf5f000 0x0 0x09c>;
+ 
+ 				interrupt-parent = <&mdss0>;
+ 				interrupts = <13>;
+@@ -4169,15 +4170,18 @@ mdss0_dp1: displayport-controller@af5c000 {
+ 					 <&dispcc0 MDSS_DISP_CC_MDSS_DPTX1_AUX_CLK>,
+ 					 <&dispcc0 MDSS_DISP_CC_MDSS_DPTX1_LINK_CLK>,
+ 					 <&dispcc0 MDSS_DISP_CC_MDSS_DPTX1_LINK_INTF_CLK>,
+-					 <&dispcc0 MDSS_DISP_CC_MDSS_DPTX1_PIXEL0_CLK>;
++					 <&dispcc0 MDSS_DISP_CC_MDSS_DPTX1_PIXEL0_CLK>,
++					 <&dispcc0 MDSS_DISP_CC_MDSS_DPTX1_PIXEL1_CLK>;
+ 				clock-names = "core_iface",
+ 					      "core_aux",
+ 					      "ctrl_link",
+ 					      "ctrl_link_iface",
+-					      "stream_pixel";
++					      "stream_pixel",
++					      "stream_1_pixel";
+ 				assigned-clocks = <&dispcc0 MDSS_DISP_CC_MDSS_DPTX1_LINK_CLK_SRC>,
+-						  <&dispcc0 MDSS_DISP_CC_MDSS_DPTX1_PIXEL0_CLK_SRC>;
+-				assigned-clock-parents = <&mdss0_dp1_phy 0>, <&mdss0_dp1_phy 1>;
++						  <&dispcc0 MDSS_DISP_CC_MDSS_DPTX1_PIXEL0_CLK_SRC>,
++						  <&dispcc0 MDSS_DISP_CC_MDSS_DPTX1_PIXEL1_CLK_SRC>;
++				assigned-clock-parents = <&mdss0_dp1_phy 0>, <&mdss0_dp1_phy 1>, <&mdss0_dp1_phy 1>;
+ 				phys = <&mdss0_dp1_phy>;
+ 				phy-names = "dp";
+ 
+-- 
+2.34.1
+

@@ -39,8 +39,13 @@ SRC_URI = " \
     file://core/0011-Remove-bionic-specific-calls.patch;patchdir=system/core \
     file://core/0012-Fix-implicit-declaration-of-stlcat-strlcopy-function.patch;patchdir=system/core \
     file://core/adb_libssl_11.diff;patchdir=system/core \
+    file://core/b64_pton_function_decl.patch;patchdir=system/core \
     file://core/0013-adb-Support-riscv64.patch;patchdir=system/core \
     file://core/0014-add-u3-ss-descriptor-support-for-adb.patch;patchdir=system/core \
+    file://core/0015-libsparse-Split-off-most-of-sparse_file_read_normal-.patch;patchdir=system/core \
+    file://core/0016-libsparse-Add-hole-mode-to-sparse_file_read.patch;patchdir=system/core \
+    file://core/0017-img2simg-Add-support-for-converting-holes-to-don-t-c.patch;patchdir=system/core \
+    file://core/0001-memory.h-Always-define-strlcpy-for-glibc-based-syste.patch;patchdir=system/core \
     file://extras/0001-ext4_utils-remove-selinux-extensions.patch;patchdir=system/extras \
     file://extras/0002-ext4_utils-add-o-argument-to-preserve-ownership.patch;patchdir=system/extras \
     file://libselinux/0001-Remove-bionic-specific-calls.patch;patchdir=external/libselinux \
@@ -53,7 +58,6 @@ SRC_URI = " \
     file://ext4_utils.mk;subdir=${BPN} \
     file://fastboot.mk;subdir=${BPN} \
     file://mkbootimg.mk;subdir=${BPN} \
-    file://0001-f.patch;patchdir=system/core \
 "
 
 
@@ -88,7 +92,7 @@ do_compile() {
 
     # Setting both variables below causing our makefiles to not work with
     # implicit make rules
-    unset CFLAGS
+    CFLAGS="-ffile-prefix-map=${S}=${TARGET_DBGSRC_DIR}"
     unset CPPFLAGS
 
     export SRCDIR=${S}

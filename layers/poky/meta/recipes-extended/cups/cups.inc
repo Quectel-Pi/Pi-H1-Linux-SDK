@@ -8,42 +8,30 @@ SECTION = "console/utils"
 LICENSE = "Apache-2.0"
 DEPENDS = "libpng jpeg dbus zlib libusb1"
 
-SRC_URI = "https://github.com/OpenPrinting/cups/releases/download/v${PV}/cups-${PV}-source.tar.gz \
+SRC_URI = "${GITHUB_BASE_URI}/download/v${PV}/cups-${PV}-source.tar.gz \
            file://0001-use-echo-only-in-init.patch \
            file://0002-don-t-try-to-run-generated-binaries.patch \
            file://libexecdir.patch \
            file://0004-cups-fix-multilib-install-file-conflicts.patch \
            file://volatiles.99_cups \
            file://cups-volatiles.conf \
-           file://CVE-2023-32324.patch \
-           file://CVE-2023-34241.patch \
-	   file://CVE-2023-32360.patch \
-	   file://CVE-2023-4504.patch \
-	   file://CVE-2024-35235.patch \
-	   file://CVE-2024-47175-1.patch \
-	   file://CVE-2024-47175-2.patch \
-	   file://CVE-2024-47175-3.patch \
-	   file://CVE-2024-47175-4.patch \
-	   file://CVE-2024-47175-5.patch \
+           file://CVE-2025-58060.patch \
+           file://CVE-2025-58364.patch \
            "
 
-UPSTREAM_CHECK_URI = "https://github.com/OpenPrinting/cups/releases"
-UPSTREAM_CHECK_REGEX = "cups-(?P<pver>(?!.+\d(b|rc)\d.+).+)-source.tar"
+GITHUB_BASE_URI = "https://github.com/OpenPrinting/cups/releases"
 
-# Issue only applies to MacOS
-CVE_CHECK_IGNORE += "CVE-2008-1033"
-# Issue affects pdfdistiller plugin used with but not part of cups
-CVE_CHECK_IGNORE += "CVE-2009-0032"
-# This is an Ubuntu only issue.
-CVE_CHECK_IGNORE += "CVE-2018-6553"
-# This is fixed in 2.4.2 but the cve-check class still reports it
-CVE_CHECK_IGNORE += "CVE-2022-26691"
+CVE_STATUS[CVE-2008-1033] = "not-applicable-platform: Issue only applies to MacOS"
+CVE_STATUS[CVE-2009-0032] = "cpe-incorrect: Issue affects pdfdistiller plugin used with but not part of cups"
+CVE_STATUS[CVE-2018-6553] = "not-applicable-platform: This is an Ubuntu only issue"
+CVE_STATUS[CVE-2022-26691] = "fixed-version: This is fixed in 2.4.2 but the cve-check class still reports it"
+CVE_STATUS[CVE-2021-25317] = "not-applicable-config: This concerns /var/log/cups having lp ownership, our /var/log/cups is root:root, so this doesn't apply."
 
 LEAD_SONAME = "libcupsdriver.so"
 
 CLEANBROKEN = "1"
 
-inherit autotools-brokensep binconfig useradd systemd pkgconfig multilib_script
+inherit autotools-brokensep binconfig useradd systemd pkgconfig multilib_script github-releases
 
 USERADD_PACKAGES = "${PN}"
 GROUPADD_PARAM:${PN} = "--system lpadmin"
@@ -51,10 +39,13 @@ GROUPADD_PARAM:${PN} = "--system lpadmin"
 SYSTEMD_SERVICE:${PN} = "cups.socket cups.path cups.service cups-lpd.socket"
 
 PACKAGECONFIG ??= "${@bb.utils.contains('DISTRO_FEATURES', 'zeroconf', 'avahi', '', d)} \
-                   ${@bb.utils.filter('DISTRO_FEATURES', 'pam systemd', d)}"
+                   ${@bb.utils.filter('DISTRO_FEATURES', 'pam systemd', d)} \
+                   openssl \
+"
 PACKAGECONFIG[avahi] = "--with-dnssd=avahi,--with-dnssd=no,avahi"
 PACKAGECONFIG[acl] = "--enable-acl,--disable-acl,acl"
-PACKAGECONFIG[gnutls] = "--with-tls=gnutls,--with-tls=no,gnutls"
+PACKAGECONFIG[gnutls] = "--with-tls=gnutls,,gnutls,,,openssl"
+PACKAGECONFIG[openssl] = "--with-tls=openssl,,openssl,,,gnutls"
 PACKAGECONFIG[pam] = "--enable-pam --with-pam-module=unix, --disable-pam, libpam"
 PACKAGECONFIG[systemd] = "--with-systemd=${systemd_system_unitdir},--without-systemd,systemd"
 PACKAGECONFIG[xinetd] = "--with-xinetd=${sysconfdir}/xinetd.d,--without-xinetd,xinetd"
@@ -68,7 +59,7 @@ EXTRA_OECONF = " \
                --enable-debug \
                --disable-relro \
                --enable-libusb \
-               --with-system-groups=lpadmin \
+               --with-system-groups=lpadmin,root,sys,wheel \
                --with-cups-group=lp \
                --with-domainsocket=/run/cups/cups.sock \
                --with-pkgconfpath=${libdir}/pkgconfig \
@@ -107,7 +98,7 @@ do_install () {
 PACKAGES =+ "${PN}-lib ${PN}-libimage ${PN}-webif"
 
 RDEPENDS:${PN} += "${@bb.utils.contains('DISTRO_FEATURES', 'sysvinit', 'procps', '', d)}"
-FILES:${PN} += "${libexecdir}/cups/"
+FILES:${PN} += "${libexecdir}/cups/ ${systemd_system_unitdir}/system-cups.slice"
 
 FILES:${PN}-lib = "${libdir}/libcups.so.*"
 
@@ -121,11 +112,9 @@ CONFFILES:${PN} += "${sysconfdir}/cups/cupsd.conf"
 
 MULTILIB_SCRIPTS = "${PN}-dev:${bindir}/cups-config"
 
+LOCALE_PATHS += "${datadir}/cups/templates"
+
 SYSROOT_PREPROCESS_FUNCS += "cups_sysroot_preprocess"
 cups_sysroot_preprocess () {
 	sed -i ${SYSROOT_DESTDIR}${bindir_crossscripts}/cups-config -e 's:cups_datadir=.*:cups_datadir=${datadir}/cups:' -e 's:cups_serverbin=.*:cups_serverbin=${libexecdir}/cups:'
 }
-
-# -25317 concerns /var/log/cups having lp ownership.  Our /var/log/cups is
-# root:root, so this doesn't apply.
-CVE_CHECK_IGNORE += "CVE-2021-25317"

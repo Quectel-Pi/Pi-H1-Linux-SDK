@@ -1,0 +1,30 @@
+From b3be527675f370fad4ba0edc3ecb50490606e84c Mon Sep 17 00:00:00 2001
+From: Ziyue Zhang <quic_ziyuzhan@quicinc.com>
+Date: Mon, 10 Feb 2025 17:31:30 +0800
+Subject: [PATCH 4/8] FROMLIST: PCI: qcom: Add QCS8300 PCIe support
+
+Add support for QCS8300 SoC that uses controller version 5.90 so reusing
+the 1.34.0 config.
+
+Signed-off-by: Ziyue Zhang <quic_ziyuzhan@quicinc.com>
+Link: https://lore.kernel.org/all/20241220055239.2744024-5-quic_ziyuzhan@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241220055239.2744024-5-quic_ziyuzhan@quicinc.com/]
+---
+ drivers/pci/controller/dwc/pcie-qcom.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/pci/controller/dwc/pcie-qcom.c b/drivers/pci/controller/dwc/pcie-qcom.c
+index deef853c983d..8463e74a8158 100644
+--- a/drivers/pci/controller/dwc/pcie-qcom.c
++++ b/drivers/pci/controller/dwc/pcie-qcom.c
+@@ -1621,6 +1621,7 @@ static const struct of_device_id qcom_pcie_match[] = {
+ 	{ .compatible = "qcom,pcie-msm8996", .data = &cfg_2_3_2 },
+ 	{ .compatible = "qcom,pcie-qcs404", .data = &cfg_2_4_0 },
+ 	{ .compatible = "qcom,pcie-qcs615", .data = &cfg_1_9_0 },
++	{ .compatible = "qcom,pcie-qcs8300", .data = &cfg_1_9_0 },
+ 	{ .compatible = "qcom,pcie-sa8540p", .data = &cfg_1_9_0 },
+ 	{ .compatible = "qcom,pcie-sa8775p", .data = &cfg_1_9_0},
+ 	{ .compatible = "qcom,pcie-sc7280", .data = &cfg_1_9_0 },
+-- 
+2.25.1
+

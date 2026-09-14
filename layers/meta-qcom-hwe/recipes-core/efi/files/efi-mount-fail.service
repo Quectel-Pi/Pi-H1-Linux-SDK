@@ -1,0 +1,9 @@
+[Unit]
+Description=Handle efi mount failure
+DefaultDependencies=no
+Before=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/mount_efi.sh
+RemainAfterExit=yes

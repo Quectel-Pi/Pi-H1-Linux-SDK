@@ -997,6 +997,37 @@ static bool wcd937x_readonly_register(struct device *dev, unsigned int reg)
 	return false;
 }
 
+static bool wcd937x_volatile_register(struct device *dev, unsigned int reg)
+{
+	switch (reg) {
+	case WCD937X_ANA_MBHC_RESULT_1:
+	case WCD937X_ANA_MBHC_RESULT_2:
+	case WCD937X_ANA_MBHC_RESULT_3:
+	case WCD937X_MBHC_MOISTURE_DET_FSM_STATUS:
+	case WCD937X_TX_1_2_SAR1_ERR:
+	case WCD937X_TX_1_2_SAR2_ERR:
+	case WCD937X_TX_3_SAR1_ERR:
+	case WCD937X_HPH_L_STATUS:
+	case WCD937X_HPH_R_STATUS:
+	case WCD937X_HPH_SURGE_HPHLR_SURGE_STATUS:
+	case WCD937X_EAR_STATUS_REG_1:
+	case WCD937X_EAR_STATUS_REG_2:
+	case WCD937X_MBHC_NEW_FSM_STATUS:
+	case WCD937X_MBHC_NEW_ADC_RESULT:
+	case WCD937X_DIE_CRACK_DIE_CRK_DET_OUT:
+	case WCD937X_DIGITAL_INTR_STATUS_0:
+	case WCD937X_DIGITAL_INTR_STATUS_1:
+	case WCD937X_DIGITAL_INTR_STATUS_2:
+	case WCD937X_DIGITAL_SWR_HM_TEST:
+	case WCD937X_DIGITAL_PIN_STATUS_0:
+	case WCD937X_DIGITAL_PIN_STATUS_1:
+	case WCD937X_DIGITAL_MODE_STATUS_0:
+	case WCD937X_DIGITAL_MODE_STATUS_1:
+		return true;
+	}
+	return false;
+}
+
 static bool wcd937x_readable_register(struct device *dev, unsigned int reg)
 {
 	return wcd937x_readonly_register(dev, reg) || wcd937x_rdwr_register(dev, reg);
@@ -1012,7 +1043,7 @@ static const struct regmap_config wcd937x_regmap_config = {
 	.max_register = WCD937X_MAX_REGISTER,
 	.readable_reg = wcd937x_readable_register,
 	.writeable_reg = wcd937x_rdwr_register,
-	.volatile_reg = wcd937x_readonly_register,
+	.volatile_reg = wcd937x_volatile_register,
 };
 
 static const struct sdw_slave_ops wcd937x_slave_ops = {

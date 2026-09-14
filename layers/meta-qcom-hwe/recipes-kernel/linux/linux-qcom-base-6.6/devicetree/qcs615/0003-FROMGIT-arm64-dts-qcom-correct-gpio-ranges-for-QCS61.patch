@@ -1,0 +1,36 @@
+From 30fc0927be118f65369866331e2b6fda9ae258ba Mon Sep 17 00:00:00 2001
+From: Lijuan Gao <quic_lijuang@quicinc.com>
+Date: Wed, 15 Jan 2025 16:38:01 +0800
+Subject: [PATCH 3/3] FROMGIT: arm64: dts: qcom: correct gpio-ranges for QCS615
+
+Correct the gpio-ranges for the QCS615 TLMM pin controller to include
+GPIOs 0-122 and the UFS_RESET pin for primary UFS memory reset.
+
+Fixes: 8e266654a2fe ("arm64: dts: qcom: add QCS615 platform")
+Signed-off-by: Lijuan Gao <quic_lijuang@quicinc.com>
+Reviewed-by: Konrad Dybcio <konrad.dybcio@oss.qualcomm.com>
+Link: https://lore.kernel.org/r/20241219-correct_gpio_ranges-v2-5-19af8588dbd0@quicinc.com
+Signed-off-by: Bjorn Andersson <andersson@kernel.org>
+Git-repo: https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
+Git-commit: 80c82827327d80bde8fc96ebd4e637d0454062db
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git 80c82827327d80bde8fc96ebd4e637d0454062db]
+---
+ arch/arm64/boot/dts/qcom/qcs615.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs615.dtsi b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+index e4ad495c3532..36fdd32f1ce6 100644
+--- a/arch/arm64/boot/dts/qcom/qcs615.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+@@ -1128,7 +1128,7 @@ tlmm: pinctrl@3100000 {
+ 				    "west",
+ 				    "south";
+ 			interrupts = <GIC_SPI 208 IRQ_TYPE_LEVEL_HIGH>;
+-			gpio-ranges = <&tlmm 0 0 123>;
++			gpio-ranges = <&tlmm 0 0 124>;
+ 			gpio-controller;
+ 			#gpio-cells = <2>;
+ 			interrupt-controller;
+-- 
+2.46.0
+

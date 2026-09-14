@@ -1,0 +1,125 @@
+From 09c4c687ff4045bf578621dad25928eaab44b109 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:31:39 -0800
+Subject: [PATCH 105/146] FROMLIST: drm/msm/dp: re-arrange dp_display_disable()
+ into functional parts
+
+dp_display_disable() handles special case of when monitor is
+disconnected from the dongle while the dongle stays connected
+thereby needing a separate function dp_ctrl_off_link_stream()
+for this. However with a slight rework this can still be handled
+by keeping common paths same for regular and special case.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-8-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_ctrl.c    | 29 +++++++++++++++--------------
+ drivers/gpu/drm/msm/dp/dp_ctrl.h    |  4 ++++
+ drivers/gpu/drm/msm/dp/dp_display.c | 25 ++++++++++++-------------
+ 3 files changed, 31 insertions(+), 27 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_ctrl.c b/drivers/gpu/drm/msm/dp/dp_ctrl.c
+index d0d454a260d2..fab7ca3ce7f6 100644
+--- a/drivers/gpu/drm/msm/dp/dp_ctrl.c
++++ b/drivers/gpu/drm/msm/dp/dp_ctrl.c
+@@ -2064,30 +2064,31 @@ int msm_dp_ctrl_on_stream(struct msm_dp_ctrl *msm_dp_ctrl)
+ 	return ret;
+ }
+ 
+-void msm_dp_ctrl_off_link_stream(struct msm_dp_ctrl *msm_dp_ctrl)
++void msm_dp_ctrl_clear_vsc_sdp_pkt(struct msm_dp_ctrl *msm_dp_ctrl)
+ {
+ 	struct msm_dp_ctrl_private *ctrl;
+-	struct phy *phy;
+ 
+ 	ctrl = container_of(msm_dp_ctrl, struct msm_dp_ctrl_private, msm_dp_ctrl);
+-	phy = ctrl->phy;
+-
+ 	msm_dp_catalog_panel_disable_vsc_sdp(ctrl->catalog);
++}
+ 
+-	/* set dongle to D3 (power off) mode */
+-	msm_dp_link_psm_config(ctrl->link, &ctrl->panel->link_info, true);
++void msm_dp_ctrl_psm_config(struct msm_dp_ctrl *msm_dp_ctrl)
++{
++	struct msm_dp_ctrl_private *ctrl;
+ 
+-	msm_dp_catalog_ctrl_mainlink_ctrl(ctrl->catalog, false);
++	ctrl = container_of(msm_dp_ctrl, struct msm_dp_ctrl_private, msm_dp_ctrl);
+ 
+-	if (ctrl->stream_clks_on) {
+-		clk_disable_unprepare(ctrl->pixel_clk);
+-		ctrl->stream_clks_on = false;
+-	}
++	/* set dongle to D3 (power off) mode */
++	msm_dp_link_psm_config(ctrl->link, &ctrl->panel->link_info, true);
++}
+ 
+-	dev_pm_opp_set_rate(ctrl->dev, 0);
+-	msm_dp_ctrl_link_clk_disable(&ctrl->msm_dp_ctrl);
++void msm_dp_ctrl_reinit_phy(struct msm_dp_ctrl *msm_dp_ctrl)
++{
++	struct msm_dp_ctrl_private *ctrl;
++	struct phy *phy;
+ 
+-	phy_power_off(phy);
++	ctrl = container_of(msm_dp_ctrl, struct msm_dp_ctrl_private, msm_dp_ctrl);
++	phy = ctrl->phy;
+ 
+ 	/* aux channel down, reinit phy */
+ 	phy_exit(phy);
+diff --git a/drivers/gpu/drm/msm/dp/dp_ctrl.h b/drivers/gpu/drm/msm/dp/dp_ctrl.h
+index 42745c912adb..0f58b63c5c7c 100644
+--- a/drivers/gpu/drm/msm/dp/dp_ctrl.h
++++ b/drivers/gpu/drm/msm/dp/dp_ctrl.h
+@@ -42,4 +42,8 @@ void msm_dp_ctrl_config_psr(struct msm_dp_ctrl *msm_dp_ctrl);
+ int msm_dp_ctrl_core_clk_enable(struct msm_dp_ctrl *msm_dp_ctrl);
+ void msm_dp_ctrl_core_clk_disable(struct msm_dp_ctrl *msm_dp_ctrl);
+ 
++void msm_dp_ctrl_clear_vsc_sdp_pkt(struct msm_dp_ctrl *msm_dp_ctrl);
++void msm_dp_ctrl_psm_config(struct msm_dp_ctrl *msm_dp_ctrl);
++void msm_dp_ctrl_reinit_phy(struct msm_dp_ctrl *msm_dp_ctrl);
++
+ #endif /* _DP_CTRL_H_ */
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 8609fabc1e12..6c0167f2b2d3 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -911,20 +911,19 @@ static int msm_dp_display_disable(struct msm_dp_display_private *dp)
+ 	if (!msm_dp_display->power_on)
+ 		return 0;
+ 
+-	if (dp->link->sink_count == 0) {
+-		/*
+-		 * irq_hpd with sink_count = 0
+-		 * hdmi unplugged out of dongle
+-		 */
+-		msm_dp_ctrl_off_link_stream(dp->ctrl);
+-	} else {
+-		/*
+-		 * unplugged interrupt
+-		 * dongle unplugged out of DUT
+-		 */
+-		msm_dp_ctrl_off(dp->ctrl);
++	msm_dp_ctrl_clear_vsc_sdp_pkt(dp->ctrl);
++
++	/* dongle is still connected but sinks are disconnected */
++	if (dp->link->sink_count == 0)
++		msm_dp_ctrl_psm_config(dp->ctrl);
++
++	msm_dp_ctrl_off(dp->ctrl);
++
++	/* re-init the PHY so that we can listen to Dongle disconnect */
++	if (dp->link->sink_count == 0)
++		msm_dp_ctrl_reinit_phy(dp->ctrl);
++	else
+ 		msm_dp_display_host_phy_exit(dp);
+-	}
+ 
+ 	msm_dp_display->power_on = false;
+ 
+-- 
+2.34.1
+

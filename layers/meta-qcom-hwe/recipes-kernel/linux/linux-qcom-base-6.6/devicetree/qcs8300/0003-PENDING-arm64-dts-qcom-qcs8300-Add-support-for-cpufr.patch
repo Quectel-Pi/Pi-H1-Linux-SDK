@@ -1,0 +1,105 @@
+From c1d9cd11ae40ba0b92ae5eed451ccc0ee5049887 Mon Sep 17 00:00:00 2001
+From: Imran Shaik <quic_imrashai@quicinc.com>
+Date: Fri, 26 Jul 2024 15:43:42 +0530
+Subject: [PATCH 3/6] PENDING: arm64: dts: qcom: qcs8300: Add support for
+ cpufreq hw
+
+Add the cpufreq node support to enable the cpufreq scaling on qcs8300.
+
+Signed-off-by: Imran Shaik <quic_imrashai@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index c0c334c6677e..55b3123d8989 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -70,6 +70,7 @@ cpu0: cpu@0 {
+ 			next-level-cache = <&l2_0>;
+ 			power-domains = <&cpu_pd0>;
+ 			power-domain-names = "psci";
++			qcom,freq-domain = <&cpufreq_hw 0>;
+ 			capacity-dmips-mhz = <1946>;
+ 			dynamic-power-coefficient = <472>;
+ 
+@@ -89,6 +90,7 @@ cpu1: cpu@100 {
+ 			next-level-cache = <&l2_1>;
+ 			power-domains = <&cpu_pd1>;
+ 			power-domain-names = "psci";
++			qcom,freq-domain = <&cpufreq_hw 0>;
+ 			capacity-dmips-mhz = <1946>;
+ 			dynamic-power-coefficient = <472>;
+ 
+@@ -108,6 +110,7 @@ cpu2: cpu@200 {
+ 			next-level-cache = <&l2_2>;
+ 			power-domains = <&cpu_pd2>;
+ 			power-domain-names = "psci";
++			qcom,freq-domain = <&cpufreq_hw 1>;
+ 			capacity-dmips-mhz = <1946>;
+ 			dynamic-power-coefficient = <507>;
+ 
+@@ -127,6 +130,7 @@ cpu3: cpu@300 {
+ 			next-level-cache = <&l2_3>;
+ 			power-domains = <&cpu_pd3>;
+ 			power-domain-names = "psci";
++			qcom,freq-domain = <&cpufreq_hw 1>;
+ 			capacity-dmips-mhz = <1946>;
+ 			dynamic-power-coefficient = <507>;
+ 
+@@ -146,6 +150,7 @@ cpu4: cpu@10000 {
+ 			next-level-cache = <&l2_4>;
+ 			power-domains = <&cpu_pd4>;
+ 			power-domain-names = "psci";
++			qcom,freq-domain = <&cpufreq_hw 2>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
+ 
+@@ -165,6 +170,7 @@ cpu5: cpu@10100 {
+ 			next-level-cache = <&l2_5>;
+ 			power-domains = <&cpu_pd5>;
+ 			power-domain-names = "psci";
++			qcom,freq-domain = <&cpufreq_hw 2>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
+ 
+@@ -184,6 +190,7 @@ cpu6: cpu@10200 {
+ 			next-level-cache = <&l2_6>;
+ 			power-domains = <&cpu_pd6>;
+ 			power-domain-names = "psci";
++			qcom,freq-domain = <&cpufreq_hw 2>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
+ 
+@@ -203,6 +210,7 @@ cpu7: cpu@10300 {
+ 			next-level-cache = <&l2_7>;
+ 			power-domains = <&cpu_pd7>;
+ 			power-domain-names = "psci";
++			qcom,freq-domain = <&cpufreq_hw 2>;
+ 			capacity-dmips-mhz = <1024>;
+ 			dynamic-power-coefficient = <100>;
+ 
+@@ -3840,6 +3848,19 @@ epss_l3_cl0: interconnect@18590000 {
+ 			#interconnect-cells = <1>;
+ 		};
+ 
++		cpufreq_hw: cpufreq@18591000 {
++			compatible = "qcom,qcs8300-cpufreq-epss", "qcom,cpufreq-epss";
++			reg = <0x0 0x18591000 0x0 0x1000>,
++			      <0x0 0x18594000 0x0 0x1000>,
++			      <0x0 0x18593000 0x0 0x1000>;
++			reg-names = "freq-domain0", "freq-domain1", "freq-domain2";
++
++			clocks = <&rpmhcc RPMH_CXO_CLK>, <&gcc GCC_GPLL0>;
++			clock-names = "xo", "alternate";
++
++			#freq-domain-cells = <1>;
++		};
++
+ 		epss_l3_cl1: interconnect@18592000 {
+ 			compatible = "qcom,sa8775p-epss-l3-cl1",
+ 				     "qcom,epss-l3";
+-- 
+2.34.1
+

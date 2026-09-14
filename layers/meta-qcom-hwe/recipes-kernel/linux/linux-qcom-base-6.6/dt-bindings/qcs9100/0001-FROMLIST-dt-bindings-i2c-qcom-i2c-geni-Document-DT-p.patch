@@ -1,0 +1,55 @@
+From d3bf31f28d09024038109a6892a3032d14a35ac0 Mon Sep 17 00:00:00 2001
+From: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Date: Tue, 15 Oct 2024 11:56:33 +0530
+Subject: [PATCH 1/8] FROMLIST: dt-bindings: i2c: qcom,i2c-geni: Document DT
+ properties for QUP firmware loading
+
+Document the 'qcom,load-firmware' and 'qcom,xfer-mode' properties to
+support SE(Serial Engine) firmware loading from the protocol driver and to
+select the data transfer mode, either GPI DMA (Generic Packet Interface)
+or non-GPI mode (PIO/CPU DMA).
+
+I2C controller can operate in one of two modes based on the
+'qcom,xfer-mode' property, and the firmware is loaded accordingly.
+
+Change-Id: I59f36cc0840e1433d3c8524a555bd862508e47ee
+Co-developed-by: Mukesh Kumar Savaliya <quic_msavaliy@quicinc.com>
+Signed-off-by: Mukesh Kumar Savaliya <quic_msavaliy@quicinc.com>
+Signed-off-by: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Link: https://lore.kernel.org/linux-kernel/20241204150326.1470749-2-quic_vdadhani@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/linux-kernel/20241204150326.1470749-2-quic_vdadhani@quicinc.com/]
+---
+ .../devicetree/bindings/i2c/qcom,i2c-geni-qcom.yaml   | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/i2c/qcom,i2c-geni-qcom.yaml b/Documentation/devicetree/bindings/i2c/qcom,i2c-geni-qcom.yaml
+index 9f66a3bb1f80..a26f34fce1bb 100644
+--- a/Documentation/devicetree/bindings/i2c/qcom,i2c-geni-qcom.yaml
++++ b/Documentation/devicetree/bindings/i2c/qcom,i2c-geni-qcom.yaml
+@@ -66,6 +66,15 @@ properties:
+   required-opps:
+     maxItems: 1
+ 
++  qcom,load-firmware:
++    type: boolean
++    description: Optional property to load SE (serial engine) Firmware from protocol driver.
++
++  qcom,xfer-mode:
++    description: Value 1,2 and 3 represents FIFO, CPU DMA and GSI DMA mode respectively.
++    $ref: /schemas/types.yaml#/definitions/uint32
++    enum: [1, 2, 3]
++
+ required:
+   - compatible
+   - interrupts
+@@ -142,5 +151,7 @@ examples:
+         interconnect-names = "qup-core", "qup-config", "qup-memory";
+         power-domains = <&rpmhpd SC7180_CX>;
+         required-opps = <&rpmhpd_opp_low_svs>;
++        qcom,load-firmware;
++        qcom,xfer-mode = <1>;
+     };
+ ...
+-- 
+2.34.1
+

@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Release 2.6 (thud)
 ==================
 
@@ -126,16 +128,16 @@ missing from :term:`DEPENDS`).
 
 .. note::
 
-   This change affects classes beyond just the two mentioned (i.e.
-   ``distutils`` and ``distutils3``). Any recipe that inherits ``distutils*``
-   classes are affected. For example, the ``setuptools`` and ``setuptools3``
+   This change affects classes beyond just the two mentioned (i.e. ``distutils``
+   and ``distutils3``). Any recipe that inherits ``distutils*`` classes are
+   affected. For example, the ``setuptools`` and :ref:`ref-classes-setuptools3`
    recipes are affected since they inherit the ``distutils*`` classes.
 
 Fetching these types of dependencies that are not provided in the
 sysroot negatively affects the ability to reproduce builds. This type of
 fetching is now explicitly disabled. Consequently, any missing
 dependencies in Python recipes that use these classes now result in an
-error during the ``do_configure`` task.
+error during the :ref:`ref-tasks-configure` task.
 
 .. _migration-2.6-linux-yocto-configuration-audit-issues-now-correctly-reported:
 
@@ -208,22 +210,19 @@ The following changes have been made:
 ``SERIAL_CONSOLE`` Deprecated
 -----------------------------
 
-The :term:`SERIAL_CONSOLE` variable has been
-functionally replaced by the
-:term:`SERIAL_CONSOLES` variable for some time.
-With the Yocto Project 2.6 release, :term:`SERIAL_CONSOLE` has been
-officially deprecated.
+The ``SERIAL_CONSOLE`` variable has been functionally replaced by the
+:term:`SERIAL_CONSOLES` variable for some time. With the Yocto Project 2.6
+release, ``SERIAL_CONSOLE`` has been officially deprecated.
 
-:term:`SERIAL_CONSOLE` will continue to work as before for the 2.6 release.
+``SERIAL_CONSOLE`` will continue to work as before for the 2.6 release.
 However, for the sake of future compatibility, it is recommended that
-you replace all instances of :term:`SERIAL_CONSOLE` with
-:term:`SERIAL_CONSOLES`.
+you replace all instances of ``SERIAL_CONSOLE`` with :term:`SERIAL_CONSOLES`.
 
 .. note::
 
    The only difference in usage is that :term:`SERIAL_CONSOLES`
    expects entries to be separated using semicolons as compared to
-   :term:`SERIAL_CONSOLE`, which expects spaces.
+   ``SERIAL_CONSOLE``, which expects spaces.
 
 .. _migration-2.6-poky-sets-unknown-configure-option-to-qa-error:
 
@@ -275,16 +274,16 @@ The following changes have occurred:
    specifying list items to remove, be aware that leading and trailing
    whitespace resulting from the removal is retained.
 
-   See the ":ref:`bitbake:bitbake-user-manual/bitbake-user-manual-metadata:removal (override style syntax)`"
+   See the ":ref:`bitbake-user-manual/bitbake-user-manual-metadata:removal (override style syntax)`"
    section in the BitBake User Manual for a detailed example.
 
-.. _migration-2.6-systemd-configuration-now-split-out-to-system-conf:
+.. _migration-2.6-systemd-configuration-now-split-out-to-systemd-conf:
 
 ``systemd`` Configuration is Now Split Into ``systemd-conf``
 ------------------------------------------------------------
 
 The configuration for the ``systemd`` recipe has been moved into a
-``system-conf`` recipe. Moving this configuration to a separate recipe
+``systemd-conf`` recipe. Moving this configuration to a separate recipe
 avoids the ``systemd`` recipe from becoming machine-specific for cases
 where machine-specific configurations need to be applied (e.g. for
 ``qemu*`` machines).
@@ -315,13 +314,11 @@ This section provides information about automatic testing changes:
    exists and has been replaced by the
    :term:`TESTIMAGE_AUTO` variable.
 
--  Inheriting the ``testimage`` and ``testsdk`` Classes: Best
-   practices now dictate that you use the
-   :term:`IMAGE_CLASSES` variable rather than the
-   :term:`INHERIT` variable when you inherit the
-   :ref:`testimage <ref-classes-testimage>` and
-   :ref:`testsdk <ref-classes-testsdk>` classes used for automatic
-   testing.
+-  Inheriting the :ref:`ref-classes-testimage` and :ref:`ref-classes-testsdk`
+   classes: best practices now dictate that you use the :term:`IMAGE_CLASSES`
+   variable rather than the :term:`INHERIT` variable when you inherit the
+   :ref:`ref-classes-testimage` and :ref:`ref-classes-testsdk` classes used
+   for automatic testing.
 
 .. _migration-2.6-openssl-changes:
 
@@ -343,8 +340,7 @@ BitBake Changes
 ---------------
 
 The server logfile ``bitbake-cookerdaemon.log`` is now always placed in
-the :term:`Build Directory` instead of the current
-directory.
+the :term:`Build Directory` instead of the current directory.
 
 .. _migration-2.6-security-changes:
 

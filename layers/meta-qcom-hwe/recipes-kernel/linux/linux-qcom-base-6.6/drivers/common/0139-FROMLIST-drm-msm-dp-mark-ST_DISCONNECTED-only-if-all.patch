@@ -1,0 +1,33 @@
+From 95c2951987f67eed81e90227c2ba65ebd314f536 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:32:13 -0800
+Subject: [PATCH 139/146] FROMLIST: drm/msm/dp: mark ST_DISCONNECTED only if
+ all streams are disabled
+
+HPD state machine assumes only one active stream. Fix it to account
+for both while marking the state of the hpd as disconnected.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-42-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index b16afee1ea59..5bebb6763b37 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -1896,7 +1896,7 @@ void msm_dp_display_atomic_post_disable_helper(struct msm_dp *dp, struct msm_dp_
+ 	msm_dp_display_disable(msm_dp_display, msm_dp_panel);
+ 
+ 	state =  msm_dp_display->hpd_state;
+-	if (state == ST_DISCONNECT_PENDING) {
++	if (state == ST_DISCONNECT_PENDING && !msm_dp_display->active_stream_cnt) {
+ 		/* completed disconnection */
+ 		msm_dp_display->hpd_state = ST_DISCONNECTED;
+ 	}
+-- 
+2.34.1
+

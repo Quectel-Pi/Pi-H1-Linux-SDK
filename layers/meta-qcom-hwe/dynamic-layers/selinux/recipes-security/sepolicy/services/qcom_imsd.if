@@ -1,0 +1,28 @@
+# Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+## <summary>imsd daemon</summary>
+
+########################################
+## <summary>
+##       Manage IMSD service
+## </summary>
+## <desc>
+##    <p>
+##    Allow the specified domain to manage the IMSD
+##    service, including checking its status and starting it.
+##    </p>
+## </desc>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_imsd_start_service',`
+    gen_require(`
+        type qcom_imsd_exec_t;
+    ')
+
+    allow $1 qcom_imsd_exec_t:service { status start stop };
+')

@@ -1,0 +1,12 @@
+[Unit]
+Description=Enable NTP on boot
+After=network-online.target systemd-timesyncd.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/timedatectl set-ntp true
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

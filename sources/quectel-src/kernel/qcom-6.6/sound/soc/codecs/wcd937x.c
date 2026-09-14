@@ -101,9 +101,6 @@ struct wcd937x_priv {
 	int ear_rx_path;
 	u32 chipid;
 	int reset_gpio;
-	int pa_gpio;
-	int headset1_gpio;
-	int headset2_gpio;
 	u32 micb1_mv;
 	u32 micb2_mv;
 	u32 micb3_mv;
@@ -122,6 +119,7 @@ struct wcd937x_priv {
 	atomic_t rx_clk_cnt;
 	atomic_t ana_clk_count;
 	bool has_always_on_supplies;
+	struct gpio_desc *power_gpio;
 };
 
 static const DECLARE_TLV_DB_SCALE(line_gain, 0, 7, 1);
@@ -256,24 +254,6 @@ static void wcd937x_reset(struct wcd937x_priv *wcd937x)
 	gpio_set_value(wcd937x->reset_gpio, 1);
 	usleep_range(20, 30);
 }
-
-static void wcd937x_set_headset1(struct wcd937x_priv *wcd937x)
-{
-	gpio_direction_output(wcd937x->headset1_gpio, 0);
-	usleep_range(20, 30);
-
-	gpio_set_value(wcd937x->headset1_gpio, 1);
-	usleep_range(20, 30);
-}
-static void wcd937x_set_headset2(struct wcd937x_priv *wcd937x)
-{
-	gpio_direction_output(wcd937x->headset2_gpio, 0);
-	usleep_range(20, 30);
-
-	gpio_set_value(wcd937x->headset2_gpio, 1);
-	usleep_range(20, 30);
-}
-
 
 static void wcd937x_io_init(struct regmap *regmap)
 {
@@ -574,8 +554,17 @@ static int wcd937x_codec_aux_dac_event(struct snd_soc_dapm_widget *w,
 	case SND_SOC_DAPM_PRE_PMU:
 		wcd937x_rx_clk_enable(component);
 		snd_soc_component_update_bits(component,
+				WCD937X_EAR_EAR_DAC_CON,
+				BIT(7), 0x00);
+		snd_soc_component_update_bits(component,
+				WCD937X_DIGITAL_PDM_WD_CTL0, 0x07, 0x03);
+		snd_soc_component_update_bits(component,
+				WCD937X_DIGITAL_PDM_WD_CTL1, 0x07, 0x03);
+		snd_soc_component_update_bits(component,
 				WCD937X_DIGITAL_CDC_ANA_CLK_CTL,
 				BIT(2), BIT(2));
+		snd_soc_component_update_bits(component,
+				WCD937X_AUX_AUXPA, BIT(4), BIT(4));
 		snd_soc_component_update_bits(component,
 				WCD937X_DIGITAL_CDC_DIG_CLK_CTL,
 				BIT(2), BIT(2));
@@ -586,12 +575,16 @@ static int wcd937x_codec_aux_dac_event(struct snd_soc_dapm_widget *w,
 					WCD_CLSH_EVENT_PRE_DAC,
 					WCD_CLSH_STATE_AUX,
 					hph_mode);
-
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		snd_soc_component_update_bits(component,
 				WCD937X_DIGITAL_CDC_ANA_CLK_CTL,
 				BIT(2), 0x00);
+		snd_soc_component_update_bits(component,
+				WCD937X_AUX_AUXPA, BIT(4), 0x00);
+		snd_soc_component_update_bits(component,
+				WCD937X_DIGITAL_CDC_AUX_GAIN_CTL,
+				BIT(0), 0x00);
 		break;
 	}
 
@@ -633,8 +626,12 @@ static int wcd937x_codec_enable_hphr_pa(struct snd_soc_dapm_widget *w,
 				BIT(1), BIT(1));
 		if (hph_mode == CLS_AB || hph_mode == CLS_AB_HIFI)
 			snd_soc_component_update_bits(component,
+					WCD937X_ANA_RX_SUPPLIES,
+					BIT(1), BIT(1));
+		/* speaker(AUX) 关闭时清了 VNEG/BUCK 电源轨(bit6/7), 此处恢复 */
+		snd_soc_component_update_bits(component,
 				WCD937X_ANA_RX_SUPPLIES,
-				BIT(1), BIT(1));
+				BIT(6) | BIT(7), BIT(6) | BIT(7));
 		enable_irq(wcd937x->hphr_pdm_wd_int);
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
@@ -656,6 +653,18 @@ static int wcd937x_codec_enable_hphr_pa(struct snd_soc_dapm_widget *w,
 				WCD937X_DIGITAL_PDM_WD_CTL1, 0x07, 0x00);
 		snd_soc_component_update_bits(component, WCD937X_ANA_HPH,
 				BIT(4), 0x00);
+		/*
+		 * Separate the HPH PA turn-off from the class-H buck collapse
+		 * below: previously the PA was disabled and
+		 * wcd_clsh_ctrl_set_state(POST_PA) collapsed the buck
+		 * back-to-back, so the PA unload transient and the buck
+		 * discharge stacked into one dI/dt spike on the shared PM7325
+		 * L17B(1.7V) rail (which also feeds the LT9611 HDMI bridge).
+		 * With a display plugged, that end-of-playback spike trips the
+		 * L17B OCP -> AMBERJACK OCP hardware reset. Let the PA output
+		 * settle first so the buck collapse sees a quiescent load.
+		 */
+		usleep_range(5000, 5100);
 		wcd_clsh_ctrl_set_state(wcd937x->clsh_info,
 					WCD_CLSH_EVENT_POST_PA,
 					WCD_CLSH_STATE_HPHR,
@@ -701,8 +710,12 @@ static int wcd937x_codec_enable_hphl_pa(struct snd_soc_dapm_widget *w,
 				BIT(1), BIT(1));
 		if (hph_mode == CLS_AB || hph_mode == CLS_AB_HIFI)
 			snd_soc_component_update_bits(component,
+					WCD937X_ANA_RX_SUPPLIES,
+					BIT(1), BIT(1));
+		/* speaker(AUX) 关闭时清了 VNEG/BUCK 电源轨(bit6/7), 此处恢复 */
+		snd_soc_component_update_bits(component,
 				WCD937X_ANA_RX_SUPPLIES,
-				BIT(1), BIT(1));
+				BIT(6) | BIT(7), BIT(6) | BIT(7));
 		enable_irq(wcd937x->hphl_pdm_wd_int);
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
@@ -724,6 +737,13 @@ static int wcd937x_codec_enable_hphl_pa(struct snd_soc_dapm_widget *w,
 				WCD937X_DIGITAL_PDM_WD_CTL0, 0x07, 0x00);
 		snd_soc_component_update_bits(component, WCD937X_ANA_HPH,
 				BIT(5), 0x00);
+		/*
+		 * Same as HPHR: separate the HPH PA turn-off from the class-H
+		 * buck collapse so the PA unload transient and the buck
+		 * discharge do not stack into one dI/dt spike on the shared
+		 * PM7325 L17B rail (end-of-playback OCP).
+		 */
+		usleep_range(5000, 5100);
 		wcd_clsh_ctrl_set_state(wcd937x->clsh_info,
 					WCD_CLSH_EVENT_POST_PA,
 					WCD_CLSH_STATE_HPHL,
@@ -753,6 +773,12 @@ static int wcd937x_codec_enable_aux_pa(struct snd_soc_dapm_widget *w,
 			snd_soc_component_update_bits(component,
 					WCD937X_ANA_RX_SUPPLIES,
 					BIT(1), BIT(1));
+		snd_soc_component_update_bits(component,
+				WCD937X_ANA_RX_SUPPLIES,
+				BIT(6), BIT(6));
+		snd_soc_component_update_bits(component,
+				WCD937X_ANA_RX_SUPPLIES,
+				BIT(7), BIT(7));
 		enable_irq(wcd937x->aux_pdm_wd_int);
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
@@ -766,6 +792,10 @@ static int wcd937x_codec_enable_aux_pa(struct snd_soc_dapm_widget *w,
 					hph_mode);
 		snd_soc_component_update_bits(component,
 				WCD937X_DIGITAL_PDM_WD_CTL2, BIT(0), 0x00);
+		snd_soc_component_update_bits(component,
+					WCD937X_ANA_RX_SUPPLIES, BIT(6), 0x00);
+		snd_soc_component_update_bits(component,
+					WCD937X_ANA_RX_SUPPLIES, BIT(7), 0x00);
 		break;
 	}
 
@@ -2153,10 +2183,17 @@ static const struct snd_kcontrol_new wcd937x_snd_controls[] = {
 	SOC_ENUM_EXT("RX HPH Mode", rx_hph_mode_mux_enum,
 		wcd937x_rx_hph_mode_get, wcd937x_rx_hph_mode_put),
 
+#if 1
+	SOC_SINGLE_EXT("HPHL_COMP Switch", SND_SOC_NOPM, 0, 1, 0,
+		wcd937x_get_compander, wcd937x_set_compander),
+	SOC_SINGLE_EXT("HPHR_COMP Switch", SND_SOC_NOPM, 1, 1, 0,
+		wcd937x_get_compander, wcd937x_set_compander),
+#else
 	SOC_SINGLE_EXT("HPHL_COMP Switch", WCD937X_COMP_L, 0, 1, 0,
 		wcd937x_get_compander, wcd937x_set_compander),
 	SOC_SINGLE_EXT("HPHR_COMP Switch", WCD937X_COMP_R, 1, 1, 0,
 		wcd937x_get_compander, wcd937x_set_compander),
+#endif
 
 	SOC_SINGLE_TLV("HPHL Volume", WCD937X_HPH_L_EN, 0, 20, 1, line_gain),
 	SOC_SINGLE_TLV("HPHR Volume", WCD937X_HPH_R_EN, 0, 20, 1, line_gain),
@@ -2170,13 +2207,13 @@ static const struct snd_kcontrol_new wcd937x_snd_controls[] = {
 		wcd937x_get_swr_port, wcd937x_set_swr_port),
 
 	SOC_SINGLE_EXT("CLSH Switch", WCD937X_CLSH, 0, 1, 0, 
-	wcd937x_get_swr_port, wcd937x_set_swr_port),
+		wcd937x_get_swr_port, wcd937x_set_swr_port),
 	SOC_SINGLE_EXT("LO Switch", WCD937X_LO, 0, 1, 0,
-	wcd937x_get_swr_port, wcd937x_set_swr_port),
-	SOC_SINGLE_EXT("DSD_L Switch", WCD937X_DSD_R, 0, 1, 0,
-	wcd937x_get_swr_port, wcd937x_set_swr_port),
-	SOC_SINGLE_EXT("DSD_R Switch", WCD937X_DSD_L, 0, 1, 0,
-	wcd937x_get_swr_port, wcd937x_set_swr_port),
+		wcd937x_get_swr_port, wcd937x_set_swr_port),
+	SOC_SINGLE_EXT("DSD_L Switch", WCD937X_DSD_L, 0, 1, 0,
+		wcd937x_get_swr_port, wcd937x_set_swr_port),
+	SOC_SINGLE_EXT("DSD_R Switch", WCD937X_DSD_R, 0, 1, 0,
+		wcd937x_get_swr_port, wcd937x_set_swr_port),
 
 	SOC_SINGLE_EXT("ADC1 Switch", WCD937X_ADC1, 1, 1, 0,
 		       wcd937x_get_swr_port, wcd937x_set_swr_port),
@@ -2783,7 +2820,7 @@ static bool wcd937x_swap_gnd_mic(struct snd_soc_component *component, bool activ
 
 	value = gpiod_get_value(wcd937x->us_euro_gpio);
 	gpiod_set_value(wcd937x->us_euro_gpio, !value);
-
+	dev_warn(component->dev, "headphone detected: mic_det:%d, set gpio:%d\n",value,!value);
 	return true;
 }
 
@@ -3004,6 +3041,15 @@ static int wcd937x_probe(struct platform_device *pdev)
 	dev_set_drvdata(dev, wcd937x);
 	mutex_init(&wcd937x->micb_lock);
 
+	wcd937x->power_gpio = devm_gpiod_get_optional(dev, "power", GPIOD_OUT_HIGH);
+
+	if (IS_ERR(wcd937x->power_gpio)) {
+		dev_err(dev, "failed to get power gpio\n");
+		return PTR_ERR(wcd937x->power_gpio);
+	}
+	dev_info(dev, "power_gpio=%p\n", wcd937x->power_gpio);
+	gpiod_set_value(wcd937x->power_gpio, 1);
+
 	wcd937x->reset_gpio = of_get_named_gpio(dev->of_node, "reset-gpios", 0);
 	if (wcd937x->reset_gpio < 0)
 		return dev_err_probe(dev, wcd937x->reset_gpio,
@@ -3013,28 +3059,6 @@ static int wcd937x_probe(struct platform_device *pdev)
 	if (IS_ERR(wcd937x->us_euro_gpio))
 		return dev_err_probe(dev, PTR_ERR(wcd937x->us_euro_gpio),
 				"us-euro swap Control GPIO not found\n");
-	/*pa	控制在lpass-rx-macro.c中控制，此处删除*/
-	// wcd937x->pa_gpio = of_get_named_gpio(dev->of_node, "pa-gpios", 0); 
-	// if (wcd937x->pa_gpio >= 0)
-	// {
-	// 	wcd937x_set_pa(wcd937x);
-	// }else{
-	// 	dev_err(dev, "No find pa gpio");
-	// } 
-	wcd937x->headset1_gpio = of_get_named_gpio(dev->of_node, "headset1-gpios", 0); 
-	if (wcd937x->headset1_gpio >= 0)
-	{
-		wcd937x_set_headset1(wcd937x);
-	}else{
-		dev_err(dev, "No find headset1 gpio");
-	}
-	wcd937x->headset2_gpio = of_get_named_gpio(dev->of_node, "headset2-gpios", 0); 
-	if (wcd937x->headset2_gpio >= 0)
-	{
-		wcd937x_set_headset2(wcd937x);
-	}else{
-		dev_err(dev, "No find headset2 gpio");
-	}
 
 	cfg = &wcd937x->mbhc_cfg;
 	cfg->swap_gnd_mic = wcd937x_swap_gnd_mic;

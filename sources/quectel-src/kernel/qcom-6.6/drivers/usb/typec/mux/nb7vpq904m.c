@@ -68,6 +68,7 @@ struct nb7vpq904m {
 	struct typec_retimer *retimer;
 
 	bool swap_data_lanes;
+	bool dp_mode;
 	struct typec_switch *typec_switch;
 
 	struct drm_bridge bridge;
@@ -281,6 +282,15 @@ static int nb7vpq904m_retimer_set(struct typec_retimer *retimer, struct typec_re
 
 	mutex_lock(&nb7->lock);
 
+	if (nb7->dp_mode) {
+		nb7->mode = TYPEC_DP_STATE_D;
+		nb7->orientation = TYPEC_ORIENTATION_NORMAL;
+		nb7->svid = USB_TYPEC_DP_SID;
+
+		ret = nb7vpq904m_set(nb7);
+		goto unlock_and_return;
+	}
+
 	if (nb7->mode != state->mode) {
 		nb7->mode = state->mode;
 
@@ -292,6 +302,7 @@ static int nb7vpq904m_retimer_set(struct typec_retimer *retimer, struct typec_re
 		ret = nb7vpq904m_set(nb7);
 	}
 
+unlock_and_return:
 	mutex_unlock(&nb7->lock);
 
 	return ret;
@@ -436,6 +447,9 @@ static int nb7vpq904m_probe(struct i2c_client *client)
 	nb7->orientation = TYPEC_ORIENTATION_NONE;
 
 	mutex_init(&nb7->lock);
+
+	if (of_property_read_bool(nb7->client->dev.of_node, "default-dp-mode"))
+		nb7->dp_mode = true;
 
 	nb7->enable_gpio = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_LOW);
 	if (IS_ERR(nb7->enable_gpio))

@@ -1,5 +1,4 @@
 SUMMARY = "Merge machine and distro options to create a basic machine task/package"
-PR = "r83"
 
 #
 # packages which content depend on MACHINE_FEATURES need to be MACHINE_ARCH
@@ -16,7 +15,6 @@ PACKAGES = ' \
             \
             ${@bb.utils.contains("MACHINE_FEATURES", "acpi", "packagegroup-base-acpi", "",d)} \
             ${@bb.utils.contains("MACHINE_FEATURES", "alsa", "packagegroup-base-alsa", "", d)} \
-            ${@bb.utils.contains("MACHINE_FEATURES", "apm", "packagegroup-base-apm", "", d)} \
             ${@bb.utils.contains("MACHINE_FEATURES", "ext2", "packagegroup-base-ext2", "", d)} \
             ${@bb.utils.contains("MACHINE_FEATURES", "vfat", "packagegroup-base-vfat", "", d)} \
             ${@bb.utils.contains("MACHINE_FEATURES", "keyboard", "packagegroup-base-keyboard", "", d)} \
@@ -52,7 +50,6 @@ RDEPENDS:packagegroup-base = "\
     packagegroup-machine-base \
     \
     module-init-tools \
-    ${@bb.utils.contains('MACHINE_FEATURES', 'apm', 'packagegroup-base-apm', '',d)} \
     ${@bb.utils.contains('MACHINE_FEATURES', 'acpi', 'packagegroup-base-acpi', '',d)} \
     ${@bb.utils.contains('MACHINE_FEATURES', 'keyboard', 'packagegroup-base-keyboard', '',d)} \
     ${@bb.utils.contains('MACHINE_FEATURES', 'phone', 'packagegroup-base-phone', '',d)} \
@@ -132,7 +129,6 @@ RRECOMMENDS:packagegroup-distro-base = "${DISTRO_EXTRA_RRECOMMENDS}"
 #
 # packages added by machine config
 #
-SUMMARY:packagegroup-machine-base = "${MACHINE} extras"
 SUMMARY:packagegroup-machine-base = "Extra packages required to fully support ${MACHINE} hardware"
 RDEPENDS:packagegroup-machine-base = "${MACHINE_EXTRA_RDEPENDS}"
 RRECOMMENDS:packagegroup-machine-base = "${MACHINE_EXTRA_RRECOMMENDS}"
@@ -148,11 +144,6 @@ RDEPENDS:packagegroup-base-pci = "\
 SUMMARY:packagegroup-base-acpi = "ACPI support"
 RDEPENDS:packagegroup-base-acpi = "\
     acpid"
-
-SUMMARY:packagegroup-base-apm = "APM support"
-RDEPENDS:packagegroup-base-apm = "\
-    ${VIRTUAL-RUNTIME_apm} \
-    apmd"
 
 SUMMARY:packagegroup-base-ext2 = "ext2 filesystem support"
 RDEPENDS:packagegroup-base-ext2 = "\
@@ -267,10 +258,14 @@ RRECOMMENDS:packagegroup-base-ipsec = "\
 # packagegroup-base-wifi contain everything needed to get WiFi working
 # WEP/WPA connection needs to be supported out-of-box
 #
+# Choose either 'wpa-supplicant' or 'iwd' as wireless-daemon
+WIRELESS_DAEMON ??= "wpa-supplicant"
 SUMMARY:packagegroup-base-wifi = "WiFi support"
 RDEPENDS:packagegroup-base-wifi = "\
     iw \
-    wireless-regdb-static "
+    wireless-regdb-static \
+    ${WIRELESS_DAEMON} \
+"
 
 RRECOMMENDS:packagegroup-base-wifi = "\
     ${@bb.utils.contains('COMBINED_FEATURES', 'usbhost', 'kernel-module-zd1211rw', '',d)} \

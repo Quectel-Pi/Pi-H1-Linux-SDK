@@ -1,0 +1,51 @@
+From 1e8f053c8fa8d166cac5b9a9aaaee1ae4fe11b09 Mon Sep 17 00:00:00 2001
+From: Tingguo Cheng <quic_tingguoc@quicinc.com>
+Date: Wed, 8 Jan 2025 19:00:17 +0800
+Subject: [PATCH 1/3] FROMLIST: arm64: dts: qcom: qcs8300: Adds SPMI support
+
+Add the SPMI bus arbiter(Version:5.2.0) node for QCS8300 SoC
+which connected with PMICs on QCS8300 boards.
+
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Tingguo Cheng <quic_tingguoc@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250108-adds-spmi-pmic-peripherals-for-qcs8300-v3-1-ee94642279ff@quicinc.com]
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index f037a399f98f..74ca7353ce08 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -2882,6 +2882,28 @@ IPCC_MPROC_SIGNAL_GLINK_QMP
+ 			#clock-cells = <0>;
+ 		};
+ 
++		spmi_bus: spmi@c440000 {
++			compatible = "qcom,spmi-pmic-arb";
++			reg = <0x0 0x0c440000 0x0 0x1100>,
++			      <0x0 0x0c600000 0x0 0x2000000>,
++			      <0x0 0x0e600000 0x0 0x100000>,
++			      <0x0 0x0e700000 0x0 0xa0000>,
++			      <0x0 0x0c40a000 0x0 0x26000>;
++			reg-names = "core",
++				    "chnls",
++				    "obsrvr",
++				    "intr",
++				    "cnfg";
++			qcom,channel = <0>;
++			qcom,ee = <0>;
++			interrupts-extended = <&pdc 1 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "periph_irq";
++			interrupt-controller;
++			#interrupt-cells = <4>;
++			#address-cells = <2>;
++			#size-cells = <0>;
++		};
++
+ 		tlmm: pinctrl@f100000 {
+ 			compatible = "qcom,qcs8300-tlmm";
+ 			reg = <0x0 0x0f100000 0x0 0x300000>;
+-- 
+2.34.1
+

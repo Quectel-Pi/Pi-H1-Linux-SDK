@@ -1,0 +1,403 @@
+From a68c9ae774163ffb853a2296bc70f8a98112f5a8 Mon Sep 17 00:00:00 2001
+From: Satya Priya Kakitapalli <quic_skakitap@quicinc.com>
+Date: Tue, 21 May 2024 18:22:50 +0530
+Subject: [PATCH 1/6] PENDING: arm64: dts: qcom: Add support for MBG TM for
+ pm8775
+
+Add support for MBG TM peripheral for pm8775 sail pmic.
+
+While at it, updated the temp-alarm io-channels.
+
+Signed-off-by: Satya Priya Kakitapalli <quic_skakitap@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/sa8775p-pmics.dtsi | 295 ++++++++++++++++++++
+ 1 file changed, 295 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sa8775p-pmics.dtsi b/arch/arm64/boot/dts/qcom/sa8775p-pmics.dtsi
+index 4601a1dd1711..eb9082dc1c8c 100644
+--- a/arch/arm64/boot/dts/qcom/sa8775p-pmics.dtsi
++++ b/arch/arm64/boot/dts/qcom/sa8775p-pmics.dtsi
+@@ -1,10 +1,12 @@
+ // SPDX-License-Identifier: BSD-3-Clause
+ /*
+  * Copyright (c) 2023, Linaro Limited
++ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ 
+ #include <dt-bindings/input/input.h>
+ #include <dt-bindings/spmi/spmi.h>
++#include <dt-bindings/iio/qcom,spmi-adc5-gen3-pm8775.h>
+ 
+ / {
+ 	thermal-zones {
+@@ -87,6 +89,87 @@ trip1 {
+ 				};
+ 			};
+ 		};
++
++		pmm8654au_0_mbg_tm: pmm8654au_0_mbg_tz {
++			polling-delay-passive = <100>;
++			polling-delay = <0>;
++			thermal-sensors = <&pmm8654au_0_tz>;
++
++			trips {
++				trip0 {
++					temperature = <115000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++
++				trip1 {
++					temperature = <135000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++			};
++		};
++
++		pmm8654au_1_mbg_tm: pmm8654au_1_mbg_tz {
++			polling-delay-passive = <100>;
++			polling-delay = <0>;
++			thermal-sensors = <&pmm8654au_1_tz>;
++
++			trips {
++				trip0 {
++					temperature = <115000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++
++				trip1 {
++					temperature = <135000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++			};
++		};
++
++		pmm8654au_2_mbg_tm: pmm8654au_2_mbg_tz {
++			polling-delay-passive = <100>;
++			polling-delay = <0>;
++			thermal-sensors = <&pmm8654au_2_tz>;
++
++			trips {
++				trip0 {
++					temperature = <115000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++
++				trip1 {
++					temperature = <135000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++			};
++		};
++
++		pmm8654au_3_mbg_tm: pmm8654au_3_mbg_tz {
++			polling-delay-passive = <100>;
++			polling-delay = <0>;
++			thermal-sensors = <&pmm8654au_3_tz>;
++
++			trips {
++				trip0 {
++					temperature = <115000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++
++				trip1 {
++					temperature = <135000>;
++					hysteresis = <5000>;
++					type = "passive";
++				};
++
++			};
++		};
+ 	};
+ 
+ 	reboot-mode {
+@@ -105,10 +188,47 @@ pmm8654au_0: pmic@0 {
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 
++		pmm8654au_0_adc: vadc@8000 {
++			compatible = "qcom,spmi-adc5-gen3";
++			reg = <0x8000>;
++			reg-names = "adc5-gen3-base";
++			#address-cells = <1>;
++			#size-cells = <0>;
++			interrupts-extended = <&spmi_bus 0x0 0x80 0x1 IRQ_TYPE_EDGE_RISING>;
++			interrupt-names = "adc-sdam0";
++			#io-channel-cells = <1>;
++
++			pmm8654au_0_ref_gnd {
++				reg = <PM8775_1_ADC5_GEN3_OFFSET_REF>;
++				label = "pm8775_1_ref_gnd";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_0_vref_1p25 {
++				reg = <PM8775_1_ADC5_GEN3_1P25VREF>;
++				label = "pm8775_1_vref_1p25";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_0_die_temp {
++				reg = <PM8775_1_ADC5_GEN3_DIE_TEMP>;
++				label = "pm8775_1_die_temp";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_0_vph_pwr {
++				reg = <PM8775_1_ADC5_GEN3_VPH_PWR>;
++				label = "pm8775_1_vph_pwr";
++				qcom,pre-scaling = <1 3>;
++			};
++		};
++
+ 		pmm8654au_0_temp_alarm: temp-alarm@a00 {
+ 			compatible = "qcom,spmi-temp-alarm";
+ 			reg = <0xa00>;
+ 			interrupts-extended = <&spmi_bus 0x0 0xa 0x0 IRQ_TYPE_EDGE_BOTH>;
++			io-channels = <&pmm8654au_0_adc PM8775_1_ADC5_GEN3_DIE_TEMP>;
++			io-channel-names = "thermal";
+ 			#thermal-sensor-cells = <0>;
+ 		};
+ 
+@@ -164,16 +284,69 @@ reboot_reason: reboot-reason@48 {
+ 		};
+ 	};
+ 
++	pmm8654au_sail_0: pmic@1 {
++		compatible = "qcom,pmm8654au", "qcom,spmi-pmic";
++		reg = <1 SPMI_USID>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		pmm8654au_0_tz: qcom,mbg-tm@d700 {
++			compatible = "qcom,spmi-mgb-tm";
++			reg = <0xd700>;
++			io-channels = <&pmm8654au_0_adc PM8775_1_ADC5_GEN3_DIE_TEMP>;
++			io-channel-names = "thermal";
++			interrupts-extended = <&spmi_bus 0x1 0xd7 0x0 IRQ_TYPE_EDGE_RISING>;
++			#thermal-sensor-cells = <0>;
++		};
++	};
++
+ 	pmm8654au_1: pmic@2 {
+ 		compatible = "qcom,pmm8654au", "qcom,spmi-pmic";
+ 		reg = <0x2 SPMI_USID>;
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 
++		pmm8654au_1_adc: vadc@8000 {
++			compatible = "qcom,spmi-adc5-gen3";
++			reg = <0x8000>;
++			reg-names = "adc5-gen3-base";
++			#address-cells = <1>;
++			#size-cells = <0>;
++			interrupts-extended = <&spmi_bus 0x2 0x80 0x1 IRQ_TYPE_EDGE_RISING>;
++			interrupt-names = "adc-sdam0";
++			#io-channel-cells = <1>;
++
++			pmm8654au_1_ref_gnd {
++				reg = <PM8775_2_ADC5_GEN3_OFFSET_REF>;
++				label = "pm8775_2_ref_gnd";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_1_vref_1p25 {
++				reg = <PM8775_2_ADC5_GEN3_1P25VREF>;
++				label = "pm8775_2_vref_1p25";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_1_die_temp {
++				reg = <PM8775_2_ADC5_GEN3_DIE_TEMP>;
++				label = "pm8775_2_die_temp";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_1_vph_pwr {
++				reg = <PM8775_2_ADC5_GEN3_VPH_PWR>;
++				label = "pm8775_2_vph_pwr";
++				qcom,pre-scaling = <1 3>;
++			};
++		};
++
+ 		pmm8654au_1_temp_alarm: temp-alarm@a00 {
+ 			compatible = "qcom,spmi-temp-alarm";
+ 			reg = <0xa00>;
+ 			interrupts-extended = <&spmi_bus 0x2 0xa 0x0 IRQ_TYPE_EDGE_BOTH>;
++			io-channels = <&pmm8654au_1_adc PM8775_2_ADC5_GEN3_DIE_TEMP>;
++			io-channel-names = "thermal";
+ 			#thermal-sensor-cells = <0>;
+ 		};
+ 
+@@ -188,16 +361,69 @@ pmm8654au_1_gpios: gpio@8800 {
+ 		};
+ 	};
+ 
++	pmm8654au_sail_1: pmic@3 {
++		compatible = "qcom,pmm8654au", "qcom,spmi-pmic";
++		reg = <3 SPMI_USID>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		pmm8654au_1_tz: qcom,mbg-tm@d700 {
++			compatible = "qcom,spmi-mgb-tm";
++			reg = <0xd700>;
++			io-channels = <&pmm8654au_1_adc PM8775_2_ADC5_GEN3_DIE_TEMP>;
++			io-channel-names = "thermal";
++			interrupts-extended = <&spmi_bus 0x3 0xd7 0x0 IRQ_TYPE_EDGE_RISING>;
++			#thermal-sensor-cells = <0>;
++		};
++	};
++
+ 	pmm8654au_2: pmic@4 {
+ 		compatible = "qcom,pmm8654au", "qcom,spmi-pmic";
+ 		reg = <0x4 SPMI_USID>;
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 
++		pmm8654au_2_adc: vadc@8000 {
++			compatible = "qcom,spmi-adc5-gen3";
++			reg = <0x8000>;
++			reg-names = "adc5-gen3-base";
++			#address-cells = <1>;
++			#size-cells = <0>;
++			interrupts-extended = <&spmi_bus 0x4 0x80 0x1 IRQ_TYPE_EDGE_RISING>;
++			interrupt-names = "adc-sdam0";
++			#io-channel-cells = <1>;
++
++			pmm8654au_2_ref_gnd {
++				reg = <PM8775_3_ADC5_GEN3_OFFSET_REF>;
++				label = "pm8775_3_ref_gnd";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_2_vref_1p25 {
++				reg = <PM8775_3_ADC5_GEN3_1P25VREF>;
++				label = "pm8775_3_vref_1p25";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_2_die_temp {
++				reg = <PM8775_3_ADC5_GEN3_DIE_TEMP>;
++				label = "pm8775_3_die_temp";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_2_vph_pwr {
++				reg = <PM8775_3_ADC5_GEN3_VPH_PWR>;
++				label = "pm8775_3_vph_pwr";
++				qcom,pre-scaling = <1 3>;
++			};
++		};
++
+ 		pmm8654au_2_temp_alarm: temp-alarm@a00 {
+ 			compatible = "qcom,spmi-temp-alarm";
+ 			reg = <0xa00>;
+ 			interrupts-extended = <&spmi_bus 0x4 0xa 0x0 IRQ_TYPE_EDGE_BOTH>;
++			io-channels = <&pmm8654au_2_adc PM8775_3_ADC5_GEN3_DIE_TEMP>;
++			io-channel-names = "thermal";
+ 			#thermal-sensor-cells = <0>;
+ 		};
+ 
+@@ -212,16 +438,69 @@ pmm8654au_2_gpios: gpio@8800 {
+ 		};
+ 	};
+ 
++	pmm8654au_sail_2: pmic@5 {
++		compatible = "qcom,pmm8654au", "qcom,spmi-pmic";
++		reg = <5 SPMI_USID>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		pmm8654au_2_tz: qcom,mbg-tm@d700 {
++			compatible = "qcom,spmi-mgb-tm";
++			reg = <0xd700>;
++			io-channels = <&pmm8654au_2_adc PM8775_3_ADC5_GEN3_DIE_TEMP>;
++			io-channel-names = "thermal";
++			interrupts-extended = <&spmi_bus 0x5 0xd7 0x0 IRQ_TYPE_EDGE_RISING>;
++			#thermal-sensor-cells = <0>;
++		};
++	};
++
+ 	pmm8654au_3: pmic@6 {
+ 		compatible = "qcom,pmm8654au", "qcom,spmi-pmic";
+ 		reg = <0x6 SPMI_USID>;
+ 		#address-cells = <1>;
+ 		#size-cells = <0>;
+ 
++		pmm8654au_3_adc: vadc@8000 {
++			compatible = "qcom,spmi-adc5-gen3";
++			reg = <0x8000>;
++			reg-names = "adc5-gen3-base";
++			#address-cells = <1>;
++			#size-cells = <0>;
++			interrupts-extended = <&spmi_bus 0x6 0x80 0x1 IRQ_TYPE_EDGE_RISING>;
++			interrupt-names = "adc-sdam0";
++			#io-channel-cells = <1>;
++
++			pmm8654au_3_ref_gnd {
++				reg = <PM8775_4_ADC5_GEN3_OFFSET_REF>;
++				label = "pm8775_4_ref_gnd";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_3_vref_1p25 {
++				reg = <PM8775_4_ADC5_GEN3_1P25VREF>;
++				label = "pm8775_4_vref_1p25";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_3_die_temp {
++				reg = <PM8775_4_ADC5_GEN3_DIE_TEMP>;
++				label = "pm8775_4_die_temp";
++				qcom,pre-scaling = <1 1>;
++			};
++
++			pmm8654au_3_vph_pwr {
++				reg = <PM8775_4_ADC5_GEN3_VPH_PWR>;
++				label = "pm8775_4_vph_pwr";
++				qcom,pre-scaling = <1 3>;
++			};
++		};
++
+ 		pmm8654au_3_temp_alarm: temp-alarm@a00 {
+ 			compatible = "qcom,spmi-temp-alarm";
+ 			reg = <0xa00>;
+ 			interrupts-extended = <&spmi_bus 0x6 0xa 0x0 IRQ_TYPE_EDGE_BOTH>;
++			io-channels = <&pmm8654au_3_adc PM8775_4_ADC5_GEN3_DIE_TEMP>;
++			io-channel-names = "thermal";
+ 			#thermal-sensor-cells = <0>;
+ 		};
+ 
+@@ -235,4 +514,20 @@ pmm8654au_3_gpios: gpio@8800 {
+ 			#interrupt-cells = <2>;
+ 		};
+ 	};
++
++	pmm8654au_sail_3: pmic@7 {
++		compatible = "qcom,pmm8654au", "qcom,spmi-pmic";
++		reg = <7 SPMI_USID>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		pmm8654au_3_tz: qcom,mbg-tm@d700 {
++			compatible = "qcom,spmi-mgb-tm";
++			reg = <0xd700>;
++			io-channels = <&pmm8654au_3_adc PM8775_4_ADC5_GEN3_DIE_TEMP>;
++			io-channel-names = "thermal";
++			interrupts-extended = <&spmi_bus 0x7 0xd7 0x0 IRQ_TYPE_EDGE_RISING>;
++			#thermal-sensor-cells = <0>;
++		};
++	};
+ };
+-- 
+2.34.1
+

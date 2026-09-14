@@ -1,0 +1,81 @@
+From 754acba502f5274cfdacdb1270d560ad18cc31c9 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:31:54 -0800
+Subject: [PATCH 120/146] FROMLIST: drm/msm/dp: always program
+ MST_FIFO_CONSTANT_FILL for MST
+
+As required by the hardware programming guide, always program
+the MST_FIFO_CONSTANT_FILL for MST use-cases.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-21-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_catalog.c | 24 ++++++++++++++++++++++++
+ drivers/gpu/drm/msm/dp/dp_catalog.h |  1 +
+ drivers/gpu/drm/msm/dp/dp_ctrl.c    |  3 +++
+ 3 files changed, 28 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_catalog.c b/drivers/gpu/drm/msm/dp/dp_catalog.c
+index d3e05ee39f3f..23303a33554d 100644
+--- a/drivers/gpu/drm/msm/dp/dp_catalog.c
++++ b/drivers/gpu/drm/msm/dp/dp_catalog.c
+@@ -1009,6 +1009,30 @@ int msm_dp_catalog_panel_timing_cfg(struct msm_dp_catalog *msm_dp_catalog, u32 t
+ 	return 0;
+ }
+ 
++int msm_dp_catalog_mst_async_fifo(struct msm_dp_catalog *msm_dp_catalog)
++{
++	struct msm_dp_catalog_private *catalog = container_of(msm_dp_catalog,
++							      struct msm_dp_catalog_private,
++							      msm_dp_catalog);
++
++	u32 reg;
++
++	if (msm_dp_catalog->stream_id == DP_STREAM_0)
++		reg = msm_dp_read_p0(catalog, MMSS_DP_ASYNC_FIFO_CONFIG);
++	else
++		reg = msm_dp_read_p1(catalog, MMSS_DP_ASYNC_FIFO_CONFIG);
++
++	/* enable MST_FIFO_CONSTANT_FILL */
++	reg |= BIT(0);
++
++	if (msm_dp_catalog->stream_id == DP_STREAM_0)
++		msm_dp_write_p0(catalog, MMSS_DP_ASYNC_FIFO_CONFIG, reg);
++	else
++		msm_dp_write_p1(catalog, MMSS_DP_ASYNC_FIFO_CONFIG, reg);
++
++	return 0;
++}
++
+ static void msm_dp_catalog_panel_send_vsc_sdp(struct msm_dp_catalog *msm_dp_catalog, struct dp_sdp *vsc_sdp)
+ {
+ 	struct msm_dp_catalog_private *catalog;
+diff --git a/drivers/gpu/drm/msm/dp/dp_catalog.h b/drivers/gpu/drm/msm/dp/dp_catalog.h
+index 323858c587f8..0025ecc0adb2 100644
+--- a/drivers/gpu/drm/msm/dp/dp_catalog.h
++++ b/drivers/gpu/drm/msm/dp/dp_catalog.h
+@@ -150,5 +150,6 @@ void msm_dp_catalog_mst_channel_alloc(struct msm_dp_catalog *ctrl,
+ 				      u32 ch, u32 ch_start_slot, u32 tot_slot_cnt);
+ void msm_dp_catalog_ctrl_update_rg(struct msm_dp_catalog *ctrl, u32 stream,
+ 				   u32 x_int, u32 y_frac_enum);
++int msm_dp_catalog_mst_async_fifo(struct msm_dp_catalog *dp_catalog);
+ 
+ #endif /* _DP_CATALOG_H_ */
+diff --git a/drivers/gpu/drm/msm/dp/dp_ctrl.c b/drivers/gpu/drm/msm/dp/dp_ctrl.c
+index e04212e105d0..cd6fe7748205 100644
+--- a/drivers/gpu/drm/msm/dp/dp_ctrl.c
++++ b/drivers/gpu/drm/msm/dp/dp_ctrl.c
+@@ -236,6 +236,9 @@ static void msm_dp_ctrl_configure_source_params(struct msm_dp_ctrl_private *ctrl
+ 	cc = msm_dp_link_get_colorimetry_config(ctrl->link);
+ 	msm_dp_catalog_ctrl_config_misc(ctrl->catalog, cc, tb);
+ 	msm_dp_panel_timing_cfg(msm_dp_panel);
++
++	if (ctrl->mst_active)
++		msm_dp_catalog_mst_async_fifo(ctrl->catalog);
+ }
+ 
+ /*
+-- 
+2.34.1
+

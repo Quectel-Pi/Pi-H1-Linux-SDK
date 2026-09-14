@@ -1,0 +1,36 @@
+From 7dad6172a4a931dd0807fc7efe1d539202336c15 Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Date: Mon, 8 Jul 2024 09:50:21 +0200
+Subject: [PATCH 27/39] UPSTREAM: net: phy: aquantia: wait for FW reset before
+ checking the vendor ID
+
+Checking the firmware register before it complete the boot process makes
+no sense, it will report 0 even if FW is available from internal memory.
+Always wait for FW to boot before continuing or we'll unnecessarily try
+to load it from nvmem/filesystem and fail.
+
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Reviewed-by: Andrew Lunn <andrew@lunn.ch>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git ad649a1fac37e390de5b4211b902ec666c4cd202]
+---
+ drivers/net/phy/aquantia/aquantia_firmware.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/net/phy/aquantia/aquantia_firmware.c b/drivers/net/phy/aquantia/aquantia_firmware.c
+index 0c9640ef153b..524627a36c6f 100644
+--- a/drivers/net/phy/aquantia/aquantia_firmware.c
++++ b/drivers/net/phy/aquantia/aquantia_firmware.c
+@@ -353,6 +353,10 @@ int aqr_firmware_load(struct phy_device *phydev)
+ {
+ 	int ret;
+ 
++	ret = aqr_wait_reset_complete(phydev);
++	if (ret)
++		return ret;
++
+ 	/* Check if the firmware is not already loaded by pooling
+ 	 * the current version returned by the PHY. If 0 is returned,
+ 	 * no firmware is loaded.
+-- 
+2.34.1
+

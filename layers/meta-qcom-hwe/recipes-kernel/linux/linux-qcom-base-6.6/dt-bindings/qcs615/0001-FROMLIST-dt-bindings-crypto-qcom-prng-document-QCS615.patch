@@ -1,0 +1,29 @@
+From 5e5304c54f5ec1a6bb7c130a00e1f5d2421b014c Mon Sep 17 00:00:00 2001
+From: Abhinaba Rakshit <quic_arakshit@quicinc.com>
+Date: Mon, 24 Feb 2025 20:38:08 +0530
+Subject: [PATCH] FROMLIST: dt-bindings: crypto: qcom,prng: document QCS615
+
+Document QCS615 compatible for the True Random Number
+Generator.
+
+Signed-off-by: Abhinaba Rakshit <quic_arakshit@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250224-enable-trng-for-qcs615-v1-1-3243eb7d345a@quicinc.com/]
+---
+ Documentation/devicetree/bindings/crypto/qcom,prng.yaml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/crypto/qcom,prng.yaml b/Documentation/devicetree/bindings/crypto/qcom,prng.yaml
+index 8c5d1a2ad23b..23cbbbf609a8 100644
+--- a/Documentation/devicetree/bindings/crypto/qcom,prng.yaml
++++ b/Documentation/devicetree/bindings/crypto/qcom,prng.yaml
+@@ -17,6 +17,7 @@ properties:
+           - qcom,prng-ee  # 8996 and later using EE
+       - items:
+           - enum:
++              - qcom,qcs615-trng
+               - qcom,qcs8300-trng
+               - qcom,sm8450-trng
+           - const: qcom,trng
+-- 
+2.34.1
+

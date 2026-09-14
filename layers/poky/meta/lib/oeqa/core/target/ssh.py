@@ -40,13 +40,14 @@ class OESSHTarget(OETarget):
                 '-o', 'StrictHostKeyChecking=no',
                 '-o', 'LogLevel=ERROR'
                 ]
+        scp_options = [
+                '-r'
+        ]
         self.ssh = ['ssh', '-l', self.user ] + ssh_options
-        self.scp = ['scp'] + ssh_options
+        self.scp = ['scp'] + ssh_options + scp_options
         if port:
             self.ssh = self.ssh + [ '-p', port ]
             self.scp = self.scp + [ '-P', port ]
-        self._monitor_dumper = None
-        self.target_dumper = None
 
     def start(self, **kwargs):
         pass
@@ -54,23 +55,14 @@ class OESSHTarget(OETarget):
     def stop(self, **kwargs):
         pass
 
-    @property
-    def monitor_dumper(self):
-        return self._monitor_dumper
-
-    @monitor_dumper.setter
-    def monitor_dumper(self, dumper):
-        self._monitor_dumper = dumper
-        self.monitor_dumper.dump_monitor()
-
-    def _run(self, command, timeout=None, ignore_status=True):
+    def _run(self, command, timeout=None, ignore_status=True, raw=False):
         """
             Runs command in target using SSHProcess.
         """
         self.logger.debug("[Running]$ %s" % " ".join(command))
 
         starttime = time.time()
-        status, output = SSHCall(command, self.logger, timeout)
+        status, output = SSHCall(command, self.logger, timeout, raw)
         self.logger.debug("[Command returned '%d' after %.2f seconds]"
                  "" % (status, time.time() - starttime))
 
@@ -80,7 +72,7 @@ class OESSHTarget(OETarget):
 
         return (status, output)
 
-    def run(self, command, timeout=None):
+    def run(self, command, timeout=None, ignore_status=True, raw=False):
         """
             Runs command in target.
 
@@ -99,16 +91,9 @@ class OESSHTarget(OETarget):
         else:
             processTimeout = self.timeout
 
-        status, output = self._run(sshCmd, processTimeout, True)
+        status, output = self._run(sshCmd, processTimeout, ignore_status, raw)
         self.logger.debug('Command: %s\nStatus: %d Output:  %s\n' % (command, status, output))
-        if (status == 255) and (('No route to host') in output):
-            if self.monitor_dumper:
-                self.monitor_dumper.dump_monitor()
-        if status == 255:
-            if self.target_dumper:
-                self.target_dumper.dump_target()
-            if self.monitor_dumper:
-                self.monitor_dumper.dump_monitor()
+
         return (status, output)
 
     def copyTo(self, localSrc, remoteDst):
@@ -221,7 +206,7 @@ class OESSHTarget(OETarget):
                 remoteDir = os.path.join(remotePath, tmpDir.lstrip("/"))
                 self.deleteDir(remoteDir)
 
-def SSHCall(command, logger, timeout=None, **opts):
+def SSHCall(command, logger, timeout=None, raw=False, **opts):
 
     def run():
         nonlocal output
@@ -229,11 +214,12 @@ def SSHCall(command, logger, timeout=None, **opts):
         output_raw = b''
         starttime = time.time()
         process = subprocess.Popen(command, **options)
+        has_timeout = False
         if timeout:
             endtime = starttime + timeout
             eof = False
             os.set_blocking(process.stdout.fileno(), False)
-            while time.time() < endtime and not eof:
+            while not has_timeout and not eof:
                 try:
                     logger.debug('Waiting for process output: time: %s, endtime: %s' % (time.time(), endtime))
                     if select.select([process.stdout], [], [], 5)[0] != []:
@@ -253,6 +239,10 @@ def SSHCall(command, logger, timeout=None, **opts):
                 except BlockingIOError:
                     logger.debug('BlockingIOError')
                     continue
+
+                if time.time() >= endtime:
+                    logger.debug('SSHCall has timeout! Time: %s, endtime: %s' % (time.time(), endtime))
+                    has_timeout = True
 
             process.stdout.close()
 
@@ -275,7 +265,7 @@ def SSHCall(command, logger, timeout=None, **opts):
         else:
             output_raw = process.communicate()[0]
 
-        output = output_raw.decode('utf-8', errors='ignore')
+        output = output_raw if raw else output_raw.decode('utf-8', errors='ignore')
         logger.debug('Data from SSH call:\n%s' % output.rstrip())
 
         # timout or not, make sure process exits and is not hanging
@@ -290,9 +280,19 @@ def SSHCall(command, logger, timeout=None, **opts):
                     pass
                 process.wait()
 
+        if has_timeout:
+            # Version of openssh before 8.6_p1 returns error code 0 when killed
+            # by a signal, when the timeout occurs we will receive a 0 error
+            # code because the process is been terminated and it's wrong because
+            # that value means success, but the process timed out.
+            # Afterwards, from version 8.6_p1 onwards, the returned code is 255.
+            # Fix this behaviour by checking the return code
+            if process.returncode == 0:
+                process.returncode = 255
+
     options = {
         "stdout": subprocess.PIPE,
-        "stderr": subprocess.STDOUT,
+        "stderr": subprocess.STDOUT if not raw else None,
         "stdin": None,
         "shell": False,
         "bufsize": -1,
@@ -320,4 +320,4 @@ def SSHCall(command, logger, timeout=None, **opts):
         logger.debug('Something went wrong, killing SSH process')
         raise
 
-    return (process.returncode, output.rstrip())
+    return (process.returncode, output if raw else output.rstrip())

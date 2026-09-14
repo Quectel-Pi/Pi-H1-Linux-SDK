@@ -1,8 +1,8 @@
-# Add an extra DISTRO_FEATURE
-DISTRO_FEATURES:append = " pam"
+# Add extra DISTRO_FEATUREs
+DISTRO_FEATURES:append = " pam usrmerge"
 
-# Use the LTSI Kernel
-PREFERRED_VERSION_linux-yocto = "5.10%"
+# Use our alternate kernel version
+PREFERRED_VERSION_linux-yocto = "6.6%"
 
 # Ensure the kernel nfs server is enabled
 KERNEL_FEATURES:append:pn-linux-yocto = " features/nfsd/nfsd-enable.scc"

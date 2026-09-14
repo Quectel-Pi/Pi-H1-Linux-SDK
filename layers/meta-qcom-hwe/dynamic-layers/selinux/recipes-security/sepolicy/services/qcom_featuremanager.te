@@ -1,0 +1,34 @@
+# Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+policy_module(qcom_featuremanager, 1.0)
+
+type qcom_featuremanager_t;
+type qcom_featuremanager_exec_t;
+type qcom_featuremanager_usr_share_t;
+type qcom_featuremanager_var_lib_t;
+
+files_type(qcom_featuremanager_usr_share_t)
+files_type(qcom_featuremanager_var_lib_t)
+
+domain_type(qcom_featuremanager_t)
+init_daemon_domain(qcom_featuremanager_t, qcom_featuremanager_exec_t)
+
+#Connect to port
+allow qcom_featuremanager_t self:tcp_socket { create_stream_socket_perms };
+allow qcom_featuremanager_t self:unix_dgram_socket { create_socket_perms };
+corenet_tcp_connect_all_unreserved_ports(qcom_featuremanager_t)
+corenet_tcp_bind_generic_node(qcom_featuremanager_t)
+
+#File permissions
+allow qcom_featuremanager_t qcom_featuremanager_usr_share_t:dir rw_dir_perms;
+allow qcom_featuremanager_t qcom_featuremanager_usr_share_t:file rw_file_perms;
+allow qcom_featuremanager_t qcom_featuremanager_var_lib_t:dir rw_dir_perms;
+allow qcom_featuremanager_t qcom_featuremanager_var_lib_t:file rw_file_perms;
+search_var_lib(qcom_featuremanager_t)
+
+#for logging to journald
+logging_send_syslog_msg(qcom_featuremanager_t)
+
+#TZCom
+qcom_allow_smcinvoke_rw(qcom_featuremanager_t)

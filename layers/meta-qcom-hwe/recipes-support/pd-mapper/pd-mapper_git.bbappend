@@ -1,5 +1,6 @@
 # expose system user to avoid "useradd: group 'system' does not exist"
 DEPENDS:append:qcom = " useradd-qcom"
+RDEPENDS:${PN} += "useradd-qcom"
 
 do_install:prepend:qcom() {
     # convert the service from root user to system user

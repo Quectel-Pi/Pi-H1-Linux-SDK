@@ -1,6 +1,13 @@
 #!/bin/bash
 # set -ex
 
+BASE_RECIPES_FILE="${TOPDIR}/quectel_build/config/base-recipes"
+if [ -f "${BASE_RECIPES_FILE}" ]; then
+    TARGET_IMAGE=$(cat "${BASE_RECIPES_FILE}")
+else
+    TARGET_IMAGE="quecpi-image"
+fi
+
 DEFAULT_CMDLINE="root=/dev/disk/by-partlabel/system rw rootwait console=ttyMSM0,115200n8 earlycon qcom_geni_serial.con_enabled=1 kernel.sched_pelt_multiplier=4 mem_sleep_default=s2idle"
 
 mkdir -p ${TOPDIR}/quectel_build/alpha/tools/pack/image_temp
@@ -9,7 +16,7 @@ mkdir -p ${TOPDIR}/quectel_build/alpha/output/pack
 mkdir -p ${TOPDIR}/quectel_build/alpha/tools/pack/dtb_temp/dtb
 
 # efi.bin
-cp ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/qcom-multimedia-image/efi.bin ${TOPDIR}/quectel_build/alpha/tools/pack
+cp ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/${TARGET_IMAGE}/efi.bin ${TOPDIR}/quectel_build/alpha/tools/pack
 # ukify 工具
 cp ${TOPDIR}/build-qcom-wayland/tmp-glibc/sysroots-components/x86_64/systemd-boot-native/usr/bin/ukify ${TOPDIR}/quectel_build/alpha/tools/pack
 cp ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/linuxaa64.efi.stub ${TOPDIR}/quectel_build/alpha/tools/pack

@@ -24,7 +24,7 @@ The ``devtool`` command line is organized similarly to Git in that it
 has a number of sub-commands for each function. You can run
 ``devtool --help`` to see all the commands::
 
-   $ devtool -h
+   $ devtool --help
    NOTE: Starting bitbake server...
    usage: devtool [--basepath BASEPATH] [--bbpath BBPATH] [-d] [-q] [--color COLOR] [-h] <subcommand> ...
 
@@ -50,6 +50,7 @@ has a number of sub-commands for each function. You can run
        search                Search available recipes
      Working on a recipe in the workspace:
        build                 Build a recipe
+       ide-sdk               Setup the SDK and configure the IDE
        rename                Rename a recipe file in the workspace
        edit-recipe           Edit a recipe file
        find-recipe           Find a recipe file
@@ -63,17 +64,11 @@ has a number of sub-commands for each function. You can run
        build-image           Build image including workspace recipe packages
      Advanced:
        create-workspace      Set up workspace in an alternative location
+       import                Import exported tar archive into workspace
+       export                Export workspace into a tar archive
        extract               Extract the source for an existing recipe
        sync                  Synchronize the source tree for an existing recipe
        menuconfig            Alter build-time configuration for a recipe
-       import                Import exported tar archive into workspace
-       export                Export workspace into a tar archive
-     other:
-       selftest-reverse      Reverse value (for selftest)
-       pluginfile            Print the filename of this plugin
-       bbdir                 Print the BBPATH directory of this plugin
-       count                 How many times have this plugin been registered.
-       multiloaded           How many times have this plugin been initialized
    Use devtool <subcommand> --help to get help on a specific command
 
 As directed in the general help output, you can
@@ -82,8 +77,8 @@ using ``--help``::
 
    $ devtool add --help
    NOTE: Starting bitbake server...
-   usage: devtool add [-h] [--same-dir | --no-same-dir] [--fetch URI] [--npm-dev] [--version VERSION] [--no-git] [--srcrev SRCREV | --autorev] [--srcbranch SRCBRANCH] [--binary] [--also-native] [--src-subdir SUBDIR] [--mirrors]
-                      [--provides PROVIDES]
+   usage: devtool add [-h] [--same-dir | --no-same-dir] [--fetch URI] [--npm-dev] [--no-pypi] [--version VERSION] [--no-git] [--srcrev SRCREV | --autorev]
+                      [--srcbranch SRCBRANCH] [--binary] [--also-native] [--src-subdir SUBDIR] [--mirrors] [--provides PROVIDES]
                       [recipename] [srctree] [fetchuri]
 
    Adds a new recipe to the workspace to build a specified source tree. Can optionally fetch a remote URI and unpack it to create the source tree.
@@ -99,6 +94,7 @@ using ``--help``::
      --no-same-dir         Force build in a separate build directory
      --fetch URI, -f URI   Fetch the specified URI and extract it to create the source tree (deprecated - pass as positional argument instead)
      --npm-dev             For npm, also fetch devDependencies
+     --no-pypi             Do not inherit pypi class
      --version VERSION, -V VERSION
                            Version to use within recipe (PV)
      --no-git, -g          If fetching source, do not set up source tree as a git repository
@@ -126,8 +122,7 @@ common working area used across the tool.
 The following figure shows the workspace structure:
 
 .. image:: figures/build-workspace-directory.png
-   :align: center
-   :scale: 70%
+   :scale: 100%
 
 .. code-block:: none
 
@@ -354,7 +349,7 @@ variables in package recipes.
       :yocto_git:`maintainers.inc </poky/tree/meta/conf/distro/include/maintainers.inc>`
       file.
 
-   -  If the recipe is using the :ref:`bitbake:bitbake-user-manual/bitbake-user-manual-fetching:git fetcher (\`\`git://\`\`)`
+   -  If the recipe is using the :ref:`bitbake-user-manual/bitbake-user-manual-fetching:git fetcher (\`\`git://\`\`)`
       rather than a tarball, the commit hash points to the commit that matches
       the recipe's latest version tag, or in the absence of suitable tags,
       to the latest commit (when :term:`UPSTREAM_CHECK_COMMITS` set to ``1``
@@ -379,14 +374,7 @@ command::
 Unless you provide a specific recipe name on the command line, the
 command checks all recipes in all configured layers.
 
-Here is a partial example table that reports on all the recipes.
-Notice the reported reason for not upgrading the ``base-passwd`` recipe.
-In this example, while a new version is available upstream, you do not
-want to use it because the dependency on ``cdebconf`` is not easily
-satisfied. Maintainers can explicit the reason that is shown by adding
-the :term:`RECIPE_NO_UPDATE_REASON` variable to the corresponding recipe.
-See :yocto_git:`base-passwd.bb </poky/tree/meta/recipes-core/base-passwd/base-passwd_3.5.29.bb>`
-for an example::
+Here is a partial example table that reports on all the recipes::
 
    $ devtool check-upgrade-status
    ...
@@ -396,6 +384,16 @@ for an example::
    INFO: openssl                   1.1.1l          3.0.0           Alexander Kanavin <alex.kanavin@gmail.com>
    INFO: base-passwd               3.5.29          3.5.51          Anuj Mittal <anuj.mittal@intel.com>  cannot be updated due to: Version 3.5.38 requires cdebconf for update-passwd utility
    ...
+
+Notice the reported reason for not upgrading the ``base-passwd`` recipe.
+In this example, while a new version is available upstream, you do not
+want to use it because the dependency on ``cdebconf`` is not easily
+satisfied. Maintainers can explicit the reason that is shown by adding
+the :term:`RECIPE_NO_UPDATE_REASON` variable to the corresponding recipe.
+See :yocto_git:`base-passwd.bb </poky/tree/meta/recipes-core/base-passwd/base-passwd_3.5.29.bb?h=kirkstone>`
+for an example::
+
+   RECIPE_NO_UPDATE_REASON = "Version 3.5.38 requires cdebconf for update-passwd utility"
 
 Last but not least, you may set :term:`UPSTREAM_VERSION_UNKNOWN` to ``1``
 in a recipe when there's currently no way to determine its latest upstream
@@ -437,7 +435,7 @@ You can read more on the ``devtool upgrade`` workflow in the
 ":ref:`sdk-manual/extensible:use \`\`devtool upgrade\`\` to create a version of the recipe that supports a newer version of the software`"
 section in the Yocto Project Application Development and the Extensible
 Software Development Kit (eSDK) manual. You can also see an example of
-how to use ``devtool upgrade`` in the ":ref:`dev-manual/upgrading-recipes:using \`\`devtool upgrade\`\``"
+how to use ``devtool upgrade`` in the ":ref:`dev-manual/upgrading-recipes:using ``devtool upgrade```"
 section in the Yocto Project Development Tasks Manual.
 
 .. _devtool-resetting-a-recipe:
@@ -464,6 +462,20 @@ Here is an example that resets the workspace directory that contains the
    NOTE: Cleaning sysroot for recipe mtr...
    NOTE: Leaving source tree /home/scottrif/poky/build/workspace/sources/mtr as-is; if you no longer need it then please delete it manually
    $
+
+.. _devtool-finish-working-on-a-recipe:
+
+Finish Working on a Recipe
+==========================
+
+Use the ``devtool finish`` command to push any committed changes to the
+specified recipe in the specified layer and remove it from your workspace.
+
+This is roughly equivalent to the ``devtool update-recipe`` command followed by
+the ``devtool reset`` command. The changes must have been committed to the git
+repository created by ``devtool``. Here is an example::
+
+  $ devtool finish recipe /path/to/custom/layer
 
 .. _devtool-building-your-recipe:
 
@@ -541,6 +553,26 @@ the packages are already on the target. Consequently, when a runtime
 call is made in the application for a dependent function (e.g. a library
 call), the function cannot be found.
 
+.. warning::
+
+   Runtime dependencies can be explicitly listed in the :term:`RDEPENDS`
+   variable, but may also be the result of a :term:`DEPENDS` assignment in your
+   application's recipe. This is usually the case when your application depends
+   on libraries for compilation: these libraries are listed as build-time
+   dependencies in the :term:`DEPENDS` variable in your application's recipe.
+   However these may also be runtime dependencies if they install shared objects
+   on which your application will dynamically link to at runtime (e.g. shared
+   libraries ending with ``.so``).
+
+   These runtime dependencies are automatically resolved by the
+   :term:`OpenEmbedded Build System` during the packaging phase. Since
+   ``devtool`` ignores packaging dependencies, they will not be installed
+   automatically with ``devtool deploy-target``.
+
+   For more information on how the :term:`OpenEmbedded Build System` handles
+   packaging, see the :ref:`overview-manual/concepts:Automatically Added Runtime
+   Dependencies` section of the Yocto Project Overview and Concepts Manual.
+
 To be sure you have all the dependencies local to the target, you need
 to be sure that the packages are pre-deployed (installed) on the target
 before attempting to run your application.
@@ -554,8 +586,7 @@ Use the ``devtool undeploy-target`` command to remove deployed build
 output from the target machine. For the ``devtool undeploy-target``
 command to work, you must have previously used the
 ":ref:`devtool deploy-target <ref-manual/devtool-reference:deploying your software on the target machine>`"
-command.
-::
+command::
 
    $ devtool undeploy-target recipe target
 
@@ -617,3 +648,43 @@ a match.
 
 When you use the ``devtool search`` command, you must supply a keyword.
 The command uses the keyword when searching for a match.
+
+Alternatively, the ``devtool find-recipe`` command can be used to search for
+recipe files instead of recipe names. Likewise, you must supply a keyword.
+
+.. _devtool-get-the-configure-script-help:
+
+Get Information on Recipe Configuration Scripts
+===============================================
+
+Use the ``devtool configure-help`` command to get help on the configuration
+script options for a given recipe. You must supply the recipe name to the
+command. For example, it shows the output of ``./configure --help`` for
+:ref:`autotools <ref-classes-autotools>`-based recipes.
+
+The ``configure-help`` command will also display the configuration options
+currently in use, including the ones passed through the :term:`EXTRA_OECONF`
+variable.
+
+.. _devtool-generate-an-ide-configuration-for-a-recipe:
+
+Generate an IDE Configuration for a Recipe
+==========================================
+
+The ``devtool ide-sdk`` automatically creates an IDE configuration and SDK to
+work on a given recipe. Depending on the ``--mode`` parameter, different types
+of SDKs are generated:
+
+-  ``modified`` mode: this creates an SDK and generates an IDE configuration in
+   the workspace directory.
+
+-  ``shared`` mode: this creates a cross-compiling toolchain and the
+   corresponding shared sysroot directories of the supplied recipe(s).
+
+The ``--target`` option can be used to specify a ``username@hostname`` string
+and create a remote debugging configuration for the recipe. Similarly to
+``devtool deploy-target``, it requires an SSH server running on the target.
+
+For further details on the ``devtool ide-sdk`` command, see the
+":doc:`/sdk-manual/extensible`" chapter in the Yocto Project Application
+Development and the Extensible Software Development Kit (eSDK) manual.

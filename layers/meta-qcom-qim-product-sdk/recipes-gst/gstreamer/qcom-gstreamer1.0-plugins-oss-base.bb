@@ -9,18 +9,16 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/${LICENSE};md5=7a434440b651f4a4
 # Dependencies.
 DEPENDS := "gstreamer1.0"
 DEPENDS += "gstreamer1.0-plugins-base"
-DEPENDS += "gbm"
-DEPENDS += "qcom-adreno"
-DEPENDS += "qcom-fastcv-binaries"
-DEPENDS += "qcom-ib2c"
-DEPENDS:append:qcs9100 = " qcom-displaydlkm"
-DEPENDS:append:qcs8300 = " qcom-displaydlkm"
-
+DEPENDS:append:qcom-custom-bsp = " qcom-fastcv-binaries"
+DEPENDS += "virtual/kernel"
+DEPENDS += "virtual/egl"
+DEPENDS += "virtual/libgles2"
+DEPENDS += "json-glib"
 SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/vendor/qcom-opensource/gst-plugins-qti-oss.git;protocol=https"
 SRCBRANCH  = "imsdk.lnx.2.0.0.r2-rel"
-SRCREV     = "49256b26148d10257959b2b8d55879f72888cb0f"
+SRCREV     = "dcb4b8252b66304545c5efb5cb7c8fecc26b6680"
 
-SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};rev=${SRCREV};subpath=gst-plugin-base"
+SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};subpath=gst-plugin-base"
 S = "${WORKDIR}/gst-plugin-base"
 
 # Install directries.
@@ -36,8 +34,13 @@ EXTRA_OECMAKE += "-DGST_PLUGINS_QTI_OSS_INSTALL_INCDIR=${INSTALL_INCDIR}"
 EXTRA_OECMAKE += "-DGST_PLUGINS_QTI_OSS_INSTALL_BINDIR=${INSTALL_BINDIR}"
 EXTRA_OECMAKE += "-DGST_PLUGINS_QTI_OSS_INSTALL_LIBDIR=${INSTALL_LIBDIR}"
 
+PACKAGECONFIG = "${@bb.utils.contains('PREFERRED_PROVIDER_virtual/libgbm', 'gbm', 'gbm', '', d)} "
+PACKAGECONFIG[gbm] = " , ,gbm,gbm"
+
 FILES:${PN} += "${INSTALL_BINDIR}"
 FILES:${PN} += "${INSTALL_LIBDIR}"
 
 SOLIBS = ".so*"
 FILES_SOLIBSDEV = ""
+
+INSANE_SKIP:${PN} = "dev-so"

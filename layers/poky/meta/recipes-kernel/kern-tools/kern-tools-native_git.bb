@@ -9,14 +9,14 @@ LIC_FILES_CHKSUM = "\
 	file://Kconfiglib/LICENSE.txt;md5=712177a72a3937909543eda3ad1bfb7c \
 "
 
-DEPENDS = "git-native"
+DEPENDS += "git-replacement-native"
 
-SRCREV = "2d01f24bc78256c709728eb3f204491bce13e0e5"
-PV = "0.3+git${SRCPV}"
+SRCREV = "7160ebe8b865dd6028aef278efa219433db93f7e"
+PV = "0.3+git"
 
 inherit native
 
-SRC_URI = "git://git.yoctoproject.org/yocto-kernel-tools.git;branch=master"
+SRC_URI = "git://git.yoctoproject.org/yocto-kernel-tools.git;branch=master;protocol=https"
 S = "${WORKDIR}/git"
 
 do_configure() {

@@ -1,0 +1,60 @@
+--- a/v4l2loopback.c
++++ b/v4l2loopback.c
+@@ -31,6 +31,7 @@
+ #include <media/v4l2-event.h>
+ 
+ #include <linux/miscdevice.h>
++#include <linux/kobject.h>
+ #include "v4l2loopback.h"
+ 
+ #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+@@ -1918,6 +1919,31 @@
+ 	return -EINVAL;
+ }
+ 
++/* Send uevent to notify userspace about reader state change */
++static void v4l2loopback_notify_userspace(struct v4l2_loopback_device *dev,
++					  const char *state)
++{
++	char *envp[3];
++	char event_buf[64];
++	char devname_buf[64];
++
++	snprintf(event_buf, sizeof(event_buf), "READER_STATE=%s", state);
++	snprintf(devname_buf, sizeof(devname_buf), "DEVICE_NAME=%s",
++		 dev->card_label);
++
++	envp[0] = event_buf;
++	envp[1] = devname_buf;
++	envp[2] = NULL;
++
++	if (dev->vdev) {
++		kobject_uevent_env(&dev->vdev->dev.kobj, KOBJ_CHANGE, envp);
++	}
++
++	pr_info("v4l2loopback: %s reader %s\n", dev->card_label, state);
++}
++
+ /* stop streaming
+  * called on VIDIOC_STREAMOFF
+  */
+@@ -1936,6 +1962,9 @@
+ 			return -EBUSY;
+ 		opener->type = READER;
+ 		dev->active_readers++;
++		/* Notify userspace when first reader opens */
++		if (dev->active_readers == 1)
++			v4l2loopback_notify_userspace(dev, "open");
+ 		client_usage_queue_event(dev->vdev);
+ 		return 0;
+ 	default:
+@@ -2271,6 +2300,9 @@
+ 		dev->ready_for_output = 1;
+ 	if (is_reader) {
+ 		dev->active_readers--;
++		/* Notify userspace when last reader closes */
++		if (dev->active_readers == 0)
++			v4l2loopback_notify_userspace(dev, "close");
+ 		client_usage_queue_event(dev->vdev);
+ 	}
+ 	MARK();

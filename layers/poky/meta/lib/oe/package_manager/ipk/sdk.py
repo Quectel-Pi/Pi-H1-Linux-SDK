@@ -1,4 +1,6 @@
 #
+# Copyright OpenEmbedded Contributors
+#
 # SPDX-License-Identifier: GPL-2.0-only
 #
 
@@ -61,12 +63,19 @@ class PkgSdk(Sdk):
 
         self.target_pm.install_complementary(self.d.getVar('SDKIMAGE_INSTALL_COMPLEMENTARY'))
 
+        env_bkp = os.environ.copy()
+        os.environ['PATH'] = self.d.expand("${COREBASE}/scripts/nativesdk-intercept") + \
+                             os.pathsep + os.environ["PATH"]
+
         self.target_pm.run_intercepts(populate_sdk='target')
+        os.environ.update(env_bkp)
 
         execute_pre_post_process(self.d, self.d.getVar("POPULATE_SDK_POST_TARGET_COMMAND"))
 
         if not bb.utils.contains("SDKIMAGE_FEATURES", "package-management", True, False, self.d):
             self.target_pm.remove_packaging_data()
+        else:
+            self.target_pm.remove_lists()
 
         bb.note("Installing NATIVESDK packages")
         self._populate_sysroot(self.host_pm, self.host_manifest)
@@ -78,6 +87,8 @@ class PkgSdk(Sdk):
 
         if not bb.utils.contains("SDKIMAGE_FEATURES", "package-management", True, False, self.d):
             self.host_pm.remove_packaging_data()
+        else:
+            self.host_pm.remove_lists()
 
         target_sysconfdir = os.path.join(self.sdk_target_sysroot, self.sysconfdir)
         host_sysconfdir = os.path.join(self.sdk_host_sysroot, self.sysconfdir)

@@ -6,6 +6,7 @@
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/panic_notifier.h>
+#include <linux/firmware/qcom/qcom_scm.h>
 #include <soc/qcom/wdt_core.h>
 
 #include <asm/virt.h>
@@ -16,9 +17,21 @@
 
 struct notifier_block panic_notifier;
 
+/*
+ * Panic handler: when dump mode is disabled (AT+QCFG="dumpenable",0 or
+ * download_mode=off), skip the watchdog bite and let the normal panic
+ * restart path run, so the platform reboots instead of entering the
+ * 900e/Sahara dump mode. When dump is enabled, keep the bite behaviour
+ * (SBL enters 900e to allow ramdump collection over USB).
+ */
 static int panic_handler(struct notifier_block *this,
 			      unsigned long event, void *ptr)
 {
+	if (!qcom_scm_is_dump_enabled()) {
+		pr_info("Dump mode disabled, skipping watchdog bite (normal panic restart)\n");
+		return NOTIFY_DONE;
+	}
+
 	pr_info("Triggering bite\n");
 	qcom_wdt_trigger_bite();
 	return NOTIFY_DONE;

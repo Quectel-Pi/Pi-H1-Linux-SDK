@@ -184,7 +184,7 @@ static int find_components(struct aggregate_device *adev)
 		struct component_match_array *mc = &match->compare[i];
 		struct component *c;
 
-		dev_info(adev->parent, "Looking for component %zu\n", i);
+		dev_dbg(adev->parent, "Looking for component %zu\n", i);
 
 		if (match->compare[i].component)
 			continue;
@@ -195,7 +195,7 @@ static int find_components(struct aggregate_device *adev)
 			break;
 		}
 
-		dev_info(adev->parent, "found component %s, duplicate %u\n",
+		dev_dbg(adev->parent, "found component %s, duplicate %u\n",
 			dev_name(c->dev), !!c->adev);
 
 		/* Attach this component to the adev */
@@ -229,15 +229,15 @@ static int try_to_bring_up_aggregate_device(struct aggregate_device *adev,
 {
 	int ret;
 
-	dev_info(adev->parent, "trying to bring up adev\n");
+	dev_dbg(adev->parent, "trying to bring up adev\n");
 
 	if (find_components(adev)) {
-		dev_info(adev->parent, "master has incomplete components\n");
+		dev_dbg(adev->parent, "master has incomplete components\n");
 		return 0;
 	}
 
 	if (component && component->adev != adev) {
-		dev_info(adev->parent, "master is not for this component (%s)\n",
+		dev_dbg(adev->parent, "master is not for this component (%s)\n",
 			dev_name(component->dev));
 		return 0;
 	}
@@ -635,7 +635,7 @@ static int component_bind(struct component *component, struct aggregate_device *
 		return -ENOMEM;
 	}
 
-	dev_info(adev->parent, "binding %s (ops %ps)\n",
+	dev_dbg(adev->parent, "binding %s (ops %ps)\n",
 		dev_name(component->dev), component->ops);
 
 	ret = component->ops->bind(component->dev, adev->parent, data);
@@ -722,7 +722,7 @@ static int __component_add(struct device *dev, const struct component_ops *ops,
 	component->dev = dev;
 	component->subcomponent = subcomponent;
 
-	dev_info(dev, "adding component (ops %ps)\n", ops);
+	dev_dbg(dev, "adding component (ops %ps)\n", ops);
 
 	mutex_lock(&component_mutex);
 	list_add_tail(&component->node, &component_list);

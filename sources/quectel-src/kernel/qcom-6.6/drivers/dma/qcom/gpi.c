@@ -2,7 +2,7 @@
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  * Copyright (c) 2020, Linaro Limited
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <dt-bindings/dma/qcom-gpi.h>
@@ -13,10 +13,24 @@
 #include <linux/of_dma.h>
 #include <linux/platform_device.h>
 #include <linux/dma/qcom-gpi-dma.h>
+#include <linux/kernel.h>
+#include <linux/device.h>
+#include <linux/sysfs.h>
 #include <linux/scatterlist.h>
 #include <linux/slab.h>
+#include <linux/soc/qcom/geni-se.h>
 #include "../dmaengine.h"
 #include "../virt-dma.h"
+
+#define GPI_LOG(log_fn, level, dev, fmt, ...) do { \
+	if ((level) <= log_level) \
+		geni_trace_log(dev, "gpi", fmt, ##__VA_ARGS__); \
+	else \
+		log_fn(dev, fmt, ##__VA_ARGS__); \
+} while (0)
+
+#define GPI_ERR_LOG(level, dev, fmt, ...) GPI_LOG(dev_err, level, dev, fmt, ##__VA_ARGS__)
+#define GPI_DBG_LOG(level, dev, fmt, ...) GPI_LOG(dev_dbg, level, dev, fmt, ##__VA_ARGS__)
 
 #define TRE_TYPE_DMA		0x10
 #define TRE_TYPE_GO		0x20
@@ -553,6 +567,27 @@ static void gpi_ring_recycle_ev_element(struct gpi_ring *ring);
 static int gpi_ring_add_element(struct gpi_ring *ring, void **wp);
 static void gpi_process_events(struct gpii *gpii);
 
+static int log_level = -1;
+static ssize_t log_level_show(struct device *dev,
+			      struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", log_level);
+}
+
+static ssize_t log_level_store(struct device *dev,
+			       struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	int val;
+
+	if (kstrtoint(buf, 10, &val) != 0 || val < LOG_LVL_ERROR || val >= LOG_LVL_MAX)
+		return -EINVAL;
+
+	log_level = val;
+	return count;
+}
+static DEVICE_ATTR_RW(log_level);
+
 static inline struct gchan *to_gchan(struct dma_chan *dma_chan)
 {
 	return container_of(dma_chan, struct gchan, vc.chan);
@@ -644,8 +679,8 @@ static int gpi_config_interrupts(struct gpii *gpii, enum gpii_irq_settings setti
 				       gpi_handle_irq, IRQF_TRIGGER_HIGH,
 				       "gpi-dma", gpii);
 		if (ret < 0) {
-			dev_err(gpii->gpi_dev->dev, "error request irq:%d ret:%d\n",
-				gpii->irq, ret);
+			GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+				    "error request irq:%d ret:%d\n", gpii->irq, ret);
 			return ret;
 		}
 	}
@@ -707,8 +742,8 @@ static int gpi_send_cmd(struct gpii *gpii, struct gchan *gchan,
 	if (IS_CHAN_CMD(gpi_cmd))
 		chid = gchan->chid;
 
-	dev_dbg(gpii->gpi_dev->dev,
-		"sending cmd: %s:%u\n", TO_GPI_CMD_STR(gpi_cmd), chid);
+	GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+		    "sending cmd: %s:%u\n", TO_GPI_CMD_STR(gpi_cmd), chid);
 
 	/* send opcode and wait for completion */
 	reinit_completion(&gpii->cmd_completion);
@@ -721,7 +756,8 @@ static int gpi_send_cmd(struct gpii *gpii, struct gchan *gchan,
 	timeout = wait_for_completion_timeout(&gpii->cmd_completion,
 					      msecs_to_jiffies(CMD_TIMEOUT_MS));
 	if (!timeout) {
-		dev_err(gpii->gpi_dev->dev, "cmd: %s completion timeout:%u\n",
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "cmd: %s completion timeout:%u\n",
 			TO_GPI_CMD_STR(gpi_cmd), chid);
 		return -EIO;
 	}
@@ -818,7 +854,8 @@ static void gpi_process_gen_err_irq(struct gpii *gpii)
 	u32 irq_stts = gpi_read_reg(gpii, gpii->regs + offset);
 
 	/* clear the status */
-	dev_dbg(gpii->gpi_dev->dev, "irq_stts:0x%x\n", irq_stts);
+	GPI_DBG_LOG(LOG_LVL_INFO, gpii->gpi_dev->dev, "irq_stts:0x%x\n",
+		    irq_stts);
 
 	/* Clear the register */
 	offset = GPII_n_CNTXT_GPII_IRQ_CLR_OFFS(gpii_id);
@@ -837,7 +874,8 @@ static void gpi_process_glob_err_irq(struct gpii *gpii)
 
 	/* only error interrupt should be set */
 	if (irq_stts & ~GPI_GLOB_IRQ_ERROR_INT_MSK) {
-		dev_err(gpii->gpi_dev->dev, "invalid error status:0x%x\n", irq_stts);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "invalid error status:0x%x\n", irq_stts);
 		return;
 	}
 
@@ -860,8 +898,9 @@ static irqreturn_t gpi_handle_irq(int irq, void *data)
 	 * while software state is in DISABLE state, bailing out.
 	 */
 	if (!REG_ACCESS_VALID(gpii->pm_state)) {
-		dev_err(gpii->gpi_dev->dev, "receive interrupt while in %s state\n",
-			TO_GPI_PM_STR(gpii->pm_state));
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "receive interrupt while in %s state\n",
+			    TO_GPI_PM_STR(gpii->pm_state));
 		goto exit_irq;
 	}
 
@@ -886,8 +925,8 @@ static irqreturn_t gpi_handle_irq(int irq, void *data)
 			u32 ev_state;
 			u32 ev_ch_irq;
 
-			dev_dbg(gpii->gpi_dev->dev,
-				"processing EV CTRL interrupt\n");
+			GPI_DBG_LOG(LOG_LVL_INFO, gpii->gpi_dev->dev,
+				    "processing EV CTRL interrupt\n");
 			offset = GPII_n_CNTXT_SRC_EV_CH_IRQ_OFFS(gpii_id);
 			ev_ch_irq = gpi_read_reg(gpii, gpii->regs + offset);
 
@@ -907,21 +946,24 @@ static irqreturn_t gpi_handle_irq(int irq, void *data)
 				ev_state = DEFAULT_EV_CH_STATE;
 
 			gpii->ev_state = ev_state;
-			dev_dbg(gpii->gpi_dev->dev, "setting EV state to %s\n",
-				TO_GPI_EV_STATE_STR(gpii->ev_state));
+			GPI_DBG_LOG(LOG_LVL_INFO, gpii->gpi_dev->dev,
+				    "setting EV state to %s\n",
+				    TO_GPI_EV_STATE_STR(gpii->ev_state));
 			complete_all(&gpii->cmd_completion);
 			type &= ~(GPII_n_CNTXT_TYPE_IRQ_MSK_EV_CTRL);
 		}
 
 		/* channel control irq */
 		if (type & GPII_n_CNTXT_TYPE_IRQ_MSK_CH_CTRL) {
-			dev_dbg(gpii->gpi_dev->dev, "process CH CTRL interrupts\n");
+			GPI_DBG_LOG(LOG_LVL_INFO, gpii->gpi_dev->dev,
+				    "process CH CTRL interrupts\n");
 			gpi_process_ch_ctrl_irq(gpii);
 			type &= ~(GPII_n_CNTXT_TYPE_IRQ_MSK_CH_CTRL);
 		}
 
 		if (type) {
-			dev_err(gpii->gpi_dev->dev, "Unhandled interrupt status:0x%x\n", type);
+			GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+				    "Unhandled interrupt status:0x%x\n", type);
 			gpi_process_gen_err_irq(gpii);
 			goto exit_irq;
 		}
@@ -953,8 +995,9 @@ static void gpi_process_imed_data_event(struct gchan *gchan,
 	 * If channel not active don't process event
 	 */
 	if (gchan->pm_state != ACTIVE_STATE) {
-		dev_err(gpii->gpi_dev->dev, "skipping processing event because ch @ %s state\n",
-			TO_GPI_PM_STR(gchan->pm_state));
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "skipping processing event because ch @ %s state\n",
+			    TO_GPI_PM_STR(gchan->pm_state));
 		return;
 	}
 
@@ -965,17 +1008,18 @@ static void gpi_process_imed_data_event(struct gchan *gchan,
 		struct gpi_tre *gpi_tre;
 
 		spin_unlock_irqrestore(&gchan->vc.lock, flags);
-		dev_dbg(gpii->gpi_dev->dev, "event without a pending descriptor!\n");
+		GPI_DBG_LOG(LOG_LVL_INFO, gpii->gpi_dev->dev,
+			    "event without a pending descriptor!\n");
 		gpi_ere = (struct gpi_ere *)imed_event;
-		dev_dbg(gpii->gpi_dev->dev,
-			"Event: %08x %08x %08x %08x\n",
-			gpi_ere->dword[0], gpi_ere->dword[1],
-			gpi_ere->dword[2], gpi_ere->dword[3]);
+		GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+			    "Event: %08x %08x %08x %08x\n",
+			    gpi_ere->dword[0], gpi_ere->dword[1],
+			    gpi_ere->dword[2], gpi_ere->dword[3]);
 		gpi_tre = tre;
-		dev_dbg(gpii->gpi_dev->dev,
-			"Pending TRE: %08x %08x %08x %08x\n",
-			gpi_tre->dword[0], gpi_tre->dword[1],
-			gpi_tre->dword[2], gpi_tre->dword[3]);
+		GPI_DBG_LOG(LOG_LVL_INFO, gpii->gpi_dev->dev,
+			    "Pending TRE: %08x %08x %08x %08x\n",
+			    gpi_tre->dword[0], gpi_tre->dword[1],
+			    gpi_tre->dword[2], gpi_tre->dword[3]);
 		return;
 	}
 	gpi_desc = to_gpi_desc(vd);
@@ -1033,8 +1077,9 @@ static void gpi_process_xfer_compl_event(struct gchan *gchan,
 
 	/* only process events on active channel */
 	if (unlikely(gchan->pm_state != ACTIVE_STATE)) {
-		dev_err(gpii->gpi_dev->dev, "skipping processing event because ch @ %s state\n",
-			TO_GPI_PM_STR(gchan->pm_state));
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "skipping processing event because ch @ %s state\n",
+			    TO_GPI_PM_STR(gchan->pm_state));
 		return;
 	}
 
@@ -1044,12 +1089,13 @@ static void gpi_process_xfer_compl_event(struct gchan *gchan,
 		struct gpi_ere *gpi_ere;
 
 		spin_unlock_irqrestore(&gchan->vc.lock, flags);
-		dev_err(gpii->gpi_dev->dev, "Event without a pending descriptor!\n");
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "Event without a pending descriptor!\n");
 		gpi_ere = (struct gpi_ere *)compl_event;
-		dev_err(gpii->gpi_dev->dev,
-			"Event: %08x %08x %08x %08x\n",
-			gpi_ere->dword[0], gpi_ere->dword[1],
-			gpi_ere->dword[2], gpi_ere->dword[3]);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "Event: %08x %08x %08x %08x\n",
+			    gpi_ere->dword[0], gpi_ere->dword[1],
+			    gpi_ere->dword[2], gpi_ere->dword[3]);
 		return;
 	}
 
@@ -1077,14 +1123,17 @@ static void gpi_process_xfer_compl_event(struct gchan *gchan,
 	}
 
 	if (compl_event->code == MSM_GPI_TCE_UNEXP_ERR) {
-		dev_err(gpii->gpi_dev->dev, "Error in Transaction\n");
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "Error in Transaction\n");
 		result.result = DMA_TRANS_ABORTED;
 	} else {
-		dev_dbg(gpii->gpi_dev->dev, "Transaction Success\n");
+		GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+			    "Transaction Success\n");
 		result.result = DMA_TRANS_NOERROR;
 	}
 	result.residue = gpi_desc->len - compl_event->length;
-	dev_dbg(gpii->gpi_dev->dev, "Residue %d\n", result.residue);
+	GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+		    "Residue %d\n", result.residue);
 
 	dma_cookie_complete(&vd->tx);
 	if (gchan->protocol == QCOM_GPI_I2C) {
@@ -1125,11 +1174,12 @@ static void gpi_process_events(struct gpii *gpii)
 			chid = gpi_event->xfer_compl_event.chid;
 			type = gpi_event->xfer_compl_event.type;
 
-			dev_dbg(gpii->gpi_dev->dev,
-				"Event: CHID:%u, type:%x %08x %08x %08x %08x\n",
-				chid, type, gpi_event->gpi_ere.dword[0],
-				gpi_event->gpi_ere.dword[1], gpi_event->gpi_ere.dword[2],
-				gpi_event->gpi_ere.dword[3]);
+			GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+				    "Event: CHID:%u, type:%x %08x %08x %08x %08x\n",
+				    chid, type, gpi_event->gpi_ere.dword[0],
+				    gpi_event->gpi_ere.dword[1],
+				    gpi_event->gpi_ere.dword[2],
+				    gpi_event->gpi_ere.dword[3]);
 
 			switch (type) {
 			case XFER_COMPLETE_EV_TYPE:
@@ -1138,7 +1188,8 @@ static void gpi_process_events(struct gpii *gpii)
 							     &gpi_event->xfer_compl_event);
 				break;
 			case STALE_EV_TYPE:
-				dev_dbg(gpii->gpi_dev->dev, "stale event, not processing\n");
+				GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+					    "stale event, not processing\n");
 				break;
 			case IMMEDIATE_DATA_EV_TYPE:
 				gchan = &gpii->gchan[chid];
@@ -1146,11 +1197,12 @@ static void gpi_process_events(struct gpii *gpii)
 							    &gpi_event->immediate_data_event);
 				break;
 			case QUP_NOTIF_EV_TYPE:
-				dev_dbg(gpii->gpi_dev->dev, "QUP_NOTIF_EV_TYPE\n");
+				GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+					    "QUP_NOTIF_EV_TYPE\n");
 				break;
 			default:
-				dev_dbg(gpii->gpi_dev->dev,
-					"not supported event type:0x%x\n", type);
+				GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+					    "not supported event type:0x%x\n", type);
 			}
 			gpi_ring_recycle_ev_element(ev_ring);
 		}
@@ -1173,8 +1225,9 @@ static void gpi_ev_tasklet(unsigned long data)
 	read_lock(&gpii->pm_lock);
 	if (!REG_ACCESS_VALID(gpii->pm_state)) {
 		read_unlock(&gpii->pm_lock);
-		dev_err(gpii->gpi_dev->dev, "not processing any events, pm_state:%s\n",
-			TO_GPI_PM_STR(gpii->pm_state));
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "not processing any events, pm_state:%s\n",
+			    TO_GPI_PM_STR(gpii->pm_state));
 		return;
 	}
 
@@ -1223,8 +1276,9 @@ static int gpi_reset_chan(struct gchan *gchan, enum gpi_cmd gpi_cmd)
 
 	ret = gpi_send_cmd(gpii, gchan, gpi_cmd);
 	if (ret) {
-		dev_err(gpii->gpi_dev->dev, "Error with cmd:%s ret:%d\n",
-			TO_GPI_CMD_STR(gpi_cmd), ret);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "Error with cmd:%s ret:%d\n",
+			    TO_GPI_CMD_STR(gpi_cmd), ret);
 		return ret;
 	}
 
@@ -1256,8 +1310,9 @@ static int gpi_start_chan(struct gchan *gchan)
 
 	ret = gpi_send_cmd(gpii, gchan, GPI_CH_CMD_START);
 	if (ret) {
-		dev_err(gpii->gpi_dev->dev, "Error with cmd:%s ret:%d\n",
-			TO_GPI_CMD_STR(GPI_CH_CMD_START), ret);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "Error with cmd:%s ret:%d\n",
+			    TO_GPI_CMD_STR(GPI_CH_CMD_START), ret);
 		return ret;
 	}
 
@@ -1276,8 +1331,9 @@ static int gpi_stop_chan(struct gchan *gchan)
 
 	ret = gpi_send_cmd(gpii, gchan, GPI_CH_CMD_STOP);
 	if (ret) {
-		dev_err(gpii->gpi_dev->dev, "Error with cmd:%s ret:%d\n",
-			TO_GPI_CMD_STR(GPI_CH_CMD_STOP), ret);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "Error with cmd:%s ret:%d\n",
+			    TO_GPI_CMD_STR(GPI_CH_CMD_STOP), ret);
 		return ret;
 	}
 
@@ -1297,8 +1353,9 @@ static int gpi_alloc_chan(struct gchan *chan, bool send_alloc_cmd)
 	if (send_alloc_cmd) {
 		ret = gpi_send_cmd(gpii, chan, GPI_CH_CMD_ALLOCATE);
 		if (ret) {
-			dev_err(gpii->gpi_dev->dev, "Error with cmd:%s ret:%d\n",
-				TO_GPI_CMD_STR(GPI_CH_CMD_ALLOCATE), ret);
+			GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+				    "Error with cmd:%s ret:%d\n",
+				    TO_GPI_CMD_STR(GPI_CH_CMD_ALLOCATE), ret);
 			return ret;
 		}
 	}
@@ -1332,8 +1389,9 @@ static int gpi_alloc_ev_chan(struct gpii *gpii)
 
 	ret = gpi_send_cmd(gpii, NULL, GPI_EV_CMD_ALLOCATE);
 	if (ret) {
-		dev_err(gpii->gpi_dev->dev, "error with cmd:%s ret:%d\n",
-			TO_GPI_CMD_STR(GPI_EV_CMD_ALLOCATE), ret);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "error with cmd:%s ret:%d\n",
+			    TO_GPI_CMD_STR(GPI_EV_CMD_ALLOCATE), ret);
 		return ret;
 	}
 
@@ -1435,17 +1493,18 @@ static int gpi_alloc_ring(struct gpi_ring *ring, u32 elements,
 		bit++;
 	len = 1 << bit;
 	ring->alloc_size = (len + (len - 1));
-	dev_dbg(gpii->gpi_dev->dev,
-		"#el:%u el_size:%u len:%u actual_len:%llu alloc_size:%zu\n",
-		  elements, el_size, (elements * el_size), len,
-		  ring->alloc_size);
+	GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+		    "#el:%u el_size:%u len:%u actual_len:%llu alloc_size:%zu\n",
+		    elements, el_size, (elements * el_size), len,
+		    ring->alloc_size);
 
 	ring->pre_aligned = dma_alloc_coherent(gpii->gpi_dev->dev,
 					       ring->alloc_size,
 					       &ring->dma_handle, GFP_KERNEL);
 	if (!ring->pre_aligned) {
-		dev_err(gpii->gpi_dev->dev, "could not alloc size:%zu mem for ring\n",
-			ring->alloc_size);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "could not alloc size:%zu mem for ring\n",
+			    ring->alloc_size);
 		return -ENOMEM;
 	}
 
@@ -1463,10 +1522,10 @@ static int gpi_alloc_ring(struct gpi_ring *ring, u32 elements,
 	/* update to other cores */
 	smp_wmb();
 
-	dev_dbg(gpii->gpi_dev->dev,
-		"phy_pre:%pad phy_alig:%pa len:%u el_size:%u elements:%u\n",
-		&ring->dma_handle, &ring->phys_addr, ring->len,
-		ring->el_size, ring->elements);
+	GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+		    "phy_pre:%pad phy_alig:%pa len:%u el_size:%u elements:%u\n",
+		    &ring->dma_handle, &ring->phys_addr, ring->len,
+		    ring->el_size, ring->elements);
 
 	return 0;
 }
@@ -1481,7 +1540,8 @@ static void gpi_queue_xfer(struct gpii *gpii, struct gchan *gchan,
 	/* get next tre location we can copy */
 	ret = gpi_ring_add_element(&gchan->ch_ring, (void **)&ch_tre);
 	if (unlikely(ret)) {
-		dev_err(gpii->gpi_dev->dev, "Error adding ring element to xfer ring\n");
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "Error adding ring element to xfer ring\n");
 		return;
 	}
 
@@ -1526,14 +1586,16 @@ static int gpi_terminate_all(struct dma_chan *chan)
 
 		ret = gpi_reset_chan(gchan, GPI_CH_CMD_RESET);
 		if (ret) {
-			dev_err(gpii->gpi_dev->dev, "Error resetting channel ret:%d\n", ret);
+			GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+				    "Error resetting channel ret:%d\n", ret);
 			goto terminate_exit;
 		}
 
 		/* reprogram channel CNTXT */
 		ret = gpi_alloc_chan(gchan, false);
 		if (ret) {
-			dev_err(gpii->gpi_dev->dev, "Error alloc_channel ret:%d\n", ret);
+			GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+				    "Error alloc_channel ret:%d\n", ret);
 			goto terminate_exit;
 		}
 	}
@@ -1544,7 +1606,8 @@ static int gpi_terminate_all(struct dma_chan *chan)
 
 		ret = gpi_start_chan(gchan);
 		if (ret) {
-			dev_err(gpii->gpi_dev->dev, "Error Starting Channel ret:%d\n", ret);
+			GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+				    "Error Starting Channel ret:%d\n", ret);
 			goto terminate_exit;
 		}
 	}
@@ -1568,7 +1631,8 @@ static int gpi_pause(struct dma_chan *chan)
 	 * client needs to call pause only once
 	 */
 	if (gpii->pm_state == PAUSE_STATE) {
-		dev_dbg(gpii->gpi_dev->dev, "channel is already paused\n");
+		GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+			    "channel is already paused\n");
 		mutex_unlock(&gpii->ctrl_lock);
 		return 0;
 	}
@@ -1604,7 +1668,8 @@ static int gpi_resume(struct dma_chan *chan)
 
 	mutex_lock(&gpii->ctrl_lock);
 	if (gpii->pm_state == ACTIVE_STATE) {
-		dev_dbg(gpii->gpi_dev->dev, "channel is already active\n");
+		GPI_DBG_LOG(LOG_LVL_VERBOSE, gpii->gpi_dev->dev,
+			    "channel is already active\n");
 		mutex_unlock(&gpii->ctrl_lock);
 		return 0;
 	}
@@ -1615,7 +1680,8 @@ static int gpi_resume(struct dma_chan *chan)
 	for (i = 0; i < MAX_CHANNELS_PER_GPII; i++) {
 		ret = gpi_send_cmd(gpii, &gpii->gchan[i], GPI_CH_CMD_START);
 		if (ret) {
-			dev_err(gpii->gpi_dev->dev, "Error starting chan, ret:%d\n", ret);
+			GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+				    "Error starting chan, ret:%d\n", ret);
 			mutex_unlock(&gpii->ctrl_lock);
 			return ret;
 		}
@@ -1751,8 +1817,9 @@ static int gpi_create_i2c_tre(struct gchan *chan, struct gpi_desc *desc,
 	}
 
 	for (i = 0; i < tre_idx; i++)
-		dev_dbg(dev, "TRE:%d %x:%x:%x:%x\n", i, desc->tre[i].dword[0],
-			desc->tre[i].dword[1], desc->tre[i].dword[2], desc->tre[i].dword[3]);
+		GPI_DBG_LOG(LOG_LVL_INFO, dev, "TRE:%d %x:%x:%x:%x\n", i,
+			    desc->tre[i].dword[0], desc->tre[i].dword[1],
+			    desc->tre[i].dword[2], desc->tre[i].dword[3]);
 
 	return tre_idx;
 }
@@ -1848,8 +1915,9 @@ static int gpi_create_spi_tre(struct gchan *chan, struct gpi_desc *desc,
 	}
 
 	for (i = 0; i < tre_idx; i++)
-		dev_dbg(dev, "TRE:%d %x:%x:%x:%x\n", i, desc->tre[i].dword[0],
-			desc->tre[i].dword[1], desc->tre[i].dword[2], desc->tre[i].dword[3]);
+		GPI_DBG_LOG(LOG_LVL_INFO, dev, "TRE:%d %x:%x:%x:%x\n", i,
+			    desc->tre[i].dword[0], desc->tre[i].dword[1],
+			    desc->tre[i].dword[2], desc->tre[i].dword[3]);
 
 	return tre_idx;
 }
@@ -1871,12 +1939,15 @@ gpi_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 
 	gpii->ieob_set = false;
 	if (!is_slave_direction(direction)) {
-		dev_err(gpii->gpi_dev->dev, "invalid dma direction: %d\n", direction);
+		GPI_ERR_LOG(LOG_LVL_ERROR, dev, "invalid dma direction: %d\n",
+			    direction);
 		return NULL;
 	}
 
 	if (sg_len > 1) {
-		dev_err(dev, "Multi sg sent, we support only one atm: %d\n", sg_len);
+		GPI_ERR_LOG(LOG_LVL_ERROR, dev,
+			    "Multi sg sent, we support only one atm: %d\n",
+			    sg_len);
 		return NULL;
 	}
 
@@ -1890,7 +1961,9 @@ gpi_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 	/* calculate # of elements required & available */
 	nr = gpi_ring_num_elements_avail(ch_ring);
 	if (nr < nr_tre) {
-		dev_err(dev, "not enough space in ring, avail:%u required:%u\n", nr, nr_tre);
+		GPI_ERR_LOG(LOG_LVL_ERROR, dev,
+			    "not enough space in ring, avail:%u required:%u\n",
+			    nr, nr_tre);
 		return NULL;
 	}
 
@@ -1904,7 +1977,8 @@ gpi_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
 	} else if (gchan->protocol == QCOM_GPI_I2C) {
 		i = gpi_create_i2c_tre(gchan, gpi_desc, sgl, direction);
 	} else {
-		dev_err(dev, "invalid peripheral: %d\n", gchan->protocol);
+		GPI_ERR_LOG(LOG_LVL_ERROR, dev, "invalid peripheral: %d\n",
+			    gchan->protocol);
 		kfree(gpi_desc);
 		return NULL;
 	}
@@ -1971,8 +2045,9 @@ static int gpi_ch_init(struct gchan *gchan)
 
 	/* protocol must be same for both channels */
 	if (gpii->gchan[0].protocol != gpii->gchan[1].protocol) {
-		dev_err(gpii->gpi_dev->dev, "protocol did not match protocol %u != %u\n",
-			gpii->gchan[0].protocol, gpii->gchan[1].protocol);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "protocol did not match protocol %u != %u\n",
+			    gpii->gchan[0].protocol, gpii->gchan[1].protocol);
 		ret = -EINVAL;
 		goto exit_gpi_init;
 	}
@@ -1990,14 +2065,16 @@ static int gpi_ch_init(struct gchan *gchan)
 	write_unlock_irq(&gpii->pm_lock);
 	ret = gpi_config_interrupts(gpii, DEFAULT_IRQ_SETTINGS, 0);
 	if (ret) {
-		dev_err(gpii->gpi_dev->dev, "error config. interrupts, ret:%d\n", ret);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "error config. interrupts, ret:%d\n", ret);
 		goto error_config_int;
 	}
 
 	/* allocate event rings */
 	ret = gpi_alloc_ev_chan(gpii);
 	if (ret) {
-		dev_err(gpii->gpi_dev->dev, "error alloc_ev_chan:%d\n", ret);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+			    "error alloc_ev_chan:%d\n", ret);
 		goto error_alloc_ev_ring;
 	}
 
@@ -2005,7 +2082,8 @@ static int gpi_ch_init(struct gchan *gchan)
 	for (i = 0; i < MAX_CHANNELS_PER_GPII; i++) {
 		ret = gpi_alloc_chan(&gpii->gchan[i], true);
 		if (ret) {
-			dev_err(gpii->gpi_dev->dev, "Error allocating chan:%d\n", ret);
+			GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+				    "Error allocating chan:%d\n", ret);
 			goto error_alloc_chan;
 		}
 	}
@@ -2014,7 +2092,8 @@ static int gpi_ch_init(struct gchan *gchan)
 	for (i = 0; i < MAX_CHANNELS_PER_GPII; i++) {
 		ret = gpi_start_chan(&gpii->gchan[i]);
 		if (ret) {
-			dev_err(gpii->gpi_dev->dev, "Error start chan:%d\n", ret);
+			GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+				    "Error start chan:%d\n", ret);
 			goto error_start_chan;
 		}
 	}
@@ -2060,7 +2139,8 @@ static void gpi_free_chan_resources(struct dma_chan *chan)
 
 		ret = gpi_send_cmd(gpii, gchan, GPI_CH_CMD_RESET);
 		if (ret)
-			dev_err(gpii->gpi_dev->dev, "error resetting channel:%d\n", ret);
+			GPI_ERR_LOG(LOG_LVL_ERROR, gpii->gpi_dev->dev,
+				    "error resetting channel:%d\n", ret);
 
 		gpi_reset_chan(gchan, GPI_CH_CMD_DE_ALLOC);
 	}
@@ -2183,14 +2263,16 @@ static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
 	struct gchan *gchan;
 
 	if (args->args_count < 3) {
-		dev_err(gpi_dev->dev, "gpii require minimum 2 args, client passed:%d args\n",
-			args->args_count);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpi_dev->dev,
+			    "gpii require minimum 2 args, client passed:%d args\n",
+			    args->args_count);
 		return NULL;
 	}
 
 	chid = args->args[0];
 	if (chid >= MAX_CHANNELS_PER_GPII) {
-		dev_err(gpi_dev->dev, "gpii channel:%d not valid\n", chid);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpi_dev->dev,
+			    "gpii channel:%d not valid\n", chid);
 		return NULL;
 	}
 
@@ -2199,14 +2281,16 @@ static struct dma_chan *gpi_of_dma_xlate(struct of_phandle_args *args,
 	/* find next available gpii to use */
 	gpii = gpi_find_avail_gpii(gpi_dev, seid);
 	if (gpii < 0) {
-		dev_err(gpi_dev->dev, "no available gpii instances\n");
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpi_dev->dev,
+			    "no available gpii instances\n");
 		return NULL;
 	}
 
 	gchan = &gpi_dev->gpiis[gpii].gchan[chid];
 	if (gchan->vc.chan.client_count) {
-		dev_err(gpi_dev->dev, "gpii:%d chid:%d seid:%d already configured\n",
-			gpii, chid, gchan->seid);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpi_dev->dev,
+			    "gpii:%d chid:%d seid:%d already configured\n",
+			    gpii, chid, gchan->seid);
 		return NULL;
 	}
 
@@ -2236,14 +2320,16 @@ static int gpi_probe(struct platform_device *pdev)
 	ret = of_property_read_u32(gpi_dev->dev->of_node, "dma-channels",
 				   &gpi_dev->max_gpii);
 	if (ret) {
-		dev_err(gpi_dev->dev, "missing 'max-no-gpii' DT node\n");
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpi_dev->dev,
+			    "missing 'max-no-gpii' DT node\n");
 		return ret;
 	}
 
 	ret = of_property_read_u32(gpi_dev->dev->of_node, "dma-channel-mask",
 				   &gpi_dev->gpii_mask);
 	if (ret) {
-		dev_err(gpi_dev->dev, "missing 'gpii-mask' DT node\n");
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpi_dev->dev,
+			    "missing 'gpii-mask' DT node\n");
 		return ret;
 	}
 
@@ -2254,7 +2340,8 @@ static int gpi_probe(struct platform_device *pdev)
 
 	ret = dma_set_mask(gpi_dev->dev, DMA_BIT_MASK(64));
 	if (ret) {
-		dev_err(gpi_dev->dev, "Error setting dma_mask to 64, ret:%d\n", ret);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpi_dev->dev,
+			    "Error setting dma_mask to 64, ret:%d\n", ret);
 		return ret;
 	}
 
@@ -2338,17 +2425,23 @@ static int gpi_probe(struct platform_device *pdev)
 	/* register with dmaengine framework */
 	ret = dma_async_device_register(&gpi_dev->dma_device);
 	if (ret) {
-		dev_err(gpi_dev->dev, "async_device_register failed ret:%d", ret);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpi_dev->dev,
+			    "async_device_register failed ret:%d", ret);
 		return ret;
 	}
 
 	ret = of_dma_controller_register(gpi_dev->dev->of_node,
 					 gpi_of_dma_xlate, gpi_dev);
 	if (ret) {
-		dev_err(gpi_dev->dev, "of_dma_controller_reg failed ret:%d", ret);
+		GPI_ERR_LOG(LOG_LVL_ERROR, gpi_dev->dev,
+			    "of_dma_controller_reg failed ret:%d", ret);
 		return ret;
 	}
 
+	ret = device_create_file(gpi_dev->dev, &dev_attr_log_level);
+	if (ret)
+		GPI_ERR_LOG(LOG_LVL_ERROR, &pdev->dev,
+			    "Failed to create sysfs entry ret:%d\n", ret);
 	return ret;
 }
 

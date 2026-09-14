@@ -1,0 +1,6 @@
+# Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+/usr/bin/provisioning-manager -- gen_context(system_u:object_r:qcom_provisioningmanager_exec_t,s0)
+/usr/share/secure-edge-control/provisioningmanager(/.*)? -- gen_context(system_u:object_r:qcom_provisioningmanager_usr_share_t,s0)
+/var/lib/secure-edge-control/provisioningmanager(/.*)? -- gen_context(system_u:object_r:qcom_provisioningmanager_var_lib_t,s0)

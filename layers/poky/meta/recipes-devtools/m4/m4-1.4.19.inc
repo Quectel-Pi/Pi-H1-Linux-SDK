@@ -9,6 +9,7 @@ inherit autotools texinfo ptest gettext
 SRC_URI = "${GNU_MIRROR}/m4/m4-${PV}.tar.gz \
            file://ac_config_links.patch \
            file://0001-sigsegv-Fix-build-on-ppc-musl.patch \
+           file://0001-Define-alignof_slot-using-_Alignof-when-using-C11-or.patch \
            "
 SRC_URI:append:class-target = " file://run-ptest \
                                 file://serial-tests-config.patch \
@@ -29,6 +30,9 @@ EXTRA_OECONF += "--without-libsigsegv-prefix"
 
 EXTRA_OEMAKE += "'infodir=${infodir}'"
 
+CFLAGS += "-std=gnu17"
+BUILD_CFLAGS += "-std=gnu17"
+
 do_compile_ptest() {
 	cd ${B}/tests
 	sed -i '/^buildtest-TESTS: /c buildtest-TESTS: $(TESTS) $(check_LIBRARIES) $(check_PROGRAMS)' Makefile
@@ -39,8 +43,6 @@ do_install_ptest() {
                 cp -r ${B}/tests                        ${D}${PTEST_PATH}
                 cp -r ${S}/tests/*                      ${D}${PTEST_PATH}/tests/
                 sed -i '/^Makefile:/c Makefile:'        ${D}${PTEST_PATH}/tests/Makefile
-                sed -i -e  "s;LOCALE_FR='fr_FR';LOCALE_FR='fr_FR.iso88591';g" \
-                       -e  "s;LOCALE_FR_UTF8='none';LOCALE_FR_UTF8='fr_FR.utf8';g" ${D}${PTEST_PATH}/tests/Makefile
                 find ${D}${PTEST_PATH} -type f -name *.[hoc] | xargs -i rm {}
                 cp ${S}/build-aux/update-copyright  ${D}${PTEST_PATH}/tests/
                 sed -i 's;update-copyright;./update-copyright;g' ${D}${PTEST_PATH}/tests/test-update-copyright.sh
@@ -51,10 +53,16 @@ do_install_ptest() {
                 ln -s ptest ${D}${libdir}/${BPN}/${BP} 
 }
 
+do_install_ptest:append:libc-glibc() {
+                sed -i -e  "s;LOCALE_FR='fr_FR';LOCALE_FR='fr_FR.iso88591';g" \
+                       -e  "s;LOCALE_FR_UTF8='none';LOCALE_FR_UTF8='fr_FR.utf8';g" ${D}${PTEST_PATH}/tests/Makefile
+}
 
-RDEPENDS:${PN}-ptest += "make coreutils diffutils"
+RDEPENDS:${PN}-ptest += "make coreutils diffutils bash"
 RDEPENDS:${PN}-ptest:append:libc-glibc = "\
+     locale-base-fr-fr \
      locale-base-fr-fr.iso-8859-1 \
+     glibc-gconv-iso8859-1 \
 "
 
 INSANE_SKIP:${PN}-ptest += "ldflags"

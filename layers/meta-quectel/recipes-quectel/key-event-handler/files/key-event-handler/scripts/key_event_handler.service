@@ -1,15 +1,13 @@
 [Unit]
 Description=Power Key Shutdown Service
-After=init_usb.service usb.service 
+After=init_usb.service usb.service gdm.service
 
 [Service]
 Type=simple
-Restart=on-failure
+Restart=always
 RestartSec=1s
 StandardOutput=journal
-RemainAfterExit=yes
 ExecStart=/usr/sbin/key_event_handler
-Restart=always
 
 [Install]
 WantedBy=multi-user.target

@@ -1,4 +1,6 @@
 #
+# Copyright OpenEmbedded Contributors
+#
 # SPDX-License-Identifier: GPL-2.0-only
 #
 
@@ -188,7 +190,7 @@ class RpmPM(PackageManager):
         os.environ['NATIVE_ROOT'] = self.d.getVar('STAGING_DIR_NATIVE')
 
 
-    def install(self, pkgs, attempt_only = False):
+    def install(self, pkgs, attempt_only=False, hard_depends_only=False):
         if len(pkgs) == 0:
             return
         self._prepare_pkg_transaction()
@@ -199,7 +201,7 @@ class RpmPM(PackageManager):
 
         output = self._invoke_dnf((["--skip-broken"] if attempt_only else []) +
                          (["-x", ",".join(exclude_pkgs)] if len(exclude_pkgs) > 0 else []) +
-                         (["--setopt=install_weak_deps=False"] if self.d.getVar('NO_RECOMMENDATIONS') == "1" else []) +
+                         (["--setopt=install_weak_deps=False"] if (hard_depends_only or self.d.getVar('NO_RECOMMENDATIONS') == "1") else []) +
                          (["--nogpgcheck"] if self.d.getVar('RPM_SIGN_PACKAGES') != '1' else ["--setopt=gpgcheck=True"]) +
                          ["install"] +
                          pkgs)
@@ -384,11 +386,12 @@ class RpmPM(PackageManager):
             self.save_rpmpostinst(pkg)
 
     def extract(self, pkg):
-        output = self._invoke_dnf(["repoquery", "--queryformat", "%{location}", pkg])
+        output = self._invoke_dnf(["repoquery", "--location", pkg])
         pkg_name = output.splitlines()[-1]
         if not pkg_name.endswith(".rpm"):
             bb.fatal("dnf could not find package %s in repository: %s" %(pkg, output))
-        pkg_path = oe.path.join(self.rpm_repo_dir, pkg_name)
+        # Strip file: prefix
+        pkg_path = pkg_name[5:]
 
         cpio_cmd = bb.utils.which(os.getenv("PATH"), "cpio")
         rpm2cpio_cmd = bb.utils.which(os.getenv("PATH"), "rpm2cpio")

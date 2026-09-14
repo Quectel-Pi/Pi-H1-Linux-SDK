@@ -1,0 +1,139 @@
+From bdc808db698b4524453b0db06ddd2477d3a474eb Mon Sep 17 00:00:00 2001
+From: Akhil P Oommen <quic_akhilpo@quicinc.com>
+Date: Mon, 9 Dec 2024 19:19:18 +0530
+Subject: [PATCH] FROMLIST: drm/msm/a6xx: Skip gpu secure fw load in EL2 mode
+
+When kernel is booted in EL2, SECVID registers are accessible to the
+KMD. So we can use that to switch GPU's secure mode to avoid dependency
+on Zap firmware. Also, we can't load a secure firmware without a
+hypervisor that supports it.
+
+Tested following configurations on sa8775p chipset (Adreno 663 gpu):
+
+1. Gunyah (No KVM) - Loads zap shader based on DT
+2. KVM in VHE - Skips zap shader load and programs SECVID register
+3. KVM in nVHE - Loads zap shader based on DT
+4. Kernel in EL2 with CONFIG_KVM=n - Skips zap shader load and
+        programs SECVID register
+
+For (1) and (3) configuration, this patch doesn't have any impact.
+Driver loads secure firmware based on other existing hints.
+
+Signed-off-by: Akhil P Oommen <quic_akhilpo@quicinc.com>
+Patchwork: https://patchwork.freedesktop.org/patch/627815/
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241209-drm-msm-kvm-support-v1-1-1c983a8a8087@quicinc.com/]
+---
+ drivers/gpu/drm/msm/adreno/a6xx_gpu.c | 82 ++++++++++++++++++---------
+ 1 file changed, 54 insertions(+), 28 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/adreno/a6xx_gpu.c b/drivers/gpu/drm/msm/adreno/a6xx_gpu.c
+index 504a17f45065..8dc8a04bf0b0 100644
+--- a/drivers/gpu/drm/msm/adreno/a6xx_gpu.c
++++ b/drivers/gpu/drm/msm/adreno/a6xx_gpu.c
+@@ -13,6 +13,10 @@
+ #include <linux/pm_domain.h>
+ #include <linux/soc/qcom/llcc-qcom.h>
+ 
++#ifdef CONFIG_ARM64
++#include <asm/virt.h>
++#endif
++
+ #define GPU_PAS_ID 13
+ 
+ static inline bool _a6xx_check_idle(struct msm_gpu *gpu)
+@@ -1201,6 +1205,54 @@ static int a6xx_zap_shader_init(struct msm_gpu *gpu)
+ 	return ret;
+ }
+ 
++static int a6xx_switch_secure_mode(struct msm_gpu *gpu)
++{
++	int ret;
++
++#ifdef CONFIG_ARM64
++	/*
++	 * We can access SECVID_TRUST_CNTL register when kernel is booted in EL2 mode. So, use it
++	 * to switch the secure mode to avoid the dependency on zap shader.
++	 */
++	if (is_kernel_in_hyp_mode())
++		goto direct_switch;
++#endif
++
++	/*
++	 * Try to load a zap shader into the secure world. If successful
++	 * we can use the CP to switch out of secure mode. If not then we
++	 * have no resource but to try to switch ourselves out manually. If we
++	 * guessed wrong then access to the RBBM_SECVID_TRUST_CNTL register will
++	 * be blocked and a permissions violation will soon follow.
++	 */
++	ret = a6xx_zap_shader_init(gpu);
++	if (ret == -ENODEV) {
++		/*
++		 * This device does not use zap shader (but print a warning
++		 * just in case someone got their dt wrong.. hopefully they
++		 * have a debug UART to realize the error of their ways...
++		 * if you mess this up you are about to crash horribly)
++		 */
++		dev_warn_once(gpu->dev->dev,
++			"Zap shader not enabled - using SECVID_TRUST_CNTL instead\n");
++		goto direct_switch;
++	} else if (ret)
++		return ret;
++
++	OUT_PKT7(gpu->rb[0], CP_SET_SECURE_MODE, 1);
++	OUT_RING(gpu->rb[0], 0x00000000);
++
++	a6xx_flush(gpu, gpu->rb[0]);
++	if (!a6xx_idle(gpu, gpu->rb[0]))
++		return -EINVAL;
++
++	return 0;
++
++direct_switch:
++	gpu_write(gpu, REG_A6XX_RBBM_SECVID_TRUST_CNTL, 0x0);
++	return 0;
++}
++
+ #define A6XX_INT_MASK (A6XX_RBBM_INT_0_MASK_CP_AHB_ERROR | \
+ 	  A6XX_RBBM_INT_0_MASK_RBBM_ATB_ASYNCFIFO_OVERFLOW | \
+ 	  A6XX_RBBM_INT_0_MASK_CP_HW_ERROR | \
+@@ -1442,35 +1494,9 @@ static int hw_init(struct msm_gpu *gpu)
+ 	if (ret)
+ 		goto out;
+ 
+-	/*
+-	 * Try to load a zap shader into the secure world. If successful
+-	 * we can use the CP to switch out of secure mode. If not then we
+-	 * have no resource but to try to switch ourselves out manually. If we
+-	 * guessed wrong then access to the RBBM_SECVID_TRUST_CNTL register will
+-	 * be blocked and a permissions violation will soon follow.
+-	 */
+-	ret = a6xx_zap_shader_init(gpu);
+-	if (!ret) {
+-		OUT_PKT7(gpu->rb[0], CP_SET_SECURE_MODE, 1);
+-		OUT_RING(gpu->rb[0], 0x00000000);
+-
+-		a6xx_flush(gpu, gpu->rb[0]);
+-		if (!a6xx_idle(gpu, gpu->rb[0]))
+-			return -EINVAL;
+-	} else if (ret == -ENODEV) {
+-		/*
+-		 * This device does not use zap shader (but print a warning
+-		 * just in case someone got their dt wrong.. hopefully they
+-		 * have a debug UART to realize the error of their ways...
+-		 * if you mess this up you are about to crash horribly)
+-		 */
+-		dev_warn_once(gpu->dev->dev,
+-			"Zap shader not enabled - using SECVID_TRUST_CNTL instead\n");
+-		gpu_write(gpu, REG_A6XX_RBBM_SECVID_TRUST_CNTL, 0x0);
+-		ret = 0;
+-	} else {
++	ret = a6xx_switch_secure_mode(gpu);
++	if (!ret)
+ 		return ret;
+-	}
+ 
+ out:
+ 	if (adreno_has_gmu_wrapper(adreno_gpu))
+-- 
+2.34.1
+

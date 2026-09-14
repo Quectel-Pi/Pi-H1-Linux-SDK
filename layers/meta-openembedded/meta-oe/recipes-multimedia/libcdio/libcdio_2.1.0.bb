@@ -6,6 +6,7 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=d32239bcb673463ab874e80d47fae504"
 
 SRC_URI = "${GNU_MIRROR}/${BPN}/${BP}.tar.bz2 \
            file://0001-Fix-a-few-Werror-format-security-errors-with-mvprint.patch \
+           file://Drop-LIBCDIO_SOURCE_PATH-by-dropping-STRIP_FROM_PATH.patch \
            "
 
 SRC_URI[md5sum] = "aa7629e8f73662a762f64c444b901055"
@@ -17,6 +18,9 @@ PACKAGECONFIG ??= "cdda-player"
 PACKAGECONFIG[cdda-player] = "--with-cdda-player,--without-cdda-player,ncurses"
 PACKAGECONFIG[cddb] = "--enable-cddb,--disable-cddb,libcddb"
 PACKAGECONFIG[vcd-info] = "--enable-vcd-info,--disable-vcd-info,vcdimager"
+
+# add -D_LARGEFILE64_SOURCE for 32bit targets
+CFLAGS += "${@['-D_LARGEFILE64_SOURCE',''][d.getVar('SITEINFO_BITS') != '32']}"
 
 PACKAGES += "${PN}-utils"
 

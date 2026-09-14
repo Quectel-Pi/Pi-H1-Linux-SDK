@@ -1,0 +1,6 @@
+# Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+/usr/bin/data-manager -- gen_context(system_u:object_r:qcom_datamanager_exec_t,s0)
+/usr/share/secure-edge-control/datamanager(/.*)? -- gen_context(system_u:object_r:qcom_datamanager_usr_share_t,s0)
+/var/lib/secure-edge-control/datamanager(/.*)? -- gen_context(system_u:object_r:qcom_datamanager_var_lib_t,s0)

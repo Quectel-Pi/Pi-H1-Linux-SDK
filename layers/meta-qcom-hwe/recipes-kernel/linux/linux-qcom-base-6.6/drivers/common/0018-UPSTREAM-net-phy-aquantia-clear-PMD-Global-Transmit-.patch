@@ -1,0 +1,45 @@
+From 799769618e902b492ca65ad8d463efafc2f00e03 Mon Sep 17 00:00:00 2001
+From: Robert Marko <robimarko@gmail.com>
+Date: Sun, 11 Feb 2024 19:16:41 +0100
+Subject: [PATCH 18/39] UPSTREAM: net: phy: aquantia: clear PMD Global Transmit
+ Disable bit during init
+
+PMD Global Transmit Disable bit should be cleared for normal operation.
+This should be HW default, however I found that on Asus RT-AX89X that uses
+AQR113C PHY and firmware 5.4 this bit is set by default.
+
+With this bit set the AQR cannot achieve a link with its link-partner and
+it took me multiple hours of digging through the vendor GPL source to find
+this out, so lets always clear this bit during .config_init() to avoid a
+situation like this in the future.
+
+Signed-off-by: Robert Marko <robimarko@gmail.com>
+Reviewed-by: Andrew Lunn <andrew@lunn.ch>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git bed90b06b6812d9c8c848414b090ddf38f0e6cc1]
+---
+ drivers/net/phy/aquantia/aquantia_main.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/drivers/net/phy/aquantia/aquantia_main.c b/drivers/net/phy/aquantia/aquantia_main.c
+index 97a2fafa15ca..e1f092cbfdce 100644
+--- a/drivers/net/phy/aquantia/aquantia_main.c
++++ b/drivers/net/phy/aquantia/aquantia_main.c
+@@ -727,6 +727,15 @@ static int aqr113c_config_init(struct phy_device *phydev)
+ 	if (ret < 0)
+ 		return ret;
+ 
++	ret = phy_clear_bits_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_PMA_TXDIS,
++				 MDIO_PMD_TXDIS_GLOBAL);
++	if (ret)
++		return ret;
++
++	ret = aqr107_wait_processor_intensive_op(phydev);
++	if (ret)
++		return ret;
++
+ 	return aqr107_fill_interface_modes(phydev);
+ }
+ 
+-- 
+2.34.1
+

@@ -10,7 +10,7 @@ DEPENDS = "logrotate"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/le-utils.git;protocol=https"
 SRCBRANCH  = "le-utils.qclinux.1.0.r2-rel"
-SRCREV     = "80064c0374bc1f7a3238e45ea8da5cb9addae58c"
+SRCREV     = "e53fdf412ac7724af7ec9939674f5357606f7c5b"
 
 SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=le-utils"
 
@@ -19,10 +19,4 @@ S = "${WORKDIR}/le-utils/syslog-plumber"
 do_install() {
     install -d ${D}${includedir}
     install -m 0755 ${S}/include/log.h ${D}${includedir}/
-}
-
-python () {
-    mach_overrides = d.getVar('MACHINEOVERRIDES').split(":")
-    if ('qcom-base-bsp' in mach_overrides):
-        raise bb.parse.SkipRecipe("syslog-plumber not compatible with qcom-base-bsp")
 }

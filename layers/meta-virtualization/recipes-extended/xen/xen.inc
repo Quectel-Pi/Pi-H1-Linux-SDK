@@ -2,16 +2,17 @@ HOMEPAGE = "http://xen.org"
 LICENSE = "GPL-2.0-only"
 SECTION = "console/tools"
 
+TOOLCHAIN = "gcc"
+
 inherit autotools-brokensep pkgconfig
 
 require xen-arch.inc
 
 PACKAGECONFIG ??= " \
-    sdl \
     ${@bb.utils.contains('DISTRO_FEATURES', 'systemd', 'systemd', '', d)} \
     "
 
-PACKAGECONFIG[sdl] = "--enable-sdl,--disable-sdl,virtual/libsdl,"
+PACKAGECONFIG[lzo] = ",,lzo"
 PACKAGECONFIG[xsm] = "--enable-xsmpolicy,--disable-xsmpolicy,checkpolicy-native,"
 PACKAGECONFIG[systemd] = "--enable-systemd,--disable-systemd,systemd,"
 PACKAGECONFIG[externalblktap] = ",,,"
@@ -41,7 +42,6 @@ DEPENDS = " \
     procps \
     python3 \
     libaio \
-    lzo \
     util-linux \
     xz \
     yajl \
@@ -88,12 +88,13 @@ export CROSS_COMPILE="${TARGET_PREFIX}"
 # overide LDFLAGS to allow xen to build without: "x86_64-oe-linux-ld: unrecognized option '-Wl,-O1'"
 export LDFLAGS=""
 
-# Pass through the Yocto distro compiler flags via the Xen-provided variables.
-# Special handling:
-# - The Yocto distro compiler flags are typically set to be appropriate for
-#   user-space software rather than for generation of a hypervisor binary, so
-#   only pass the debug prefix map to the hypervisor build:
-EXTRA_CFLAGS_XEN_CORE="${DEBUG_PREFIX_MAP}"
+# No additional C flags for the main hypervisor build
+EXTRA_CFLAGS_XEN_CORE ?= ""
+# Add prefix maps to support buildpaths QA test and reproducibility
+DEBUG_PREFIX_MAP:append = " \
+    -ffile-prefix-map=${S}=${PN}-source \
+    -fdebug-prefix-map=${WORKDIR}=${PN} \
+    "
 
 # - The Xen tools build for x86 systems with HVM-mode enabled includes hvmloader
 #   which fails to build when "-m64" is included in flags set via the
@@ -109,11 +110,11 @@ TUNE_CCARGS:x86-64=""
 #   It must not be compiled with SSE compiler options enabled and the Xen build
 #   explicitly clears CFLAGS to ensure that, so such options must not be passed
 #   in via the tool variable. hvmloader is required to run HVM-mode guest VMs.
-CC="${CCACHE}${HOST_PREFIX}gcc ${TOOLCHAIN_OPTIONS} ${CC_REPRODUCIBLE_OPTIONS}"
+CC="${CCACHE}${HOST_PREFIX}gcc ${TOOLCHAIN_OPTIONS} ${DEBUG_PREFIX_MAP} ${CC_REPRODUCIBLE_OPTIONS}"
 EXTRA_CFLAGS_XEN_TOOLS="${HOST_CC_ARCH} ${CFLAGS}"
 # 32-bit ARM needs the TUNE_CCARGS component of HOST_CC_ARCH to be passed
 # in CC to ensure that configure can compile binaries for the right arch.
-CC:arm="${CCACHE}${HOST_PREFIX}gcc ${TUNE_CCARGS} ${TOOLCHAIN_OPTIONS} ${CC_REPRODUCIBLE_OPTIONS}"
+CC:arm="${CCACHE}${HOST_PREFIX}gcc ${TUNE_CCARGS} ${TOOLCHAIN_OPTIONS} ${DEBUG_PREFIX_MAP} ${CC_REPRODUCIBLE_OPTIONS}"
 
 # There are no Xen-provided variables for C++, so append to the tool variables:
 CPP:append = " ${CPPFLAGS}"
@@ -150,7 +151,7 @@ def get_build_time_vars(d):
     source_date_epoch = d.getVar('SOURCE_DATE_EPOCH')
     if source_date_epoch is not None:
         import datetime
-        utc_datetime = datetime.datetime.utcfromtimestamp(float(source_date_epoch))
+        utc_datetime =  datetime.datetime.fromtimestamp(float(source_date_epoch), datetime.timezone.utc)
         return " XEN_BUILD_DATE=" + utc_datetime.strftime("%Y-%m-%d") + \
                " XEN_BUILD_TIME=" + utc_datetime.strftime("%H:%M:%S")
     return ""
@@ -158,9 +159,7 @@ EXTRA_OEMAKE += "${@['', 'XEN_WHOAMI=${PF} XEN_DOMAIN=${DISTRO} XEN_BUILD_HOST=$
                     [d.getVar('BUILD_REPRODUCIBLE_BINARIES') == '1']}${@get_build_time_vars(d)}"
 
 # Improve build reproducibility: compiler flags to remove filesystem differences.
-CC_REPRODUCIBLE_OPTIONS = "${@['', '-gno-record-gcc-switches ' + \
-                                   '-ffile-prefix-map=${S}=${PN}-source ' + \
-                                   '-fdebug-prefix-map=${WORKDIR}=${PN}'] \
+CC_REPRODUCIBLE_OPTIONS = "${@['', '-gno-record-gcc-switches'] \
                              [d.getVar('BUILD_REPRODUCIBLE_BINARIES') == '1']}"
 
 # check for XSM in package config to allow XSM_ENABLE to be set

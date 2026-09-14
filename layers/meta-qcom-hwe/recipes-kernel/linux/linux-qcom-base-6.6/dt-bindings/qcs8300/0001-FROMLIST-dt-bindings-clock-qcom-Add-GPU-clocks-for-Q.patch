@@ -1,0 +1,71 @@
+From 4406339217bd1ffa14133e58a156bfd6ad75b884 Mon Sep 17 00:00:00 2001
+From: Imran Shaik <quic_imrashai@quicinc.com>
+Date: Wed, 6 Nov 2024 15:21:56 +0530
+Subject: [PATCH 1/6] FROMLIST: dt-bindings: clock: qcom: Add GPU clocks for
+ QCS8300
+
+The QCS8300 GPU clock controller is mostly identical to SA8775P, but
+QCS8300 has few additional clocks and minor differences. Hence, reuse
+SA8775P gpucc bindings and add additional clocks required for QCS8300.
+
+Signed-off-by: Imran Shaik <quic_imrashai@quicinc.com>
+Acked-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Link: https://lore.kernel.org/all/20241106-qcs8300-mm-patches-v3-1-f611a8f87f15@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241106-qcs8300-mm-patches-v3-1-f611a8f87f15@quicinc.com/]
+---
+ .../devicetree/bindings/clock/qcom,gpucc.yaml   |  3 +++
+ include/dt-bindings/clock/qcom,qcs8300-gpucc.h  | 17 +++++++++++++++++
+ 2 files changed, 20 insertions(+)
+ create mode 100644 include/dt-bindings/clock/qcom,qcs8300-gpucc.h
+
+diff --git a/Documentation/devicetree/bindings/clock/qcom,gpucc.yaml b/Documentation/devicetree/bindings/clock/qcom,gpucc.yaml
+index f369fa34e00c..9db67faad68a 100644
+--- a/Documentation/devicetree/bindings/clock/qcom,gpucc.yaml
++++ b/Documentation/devicetree/bindings/clock/qcom,gpucc.yaml
+@@ -8,6 +8,7 @@ title: Qualcomm Graphics Clock & Reset Controller
+ 
+ maintainers:
+   - Taniya Das <quic_tdas@quicinc.com>
++  - Imran Shaik <quic_imrashai@quicinc.com>
+ 
+ description: |
+   Qualcomm graphics clock control module provides the clocks, resets and power
+@@ -23,10 +24,12 @@ description: |
+     include/dt-bindings/clock/qcom,gpucc-sm8150.h
+     include/dt-bindings/clock/qcom,gpucc-sm8250.h
+     include/dt-bindings/clock/qcom,gpucc-sm8350.h
++    include/dt-bindings/clock/qcom,qcs8300-gpucc.h
+ 
+ properties:
+   compatible:
+     enum:
++      - qcom,qcs8300-gpucc
+       - qcom,sdm845-gpucc
+       - qcom,sa8775p-gpucc
+       - qcom,sc7180-gpucc
+diff --git a/include/dt-bindings/clock/qcom,qcs8300-gpucc.h b/include/dt-bindings/clock/qcom,qcs8300-gpucc.h
+new file mode 100644
+index 000000000000..afa187467b4c
+--- /dev/null
++++ b/include/dt-bindings/clock/qcom,qcs8300-gpucc.h
+@@ -0,0 +1,17 @@
++/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
++/*
++ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++
++#ifndef _DT_BINDINGS_CLK_QCOM_GPUCC_QCS8300_H
++#define _DT_BINDINGS_CLK_QCOM_GPUCC_QCS8300_H
++
++#include "qcom,sa8775p-gpucc.h"
++
++/* QCS8300 introduces below new clocks compared to SA8775P */
++
++/* GPU_CC clocks */
++#define GPU_CC_CX_ACCU_SHIFT_CLK		23
++#define GPU_CC_GX_ACCU_SHIFT_CLK		24
++
++#endif
+-- 
+2.34.1
+

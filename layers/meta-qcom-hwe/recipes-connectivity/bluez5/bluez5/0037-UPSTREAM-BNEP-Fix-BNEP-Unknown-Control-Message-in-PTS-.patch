@@ -1,0 +1,63 @@
+From 8a44f7751a354e1fc1f9d60a8dc2726f81a604a3 Mon Sep 17 00:00:00 2001
+From: Shuai Zhang <quic_shuaz@quicinc.com>
+Date: Tue, 21 Jan 2025 11:09:50 +0800
+Subject: [PATCH v1] BNEP: Fix the BNEP Unknown Control Message in PTS testing
+
+This change is required for passing below PTS testcase:
+1. BNEP/CTRL/BV-01-C
+
+PTS sends an Unknown Control Message with only two bytes,
+which is considered incorrect data. Therefore, add
+responses to error control commands.
+Upstream-Status: Backport [Accepted]
+Signed-off-by: Shuai Zhang <quic_shuaz@quicinc.com>
+---
+ profiles/network/bnep.c   | 6 ++++++
+ profiles/network/bnep.h   | 2 ++
+ profiles/network/server.c | 6 ++++++
+ 3 files changed, 14 insertions(+)
+
+diff --git a/profiles/network/bnep.c b/profiles/network/bnep.c
+index 54b9500..8d4786d 100644
+--- a/profiles/network/bnep.c
++++ b/profiles/network/bnep.c
+@@ -726,3 +726,9 @@ void bnep_server_delete(char *bridge, char *iface, const bdaddr_t *addr)
+ 	bnep_if_down(iface);
+ 	bnep_conndel(addr);
+ }
++
++int bnep_send_unkown_rsp(int sk, uint16_t resp)
++{
++	return bnep_send_ctrl_rsp(sk, BNEP_CMD_NOT_UNDERSTOOD,
++							  resp);
++}
+diff --git a/profiles/network/bnep.h b/profiles/network/bnep.h
+index 493a2b0..61971ae 100644
+--- a/profiles/network/bnep.h
++++ b/profiles/network/bnep.h
+@@ -27,3 +27,5 @@ void bnep_disconnect(struct bnep *session);
+ int bnep_server_add(int sk, char *bridge, char *iface, const bdaddr_t *addr,
+ 						uint8_t *setup_data, int len);
+ void bnep_server_delete(char *bridge, char *iface, const bdaddr_t *addr);
++int bnep_send_unkown_rsp(int sk, uint16_t resp);
++
+diff --git a/profiles/network/server.c b/profiles/network/server.c
+index 96738f2..ab622d1 100644
+--- a/profiles/network/server.c
++++ b/profiles/network/server.c
+@@ -331,6 +331,12 @@ static gboolean bnep_setup(GIOChannel *chan,
+ 	 * 1 byte of BNEP Control Type + 1 byte of BNEP services UUID size.
+ 	 */
+ 	if (n < 3) {
++		/* Added a response to the error control command
++		 *This packet reply to any control message received,
++		 * which contains an unknown BNEP control type value.
++		 */
++		if (req->type == BNEP_CONTROL)
++			bnep_send_unkown_rsp(sk, req->ctrl);
+ 		error("To few setup connection request data received");
+ 		return FALSE;
+ 	}
+-- 
+2.25.1
+

@@ -10,9 +10,11 @@ PKG_NAME = "github.com/docker/${SRCNAME}"
 SRC_URI = "git://${PKG_NAME}.git;branch=master;protocol=https"
 
 SRCREV = "9cbd2a1374f46905c68a4eb3694a130610adc62a"
-PV = "0.0+git${SRCPV}"
+PV = "0.0+git"
 
 S = "${WORKDIR}/git"
+
+inherit meta-virt-depreciated-warning
 
 do_install() {
 	install -d ${D}${prefix}/local/go/src/${PKG_NAME}

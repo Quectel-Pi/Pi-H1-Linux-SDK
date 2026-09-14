@@ -1,4 +1,10 @@
 #
+# Copyright OpenEmbedded Contributors
+#
+# SPDX-License-Identifier: MIT
+#
+
+#
 # Usage:
 # - Enable ccache
 #   Add the following line to a conffile such as conf/local.conf:
@@ -21,6 +27,11 @@
 # Set it to a shared location for different builds, so that cache files can
 # be shared between different builds.
 CCACHE_TOP_DIR ?= "${TMPDIR}/ccache"
+
+# ccache-native and cmake-native have a circular dependency
+# that affects other native recipes, but not all.
+# Allows to use ccache in specified native recipes.
+CCACHE_NATIVE_RECIPES_ALLOWED ?= ""
 
 # ccahe removes CCACHE_BASEDIR from file path, so that hashes will be the same
 # in different builds.
@@ -48,9 +59,9 @@ python() {
     Enable ccache for the recipe
     """
     pn = d.getVar('PN')
-    # quilt-native doesn't need ccache since no c files
-    if not (bb.data.inherits_class("native", d) or
-            bb.utils.to_boolean(d.getVar('CCACHE_DISABLE'))):
+    if (pn in d.getVar('CCACHE_NATIVE_RECIPES_ALLOWED') or
+        not (bb.data.inherits_class("native", d) or
+        bb.utils.to_boolean(d.getVar('CCACHE_DISABLE')))):
         d.appendVar('DEPENDS', ' ccache-native')
         d.setVar('CCACHE', 'ccache ')
 }

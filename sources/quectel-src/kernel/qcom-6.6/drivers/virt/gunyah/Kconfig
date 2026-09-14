@@ -58,6 +58,17 @@ config GUNYAH_IOEVENTFD
 
 	  Say Y/M here if unsure and you want to support Gunyah VMMs.
 
+config GH_CTRL
+    tristate "Create Gunyah entries under /sys/hypervisor"
+    depends on SYSFS
+    select SYS_HYPERVISOR
+    help
+    The driver provides a facility for controlling gunyah
+    hypervisor debug features through sysfs interface
+    under /sys/hypervisor/gunyah. One such debug feature
+    provides a timer offset between hypervisor and sched clock.
+	If you say N, all options in this submenu will be skipped and disabled.
+
 menuconfig GUNYAH_DRIVERS
 	bool "Gunyah Virtualization drivers"
 	depends on ARM64

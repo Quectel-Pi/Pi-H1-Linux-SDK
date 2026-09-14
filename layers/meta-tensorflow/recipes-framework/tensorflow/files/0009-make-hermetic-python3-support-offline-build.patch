@@ -1,0 +1,88 @@
+From fb71dd4dfd574326c29c5d8ccda5a6e3f73c942b Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Fri, 8 Mar 2024 11:31:26 +0800
+Subject: [PATCH] make hermetic python3 support offline build
+
+If environment TS_DL_DIR is set, download python whl from local archive other then
+python index
+
+If environment TS_DL_DIR is set, save python whl to local dir
+
+Upstream-Status: Inappropriate [Yocto specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ WORKSPACE                                    |  2 +
+ third_party/0001-support-offline-build.patch | 50 ++++++++++++++++++++
+ 2 files changed, 52 insertions(+)
+ create mode 100644 third_party/0001-support-offline-build.patch
+
+diff --git a/WORKSPACE b/WORKSPACE
+index a697405110e..9b33f0cfdf1 100644
+--- a/WORKSPACE
++++ b/WORKSPACE
+@@ -16,6 +16,8 @@ http_archive(
+     name = "rules_python",
+     sha256 = "9d04041ac92a0985e344235f5d946f71ac543f1b1565f2cdbc9a2aaee8adf55b",
+     strip_prefix = "rules_python-0.26.0",
++    patch_args = ["-p1"],
++    patches = ["//third_party:0001-support-offline-build.patch"],
+     url = "https://github.com/bazelbuild/rules_python/releases/download/0.26.0/rules_python-0.26.0.tar.gz",
+ )
+ 
+diff --git a/third_party/0001-support-offline-build.patch b/third_party/0001-support-offline-build.patch
+new file mode 100644
+index 00000000000..c540a27c818
+--- /dev/null
++++ b/third_party/0001-support-offline-build.patch
+@@ -0,0 +1,50 @@
++From e6caa36b8cac9aebc0f1d2352ce9ed6a2dc95826 Mon Sep 17 00:00:00 2001
++From: Hongxu Jia <hongxu.jia@windriver.com>
++Date: Wed, 26 Jun 2024 16:43:35 +0800
++Subject: [PATCH] make hermetic python3 support offline build
++
++If environment TS_DL_DIR is set, download python whl from local archive other then
++python index
++
++If environment TS_DL_DIR is set, save python whl to local dir
++
++Upstream-Status: Inappropriate [Yocto specific]
++
++Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
++---
++ .../tools/wheel_installer/wheel_installer.py         | 12 ++++++++++++
++ 1 file changed, 12 insertions(+)
++
++diff --git a/python/pip_install/tools/wheel_installer/wheel_installer.py b/python/pip_install/tools/wheel_installer/wheel_installer.py
++index c6c2961..33a767d 100644
++--- a/python/pip_install/tools/wheel_installer/wheel_installer.py
+++++ b/python/pip_install/tools/wheel_installer/wheel_installer.py
++@@ -163,6 +163,11 @@ def main() -> None:
++         + deserialized_args["extra_pip_args"]
++     )
++ 
+++    # Look for archives(*.whl) in the directory
+++    if os.environ.get('TS_DL_DIR'):
+++        dl_dir_pip = os.environ.get('TS_DL_DIR')
+++        pip_args.extend(["-f", dl_dir_pip])
+++
++     requirement_file = NamedTemporaryFile(mode="wb", delete=False)
++     try:
++         requirement_file.write(args.requirement.encode("utf-8"))
++@@ -185,6 +190,13 @@ def main() -> None:
++             if e.errno != errno.ENOENT:
++                 raise
++ 
+++    # Save archives(*.whl) to the directory
+++    if os.environ.get('TS_DL_DIR'):
+++        try:
+++            subprocess.run(f"ls {dl_dir_pip}/$(ls *.whl) 2>/dev/null || cp -f *.whl {dl_dir_pip}", check=True, env=env, shell=True)
+++        except OSError as e:
+++            raise
+++
++     name, extras_for_pkg = _parse_requirement_for_extra(args.requirement)
++     extras = {name: extras_for_pkg} if extras_for_pkg and name else dict()
++ 
++-- 
++2.27.0
++

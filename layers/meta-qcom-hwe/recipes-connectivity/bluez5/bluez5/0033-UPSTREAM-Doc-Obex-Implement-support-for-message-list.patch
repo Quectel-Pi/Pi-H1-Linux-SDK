@@ -1,0 +1,69 @@
+From a64bc818ee73c20f4eee8332c811245964feea35 Mon Sep 17 00:00:00 2001
+From: Amisha Jain <quic_amisjain@quicinc.com>
+Date: Fri, 20 Dec 2024 17:41:12 +0530
+Subject: [PATCH] UPSTREAM:Doc: Obex Implement support for message listing
+ format version 1.1
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add the documentation for the ‘Messages-Listing Format Version 1.1’
+feature for MCE.
+
+Upstream-Status: Backport https://github.com/bluez/bluez/commit/036041136f10fdb9218d86befd738840ecd58892
+Signed-off-by: Amisha Jain <quic_amisjain@quicinc.com>
+
+---
+ doc/org.bluez.obex.Message.rst | 39 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 39 insertions(+)
+
+diff --git a/doc/org.bluez.obex.Message.rst b/doc/org.bluez.obex.Message.rst
+index 082f872..9878dff 100644
+--- a/doc/org.bluez.obex.Message.rst
++++ b/doc/org.bluez.obex.Message.rst
+@@ -137,3 +137,42 @@ boolean Protected [readonly]
+ ````````````````````````````
+ 
+ 	Message protected flag
++
++string DeliveryStatus [readonly] [optional]
++```````````````````````````````````````````
++
++	Message delivery status
++
++	Possible values:
++
++	:"delivered":
++	:"sent":
++	:"unknown":
++
++uint64 ConversationId [readonly] [required]
++```````````````````````````````````````````
++
++	Message conversation id sent by Server
++	Unique identification of the conversation
++
++string ConversationName [readonly] [optional]
++`````````````````````````````````````````````
++
++	Human readable name of the conversation
++
++string Direction [readonly] [required]
++``````````````````````````````````````
++
++	Indicate the direction of the message
++
++	Possible values:
++
++	:"incoming":
++	:"outgoing":
++	:"outgoingdraft":
++	:"outgoingpending":
++
++string AttachmentMimeTypes [readonly] [optional]
++````````````````````````````````````````````````
++
++	MIME type of the attachment
+-- 
+2.34.1
+

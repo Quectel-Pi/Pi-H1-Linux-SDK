@@ -1,0 +1,27 @@
+From f1125594506bfa10f5038b127492965ab99f05e7 Wed Mar 5 09:40:42 2025 +0530
+From: Yaswanth Kowtha <quic_ykowtha@quicinc.com>
+Date: Wed, Mar 5 09:40:42 2025 +0530
+Subject: [PATCH] Don't require dri
+
+DRI is not needed, so just disabling it.
+
+Upstream-Status: Inappropriate [specific to our build setup]
+Signed-off-by: Yaswanth Kowtha <quic_ykowtha@quicinc.com>
+---
+ media/gpu/sandbox/BUILD.gn | 5-----
+ 1 file changed, 5 deletions(-)
+ 
+diff --git a/media/gpu/sandbox/BUILD.gn b/media/gpu/sandbox/BUILD.gn
+index cfcb7fa..c7a9bd1 100644
+--- a/media/gpu/sandbox/BUILD.gn
++++ b/media/gpu/sandbox/BUILD.gn
+@@ -30,9 +30,4 @@ source_set("sandbox") {
+   if (use_v4l2_codec) {
+     deps += [ "//media/gpu/v4l2" ]
+   }
+-  if (current_cpu != "s390x" && current_cpu != "ppc64" && is_linux &&
+-      !is_castos) {
+-    # For DRI_DRIVER_DIR.
+-    configs += [ "//build/config/linux/dri" ]
+-  }
+ }

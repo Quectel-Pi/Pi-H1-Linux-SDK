@@ -3,6 +3,7 @@
  * qcm6490-addons IDP device tree source
  *
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  *
  */
 
@@ -220,6 +221,15 @@
 	};
 };
 
+&msm_stub_codec {
+	pinctrl-0 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
+		    <&mi2s0_sclk_sleep>, <&mi2s0_ws_sleep>;
+	pinctrl-1 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>, <&mi2s0_ws>;
+	pinctrl-2 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
+		    <&mi2s0_sclk_sleep>, <&mi2s0_ws_sleep>;
+	pinctrl-names = "default", "mi2s_aud_active", "mi2s_aud_sleep";
+};
+
 &pm8350c_gpios {
 	pm8008i-reset-state {
 		pm8008i_active: pm8008i-active-pins {
@@ -242,19 +252,7 @@
 	};
 };
 
-&q6apmbedai {
-	qcom,prmcc_clk = <&q6prmcc>;
-};
-
 &sound {
-	pinctrl-names = "default", "stub_aif1_active", "stub_aif1_sleep";
-	pinctrl-0 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
-				<&mi2s0_sclk_sleep>, <&mi2s0_ws_sleep>;
-	pinctrl-1 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>,
-				<&mi2s0_sclk>, <&mi2s0_ws>;
-	pinctrl-2 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
-				<&mi2s0_sclk_sleep>, <&mi2s0_ws_sleep>;
-
 	mi2s-capture-dai-link {
 		link-name = "MI2S-LPAIF-TX-PRIMARY";
 

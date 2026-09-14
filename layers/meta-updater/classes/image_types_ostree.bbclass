@@ -17,7 +17,7 @@ GARAGE_PUSH_RETRIES_SLEEP ??= "0"
 SYSTEMD_USED = "${@oe.utils.ifelse(d.getVar('VIRTUAL-RUNTIME_init_manager') == 'systemd', 'true', '')}"
 
 IMAGE_CMD_TAR = "tar ${@bb.utils.contains('DISTRO_FEATURES', 'selinux', '--selinux', '', d)} --xattrs --xattrs-include=*"
-CONVERSION_CMD:tar = "touch ${IMGDEPLOYDIR}/${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.${type}; ${IMAGE_CMD_TAR} --numeric-owner -cf ${IMGDEPLOYDIR}/${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.${type}.tar -C ${TAR_IMAGE_ROOTFS} . || [ $? -eq 1 ]"
+CONVERSION_CMD:tar = "touch ${IMGDEPLOYDIR}/${IMAGE_NAME}.${type}; ${IMAGE_CMD_TAR} --numeric-owner -cf ${IMGDEPLOYDIR}/${IMAGE_NAME}.${type}.tar -C ${TAR_IMAGE_ROOTFS} . || [ $? -eq 1 ]"
 CONVERSIONTYPES:append = " tar"
 
 TAR_IMAGE_ROOTFS:task-image-ostree = "${OSTREE_ROOTFS}"
@@ -201,7 +201,7 @@ IMAGE_CMD:garagesign () {
         fi
 
         rm -rf ${GARAGE_SIGN_REPO}
-        garage-sign init --repo tufrepo \
+        ${GARAGE_SIGN_TOOL} init --repo tufrepo \
                          --home-dir ${GARAGE_SIGN_REPO} \
                          --credentials ${SOTA_PACKED_CREDENTIALS}
 
@@ -236,9 +236,9 @@ IMAGE_CMD:garagesign () {
         fi
 
         for push_retries in $( seq ${GARAGE_PUSH_RETRIES} ); do
-            garage-sign targets pull --repo tufrepo \
+            ${GARAGE_SIGN_TOOL} targets pull --repo tufrepo \
                                      --home-dir ${GARAGE_SIGN_REPO}
-            garage-sign targets add --repo tufrepo \
+            ${GARAGE_SIGN_TOOL} targets add --repo tufrepo \
                                     --home-dir ${GARAGE_SIGN_REPO} \
                                     --name ${GARAGE_TARGET_NAME} \
                                     --format OSTREE \
@@ -253,12 +253,12 @@ IMAGE_CMD:garagesign () {
                     ${GARAGE_SIGN_REPO}/tufrepo/roles/unsigned/targets.json \
                     ${GARAGE_TARGET_NAME}-${target_version}
             fi
-            garage-sign targets sign --repo tufrepo \
+            ${GARAGE_SIGN_TOOL} targets sign --repo tufrepo \
                                      --home-dir ${GARAGE_SIGN_REPO} \
                                      ${target_expiry} \
                                      --key-name=targets
             errcode=0
-            garage-sign targets push --repo tufrepo \
+            ${GARAGE_SIGN_TOOL} targets push --repo tufrepo \
                                      --home-dir ${GARAGE_SIGN_REPO} || errcode=$?
             if [ "$errcode" -eq "0" ]; then
                 push_success=1

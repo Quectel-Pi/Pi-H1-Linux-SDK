@@ -40,7 +40,10 @@ properties:
               - qcom,ipq9574-sdhci
               - qcom,qcm2290-sdhci
               - qcom,qcs404-sdhci
+              - qcom,qcs615-sdhci
               - qcom,qdu1000-sdhci
+              - qcom,sa7255-sdhci
+              - qcom,sa8775-sdhci
               - qcom,sc7180-sdhci
               - qcom,sc7280-sdhci
               - qcom,sc8280xp-sdhci

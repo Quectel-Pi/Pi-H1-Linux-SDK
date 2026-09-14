@@ -1,0 +1,1128 @@
+From 5f58520619d197990f8ad63a062e119086df7094 Mon Sep 17 00:00:00 2001
+From: Milen Mitkov <quic_mmitkov@quicinc.com>
+Date: Wed, 22 May 2024 18:46:59 +0300
+Subject: [PATCH 37/42] UPSTREAM: media: qcom: camss: Decouple VFE from CSID
+
+Decouple the direct calls to VFE's vfe_get/put in the CSID subdev
+in order to prepare for the introduction of IFE subdev.
+
+Also decouple CSID base address from VFE since on the Titan platform
+CSID register base address resides within VFE's base address.
+
+Signed-off-by: Milen Mitkov <quic_mmitkov@quicinc.com>
+Signed-off-by: Gjorgji Rosikopulos <quic_grosikop@quicinc.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Tested-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org> # sc8280xp/sm8250/sdm845/apq8016
+Acked-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+[quic_vikramsa@quicinc.com: resolve trivial merge conflicts]
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git b1e6eef535dfc4ad32332e227c5757ded4512aa2]
+---
+ .../platform/qcom/camss/camss-csid-gen2.c     |  21 +-
+ .../media/platform/qcom/camss/camss-csid.c    |  18 +-
+ .../media/platform/qcom/camss/camss-csid.h    |   1 +
+ .../media/platform/qcom/camss/camss-csiphy.c  |   5 +
+ .../media/platform/qcom/camss/camss-csiphy.h  |   1 +
+ .../media/platform/qcom/camss/camss-format.c  |   6 +-
+ .../media/platform/qcom/camss/camss-vfe-17x.c |  36 ---
+ .../media/platform/qcom/camss/camss-vfe-480.c |   1 -
+ drivers/media/platform/qcom/camss/camss-vfe.c |  14 +-
+ drivers/media/platform/qcom/camss/camss-vfe.h |   2 +-
+ .../media/platform/qcom/camss/camss-video.c   |   3 +-
+ .../media/platform/qcom/camss/camss-video.h   |   3 +-
+ drivers/media/platform/qcom/camss/camss.c     | 237 +++++++++---------
+ drivers/media/platform/qcom/camss/camss.h     |  16 +-
+ 14 files changed, 168 insertions(+), 196 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csid-gen2.c b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+index 52f8b18eda29..e1c757933e27 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+@@ -21,6 +21,7 @@
+  * interface support. As a result of that it has an
+  * alternate register layout.
+  */
++
+ #define CSID_HW_VERSION		0x0
+ #define		HW_VERSION_STEPPING	0
+ #define		HW_VERSION_REVISION	16
+@@ -178,9 +179,13 @@
+ static void __csid_configure_rx(struct csid_device *csid,
+ 				struct csid_phy_config *phy, int vc)
+ {
++	u8 lane_cnt = csid->phy.lane_cnt;
+ 	int val;
+ 
+-	val = (phy->lane_cnt - 1) << CSI2_RX_CFG0_NUM_ACTIVE_LANES;
++	if (!lane_cnt)
++		lane_cnt = 4;
++
++	val = (lane_cnt - 1) << CSI2_RX_CFG0_NUM_ACTIVE_LANES;
+ 	val |= phy->lane_assign << CSI2_RX_CFG0_DL0_INPUT_SEL;
+ 	val |= phy->csiphy_id << CSI2_RX_CFG0_PHY_NUM_SEL;
+ 	writel_relaxed(val, csid->base + CSID_CSI2_RX_CFG0);
+@@ -213,6 +218,9 @@ static void __csid_configure_testgen(struct csid_device *csid, u8 enable, u8 vc)
+ 	u8 lane_cnt = csid->phy.lane_cnt;
+ 	u32 val;
+ 
++	if (!lane_cnt)
++		lane_cnt = 4;
++
+ 	/* configure one DT, infinite frames */
+ 	val = vc << TPG_VC_CFG0_VC_NUM;
+ 	val |= INTELEAVING_MODE_ONE_SHOT << TPG_VC_CFG0_LINE_INTERLEAVING_MODE;
+@@ -252,21 +260,12 @@ static void __csid_configure_testgen(struct csid_device *csid, u8 enable, u8 vc)
+ 
+ static void __csid_configure_rdi_stream(struct csid_device *csid, u8 enable, u8 vc)
+ {
+-	struct csid_testgen_config *tg = &csid->testgen;
+-	u32 val;
+-	u32 phy_sel = 0;
+-	u8 lane_cnt = csid->phy.lane_cnt;
+ 	/* Source pads matching RDI channels on hardware. Pad 1 -> RDI0, Pad 2 -> RDI1, etc. */
+ 	struct v4l2_mbus_framefmt *input_format = &csid->fmt[MSM_CSID_PAD_FIRST_SRC + vc];
+ 	const struct csid_format_info *format = csid_get_fmt_entry(csid->res->formats->formats,
+ 								   csid->res->formats->nformats,
+ 								   input_format->code);
+-
+-	if (!lane_cnt)
+-		lane_cnt = 4;
+-
+-	if (!tg->enabled)
+-		phy_sel = csid->phy.csiphy_id;
++	u32 val;
+ 
+ 	/*
+ 	 * DT_ID is a two bit bitfield that is concatenated with
+diff --git a/drivers/media/platform/qcom/camss/camss-csid.c b/drivers/media/platform/qcom/camss/camss-csid.c
+index 397c550f902e..8ebc2443723d 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid.c
++++ b/drivers/media/platform/qcom/camss/camss-csid.c
+@@ -602,7 +602,6 @@ static int csid_set_power(struct v4l2_subdev *sd, int on)
+ 	struct csid_device *csid = v4l2_get_subdevdata(sd);
+ 	struct camss *camss = csid->camss;
+ 	struct device *dev = camss->dev;
+-	struct vfe_device *vfe = &camss->vfe[csid->id];
+ 	int ret = 0;
+ 
+ 	if (on) {
+@@ -611,7 +610,7 @@ static int csid_set_power(struct v4l2_subdev *sd, int on)
+ 		 * switching on the CSID. Do so unconditionally, as there is no
+ 		 * drawback in following the same powering order on older SoCs.
+ 		 */
+-		ret = vfe_get(vfe);
++		ret = csid->res->parent_dev_ops->get(camss, csid->id);
+ 		if (ret < 0)
+ 			return ret;
+ 
+@@ -663,7 +662,7 @@ static int csid_set_power(struct v4l2_subdev *sd, int on)
+ 		regulator_bulk_disable(csid->num_supplies,
+ 				       csid->supplies);
+ 		pm_runtime_put_sync(dev);
+-		vfe_put(vfe);
++		csid->res->parent_dev_ops->put(camss, csid->id);
+ 	}
+ 
+ 	return ret;
+@@ -1022,6 +1021,11 @@ int msm_csid_subdev_init(struct camss *camss, struct csid_device *csid,
+ 	csid->id = id;
+ 	csid->res = &res->csid;
+ 
++	if (dev_WARN_ONCE(dev, !csid->res->parent_dev_ops,
++			  "Error: CSID depends on VFE/IFE device ops!\n")) {
++		return -EINVAL;
++	}
++
+ 	csid->res->hw_ops->subdev_init(csid);
+ 
+ 	/* Memory */
+@@ -1032,9 +1036,11 @@ int msm_csid_subdev_init(struct camss *camss, struct csid_device *csid,
+ 		 * VFE to be initialized before CSID
+ 		 */
+ 		if (id >= 2) /* VFE/CSID lite */
+-			csid->base = camss->vfe[id].base + VFE_480_LITE_CSID_OFFSET;
++			csid->base = csid->res->parent_dev_ops->get_base_address(camss, id)
++				+ VFE_480_LITE_CSID_OFFSET;
+ 		else
+-			csid->base = camss->vfe[id].base + VFE_480_CSID_OFFSET;
++			csid->base = csid->res->parent_dev_ops->get_base_address(camss, id)
++				 + VFE_480_CSID_OFFSET;
+ 	} else {
+ 		csid->base = devm_platform_ioremap_resource_byname(pdev, res->reg[0]);
+ 		if (IS_ERR(csid->base))
+@@ -1344,5 +1350,5 @@ void msm_csid_unregister_entity(struct csid_device *csid)
+ 
+ inline bool csid_is_lite(struct csid_device *csid)
+ {
+-	return csid->camss->res->csid_res[csid->id].is_lite;
++	return csid->camss->res->csid_res[csid->id].csid.is_lite;
+ }
+diff --git a/drivers/media/platform/qcom/camss/camss-csid.h b/drivers/media/platform/qcom/camss/camss-csid.h
+index 0e385d17c250..8cdae98e4dca 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid.h
++++ b/drivers/media/platform/qcom/camss/camss-csid.h
+@@ -157,6 +157,7 @@ struct csid_hw_ops {
+ struct csid_subdev_resources {
+ 	bool is_lite;
+ 	const struct csid_hw_ops *hw_ops;
++	const struct parent_dev_ops *parent_dev_ops;
+ 	const struct csid_formats *formats;
+ };
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss-csiphy.c b/drivers/media/platform/qcom/camss/camss-csiphy.c
+index cf1a444d0341..125c00912b04 100644
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.c
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.c
+@@ -108,6 +108,11 @@ const struct csiphy_formats csiphy_formats_sdm845 = {
+ 	.formats = formats_sdm845
+ };
+ 
++const struct csiphy_formats csiphy_formats_sc7280 = {
++	.nformats = ARRAY_SIZE(formats_sdm845),
++	.formats = formats_sdm845
++};
++
+ /*
+  * csiphy_get_bpp - map media bus format to bits per pixel
+  * @formats: supported media bus formats array
+diff --git a/drivers/media/platform/qcom/camss/camss-csiphy.h b/drivers/media/platform/qcom/camss/camss-csiphy.h
+index 47f0b6b09eba..9295f2fc6745 100644
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.h
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.h
+@@ -110,6 +110,7 @@ void msm_csiphy_unregister_entity(struct csiphy_device *csiphy);
+ extern const struct csiphy_formats csiphy_formats_8x16;
+ extern const struct csiphy_formats csiphy_formats_8x96;
+ extern const struct csiphy_formats csiphy_formats_sdm845;
++extern const struct csiphy_formats csiphy_formats_sc7280;
+ 
+ extern const struct csiphy_hw_ops csiphy_ops_2ph_1_0;
+ extern const struct csiphy_hw_ops csiphy_ops_3ph_1_0;
+diff --git a/drivers/media/platform/qcom/camss/camss-format.c b/drivers/media/platform/qcom/camss/camss-format.c
+index 04aa828d2642..4b20f4ffc0ab 100644
+--- a/drivers/media/platform/qcom/camss/camss-format.c
++++ b/drivers/media/platform/qcom/camss/camss-format.c
+@@ -49,7 +49,7 @@ u8 camss_format_get_bpp(const struct camss_format_info *formats, unsigned int nf
+  */
+ u32 camss_format_find_code(u32 *code, unsigned int n_code, unsigned int index, u32 req_code)
+ {
+-	int i;
++	unsigned int i;
+ 
+ 	if (!req_code && index >= n_code)
+ 		return 0;
+@@ -79,7 +79,7 @@ u32 camss_format_find_code(u32 *code, unsigned int n_code, unsigned int index, u
+ int camss_format_find_format(u32 code, u32 pixelformat, const struct camss_format_info *formats,
+ 			     unsigned int nformats)
+ {
+-	int i;
++	unsigned int i;
+ 
+ 	for (i = 0; i < nformats; i++) {
+ 		if (formats[i].code == code &&
+@@ -92,7 +92,5 @@ int camss_format_find_format(u32 code, u32 pixelformat, const struct camss_forma
+ 			return i;
+ 	}
+ 
+-	WARN_ON(1);
+-
+ 	return -EINVAL;
+ }
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe-17x.c b/drivers/media/platform/qcom/camss/camss-vfe-17x.c
+index b3b8c2d92f3d..380c99321030 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe-17x.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe-17x.c
+@@ -627,42 +627,6 @@ static void vfe_isr_wm_done(struct vfe_device *vfe, u8 wm)
+ 	spin_unlock_irqrestore(&vfe->output_lock, flags);
+ }
+ 
+-/*
+- * vfe_pm_domain_off - Disable power domains specific to this VFE.
+- * @vfe: VFE Device
+- */
+-static void vfe_pm_domain_off(struct vfe_device *vfe)
+-{
+-	struct camss *camss = vfe->camss;
+-
+-	if (vfe->id >= camss->res->vfe_num)
+-		return;
+-
+-	device_link_del(camss->genpd_link[vfe->id]);
+-}
+-
+-/*
+- * vfe_pm_domain_on - Enable power domains specific to this VFE.
+- * @vfe: VFE Device
+- */
+-static int vfe_pm_domain_on(struct vfe_device *vfe)
+-{
+-	struct camss *camss = vfe->camss;
+-	enum vfe_line_id id = vfe->id;
+-
+-	if (id >= camss->res->vfe_num)
+-		return 0;
+-
+-	camss->genpd_link[id] = device_link_add(camss->dev, camss->genpd[id],
+-						DL_FLAG_STATELESS |
+-						DL_FLAG_PM_RUNTIME |
+-						DL_FLAG_RPM_ACTIVE);
+-	if (!camss->genpd_link[id])
+-		return -EINVAL;
+-
+-	return 0;
+-}
+-
+ /*
+  * vfe_queue_buffer - Add empty buffer
+  * @vid: Video device structure
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe-480.c b/drivers/media/platform/qcom/camss/camss-vfe-480.c
+index 7227cf61d606..dc2735476c82 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe-480.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe-480.c
+@@ -17,7 +17,6 @@
+ 
+ #define VFE_HW_VERSION			(0x00)
+ 
+-
+ #define VFE_GLOBAL_RESET_CMD		(vfe_is_lite(vfe) ? 0x0c : 0x1c)
+ #define	    GLOBAL_RESET_HW_AND_REG	(vfe_is_lite(vfe) ? BIT(1) : BIT(0))
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.c b/drivers/media/platform/qcom/camss/camss-vfe.c
+index 200abf878dae..4e34cf0d6fca 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c
+@@ -1493,18 +1493,20 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
+ 		return -EINVAL;
+ 
+ 	vfe->res = &res->vfe;
++	vfe->res->hw_ops->subdev_init(dev, vfe);
+ 
+ 	/* Power domain */
+-	if (res->pd_name) {
++
++	if (res->vfe.pd_name) {
+ 		vfe->genpd = dev_pm_domain_attach_by_name(camss->dev,
+-							  res->pd_name);
++							  res->vfe.pd_name);
+ 		if (IS_ERR(vfe->genpd)) {
+ 			ret = PTR_ERR(vfe->genpd);
+ 			return ret;
+ 		}
+ 	}
+ 
+-	if (!vfe->genpd && res->has_pd) {
++	if (!vfe->genpd && res->vfe.has_pd) {
+ 		/*
+ 		 * Legacy magic index.
+ 		 * Requires
+@@ -1521,10 +1523,8 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
+ 			return PTR_ERR(vfe->genpd);
+ 	}
+ 
+-	vfe->line_num = res->line_num;
+-	vfe->res->hw_ops->subdev_init(dev, vfe);
+-
+ 	/* Memory */
++
+ 	vfe->base = devm_platform_ioremap_resource_byname(pdev, res->reg[0]);
+ 	if (IS_ERR(vfe->base)) {
+ 		dev_err(dev, "could not map memory\n");
+@@ -1836,5 +1836,5 @@ void msm_vfe_unregister_entities(struct vfe_device *vfe)
+ 
+ bool vfe_is_lite(struct vfe_device *vfe)
+ {
+-	return vfe->camss->res->vfe_res[vfe->id].is_lite;
++	return vfe->camss->res->vfe_res[vfe->id].vfe.is_lite;
+ }
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.h b/drivers/media/platform/qcom/camss/camss-vfe.h
+index 1f5ba01f426b..10e2cc3c0b83 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.h
++++ b/drivers/media/platform/qcom/camss/camss-vfe.h
+@@ -127,8 +127,8 @@ struct vfe_isr_ops {
+ };
+ 
+ struct vfe_subdev_resources {
+-	u8 line_num;
+ 	bool is_lite;
++	u8 line_num;
+ 	bool has_pd;
+ 	char *pd_name;
+ 	const struct vfe_hw_ops *hw_ops;
+diff --git a/drivers/media/platform/qcom/camss/camss-video.c b/drivers/media/platform/qcom/camss/camss-video.c
+index 2cb063f00915..3b8fc31d957c 100644
+--- a/drivers/media/platform/qcom/camss/camss-video.c
++++ b/drivers/media/platform/qcom/camss/camss-video.c
+@@ -702,7 +702,8 @@ static int msm_video_init_format(struct camss_video *video)
+  * Return 0 on success or a negative error code otherwise
+  */
+ 
+-int msm_video_register(struct camss_video *video, struct v4l2_device *v4l2_dev, const char *name)
++int msm_video_register(struct camss_video *video, struct v4l2_device *v4l2_dev,
++		       const char *name)
+ {
+ 	struct media_pad *pad = &video->pad;
+ 	struct video_device *vdev;
+diff --git a/drivers/media/platform/qcom/camss/camss-video.h b/drivers/media/platform/qcom/camss/camss-video.h
+index 4f6c0821ead2..d3e56e240a88 100644
+--- a/drivers/media/platform/qcom/camss/camss-video.h
++++ b/drivers/media/platform/qcom/camss/camss-video.h
+@@ -50,7 +50,8 @@ struct camss_video {
+ 	unsigned int nformats;
+ };
+ 
+-int msm_video_register(struct camss_video *video, struct v4l2_device *v4l2_dev, const char *name);
++int msm_video_register(struct camss_video *video, struct v4l2_device *v4l2_dev,
++		       const char *name);
+ 
+ void msm_video_unregister(struct camss_video *video);
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index f8def1f2bd1a..741ddfa0541b 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -32,6 +32,8 @@
+ #define CAMSS_CLOCK_MARGIN_NUMERATOR 105
+ #define CAMSS_CLOCK_MARGIN_DENOMINATOR 100
+ 
++static const struct parent_dev_ops vfe_parent_dev_ops;
++
+ static const struct camss_subdev_resources csiphy_res_8x16[] = {
+ 	/* CSIPHY0 */
+ 	{
+@@ -43,7 +45,6 @@ static const struct camss_subdev_resources csiphy_res_8x16[] = {
+ 				{ 100000000, 200000000 } },
+ 		.reg = { "csiphy0", "csiphy0_clk_mux" },
+ 		.interrupt = { "csiphy0" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_2ph_1_0,
+ 			.formats = &csiphy_formats_8x16
+@@ -60,7 +61,6 @@ static const struct camss_subdev_resources csiphy_res_8x16[] = {
+ 				{ 100000000, 200000000 } },
+ 		.reg = { "csiphy1", "csiphy1_clk_mux" },
+ 		.interrupt = { "csiphy1" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_2ph_1_0,
+ 			.formats = &csiphy_formats_8x16
+@@ -84,9 +84,9 @@ static const struct camss_subdev_resources csid_res_8x16[] = {
+ 				{ 0 } },
+ 		.reg = { "csid0" },
+ 		.interrupt = { "csid0" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.hw_ops = &csid_ops_4_1,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_4_1
+ 		}
+ 	},
+@@ -106,9 +106,9 @@ static const struct camss_subdev_resources csid_res_8x16[] = {
+ 				{ 0 } },
+ 		.reg = { "csid1" },
+ 		.interrupt = { "csid1" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.hw_ops = &csid_ops_4_1,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_4_1
+ 		}
+ 	},
+@@ -122,7 +122,6 @@ static const struct camss_subdev_resources ispif_res_8x16 = {
+ 	.clock_for_reset = { "vfe0", "csi_vfe0" },
+ 	.reg = { "ispif", "csi_clk_mux" },
+ 	.interrupt = { "ispif" },
+-	.type = CAMSS_SUBDEV_TYPE_ISPIF
+ };
+ 
+ static const struct camss_subdev_resources vfe_res_8x16[] = {
+@@ -144,7 +143,6 @@ static const struct camss_subdev_resources vfe_res_8x16[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe0" },
+ 		.interrupt = { "vfe0" },
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
+ 			.hw_ops = &vfe_ops_4_1,
+@@ -165,7 +163,6 @@ static const struct camss_subdev_resources csiphy_res_8x96[] = {
+ 				{ 100000000, 200000000, 266666667 } },
+ 		.reg = { "csiphy0", "csiphy0_clk_mux" },
+ 		.interrupt = { "csiphy0" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_8x96
+@@ -182,7 +179,6 @@ static const struct camss_subdev_resources csiphy_res_8x96[] = {
+ 				{ 100000000, 200000000, 266666667 } },
+ 		.reg = { "csiphy1", "csiphy1_clk_mux" },
+ 		.interrupt = { "csiphy1" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_8x96
+@@ -199,7 +195,6 @@ static const struct camss_subdev_resources csiphy_res_8x96[] = {
+ 				{ 100000000, 200000000, 266666667 } },
+ 		.reg = { "csiphy2", "csiphy2_clk_mux" },
+ 		.interrupt = { "csiphy2" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_8x96
+@@ -223,9 +218,9 @@ static const struct camss_subdev_resources csid_res_8x96[] = {
+ 				{ 0 } },
+ 		.reg = { "csid0" },
+ 		.interrupt = { "csid0" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.hw_ops = &csid_ops_4_7,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_4_7
+ 		}
+ 	},
+@@ -245,9 +240,9 @@ static const struct camss_subdev_resources csid_res_8x96[] = {
+ 				{ 0 } },
+ 		.reg = { "csid1" },
+ 		.interrupt = { "csid1" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.hw_ops = &csid_ops_4_7,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_4_7
+ 		}
+ 	},
+@@ -267,9 +262,9 @@ static const struct camss_subdev_resources csid_res_8x96[] = {
+ 				{ 0 } },
+ 		.reg = { "csid2" },
+ 		.interrupt = { "csid2" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.hw_ops = &csid_ops_4_7,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_4_7
+ 		}
+ 	},
+@@ -289,9 +284,9 @@ static const struct camss_subdev_resources csid_res_8x96[] = {
+ 				{ 0 } },
+ 		.reg = { "csid3" },
+ 		.interrupt = { "csid3" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.hw_ops = &csid_ops_4_7,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_4_7
+ 		}
+ 	}
+@@ -307,7 +302,6 @@ static const struct camss_subdev_resources ispif_res_8x96 = {
+ 	.clock_for_reset = { "vfe0", "csi_vfe0", "vfe1", "csi_vfe1" },
+ 	.reg = { "ispif", "csi_clk_mux" },
+ 	.interrupt = { "ispif" },
+-	.type = CAMSS_SUBDEV_TYPE_ISPIF
+ };
+ 
+ static const struct camss_subdev_resources vfe_res_8x96[] = {
+@@ -327,7 +321,6 @@ static const struct camss_subdev_resources vfe_res_8x96[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe0" },
+ 		.interrupt = { "vfe0" },
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
+ 			.has_pd = true,
+@@ -353,7 +346,6 @@ static const struct camss_subdev_resources vfe_res_8x96[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe1" },
+ 		.interrupt = { "vfe1" },
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
+ 			.has_pd = true,
+@@ -377,7 +369,6 @@ static const struct camss_subdev_resources csiphy_res_660[] = {
+ 				{ 0 } },
+ 		.reg = { "csiphy0", "csiphy0_clk_mux" },
+ 		.interrupt = { "csiphy0" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_8x96
+@@ -396,7 +387,6 @@ static const struct camss_subdev_resources csiphy_res_660[] = {
+ 				{ 0 } },
+ 		.reg = { "csiphy1", "csiphy1_clk_mux" },
+ 		.interrupt = { "csiphy1" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_8x96
+@@ -415,7 +405,6 @@ static const struct camss_subdev_resources csiphy_res_660[] = {
+ 				{ 0 } },
+ 		.reg = { "csiphy2", "csiphy2_clk_mux" },
+ 		.interrupt = { "csiphy2" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_8x96
+@@ -442,9 +431,9 @@ static const struct camss_subdev_resources csid_res_660[] = {
+ 				{ 0 } },
+ 		.reg = { "csid0" },
+ 		.interrupt = { "csid0" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.hw_ops = &csid_ops_4_7,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_4_7
+ 		}
+ 	},
+@@ -467,9 +456,9 @@ static const struct camss_subdev_resources csid_res_660[] = {
+ 				{ 0 } },
+ 		.reg = { "csid1" },
+ 		.interrupt = { "csid1" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.hw_ops = &csid_ops_4_7,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_4_7
+ 		}
+ 	},
+@@ -492,9 +481,9 @@ static const struct camss_subdev_resources csid_res_660[] = {
+ 				{ 0 } },
+ 		.reg = { "csid2" },
+ 		.interrupt = { "csid2" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.hw_ops = &csid_ops_4_7,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_4_7
+ 		}
+ 	},
+@@ -517,9 +506,9 @@ static const struct camss_subdev_resources csid_res_660[] = {
+ 				{ 0 } },
+ 		.reg = { "csid3" },
+ 		.interrupt = { "csid3" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.hw_ops = &csid_ops_4_7,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_4_7
+ 		}
+ 	}
+@@ -535,7 +524,6 @@ static const struct camss_subdev_resources ispif_res_660 = {
+ 	.clock_for_reset = { "vfe0", "csi_vfe0", "vfe1", "csi_vfe1" },
+ 	.reg = { "ispif", "csi_clk_mux" },
+ 	.interrupt = { "ispif" },
+-	.type = CAMSS_SUBDEV_TYPE_ISPIF
+ };
+ 
+ static const struct camss_subdev_resources vfe_res_660[] = {
+@@ -558,7 +546,6 @@ static const struct camss_subdev_resources vfe_res_660[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe0" },
+ 		.interrupt = { "vfe0" },
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
+ 			.has_pd = true,
+@@ -587,7 +574,6 @@ static const struct camss_subdev_resources vfe_res_660[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe1" },
+ 		.interrupt = { "vfe1" },
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
+ 			.has_pd = true,
+@@ -615,7 +601,6 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
+ 				{ 19200000, 240000000, 269333333 } },
+ 		.reg = { "csiphy0" },
+ 		.interrupt = { "csiphy0" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_sdm845
+@@ -638,7 +623,6 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
+ 				{ 19200000, 240000000, 269333333 } },
+ 		.reg = { "csiphy1" },
+ 		.interrupt = { "csiphy1" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_sdm845
+@@ -661,7 +645,6 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
+ 				{ 19200000, 240000000, 269333333 } },
+ 		.reg = { "csiphy2" },
+ 		.interrupt = { "csiphy2" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_sdm845
+@@ -684,7 +667,6 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
+ 				{ 19200000, 240000000, 269333333 } },
+ 		.reg = { "csiphy3" },
+ 		.interrupt = { "csiphy3" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_sdm845
+@@ -711,10 +693,9 @@ static const struct camss_subdev_resources csid_res_845[] = {
+ 				{ 384000000 } },
+ 		.reg = { "csid0" },
+ 		.interrupt = { "csid0" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.is_lite = false,
+ 			.hw_ops = &csid_ops_gen2,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_gen2
+ 		}
+ 	},
+@@ -737,10 +718,9 @@ static const struct camss_subdev_resources csid_res_845[] = {
+ 				{ 384000000 } },
+ 		.reg = { "csid1" },
+ 		.interrupt = { "csid1" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.is_lite = false,
+ 			.hw_ops = &csid_ops_gen2,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_gen2
+ 		}
+ 	},
+@@ -763,10 +743,10 @@ static const struct camss_subdev_resources csid_res_845[] = {
+ 				{ 384000000 } },
+ 		.reg = { "csid2" },
+ 		.interrupt = { "csid2" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.is_lite = true,
+ 			.hw_ops = &csid_ops_gen2,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_gen2
+ 		}
+ 	}
+@@ -791,11 +771,9 @@ static const struct camss_subdev_resources vfe_res_845[] = {
+ 				{ 384000000 } },
+ 		.reg = { "vfe0" },
+ 		.interrupt = { "vfe0" },
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 4,
+ 			.has_pd = true,
+-			.is_lite = false,
+ 			.hw_ops = &vfe_ops_170,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -820,11 +798,9 @@ static const struct camss_subdev_resources vfe_res_845[] = {
+ 				{ 384000000 } },
+ 		.reg = { "vfe1" },
+ 		.interrupt = { "vfe1" },
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 4,
+ 			.has_pd = true,
+-			.is_lite = false,
+ 			.hw_ops = &vfe_ops_170,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -848,10 +824,9 @@ static const struct camss_subdev_resources vfe_res_845[] = {
+ 				{ 384000000 } },
+ 		.reg = { "vfe_lite" },
+ 		.interrupt = { "vfe_lite" },
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+-			.line_num = 4,
+ 			.is_lite = true,
++			.line_num = 4,
+ 			.hw_ops = &vfe_ops_170,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -868,7 +843,6 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 				{ 300000000 } },
+ 		.reg = { "csiphy0" },
+ 		.interrupt = { "csiphy0" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_sdm845
+@@ -882,7 +856,6 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 				{ 300000000 } },
+ 		.reg = { "csiphy1" },
+ 		.interrupt = { "csiphy1" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_sdm845
+@@ -896,7 +869,6 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 				{ 300000000 } },
+ 		.reg = { "csiphy2" },
+ 		.interrupt = { "csiphy2" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_sdm845
+@@ -910,7 +882,6 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 				{ 300000000 } },
+ 		.reg = { "csiphy3" },
+ 		.interrupt = { "csiphy3" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_sdm845
+@@ -924,7 +895,6 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 				{ 300000000 } },
+ 		.reg = { "csiphy4" },
+ 		.interrupt = { "csiphy4" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_sdm845
+@@ -938,7 +908,6 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 				{ 300000000 } },
+ 		.reg = { "csiphy5" },
+ 		.interrupt = { "csiphy5" },
+-		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+ 			.hw_ops = &csiphy_ops_3ph_1_0,
+ 			.formats = &csiphy_formats_sdm845
+@@ -958,10 +927,9 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "csid0" },
+ 		.interrupt = { "csid0" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.is_lite = false,
+ 			.hw_ops = &csid_ops_gen2,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_gen2
+ 		}
+ 	},
+@@ -976,10 +944,9 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "csid1" },
+ 		.interrupt = { "csid1" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+-			.is_lite = false,
+ 			.hw_ops = &csid_ops_gen2,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_gen2
+ 		}
+ 	},
+@@ -993,10 +960,10 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "csid2" },
+ 		.interrupt = { "csid2" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.is_lite = true,
+ 			.hw_ops = &csid_ops_gen2,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_gen2
+ 		}
+ 	},
+@@ -1010,10 +977,10 @@ static const struct camss_subdev_resources csid_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "csid3" },
+ 		.interrupt = { "csid3" },
+-		.type = CAMSS_SUBDEV_TYPE_CSID,
+ 		.csid = {
+ 			.is_lite = true,
+ 			.hw_ops = &csid_ops_gen2,
++			.parent_dev_ops = &vfe_parent_dev_ops,
+ 			.formats = &csid_formats_gen2
+ 		}
+ 	}
+@@ -1037,12 +1004,10 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe0" },
+ 		.interrupt = { "vfe0" },
+-		.pd_name = "ife0",
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
+ 			.has_pd = true,
+-			.is_lite = false,
++			.pd_name = "ife0",
+ 			.hw_ops = &vfe_ops_480,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -1065,12 +1030,10 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe1" },
+ 		.interrupt = { "vfe1" },
+-		.pd_name = "ife1",
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+ 			.line_num = 3,
+ 			.has_pd = true,
+-			.is_lite = false,
++			.pd_name = "ife1",
+ 			.hw_ops = &vfe_ops_480,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -1092,10 +1055,9 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe_lite0" },
+ 		.interrupt = { "vfe_lite0" },
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+-			.line_num = 4,
+ 			.is_lite = true,
++			.line_num = 4,
+ 			.hw_ops = &vfe_ops_480,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -1117,10 +1079,9 @@ static const struct camss_subdev_resources vfe_res_8250[] = {
+ 				{ 0 } },
+ 		.reg = { "vfe_lite1" },
+ 		.interrupt = { "vfe_lite1" },
+-		.type = CAMSS_SUBDEV_TYPE_VFE,
+ 		.vfe = {
+-			.line_num = 4,
+ 			.is_lite = true,
++			.line_num = 4,
+ 			.hw_ops = &vfe_ops_480,
+ 			.formats_rdi = &vfe_formats_rdi_845,
+ 			.formats_pix = &vfe_formats_pix_845
+@@ -1308,6 +1269,48 @@ void camss_pm_domain_off(struct camss *camss, int id)
+ 	}
+ }
+ 
++static int vfe_parent_dev_ops_get(struct camss *camss, int id)
++{
++	int ret = -EINVAL;
++
++	if (id < camss->res->vfe_num) {
++		struct vfe_device *vfe = &camss->vfe[id];
++
++		ret = vfe_get(vfe);
++	}
++
++	return ret;
++}
++
++static int vfe_parent_dev_ops_put(struct camss *camss, int id)
++{
++	if (id < camss->res->vfe_num) {
++		struct vfe_device *vfe = &camss->vfe[id];
++
++		vfe_put(vfe);
++	}
++
++	return 0;
++}
++
++static void __iomem
++*vfe_parent_dev_ops_get_base_address(struct camss *camss, int id)
++{
++	if (id < camss->res->vfe_num) {
++		struct vfe_device *vfe = &camss->vfe[id];
++
++		return vfe->base;
++	}
++
++	return NULL;
++}
++
++static const struct parent_dev_ops vfe_parent_dev_ops = {
++	.get = vfe_parent_dev_ops_get,
++	.put = vfe_parent_dev_ops_put,
++	.get_base_address = vfe_parent_dev_ops_get_base_address
++};
++
+ /*
+  * camss_of_parse_endpoint_node - Parse port endpoint node
+  * @dev: Device
+@@ -1484,70 +1487,65 @@ static int camss_link_entities(struct camss *camss)
+ 			}
+ 		}
+ 	}
++	return 0;
++}
+ 
+-	if (camss->ispif) {
+-		for (i = 0; i < camss->res->csid_num; i++) {
+-			for (j = 0; j < camss->ispif->line_num; j++) {
+-				ret = media_create_pad_link(&camss->csid[i].subdev.entity,
+-							    MSM_CSID_PAD_SRC,
+-							    &camss->ispif->line[j].subdev.entity,
+-							    MSM_ISPIF_PAD_SINK,
++/*
++ * camss_link_entities_ispif - Register subdev nodes and create links
++ * @camss: CAMSS device
++ *
++ * Return 0 on success or a negative error code on failure
++ */
++static int camss_link_entities_ispif(struct camss *camss)
++{
++	int i, j, k;
++	int ret;
++
++	for (i = 0; i < camss->ispif->line_num; i++)
++		for (k = 0; k < camss->res->vfe_num; k++)
++			for (j = 0; j < camss->vfe[k].res->line_num; j++) {
++				struct v4l2_subdev *ispif = &camss->ispif->line[i].subdev;
++				struct v4l2_subdev *vfe = &camss->vfe[k].line[j].subdev;
++
++				ret = media_create_pad_link(&ispif->entity,
++							    MSM_ISPIF_PAD_SRC,
++							    &vfe->entity,
++							    MSM_VFE_PAD_SINK,
+ 							    0);
+ 				if (ret < 0) {
+ 					dev_err(camss->dev,
+ 						"Failed to link %s->%s entities: %d\n",
+-						camss->csid[i].subdev.entity.name,
+-						camss->ispif->line[j].subdev.entity.name,
++						ispif->entity.name,
++						vfe->entity.name,
+ 						ret);
+ 					return ret;
+ 				}
+ 			}
+-		}
++	return 0;
++}
+ 
+-		for (i = 0; i < camss->ispif->line_num; i++)
+-			for (k = 0; k < camss->res->vfe_num; k++)
+-				for (j = 0; j < camss->vfe[k].res->line_num; j++) {
+-					struct v4l2_subdev *ispif = &camss->ispif->line[i].subdev;
+-					struct v4l2_subdev *vfe = &camss->vfe[k].line[j].subdev;
+-
+-					ret = media_create_pad_link(&ispif->entity,
+-								    MSM_ISPIF_PAD_SRC,
+-								    &vfe->entity,
+-								    MSM_VFE_PAD_SINK,
+-								    0);
+-					if (ret < 0) {
+-						dev_err(camss->dev,
+-							"Failed to link %s->%s entities: %d\n",
+-							ispif->entity.name,
+-							vfe->entity.name,
+-							ret);
+-						return ret;
+-					}
+-				}
+-	} else {
+-		for (i = 0; i < camss->res->csid_num; i++)
+-			for (k = 0; k < camss->res->vfe_num; k++)
+-				for (j = 0; j < camss->vfe[k].res->line_num; j++) {
+-					struct v4l2_subdev *csid = &camss->csid[i].subdev;
+-					struct v4l2_subdev *vfe = &camss->vfe[k].line[j].subdev;
+-
+-					ret = media_create_pad_link(&csid->entity,
+-								    MSM_CSID_PAD_FIRST_SRC + j,
+-								    &vfe->entity,
+-								    MSM_VFE_PAD_SINK,
+-								    0);
+-					if (ret < 0) {
+-						dev_err(camss->dev,
+-							"Failed to link %s->%s entities: %d\n",
+-							csid->entity.name,
+-							vfe->entity.name,
+-							ret);
+-						return ret;
+-					}
+-				}
+-	}
++/*
++ * camss_link_entities - Register subdev nodes and create links
++ * @camss: CAMSS device
++ *
++ * Return 0 on success or a negative error code on failure
++ */
++static int camss_link_entities(struct camss *camss)
++{
++	int ret;
+ 
+-	return 0;
++	ret = camss_link_entities_csiphy(camss);
++	if (ret < 0)
++		return ret;
++
++	ret = camss_link_entities_csid(camss);
++	if (ret < 0)
++		return ret;
++
++	if (camss->ispif)
++		ret = camss_link_entities_ispif(camss);
++
++	return ret;
+ }
+ 
+ /*
+@@ -1740,7 +1738,7 @@ static int camss_configure_pd(struct camss *camss)
+ 
+ 	/* count the # of VFEs which have flagged power-domain */
+ 	for (vfepd_num = i = 0; i < camss->res->vfe_num; i++) {
+-		if (res->vfe_res[i].has_pd)
++		if (res->vfe_res[i].vfe.has_pd)
+ 			vfepd_num++;
+ 	}
+ 
+@@ -1760,8 +1758,7 @@ static int camss_configure_pd(struct camss *camss)
+ 		camss->genpd = dev_pm_domain_attach_by_name(camss->dev,
+ 							    camss->res->pd_name);
+ 		if (IS_ERR(camss->genpd)) {
+-			ret = PTR_ERR(camss->genpd);
+-			goto fail_pm;
++			return PTR_ERR(camss->genpd);
+ 		}
+ 	}
+ 
+@@ -1778,7 +1775,7 @@ static int camss_configure_pd(struct camss *camss)
+ 			ret = -ENODEV;
+ 		else
+ 			ret = PTR_ERR(camss->genpd);
+-		goto fail_pm;
++		return ret;
+ 	}
+ 	camss->genpd_link = device_link_add(camss->dev, camss->genpd,
+ 					    DL_FLAG_STATELESS | DL_FLAG_PM_RUNTIME |
+diff --git a/drivers/media/platform/qcom/camss/camss.h b/drivers/media/platform/qcom/camss/camss.h
+index fb997b94fd70..bef9d229915d 100644
+--- a/drivers/media/platform/qcom/camss/camss.h
++++ b/drivers/media/platform/qcom/camss/camss.h
+@@ -42,13 +42,6 @@
+ 
+ #define CAMSS_RES_MAX 17
+ 
+-enum camss_subdev_type {
+-	CAMSS_SUBDEV_TYPE_CSIPHY,
+-	CAMSS_SUBDEV_TYPE_CSID,
+-	CAMSS_SUBDEV_TYPE_ISPIF,
+-	CAMSS_SUBDEV_TYPE_VFE,
+-};
+-
+ struct camss_subdev_resources {
+ 	char *regulators[CAMSS_RES_MAX];
+ 	char *clock[CAMSS_RES_MAX];
+@@ -56,7 +49,6 @@ struct camss_subdev_resources {
+ 	u32 clock_rate[CAMSS_RES_MAX][CAMSS_RES_MAX];
+ 	char *reg[CAMSS_RES_MAX];
+ 	char *interrupt[CAMSS_RES_MAX];
+-	enum camss_subdev_type type;
+ 	union {
+ 		struct csiphy_subdev_resources csiphy;
+ 		struct csid_subdev_resources csid;
+@@ -142,6 +134,12 @@ struct camss_clock {
+ 	u32 nfreqs;
+ };
+ 
++struct parent_dev_ops {
++	int (*get)(struct camss *camss, int id);
++	int (*put)(struct camss *camss, int id);
++	void __iomem *(*get_base_address)(struct camss *camss, int id);
++};
++
+ void camss_add_clock_margin(u64 *rate);
+ int camss_enable_clocks(int nclocks, struct camss_clock *clock,
+ 			struct device *dev);
+@@ -152,6 +150,8 @@ s64 camss_get_link_freq(struct media_entity *entity, unsigned int bpp,
+ int camss_get_pixel_clock(struct media_entity *entity, u64 *pixel_clock);
+ int camss_pm_domain_on(struct camss *camss, int id);
+ void camss_pm_domain_off(struct camss *camss, int id);
++int camss_vfe_get(struct camss *camss, int id);
++void camss_vfe_put(struct camss *camss, int id);
+ void camss_delete(struct camss *camss);
+ 
+ #endif /* QC_MSM_CAMSS_H */
+-- 
+2.25.1
+

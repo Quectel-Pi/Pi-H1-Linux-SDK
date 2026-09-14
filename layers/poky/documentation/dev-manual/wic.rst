@@ -140,10 +140,10 @@ command to return the available Wic images as follows::
 
    $ wic list images
      genericx86                                 Create an EFI disk image for genericx86*
-     edgerouter                                 Create SD card image for Edgerouter
      beaglebone-yocto                           Create SD card image for Beaglebone
      qemuriscv                                  Create qcow2 image for RISC-V QEMU machines
      mkefidisk                                  Create an EFI disk image
+     qemuloongarch                              Create qcow2 image for LoongArch QEMU machines
      directdisk-multi-rootfs                    Create multi rootfs image using rootfs plugin
      directdisk                                 Create a 'pcbios' direct disk image
      efi-bootdisk
@@ -153,7 +153,6 @@ command to return the available Wic images as follows::
      sdimage-bootpart                           Create SD card image with a boot partition
      qemux86-directdisk                         Create a qemu machine 'pcbios' direct disk image
      directdisk-bootloader-config               Create a 'pcbios' direct disk image with custom bootloader config
-
 
 Once you know the list of available
 Wic images, you can use ``help`` with the command to get help on a
@@ -284,10 +283,10 @@ Use the following command to list the available kickstart files::
 
    $ wic list images
      genericx86                                 Create an EFI disk image for genericx86*
-     edgerouter                                 Create SD card image for Edgerouter
      beaglebone-yocto                           Create SD card image for Beaglebone
      qemuriscv                                  Create qcow2 image for RISC-V QEMU machines
      mkefidisk                                  Create an EFI disk image
+     qemuloongarch                              Create qcow2 image for LoongArch QEMU machines
      directdisk-multi-rootfs                    Create multi rootfs image using rootfs plugin
      directdisk                                 Create a 'pcbios' direct disk image
      efi-bootdisk
@@ -504,7 +503,7 @@ Continuing with the example, you can now write the image from the
 built your image, and boot from the media. You can write the image by using
 ``bmaptool`` or ``dd``::
 
-   $ oe-run-native bmap-tools-native bmaptool copy mkefidisk-201804191017-sda.direct /dev/sdX
+   $ oe-run-native bmaptool-native bmaptool copy mkefidisk-201804191017-sda.direct /dev/sdX
 
 or ::
 
@@ -514,7 +513,7 @@ or ::
 
    For more information on how to use the ``bmaptool``
    to flash a device with an image, see the
-   ":ref:`dev-manual/bmaptool:flashing images using \`\`bmaptool\`\``"
+   ":ref:`dev-manual/bmaptool:flashing images using \`bmaptool\``"
    section.
 
 Using a Modified Kickstart File
@@ -722,7 +721,7 @@ the existing kernel, and then inserts a new kernel:
 
    Once the new kernel is added back into the image, you can use the
    ``dd`` command or :ref:`bmaptool
-   <dev-manual/bmaptool:flashing images using \`\`bmaptool\`\`>`
+   <dev-manual/bmaptool:flashing images using \`bmaptool\`>` commands
    to flash your wic image onto an SD card or USB stick and test your
    target.
 

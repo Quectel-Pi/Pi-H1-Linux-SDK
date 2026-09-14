@@ -11,20 +11,19 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=d32239bcb673463ab874e80d47fae504 \
 DEPENDS = "libpng jpeg udev"
 DEPENDS:append = " ${@bb.utils.contains('DISTRO_FEATURES', 'wayland', 'wayland-native wayland-protocols', '', d)}"
 
-PV = "2021.12"
+PV = "2023.01"
 
 SRC_URI = " \
     git://github.com/glmark2/glmark2.git;protocol=https;branch=master \
     file://0001-fix-dispmanx-build.patch \
     file://0002-run-dispmanx-fullscreen.patch \
-    file://0001-libmatrix-Include-missing-utility-header.patch \
-    file://0001-waflib-fix-compatibility-with-python-3.11.patch \
+    file://0003-GLVisualConfig-By-default-don-t-care-about-the-stenc.patch \
 "
-SRCREV = "0858b450cd88c84a15b99dda9698d44e7f7e8c70"
+SRCREV = "42e3d8fe3aa88743ef90348138f643f7b04a9237"
 
 S = "${WORKDIR}/git"
 
-inherit waf pkgconfig features_check python3native
+inherit meson pkgconfig features_check
 
 ANY_OF_DISTRO_FEATURES = "opengl dispmanx"
 
@@ -60,6 +59,6 @@ python __anonymous() {
     if "dispmanx" in packageconfig:
         flavors = ["dispmanx-glesv2"]
     if flavors:
-        d.appendVar("EXTRA_OECONF", " --with-flavors=%s" % ",".join(flavors))
+        d.appendVar("EXTRA_OEMESON", " -Dflavors=%s" % ",".join(flavors))
 }
 

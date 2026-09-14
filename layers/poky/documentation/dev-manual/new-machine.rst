@@ -1,7 +1,7 @@
 .. SPDX-License-Identifier: CC-BY-SA-2.0-UK
 
 Adding a New Machine
-====================
+********************
 
 Adding a new machine to the Yocto Project is a straightforward process.
 This section describes how to add machines that are similar to those
@@ -38,7 +38,7 @@ file or include from a lower-level configuration file are as follows:
 
 -  ``PREFERRED_PROVIDER_virtual/kernel``
 
--  :term:`MACHINE_FEATURES` (e.g. "apm screen wifi")
+-  :term:`MACHINE_FEATURES` (e.g. "screen wifi")
 
 You might also need these variables:
 

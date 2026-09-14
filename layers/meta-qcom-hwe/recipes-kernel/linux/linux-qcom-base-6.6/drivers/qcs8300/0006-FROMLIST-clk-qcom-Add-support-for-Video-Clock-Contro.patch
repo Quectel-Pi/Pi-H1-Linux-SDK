@@ -1,0 +1,47 @@
+From dcb974c8d2bd16c59bca76dddb130e5e76d692ba Mon Sep 17 00:00:00 2001
+From: Imran Shaik <quic_imrashai@quicinc.com>
+Date: Wed, 6 Nov 2024 15:22:01 +0530
+Subject: [PATCH 6/6] FROMLIST: clk: qcom: Add support for Video Clock
+ Controller on QCS8300
+
+Add support to the QCS8300 Video clock controller by extending
+the SA8775P Video clock controller, which is mostly identical
+but QCS8300 has minor difference.
+
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Imran Shaik <quic_imrashai@quicinc.com>
+Link: https://lore.kernel.org/all/20241106-qcs8300-mm-patches-v3-6-f611a8f87f15@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241106-qcs8300-mm-patches-v3-6-f611a8f87f15@quicinc.com/]
+---
+ drivers/clk/qcom/videocc-sa8775p.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/drivers/clk/qcom/videocc-sa8775p.c b/drivers/clk/qcom/videocc-sa8775p.c
+index 2c10df2b9f6a..98a0b8af595a 100644
+--- a/drivers/clk/qcom/videocc-sa8775p.c
++++ b/drivers/clk/qcom/videocc-sa8775p.c
+@@ -523,6 +523,7 @@ static struct qcom_cc_desc video_cc_sa8775p_desc = {
+ };
+ 
+ static const struct of_device_id video_cc_sa8775p_match_table[] = {
++	{ .compatible = "qcom,qcs8300-videocc" },
+ 	{ .compatible = "qcom,sa8775p-videocc" },
+ 	{ }
+ };
+@@ -550,6 +551,13 @@ static int video_cc_sa8775p_probe(struct platform_device *pdev)
+ 	clk_lucid_evo_pll_configure(&video_pll0, regmap, &video_pll0_config);
+ 	clk_lucid_evo_pll_configure(&video_pll1, regmap, &video_pll1_config);
+ 
++	/*
++	 * Set mvs0c clock divider to div-3 to make the mvs0 and
++	 * mvs0c clocks to run at the same frequency on QCS8300
++	 */
++	if (of_device_is_compatible(pdev->dev.of_node, "qcom,qcs8300-videocc"))
++		regmap_write(regmap, video_cc_mvs0c_div2_div_clk_src.reg, 2);
++
+ 	/* Keep some clocks always enabled */
+ 	regmap_update_bits(regmap, 0x80ec, BIT(0), BIT(0)); /* VIDEO_CC_AHB_CLK */
+ 	regmap_update_bits(regmap, 0x8144, BIT(0), BIT(0)); /* VIDEO_CC_SLEEP_CLK */
+-- 
+2.34.1
+

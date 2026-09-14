@@ -1,0 +1,29 @@
+From 077ea9c01ab4a375276397d9c781d1ed5bb36681 Mon Sep 17 00:00:00 2001
+From: Cheng Jiang <quic_chejiang@quicinc.com>
+Date: Mon, 17 Mar 2025 13:42:19 +0800
+Subject: [PATCH] PENDING: Add sepolicy rules for brctl to add/remove bridge
+
+Add sepolicy for brctl to add/remove bridge
+
+Upstream-Status: Pending
+
+Signed-off-by: Cheng Jiang <quic_chejiang@quicinc.com>
+---
+ policy/modules/admin/brctl.te | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/policy/modules/admin/brctl.te b/policy/modules/admin/brctl.te
+index 026b0002d..8e58a8eb5 100644
+--- a/policy/modules/admin/brctl.te
++++ b/policy/modules/admin/brctl.te
+@@ -22,6 +22,7 @@ allow brctl_t self:fifo_file rw_fifo_file_perms;
+ allow brctl_t self:unix_stream_socket create_stream_socket_perms;
+ allow brctl_t self:unix_dgram_socket create_socket_perms;
+ allow brctl_t self:tcp_socket create_socket_perms;
++init_use_script_ptys(brctl_t);
+ 
+ kernel_request_load_module(brctl_t)
+ kernel_read_network_state(brctl_t)
+-- 
+2.34.1
+

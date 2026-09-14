@@ -1,28 +1,26 @@
-From 8d27cb846cbdb17c8dc266fe403bbf9f2dce9f62 Mon Sep 17 00:00:00 2001
+From ee536b888e217df01cd821297a03a9e45dc19970 Mon Sep 17 00:00:00 2001
 From: Damodar Reddy GangiReddy <quic_dgangire@quicinc.com>
-Date: Tue, 20 Aug 2024 16:22:19 +0530
+Date: Tue, 28 Jan 2025 15:35:33 +0530
 Subject: [PATCH] Set variable MAP_ROOT="map-messages" to create MAP sdp record
 
 Signed-off-by: Damodar Reddy GangiReddy<quic_dgangire@quicinc.com>
-
 Upstream-Status: Inappropriate
-
 ---
  obexd/src/obex.service.in | 1 +
  1 file changed, 1 insertion(+)
 
 diff --git a/obexd/src/obex.service.in b/obexd/src/obex.service.in
-index 98835c8b8..1ad5de139 100644
+index fc0dce993..57f8b1418 100644
 --- a/obexd/src/obex.service.in
 +++ b/obexd/src/obex.service.in
-@@ -4,6 +4,7 @@ Requires=bluetooth.service
- After=bluetooth.service
+@@ -2,6 +2,7 @@
+ Description=Bluetooth OBEX service
  
  [Service]
 +Environment="MAP_ROOT="map-messages""
  Type=dbus
  BusName=org.bluez.obex
- ExecStartPre=/bin/mkdir -p /var/bluetooth
+ ExecStart=@pkglibexecdir@/obexd
 -- 
 2.34.1
 

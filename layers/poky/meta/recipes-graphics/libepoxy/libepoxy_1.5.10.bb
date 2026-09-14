@@ -12,14 +12,13 @@ LIC_FILES_CHKSUM = "file://COPYING;md5=58ef4c80d401e07bd9ee8b6b58cf464b"
 SRC_URI = "git://github.com/anholt/libepoxy;branch=master;protocol=https"
 SRCREV = "c84bc9459357a40e46e2fec0408d04fbdde2c973"
 S = "${WORKDIR}/git"
-UPSTREAM_CHECK_URI = "https://github.com/anholt/libepoxy/releases"
 
-inherit meson pkgconfig features_check
+inherit meson pkgconfig features_check github-releases
 
 REQUIRED_DISTRO_FEATURES = "opengl"
 
 PACKAGECONFIG[egl] = "-Degl=yes, -Degl=no, virtual/egl"
-PACKAGECONFIG[x11] = "-Dglx=yes, -Dglx=no -Dx11=false, virtual/libx11 "
+PACKAGECONFIG[x11] = "-Dglx=yes, -Dglx=no -Dx11=false, virtual/libx11 virtual/libgl"
 PACKAGECONFIG ??= "${@bb.utils.filter('DISTRO_FEATURES', 'x11', d)} egl"
 
 EXTRA_OEMESON += "-Dtests=false"

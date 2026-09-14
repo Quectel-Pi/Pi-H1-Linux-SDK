@@ -1,0 +1,51 @@
+From 287b53c6d381d874f3be2efcb074a6f91ffad878 Mon Sep 17 00:00:00 2001
+From: Anagh G <quic_anaghg@quicinc.com>
+Date: Mon, 15 Apr 2024 15:10:03 +0530
+Subject: [PATCH] PENDING: Avoid updation of mtu of master interface.
+
+ModemManager incorrectly limits the MTU of the master interface
+to 1500 causing unnecessary fragmentation. Fixed it with this
+commit
+
+Change-Id: I64768caf56ecd521243a6bf2e6ea84a5bf1bf90f
+Signed-Off-by: Anagh G <quic_anaghg@quicinc.com>
+
+---
+ src/mm-port-qmi.c | 9 +--------
+ 1 file changed, 1 insertion(+), 8 deletions(-)
+
+diff --git a/src/mm-port-qmi.c b/src/mm-port-qmi.c
+index 4d79a43b..83f3625c 100644
+--- a/src/mm-port-qmi.c
++++ b/src/mm-port-qmi.c
+@@ -982,7 +982,6 @@ internal_reset (MMPortQmi           *self,
+ {
+     GTask                *task;
+     InternalResetContext *ctx;
+-    guint                 mtu;
+ 
+     task = g_task_new (self, NULL, callback, user_data);
+ 
+@@ -991,18 +990,12 @@ internal_reset (MMPortQmi           *self,
+     ctx->device = g_object_ref (device);
+     g_task_set_task_data (task, ctx, (GDestroyNotify) internal_reset_context_free);
+ 
+-    /* mhi_net has a custom default MTU set by the kernel driver */
+-    if (g_strcmp0 (self->priv->net_driver, "mhi_net") == 0)
+-        mtu = MHI_NET_MTU_DEFAULT;
+-    else
+-        mtu = MM_PORT_NET_MTU_DEFAULT;
+-
+     /* first, bring down main interface */
+     mm_obj_dbg (self, "bringing down data interface '%s'",
+                 mm_port_get_device (ctx->data));
+     mm_port_net_link_setup (MM_PORT_NET (ctx->data),
+                             FALSE,
+-                            mtu,
++                            0, /* Do not update MTU of physical device */
+                             NULL,
+                             (GAsyncReadyCallback) net_link_down_ready,
+                             task);
+-- 
+2.25.1
+

@@ -7,7 +7,7 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=76ba15dd76a248e1dd526bca0e2125fa"
 
 DEPENDS = "glib-2.0 util-linux popt bison-native flex-native"
 
-SRC_URI = "git://git.efficios.com/babeltrace.git;branch=stable-1.5 \
+SRC_URI = "git://git.efficios.com/babeltrace.git;branch=stable-1.5;protocol=https \
 	   file://run-ptest \
 	  "
 SRCREV = "91c00f70884887ff5c4849a8e3d47e311a22ba9d"
@@ -21,7 +21,7 @@ EXTRA_OECONF = "--disable-debug-info"
 
 ASNEEDED = ""
 
-RDEPENDS:${PN}-ptest += "bash gawk"
+RDEPENDS:${PN}-ptest += "bash gawk make"
 
 addtask do_patch_ptest_path after do_patch before do_configure
 do_patch_ptest_path () {
@@ -96,3 +96,5 @@ do_install_ptest () {
 	sed -i 's:^BTBIN.*:BTBIN=/usr/bin/babeltrace:' ${f}
     done
 }
+
+BBCLASSEXTEND = "nativesdk"

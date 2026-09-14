@@ -27,6 +27,8 @@ SRCREV = "688e697c51fd5353725da078555adbeff0363d01"
 
 inherit go-mod pkgconfig systemd update-rc.d useradd
 
+export GOPROXY = "https://proxy.golang.org,direct"
+
 # Workaround for network access issue during compile step
 # this needs to be fixed in the recipes buildsystem to move
 # this such that it can be accomplished during do_fetch task
@@ -36,16 +38,17 @@ USERADD_PACKAGES = "${PN}"
 USERADD_PARAM:${PN} = "--system -d /var/lib/influxdb -m -s /bin/nologin influxdb"
 
 do_install:prepend() {
-    rm ${B}/src/${GO_IMPORT}/build.py
-    rm ${B}/src/${GO_IMPORT}/build.sh
-    rm ${B}/src/${GO_IMPORT}/Dockerfile*
+    test -e ${B}/src/${GO_IMPORT}/build.py && rm ${B}/src/${GO_IMPORT}/build.py
+    test -e ${B}/src/${GO_IMPORT}/build.sh && rm ${B}/src/${GO_IMPORT}/build.sh
+    rm -rf ${B}/src/${GO_IMPORT}/Dockerfile*
+
     sed -i -e "s#usr/bin/sh#bin/sh#g" ${B}/src/${GO_IMPORT}/scripts/ci/run_perftest.sh
 }
 
 do_install:append() {
     install -d ${D}${sysconfdir}/influxdb
     install -m 0644 ${WORKDIR}/influxdb.conf ${D}${sysconfdir}/influxdb
-    chown -R root.influxdb ${D}${sysconfdir}/influxdb
+    chown -R root:influxdb ${D}${sysconfdir}/influxdb
 
     install -d ${D}${sysconfdir}/init.d
     install -m 0755 ${WORKDIR}/influxdb ${D}${sysconfdir}/init.d/influxdb
@@ -58,13 +61,19 @@ do_install:append() {
     if [ "${@bb.utils.filter('DISTRO_FEATURES', 'systemd', d)}" ] ; then
         install -d ${D}${systemd_unitdir}/system
         install -m 0644 ${S}/src/${GO_IMPORT}/scripts/influxdb.service ${D}${systemd_system_unitdir}/influxdb.service
+        install -d ${D}${libdir}/influxdb/scripts
+        install -m 0755 ${S}/src/${GO_IMPORT}/scripts/influxd-systemd-start.sh ${D}${libdir}/influxdb/scripts/influxd-systemd-start.sh
     fi
 
     # TODO chown
 }
+
+FILES:${PN} += "${libdir}/influxdb/scripts/influxd-systemd-start.sh"
 
 INITSCRIPT_PACKAGES = "${PN}"
 INITSCRIPT_NAME = "influxdb"
 INITSCRIPT_PARAMS = "defaults"
 
 SYSTEMD_SERVICE:${PN} = "influxdb.service"
+
+CVE_STATUS[CVE-2019-10329] = "cpe-incorrect: Version does not match and only the Jenkins plugin is affected."

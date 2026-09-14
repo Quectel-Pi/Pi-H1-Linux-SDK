@@ -1,3 +1,8 @@
+#
+# Copyright OpenEmbedded Contributors
+#
+# SPDX-License-Identifier: MIT
+#
 from oeqa.selftest.case import OESelftestTestCase
 from oeqa.utils.commands import bitbake
 
@@ -108,6 +113,7 @@ INCOMPATIBLE_LICENSE:pn-core-image-minimal = "GPL-3.0* LGPL-3.0*"
             raise AssertionError(result.output)
 
     def test_bash_and_license(self):
+        self.disable_class("create-spdx")
         self.write_config(self.default_config() + '\nLICENSE:append:pn-bash = " & SomeLicense"')
         error_msg = "ERROR: core-image-minimal-1.0-r0 do_rootfs: Package bash cannot be installed into the image because it has incompatible license(s): GPL-3.0-or-later"
 
@@ -116,6 +122,7 @@ INCOMPATIBLE_LICENSE:pn-core-image-minimal = "GPL-3.0* LGPL-3.0*"
             raise AssertionError(result.output)
 
     def test_bash_or_license(self):
+        self.disable_class("create-spdx")
         self.write_config(self.default_config() + '\nLICENSE:append:pn-bash = " | SomeLicense"')
 
         bitbake('core-image-minimal')
@@ -134,23 +141,11 @@ INCOMPATIBLE_LICENSE:pn-core-image-minimal = "GPL-3.0* LGPL-3.0*"
 
     def test_core_image_full_cmdline_weston(self):
         self.write_config("""
-INHERIT += "testimage"
+IMAGE_CLASSES += "testimage"
 INCOMPATIBLE_LICENSE:pn-core-image-full-cmdline = "GPL-3.0* LGPL-3.0*"
 INCOMPATIBLE_LICENSE:pn-core-image-weston = "GPL-3.0* LGPL-3.0*"
-# Settings for full-cmdline
-RDEPENDS:packagegroup-core-full-cmdline-utils:remove = "bash bc coreutils cpio ed findutils gawk grep mc mc-fish mc-helpers mc-helpers-perl sed tar time"
-RDEPENDS:packagegroup-core-full-cmdline-dev-utils:remove = "diffutils m4 make patch"
-RDEPENDS:packagegroup-core-full-cmdline-multiuser:remove = "gzip"
-# Settings for weston
-# direct gpl3 dependencies
-RRECOMMENDS:packagegroup-base-vfat:remove = "dosfstools"
-PACKAGECONFIG:remove:pn-bluez5 = "readline"
-# dnf pulls in gpg which is gpl3; it also pulls in python3-rpm which pulls in rpm-build which pulls in bash
-# so install rpm but not dnf
-IMAGE_FEATURES:remove:pn-core-image-weston = "package-management"
-CORE_IMAGE_EXTRA_INSTALL:pn-core-image-weston += "rpm"
-# matchbox-terminal depends on vte, which is gpl3
-CORE_IMAGE_BASE_INSTALL:remove:pn-core-image-weston = "matchbox-terminal"
+
+require conf/distro/include/no-gplv3.inc
 """)
         bitbake('core-image-full-cmdline core-image-weston')
         bitbake('-c testimage core-image-full-cmdline core-image-weston')

@@ -1,7 +1,7 @@
-From da066022d2fcdc1a26fe2a3a289227f8d1f9fed9 Mon Sep 17 00:00:00 2001
+From ca5a328cb7238fca2a34484f6236aae1cb250b4f Mon Sep 17 00:00:00 2001
 From: Taniya Das <quic_tdas@quicinc.com>
 Date: Wed, 16 Oct 2024 15:20:29 +0800
-Subject: [PATCH 3/4] FROMLIST: clk: qcom: rpmhcc: Add support for QCS615
+Subject: [PATCH 1/1] FROMLIST: clk: qcom: rpmhcc: Add support for QCS615
  Clocks
 
 Add the RPMHCC clocks required for QCS615 SoC.
@@ -15,10 +15,10 @@ Upstream-Status: Submitted [https://lore.kernel.org/all/20241016-qcs615-clock-dr
  1 file changed, 19 insertions(+)
 
 diff --git a/drivers/clk/qcom/clk-rpmh.c b/drivers/clk/qcom/clk-rpmh.c
-index 4c5b552b47b6..47d79d383090 100644
+index edbae2a88afc..2c3615abcaf0 100644
 --- a/drivers/clk/qcom/clk-rpmh.c
 +++ b/drivers/clk/qcom/clk-rpmh.c
-@@ -717,6 +717,24 @@ static const struct clk_rpmh_desc clk_rpmh_sdx75 = {
+@@ -731,6 +731,24 @@ static const struct clk_rpmh_desc clk_rpmh_sdx75 = {
  	.num_clks = ARRAY_SIZE(sdx75_rpmh_clocks),
  };
  
@@ -43,14 +43,14 @@ index 4c5b552b47b6..47d79d383090 100644
  static struct clk_hw *of_clk_rpmh_hw_get(struct of_phandle_args *clkspec,
  					 void *data)
  {
-@@ -800,6 +818,7 @@ static int clk_rpmh_probe(struct platform_device *pdev)
+@@ -814,6 +832,7 @@ static int clk_rpmh_probe(struct platform_device *pdev)
  }
  
  static const struct of_device_id clk_rpmh_match_table[] = {
 +	{ .compatible = "qcom,qcs615-rpmh-clk", .data = &clk_rpmh_qcs615},
  	{ .compatible = "qcom,qdu1000-rpmh-clk", .data = &clk_rpmh_qdu1000},
  	{ .compatible = "qcom,sa8775p-rpmh-clk", .data = &clk_rpmh_sa8775p},
- 	{ .compatible = "qcom,sc7180-rpmh-clk", .data = &clk_rpmh_sc7180},
+ 	{ .compatible = "qcom,sar2130p-rpmh-clk", .data = &clk_rpmh_sar2130p},
 -- 
-2.46.0
+2.25.1
 

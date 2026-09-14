@@ -2,8 +2,8 @@
 /*
  * qcm6490-addons-rb3gen2 device tree source include
  *
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include "qcm6490-addons.dtsi"
 
@@ -91,7 +91,61 @@
 	};
 };
 
+&camcc {
+	status = "okay";
+};
 
+&camss {
+	status = "disabled";
+	ports {
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		/* The port index denotes CSIPHY id i.e. csiphy2 */
+		port@3 {
+			reg = <3>;
+			csiphy3_ep: endpoint {
+				clock-lanes = <7>;
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&imx577_ep>;
+			};
+		};
+	};
+};
+
+&cci1 {
+	status = "disabled";
+};
+
+&cci1_i2c1 {
+	camera@1a {
+		compatible = "sony,imx577";
+		reg = <0x1a>;
+
+		reset-gpios = <&tlmm 78 GPIO_ACTIVE_LOW>;
+		pinctrl-names = "default", "suspend";
+		pinctrl-0 = <&cam2_default>;
+		pinctrl-1 = <&cam2_suspend>;
+
+		clocks = <&camcc CAM_CC_MCLK3_CLK>,
+			 <&camcc CAM_CC_MCLK2_CLK>;
+		assigned-clocks = <&camcc CAM_CC_MCLK3_CLK>,
+				  <&camcc CAM_CC_MCLK2_CLK>;
+		assigned-clock-rates = <24000000>,
+				       <24000000>;
+
+		dovdd-supply  = <&vreg_l18b_1p8>;
+
+		port {
+			imx577_ep: endpoint {
+				clock-lanes = <7>;
+				link-frequencies = /bits/ 64 <600000000>;
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&csiphy3_ep>;
+			};
+		};
+	};
+};
 
 &i2c0 {
 	clock-frequency = <100000>;
@@ -145,7 +199,7 @@
 					reg = <0x0 0x0 0x0 0x0 0x0>;
 					pinctrl-names = "default";
 					pinctrl-0 = <&aqr_intn_wol_sig>;
-					qcom,phy-rst-gpio = <0>;
+					qcom,phy-rst-gpio-id = <0>;
 					interrupts-extended = <&tlmm 141 IRQ_TYPE_EDGE_FALLING>;
 					interrupt-names = "wol_irq";
 					phy-supply = <&aqr_vreg>;
@@ -167,7 +221,7 @@
 					reg = <0x100 0x0 0x0 0x0 0x0>;
 					pinctrl-names = "default";
 					pinctrl-0 = <&napa_intn_wol_sig>;
-					qcom,phy-rst-gpio = <1>;
+					qcom,phy-rst-gpio-id = <1>;
 					interrupts-extended = <&tlmm 101 IRQ_TYPE_EDGE_FALLING>;
 					interrupt-names = "wol_irq";
 					phy-supply = <&qep_vreg>;
@@ -194,19 +248,7 @@
 	qcom,refclk-always-on;
 };
 
-&q6apmbedai {
-	qcom,prmcc_clk = <&q6prmcc>;
-};
-
 &sound {
-
-	pinctrl-names = "default", "stub_aif1_active", "stub_aif1_sleep";
-	pinctrl-0 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
-		    <&mi2s0_sclk_sleep>, <&mi2s0_ws_sleep>;
-	pinctrl-1 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>, <&mi2s0_ws>;
-	pinctrl-2 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
-		    <&mi2s0_sclk_sleep>, <&mi2s0_ws_sleep>;
-
 	mi2s-capture-dai-link {
 		link-name = "MI2S-LPAIF-TX-PRIMARY";
 
@@ -255,6 +297,18 @@
 		};
 	};
 
+	mi2s1-playback-dai-link {
+		link-name = "MI2S-LPAIF-RX-SECONDARY";
+
+		cpu {
+			sound-dai = <&q6apmbedai SECONDARY_MI2S_RX>;
+		};
+
+		codec {
+			sound-dai = <&msm_stub_codec 2>;
+		};
+	};
+
 };
 
 &tlmm {
@@ -292,6 +346,38 @@
 
 	mi2s0_ws_sleep: mi2s0-ws-sleep {
 		pins = "gpio100";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	mi2s1_data0_sleep: mi2s1-data0-sleep {
+		pins = "gpio107";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	mi2s1_mclk_sleep: mi2s1-mclk-sleep {
+		pins = "gpio105";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	mi2s1_sclk_sleep: mi2s1-sclk-sleep {
+		pins = "gpio106";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	mi2s1_ws_sleep: mi2s1-ws-sleep {
+		pins = "gpio108";
 		function = "gpio";
 		drive-strength = <2>;
 		bias-pull-down;
@@ -361,6 +447,41 @@
 	drive-strength = <8>;
 	bias-disable;
 	output-high;
+};
+
+&mi2s1_data0 {
+	drive-strength = <8>;
+	bias-disable;
+};
+
+&mi2s1_mclk {
+	drive-strength = <8>;
+	bias-disable;
+	output-high;
+};
+
+&mi2s1_sclk {
+	drive-strength = <8>;
+	bias-disable;
+	output-high;
+};
+
+&mi2s1_ws {
+	drive-strength = <8>;
+	bias-disable;
+	output-high;
+};
+
+&msm_stub_codec {
+	pinctrl-0 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
+		    <&mi2s0_sclk_sleep>, <&mi2s0_ws_sleep>, <&mi2s1_data0_sleep>,
+		    <&mi2s1_mclk_sleep>, <&mi2s1_sclk_sleep>, <&mi2s1_ws_sleep>;
+	pinctrl-1 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>, <&mi2s0_ws>,
+		    <&mi2s1_data0>, <&mi2s1_mclk>, <&mi2s1_sclk>, <&mi2s1_ws>;
+	pinctrl-2 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
+		    <&mi2s0_sclk_sleep>, <&mi2s0_ws_sleep>, <&mi2s1_data0_sleep>,
+		    <&mi2s1_mclk_sleep>, <&mi2s1_sclk_sleep>, <&mi2s1_ws_sleep>;
+	pinctrl-names = "default", "mi2s_aud_active", "mi2s_aud_sleep";
 };
 
 &spmi_bus {
@@ -444,7 +565,7 @@
 
 			map4 {
 				trip = <&b_bcl_lvl0>;
-				cooling-device = <&cdsp_sw 2 2>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 			};
 
 			map5 {
@@ -480,7 +601,7 @@
 
 			map1 {
 				trip = <&b_bcl_lvl1>;
-				cooling-device = <&cdsp_sw 4 4>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 			};
 
 			map2 {
@@ -506,7 +627,7 @@
 		cooling-maps {
 			map0 {
 				trip = <&b_bcl_lvl2>;
-				cooling-device = <&cdsp_sw 5 5>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 			};
 		};
 	};

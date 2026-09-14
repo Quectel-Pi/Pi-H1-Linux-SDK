@@ -1,0 +1,39 @@
+From 87745f33d63c2943c628764bbc33ab23f292e453 Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Date: Mon, 1 Jul 2024 10:03:22 +0200
+Subject: [PATCH 25/39] UPSTREAM: net: phy: aquantia: add missing include
+ guards
+
+The header is missing the include guards so add them.
+
+Reviewed-by: Andrew Lunn <andrew@lunn.ch>
+Fixes: fb470f70fea7 ("net: phy: aquantia: add hwmon support")
+Change-Id: I050c765091ae3ca445c2742497a0815cb1bcda0c
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 219343755eae6536d1fcb9184e6253ade4906aac]
+---
+ drivers/net/phy/aquantia/aquantia.h | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/net/phy/aquantia/aquantia.h b/drivers/net/phy/aquantia/aquantia.h
+index c0e1fd9d7152..0bca28ec3332 100644
+--- a/drivers/net/phy/aquantia/aquantia.h
++++ b/drivers/net/phy/aquantia/aquantia.h
+@@ -6,6 +6,9 @@
+  * Author: Heiner Kallweit <hkallweit1@gmail.com>
+  */
+ 
++#ifndef AQUANTIA_H
++#define AQUANTIA_H
++
+ #include <linux/device.h>
+ #include <linux/phy.h>
+ 
+@@ -198,3 +201,4 @@ int aqr_phy_led_hw_control_set(struct phy_device *phydev, u8 index,
+ int aqr_phy_led_active_low_set(struct phy_device *phydev, int index, bool enable);
+ int aqr_phy_led_polarity_set(struct phy_device *phydev, int index,
+ 			     unsigned long modes);
++#endif /* AQUANTIA_H */
+-- 
+2.34.1
+

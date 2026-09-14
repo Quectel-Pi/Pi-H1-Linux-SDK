@@ -18,6 +18,9 @@
 #include <linux/hwmon-sysfs.h>
 #include <linux/err.h>
 #include <linux/mutex.h>
+#include <linux/pwm.h>
+
+#include <dt-bindings/pwm/pwm.h>
 
 /*
  * Addresses to scan.
@@ -30,7 +33,7 @@ static const unsigned short normal_i2c[] = {0x18, 0x19, 0x1a, 0x2c, 0x2d, 0x2e,
  * Insmod parameters
  */
 
-static int pwminv;	/*Inverted PWM output. */
+static int pwminv = -1; /*Inverted PWM output. */
 module_param(pwminv, int, 0444);
 
 static int init = 1; /*Power-on initialization.*/
@@ -814,9 +817,43 @@ static int amc6821_detect(
 	return 0;
 }
 
-static int amc6821_init_client(struct i2c_client *client)
+static enum pwm_polarity amc6821_pwm_polarity(struct i2c_client *client)
+{
+	enum pwm_polarity polarity = PWM_POLARITY_NORMAL;
+	struct of_phandle_args args;
+	struct device_node *fan_np;
+
+	/*
+	 * For backward compatibility, the pwminv module parameter takes
+	 * always the precedence over any other device description
+	 */
+	if (pwminv == 0)
+		return PWM_POLARITY_NORMAL;
+	if (pwminv > 0)
+		return PWM_POLARITY_INVERSED;
+
+	fan_np = of_get_child_by_name(client->dev.of_node, "fan");
+	if (!fan_np)
+		return PWM_POLARITY_NORMAL;
+
+	if (of_parse_phandle_with_args(fan_np, "pwms", "#pwm-cells", 0, &args))
+		goto out;
+	of_node_put(args.np);
+
+	if (args.args_count != 2)
+		goto out;
+
+	if (args.args[1] & PWM_POLARITY_INVERTED)
+		polarity = PWM_POLARITY_INVERSED;
+out:
+	of_node_put(fan_np);
+	return polarity;
+}
+
+static int amc6821_init_client(struct i2c_client *client, struct amc6821_data *data)
 {
 	int config;
+	u32 regval;
 	int err = -EIO;
 
 	if (init) {
@@ -836,6 +873,10 @@ static int amc6821_init_client(struct i2c_client *client)
 			"Configuration register write error, aborting.\n");
 			return err;
 		}
+
+		regval = AMC6821_CONF1_START;
+		if (amc6821_pwm_polarity(client) == PWM_POLARITY_INVERSED)
+			regval |= AMC6821_CONF1_PWMINV;
 
 		config = i2c_smbus_read_byte_data(client, AMC6821_REG_CONF3);
 
@@ -917,7 +958,7 @@ static int amc6821_probe(struct i2c_client *client)
 	/*
 	 * Initialize the amc6821 chip
 	 */
-	err = amc6821_init_client(client);
+	err = amc6821_init_client(client, data);
 	if (err)
 		return err;
 

@@ -1,0 +1,28 @@
+From f0c70ca30035cea56ea365c08041d1e68b4a0ce9 Mon Sep 17 00:00:00 2001
+From: Abhinaba Rakshit <quic_arakshit@quicinc.com>
+Date: Mon, 24 Feb 2025 22:46:49 +0530
+Subject: [PATCH] FROMLIST: dt-bindings: crypto: qcom-qce: document the QCS615
+
+Document the crypto engine on the QCS615 platform.
+
+Signed-off-by: Abhinaba Rakshit <quic_arakshit@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250224-enable-qce-for-qcs615-v1-1-e7c665347eef@quicinc.com/]
+---
+ Documentation/devicetree/bindings/crypto/qcom-qce.yaml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/crypto/qcom-qce.yaml b/Documentation/devicetree/bindings/crypto/qcom-qce.yaml
+index a1434d832d16..7917a0657c9b 100644
+--- a/Documentation/devicetree/bindings/crypto/qcom-qce.yaml
++++ b/Documentation/devicetree/bindings/crypto/qcom-qce.yaml
+@@ -44,6 +44,7 @@ properties:
+ 
+       - items:
+           - enum:
++              - qcom,qcs615-qce
+               - qcom,qcs8300-qce
+               - qcom,sa8775p-qce
+               - qcom,sm8250-qce
+-- 
+2.34.1
+

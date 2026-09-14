@@ -1,0 +1,62 @@
+From f65eb6b61586d46ed01fddd68bb2d2b42a331b04 Mon Sep 17 00:00:00 2001
+From: Yongxing Mou <quic_yongmou@quicinc.com>
+Date: Tue, 11 Feb 2025 15:57:56 +0800
+Subject: [PATCH 146/146] FROMLIST: arm64: dts: qcom: qcs8300: add support for
+ stream 1 clk for DP MST
+
+Add 2 streams MST support for qcs8300. Compatile with qcs8300 dp
+controller driver and populate the stream clock for qcs8300 DP0
+controller in MST mode.
+
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250212-mst_qcs8300-v1-4-38a8aa08394b@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 15 ++++++++++-----
+ 1 file changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index f037a399f98f..6d6b584442a2 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -2648,12 +2648,13 @@ mdss_dp0_phy: phy@aec2a00 {
+ 			};
+ 
+ 			mdss_dp0: displayport-controller@af54000 {
+-				compatible = "qcom,qcs8300-dp", "qcom,sm8650-dp";
++				compatible = "qcom,qcs8300-dp";
+ 
+ 				reg = <0x0 0x0af54000 0x0 0x200>,
+ 				      <0x0 0x0af54200 0x0 0x200>,
+ 				      <0x0 0x0af55000 0x0 0xc00>,
+-				      <0x0 0x0af56000 0x0 0x400>;
++				      <0x0 0x0af56000 0x0 0x400>,
++				      <0x0 0x0af57000 0x0 0x400>;
+ 
+ 				interrupt-parent = <&mdss>;
+ 				interrupts = <12>;
+@@ -2662,15 +2663,19 @@ mdss_dp0: displayport-controller@af54000 {
+ 					 <&dispcc MDSS_DISP_CC_MDSS_DPTX0_AUX_CLK>,
+ 					 <&dispcc MDSS_DISP_CC_MDSS_DPTX0_LINK_CLK>,
+ 					 <&dispcc MDSS_DISP_CC_MDSS_DPTX0_LINK_INTF_CLK>,
+-					 <&dispcc MDSS_DISP_CC_MDSS_DPTX0_PIXEL0_CLK>;
++					 <&dispcc MDSS_DISP_CC_MDSS_DPTX0_PIXEL0_CLK>,
++					 <&dispcc MDSS_DISP_CC_MDSS_DPTX0_PIXEL1_CLK>;
+ 				clock-names = "core_iface",
+ 					      "core_aux",
+ 					      "ctrl_link",
+ 					      "ctrl_link_iface",
+-					      "stream_pixel";
++					      "stream_pixel",
++					      "stream_1_pixel";
+ 				assigned-clocks = <&dispcc MDSS_DISP_CC_MDSS_DPTX0_LINK_CLK_SRC>,
+-						  <&dispcc MDSS_DISP_CC_MDSS_DPTX0_PIXEL0_CLK_SRC>;
++						  <&dispcc MDSS_DISP_CC_MDSS_DPTX0_PIXEL0_CLK_SRC>,
++						  <&dispcc MDSS_DISP_CC_MDSS_DPTX0_PIXEL1_CLK_SRC>;
+ 				assigned-clock-parents = <&mdss_dp0_phy 0>,
++							 <&mdss_dp0_phy 1>,
+ 							 <&mdss_dp0_phy 1>;
+ 				phys = <&mdss_dp0_phy>;
+ 				phy-names = "dp";
+-- 
+2.34.1
+

@@ -1,13 +1,11 @@
 [Unit]
-Description=Overlayfs directories setup
-Requires={DATA_MOUNT_UNIT}
-After={DATA_MOUNT_UNIT}
+Description=Overlayfs directories setup {LOWERDIR}
+RequiresMountsFor={DATA_MOUNT_POINT}
 DefaultDependencies=no
 
 [Service]
 Type=oneshot
-ExecStart=mkdir -p {DATA_MOUNT_POINT}/upper{LOWERDIR}
-ExecStart=mkdir -p {DATA_MOUNT_POINT}/workdir{LOWERDIR}
+ExecStart=/usr/sbin/overlayfs-create-dirs.sh {LOWERDIR} {DATA_MOUNT_POINT}
 RemainAfterExit=true
 StandardOutput=journal
 

@@ -1,0 +1,34 @@
+From 8cbc09769a08cf3f5dcb611d471e5da298bde67c Mon Sep 17 00:00:00 2001
+From: Yi Zhao <yi.zhao@windriver.com>
+Date: Wed, 1 Jul 2020 08:44:07 +0800
+Subject: [PATCH] policy/modules/services/rpcbind: allow rpcbind_t to create
+ directory with label rpcbind_runtime_t
+
+Fixes:
+avc:  denied  { create } for  pid=136 comm="rpcbind" name="rpcbind"
+scontext=system_u:system_r:rpcbind_t:s0-s15:c0.c1023
+tcontext=system_u:object_r:var_run_t:s0 tclass=dir permissive=0
+
+Upstream-Status: Inappropriate [embedded specific]
+
+Signed-off-by: Yi Zhao <yi.zhao@windriver.com>
+---
+ policy/modules/services/rpcbind.te | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/policy/modules/services/rpcbind.te b/policy/modules/services/rpcbind.te
+index 137c21ece..2a712192b 100644
+--- a/policy/modules/services/rpcbind.te
++++ b/policy/modules/services/rpcbind.te
+@@ -25,7 +25,7 @@ files_type(rpcbind_var_lib_t)
+ # Local policy
+ #
+ 
+-allow rpcbind_t self:capability { dac_override setgid setuid sys_tty_config };
++allow rpcbind_t self:capability { dac_override setgid setuid sys_tty_config chown };
+ # net_admin is for SO_SNDBUFFORCE
+ dontaudit rpcbind_t self:capability net_admin;
+ allow rpcbind_t self:fifo_file rw_fifo_file_perms;
+-- 
+2.25.1
+

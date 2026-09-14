@@ -13,9 +13,8 @@ LIC_FILES_CHKSUM = "\
     file://LICENSE-MIT;md5=4b242fd9ef20207e18286d73da8a6677 \
 "
 
-DEPENDS = "boost"
 SRCREV = "42ebcec9dc2c99a1b3a4542787572045763ad196"
-PV = "0.6.3+git${SRCPV}"
+PV = "0.6.3+git"
 
 SRC_URI = "\
     git://github.com/docopt/docopt.cpp.git;protocol=https;branch=master \
@@ -24,3 +23,8 @@ SRC_URI = "\
 S = "${WORKDIR}/git"
 
 inherit cmake
+
+PACKAGECONFIG ??= ""
+PACKAGECONFIG[boost] = "-DUSE_BOOST_REGEX=ON,-DUSE_BOOST_REGEX=OFF,boost"
+
+BBCLASSEXTEND = "native nativesdk"

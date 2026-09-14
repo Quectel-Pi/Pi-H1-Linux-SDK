@@ -1,0 +1,38 @@
+From 7ed518e308764fafabd380886650faed9de3aa74 Mon Sep 17 00:00:00 2001
+From: Christian Marangi <ansuelsmth@gmail.com>
+Date: Thu, 25 Jan 2024 21:36:58 +0100
+Subject: [PATCH 32/39] UPSTREAM: dt-bindings: net: phy: Document LED inactive
+ high impedance mode
+
+Document LED inactive high impedance mode to set the LED to require high
+impedance configuration to be turned OFF.
+
+Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
+Reviewed-by: Andrew Lunn <andrew@lunn.ch>
+Acked-by: Lee Jones <lee@kernel.org>
+Reviewed-by: Rob Herring <robh@kernel.org>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 355c6dc37efa7fe6a64d155254cec8e180e5e6cb]
+---
+ Documentation/devicetree/bindings/leds/common.yaml | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/leds/common.yaml b/Documentation/devicetree/bindings/leds/common.yaml
+index d0d121aafc9e..649b963124a3 100644
+--- a/Documentation/devicetree/bindings/leds/common.yaml
++++ b/Documentation/devicetree/bindings/leds/common.yaml
+@@ -204,6 +204,12 @@ properties:
+       Makes LED active low. To turn the LED ON, line needs to be
+       set to low voltage instead of high.
+ 
++  inactive-high-impedance:
++    type: boolean
++    description:
++      Set LED to high-impedance mode to turn the LED OFF. LED might also
++      describe this mode as tristate.
++
+   # Required properties for flash LED child nodes:
+   flash-max-microamp:
+     description:
+-- 
+2.34.1
+

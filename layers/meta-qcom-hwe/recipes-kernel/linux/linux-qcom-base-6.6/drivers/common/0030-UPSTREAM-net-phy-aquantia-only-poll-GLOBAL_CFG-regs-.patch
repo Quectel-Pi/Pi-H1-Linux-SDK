@@ -1,0 +1,85 @@
+From 53aec4c89c176699695db3509a5c0b39cde4d693 Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Date: Mon, 29 Jul 2024 17:03:14 +0200
+Subject: [PATCH 30/39] UPSTREAM: net: phy: aquantia: only poll GLOBAL_CFG regs
+ on aqr113, aqr113c and aqr115c
+
+Commit 708405f3e56e ("net: phy: aquantia: wait for the GLOBAL_CFG to
+start returning real values") introduced a workaround for an issue
+observed on aqr115c. However there were never any reports of it
+happening on other models and the workaround has been reported to cause
+and issue on aqr113c (and it may cause the same on any other model not
+supporting 10M mode).
+
+Let's limit the impact of the workaround to aqr113, aqr113c and aqr115c
+and poll the 100M GLOBAL_CFG register instead as both models are known
+to support it correctly.
+
+Reported-by: Jon Hunter <jonathanh@nvidia.com>
+Closes: https://lore.kernel.org/lkml/7c0140be-4325-4005-9068-7e0fc5ff344d@nvidia.com/
+Fixes: 708405f3e56e ("net: phy: aquantia: wait for the GLOBAL_CFG to start returning real values")
+Tested-by: Jon Hunter <jonathanh@nvidia.com>
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Reviewed-by: Antoine Tenart <atenart@kernel.org>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git a7f3abcf635767b2e19c4c55c4c35756595ebc86]
+---
+ drivers/net/phy/aquantia/aquantia_main.c | 29 +++++++++++++++++-------
+ 1 file changed, 21 insertions(+), 8 deletions(-)
+
+diff --git a/drivers/net/phy/aquantia/aquantia_main.c b/drivers/net/phy/aquantia/aquantia_main.c
+index d12e35374231..e982e9ce44a5 100644
+--- a/drivers/net/phy/aquantia/aquantia_main.c
++++ b/drivers/net/phy/aquantia/aquantia_main.c
+@@ -653,13 +653,7 @@ static int aqr107_fill_interface_modes(struct phy_device *phydev)
+ 	unsigned long *possible = phydev->possible_interfaces;
+ 	unsigned int serdes_mode, rate_adapt;
+ 	phy_interface_t interface;
+-	int i, val, ret;
+-
+-	ret = phy_read_mmd_poll_timeout(phydev, MDIO_MMD_VEND1,
+-					VEND1_GLOBAL_CFG_10M, val, val != 0,
+-					1000, 100000, false);
+-	if (ret)
+-		return ret;
++	int i, val;
+ 
+ 	/* Walk the media-speed configuration registers to determine which
+ 	 * host-side serdes modes may be used by the PHY depending on the
+@@ -708,6 +702,25 @@ static int aqr107_fill_interface_modes(struct phy_device *phydev)
+ 	return 0;
+ }
+ 
++static int aqr113c_fill_interface_modes(struct phy_device *phydev)
++{
++	int val, ret;
++
++	/* It's been observed on some models that - when coming out of suspend
++	 * - the FW signals that the PHY is ready but the GLOBAL_CFG registers
++	 * continue on returning zeroes for some time. Let's poll the 100M
++	 * register until it returns a real value as both 113c and 115c support
++	 * this mode.
++	 */
++	ret = phy_read_mmd_poll_timeout(phydev, MDIO_MMD_VEND1,
++					VEND1_GLOBAL_CFG_100M, val, val != 0,
++					1000, 100000, false);
++	if (ret)
++		return ret;
++
++	return aqr107_fill_interface_modes(phydev);
++}
++
+ static int aqr113c_config_init(struct phy_device *phydev)
+ {
+ 	int ret;
+@@ -725,7 +738,7 @@ static int aqr113c_config_init(struct phy_device *phydev)
+ 	if (ret)
+ 		return ret;
+ 
+-	return aqr107_fill_interface_modes(phydev);
++	return aqr113c_fill_interface_modes(phydev);
+ }
+ 
+ static int aqr107_probe(struct phy_device *phydev)
+-- 
+2.34.1
+

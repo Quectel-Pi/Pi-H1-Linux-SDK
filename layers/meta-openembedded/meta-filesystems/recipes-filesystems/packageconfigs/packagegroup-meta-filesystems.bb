@@ -1,22 +1,26 @@
 SUMMARY = "Meta-filesystem packagegroups"
 
+PACKAGE_ARCH = "${TUNE_PKGARCH}"
 inherit packagegroup
 
 PROVIDES = "${PACKAGES}"
 PACKAGES = ' \
     packagegroup-meta-filesystems \
     packagegroup-meta-filesystems-support \
-    packagegroup-meta-filesystems-utls \
+    packagegroup-meta-filesystems-utils \
 '
 
 RDEPENDS:packagegroup-meta-filesystems = "\
     packagegroup-meta-filesystems \
     packagegroup-meta-filesystems-support \
-    packagegroup-meta-filesystems-utls \
+    packagegroup-meta-filesystems-utils \
 "
 
 RDEPENDS:packagegroup-meta-filesystems = "\
     ifuse \
+    libisofs \
+    libburn \
+    libisoburn \
     logfsprogs \
     fuse-exfat \
     owfs \

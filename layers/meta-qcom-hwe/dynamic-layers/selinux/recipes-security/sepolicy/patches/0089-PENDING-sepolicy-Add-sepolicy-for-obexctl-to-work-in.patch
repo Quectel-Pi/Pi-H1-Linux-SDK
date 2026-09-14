@@ -1,0 +1,37 @@
+From db58a4aaeb48032d60dc525557b84f97ae092cf1 Mon Sep 17 00:00:00 2001
+From: Damodar Reddy GangiReddy <dgangire@qti.qualcomm.com>
+Date: Wed, 22 Jan 2025 09:10:22 +0530
+Subject: [PATCH] PENDING: sepolicy:Add sepolicy for obexctl to work in ssh
+
+Signed-off-by: Mohammed Sameer Mulla <quic_mohamull@quicinc.com>
+
+Upstream-Status:Pending [Pending]
+
+---
+ policy/modules/services/obex.fc | 1 +
+ policy/modules/services/obex.te | 2 ++
+ 2 files changed, 3 insertions(+)
+
+diff --git a/policy/modules/services/obex.fc b/policy/modules/services/obex.fc
+index 03fa56040..dcbefa2c1 100644
+--- a/policy/modules/services/obex.fc
++++ b/policy/modules/services/obex.fc
+@@ -1 +1,2 @@
+ /usr/bin/obex-data-server	--	gen_context(system_u:object_r:obex_exec_t,s0)
++/usr/libexec/bluetooth/obexd   --      gen_context(system_u:object_r:obex_exec_t,s0)
+diff --git a/policy/modules/services/obex.te b/policy/modules/services/obex.te
+index 5e2f20578..176050056 100644
+--- a/policy/modules/services/obex.te
++++ b/policy/modules/services/obex.te
+@@ -30,6 +30,8 @@ miscfiles_read_localization(obex_t)
+ 
+ userdom_search_user_home_content(obex_t)
+ 
++unconfined_dbus_send(obex_t)
++
+ optional_policy(`
+ 	bluetooth_use(obex_t)
+ ')
+-- 
+2.34.1
+

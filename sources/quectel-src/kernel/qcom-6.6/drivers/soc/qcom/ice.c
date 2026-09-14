@@ -5,15 +5,19 @@
  * Copyright (c) 2013-2019, The Linux Foundation. All rights reserved.
  * Copyright (c) 2019, Google LLC
  * Copyright (c) 2023, Linaro Limited
+ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/device.h>
 #include <linux/iopoll.h>
 #include <linux/of_platform.h>
-
+#include <linux/of_address.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/pm_opp.h>
 
 #include <soc/qcom/ice.h>
 
@@ -77,6 +81,9 @@ struct qcom_ice {
 	u8 hwkm_version;
 	bool use_hwkm;
 	bool hwkm_init_complete;
+	unsigned long max_freq;
+	unsigned long min_freq;
+	bool has_opp;
 };
 
 union crypto_cfg {
@@ -87,6 +94,11 @@ union crypto_cfg {
 		u8 reserved;
 		u8 cfge;
 	};
+};
+
+static const char * const legacy_ice_clk_names[] = {
+	"ice_core_clk",
+	"ice",
 };
 
 static bool qcom_ice_check_supported(struct qcom_ice *ice)
@@ -511,10 +523,29 @@ int qcom_ice_import_key(struct qcom_ice *ice, const u8 *imp_key, size_t imp_key_
 }
 EXPORT_SYMBOL_GPL(qcom_ice_import_key);
 
+int qcom_ice_scale_clk(struct qcom_ice *ice, bool scale_up)
+{
+	int ret = 0;
+
+	if (scale_up && ice->max_freq)
+		ret = (ice->has_opp) ? dev_pm_opp_set_rate(ice->dev, ice->max_freq)
+				     : clk_set_rate(ice->core_clk, ice->max_freq);
+	else if (!scale_up && ice->min_freq)
+		ret = (ice->has_opp) ? dev_pm_opp_set_rate(ice->dev, ice->min_freq)
+				     : clk_set_rate(ice->core_clk, ice->min_freq);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(qcom_ice_scale_clk);
+
 static struct qcom_ice *qcom_ice_create(struct device *dev,
 					void __iomem *base)
 {
 	struct qcom_ice *engine;
+	int clk_index;
+	struct dev_pm_opp *opp;
+	int err;
+	unsigned long rate;
 
 	if (!qcom_scm_is_available())
 		return ERR_PTR(-EPROBE_DEFER);
@@ -533,18 +564,84 @@ static struct qcom_ice *qcom_ice_create(struct device *dev,
 
 	/*
 	 * Legacy DT binding uses different clk names for each consumer,
-	 * so lets try those first. If none of those are a match, it means
-	 * the we only have one clock and it is part of the dedicated DT node.
-	 * Also, enable the clock before we check what HW version the driver
-	 * supports.
+	 * so lets try those first. Also get its corresponding clock index.
 	 */
-	engine->core_clk = devm_clk_get_optional_enabled(dev, "ice_core_clk");
-	if (!engine->core_clk)
-		engine->core_clk = devm_clk_get_optional_enabled(dev, "ice");
-	if (!engine->core_clk)
-		engine->core_clk = devm_clk_get_enabled(dev, NULL);
-	if (IS_ERR(engine->core_clk))
-		return ERR_CAST(engine->core_clk);
+	for (int i = 0; i < ARRAY_SIZE(legacy_ice_clk_names); i++) {
+		engine->core_clk = devm_clk_get_optional(dev, legacy_ice_clk_names[i]);
+		if (!engine->core_clk)
+			continue;
+
+		if (IS_ERR(engine->core_clk))
+			return ERR_CAST(engine->core_clk);
+
+		/* Get the ICE clk index */
+		clk_index = of_property_match_string(dev->of_node,
+						     "clock-names",
+						     legacy_ice_clk_names[i]);
+		if (clk_index < 0)
+			return ERR_PTR(clk_index);
+
+		/* Vote for maximum clock rate for maximum performance */
+		err = clk_set_rate(engine->core_clk, INT_MAX);
+		if (err)
+			dev_warn(dev, "Failed boosting the ICE clk to TURBO\n");
+
+		break;
+	}
+
+	/* When it does not match the legacy DT bindings
+	 * it must have only one clock and it is part of
+	 * decicated DT node
+	 */
+	if (!engine->core_clk) {
+		engine->core_clk = devm_clk_get(dev, NULL);
+		if (IS_ERR(engine->core_clk))
+			return ERR_CAST(engine->core_clk);
+
+		/* OPP table is optional */
+		err = devm_pm_opp_of_add_table(dev);
+		if (err && err != -ENODEV) {
+			dev_err(dev, "Invalid OPP table in Device tree\n");
+			return ERR_PTR(err);
+		}
+		engine->has_opp = (err == 0);
+
+		/* Vote for maximum clock rate for maximum performance */
+		err = dev_pm_opp_set_rate(dev, INT_MAX);
+		if (err)
+			dev_warn(dev, "Failed boosting the ICE clk to TURBO\n");
+
+		/* Since, there is only one clock
+		 * index can be set as 0
+		 */
+		clk_index = 0;
+	}
+
+	/* Find the ICE core clock min and max frequencies */
+	rate = 0;
+	opp = dev_pm_opp_find_freq_ceil_indexed(dev, &rate, clk_index);
+	if (IS_ERR(opp)) {
+		dev_warn(dev, "Unable to find ICE core clock min freq\n");
+	} else {
+		engine->min_freq = rate;
+		dev_pm_opp_put(opp);
+	}
+
+	rate = ULONG_MAX;
+	opp = dev_pm_opp_find_freq_floor_indexed(dev, &rate, clk_index);
+	if (IS_ERR(opp)) {
+		dev_warn(dev, "Unable to find ICE core clock max freq\n");
+	} else {
+		engine->max_freq = rate;
+		dev_pm_opp_put(opp);
+	}
+
+	/* Enable the clock before we check what HW version the driver supports */
+	err = clk_prepare_enable(engine->core_clk);
+	if (err) {
+		dev_err(dev, "Failed to enable ICE core clock\n");
+		return ERR_PTR(err);
+	}
 	engine->use_hwkm = of_property_read_bool(dev->of_node,
 						 "qcom,ice-use-hwkm");
 
@@ -576,6 +673,8 @@ struct qcom_ice *of_qcom_ice_get(struct device *dev)
 	struct device_node *node;
 	struct resource *res;
 	void __iomem *base;
+	const char *status = NULL;
+
 
 	if (!dev || !dev->of_node)
 		return ERR_PTR(-ENODEV);
@@ -602,6 +701,10 @@ struct qcom_ice *of_qcom_ice_get(struct device *dev)
 	 */
 	node = of_parse_phandle(dev->of_node, "qcom,ice", 0);
 	if (!node)
+		return ERR_PTR(-EOPNOTSUPP);
+
+	of_property_read_string(node, "status", &status);
+	if (status && strcmp(status, "disabled") == 0)
 		return ERR_PTR(-EOPNOTSUPP);
 
 	pdev = of_find_device_by_node(node);
@@ -637,6 +740,53 @@ out:
 	return ice;
 }
 EXPORT_SYMBOL_GPL(of_qcom_ice_get);
+
+static void qcom_ice_put(const struct qcom_ice *ice)
+{
+	struct platform_device *pdev = to_platform_device(ice->dev);
+
+	if (!platform_get_resource_byname(pdev, IORESOURCE_MEM, "ice"))
+		platform_device_put(pdev);
+}
+
+static void devm_of_qcom_ice_put(struct device *dev, void *res)
+{
+	qcom_ice_put(*(struct qcom_ice **)res);
+}
+
+/**
+ * devm_of_qcom_ice_get() - Devres managed helper to get an ICE instance from
+ * a DT node.
+ * @dev: device pointer for the consumer device.
+ *
+ * This function will provide an ICE instance either by creating one for the
+ * consumer device if its DT node provides the 'ice' reg range and the 'ice'
+ * clock (for legacy DT style). On the other hand, if consumer provides a
+ * phandle via 'qcom,ice' property to an ICE DT, the ICE instance will already
+ * be created and so this function will return that instead.
+ *
+ * Return: ICE pointer on success, NULL if there is no ICE data provided by the
+ * consumer or ERR_PTR() on error.
+ */
+struct qcom_ice *devm_of_qcom_ice_get(struct device *dev)
+{
+	struct qcom_ice *ice, **dr;
+
+	dr = devres_alloc(devm_of_qcom_ice_put, sizeof(*dr), GFP_KERNEL);
+	if (!dr)
+		return ERR_PTR(-ENOMEM);
+
+	ice = of_qcom_ice_get(dev);
+	if (!IS_ERR_OR_NULL(ice)) {
+		*dr = ice;
+		devres_add(dev, dr);
+	} else {
+		devres_free(dr);
+	}
+
+	return ice;
+}
+EXPORT_SYMBOL_GPL(devm_of_qcom_ice_get);
 
 static int qcom_ice_probe(struct platform_device *pdev)
 {

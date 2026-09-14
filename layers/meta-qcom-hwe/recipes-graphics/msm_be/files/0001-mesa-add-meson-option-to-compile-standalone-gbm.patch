@@ -1,0 +1,61 @@
+This patch file is from Qualcomm Innovation Center, Inc. and is provided under the following license:
+
+Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+SPDX-License-Identifier: BSD-3-Clause-Clear
+
+From ec829eafe875321d91fb79b66a948e0cf9c2c5df Mon Sep 17 00:00:00 2001
+From: Devanshi Bansal <quic_devanshi@quicinc.com>
+Date: Fri, 20 Dec 2024 09:00:36 +0530
+Subject: [PATCH] mesa add meson option to compile standalone gbm
+
+Upstream-Status: Inappropriate [Downstream]
+
+Signed-off-by: Devanshi Bansal <quic_devanshi@quicinc.com>
+---
+ meson.build       | 4 ++++
+ meson_options.txt | 9 ++++++++-
+ 2 files changed, 12 insertions(+), 1 deletion(-)
+
+diff --git a/meson.build b/meson.build
+index 41ca6cf..c6ae137 100644
+--- a/meson.build
++++ b/meson.build
+@@ -434,6 +434,10 @@ if not (with_dri or with_gallium or with_glx != 'disabled')
+   with_shared_glapi = false
+ endif
+ 
++if get_option('standalone_gbm')
++  with_dri = true
++endif
++
+ with_gbm = get_option('gbm') \
+   .require(system_has_kms_drm, error_message : 'GBM only supports DRM/KMS platforms') \
+   .disable_auto_if(not with_dri) \
+diff --git a/meson_options.txt b/meson_options.txt
+index 500a2eb..9353c4e 100644
+--- a/meson_options.txt
++++ b/meson_options.txt
+@@ -1,6 +1,13 @@
+ # Copyright © 2017-2019 Intel Corporation
+ # SPDX-License-Identifier: MIT
+ 
++option(
++  'standalone_gbm',
++  type : 'boolean',
++  value : false,
++  description : 'Compile GBM standalone. Default: false',
++)
++
+ option(
+   'platforms',
+   type : 'array',
+@@ -682,4 +689,4 @@ option(
+   description : 'Build custom xmlconfig (driconf) support. If disabled, ' +
+                 'the default driconf file is hardcoded into Mesa. ' +
+                 'Requires expat.'
+-)
+\ No newline at end of file
++)
+-- 
+2.34.1
+

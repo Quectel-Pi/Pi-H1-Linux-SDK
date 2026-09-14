@@ -1,0 +1,143 @@
+From 34ed8e6b490f6e2a08fe8bcd5d740cc23f52aacf Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Matti=20Lehtim=C3=A4ki?= <matti.lehtimaki@gmail.com>
+Date: Thu, 23 Nov 2023 17:03:06 +0000
+Subject: [PATCH 30/42] UPSTREAM: media: qcom: camss: Flag CSID-lites to support
+ more CSIDs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Some platforms such as SC7280 have 3 CSIDs and 2 CSID-lites but current
+code has hardcoded 2 as the maximum number of CSIDs. Remove the hardcoded
+maximum number of VFEs to handle all possible combinations of CSIDs and
+CSID-lites.
+
+Signed-off-by: Matti Lehtimäki <matti.lehtimaki@gmail.com>
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Reviewed-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+[quic_vikramsa@quicinc.com: resolve trivial merge conflicts]
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 801ca0e7f9be141ae8a7b17e47d6af588768ae49]
+---
+ .../platform/qcom/camss/camss-csid-gen2.c     | 32 +++++++++----------
+ .../media/platform/qcom/camss/camss-csid.c    |  5 +++
+ .../media/platform/qcom/camss/camss-csid.h    |  7 ++++
+ 3 files changed, 27 insertions(+), 17 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csid-gen2.c b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+index 55c17712a48f..52f8b18eda29 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+@@ -21,8 +21,6 @@
+  * interface support. As a result of that it has an
+  * alternate register layout.
+  */
+-#define IS_LITE		(csid->res->is_lite)
+-
+ #define CSID_HW_VERSION		0x0
+ #define		HW_VERSION_STEPPING	0
+ #define		HW_VERSION_REVISION	16
+@@ -35,13 +33,13 @@
+ #define	CSID_CSI2_RX_IRQ_MASK	0x24
+ #define CSID_CSI2_RX_IRQ_CLEAR	0x28
+ 
+-#define CSID_CSI2_RDIN_IRQ_STATUS(rdi)		((IS_LITE ? 0x30 : 0x40) \
++#define CSID_CSI2_RDIN_IRQ_STATUS(rdi)		((csid_is_lite(csid) ? 0x30 : 0x40) \
+ 						 + 0x10 * (rdi))
+-#define CSID_CSI2_RDIN_IRQ_MASK(rdi)		((IS_LITE ? 0x34 : 0x44) \
++#define CSID_CSI2_RDIN_IRQ_MASK(rdi)		((csid_is_lite(csid) ? 0x34 : 0x44) \
+ 						 + 0x10 * (rdi))
+-#define CSID_CSI2_RDIN_IRQ_CLEAR(rdi)		((IS_LITE ? 0x38 : 0x48) \
++#define CSID_CSI2_RDIN_IRQ_CLEAR(rdi)		((csid_is_lite(csid) ? 0x38 : 0x48) \
+ 						 + 0x10 * (rdi))
+-#define CSID_CSI2_RDIN_IRQ_SET(rdi)		((IS_LITE ? 0x3C : 0x4C) \
++#define CSID_CSI2_RDIN_IRQ_SET(rdi)		((csid_is_lite(csid) ? 0x3C : 0x4C) \
+ 						 + 0x10 * (rdi))
+ 
+ #define CSID_TOP_IRQ_STATUS	0x70
+@@ -73,7 +71,7 @@
+ #define			CGC_MODE_DYNAMIC_GATING		0
+ #define			CGC_MODE_ALWAYS_ON		1
+ 
+-#define CSID_RDI_CFG0(rdi)			((IS_LITE ? 0x200 : 0x300) \
++#define CSID_RDI_CFG0(rdi)			((csid_is_lite(csid) ? 0x200 : 0x300) \
+ 						 + 0x100 * (rdi))
+ #define		RDI_CFG0_BYTE_CNTR_EN		0
+ #define		RDI_CFG0_FORMAT_MEASURE_EN	1
+@@ -98,32 +96,32 @@
+ #define		RDI_CFG0_PACKING_FORMAT		30
+ #define		RDI_CFG0_ENABLE			31
+ 
+-#define CSID_RDI_CFG1(rdi)			((IS_LITE ? 0x204 : 0x304)\
++#define CSID_RDI_CFG1(rdi)			((csid_is_lite(csid) ? 0x204 : 0x304)\
+ 						+ 0x100 * (rdi))
+ #define		RDI_CFG1_TIMESTAMP_STB_SEL	0
+ 
+-#define CSID_RDI_CTRL(rdi)			((IS_LITE ? 0x208 : 0x308)\
++#define CSID_RDI_CTRL(rdi)			((csid_is_lite(csid) ? 0x208 : 0x308)\
+ 						+ 0x100 * (rdi))
+ #define		RDI_CTRL_HALT_CMD		0
+ #define			HALT_CMD_HALT_AT_FRAME_BOUNDARY		0
+ #define			HALT_CMD_RESUME_AT_FRAME_BOUNDARY	1
+ #define		RDI_CTRL_HALT_MODE		2
+ 
+-#define CSID_RDI_FRM_DROP_PATTERN(rdi)			((IS_LITE ? 0x20C : 0x30C)\
++#define CSID_RDI_FRM_DROP_PATTERN(rdi)			((csid_is_lite(csid) ? 0x20C : 0x30C)\
+ 							+ 0x100 * (rdi))
+-#define CSID_RDI_FRM_DROP_PERIOD(rdi)			((IS_LITE ? 0x210 : 0x310)\
++#define CSID_RDI_FRM_DROP_PERIOD(rdi)			((csid_is_lite(csid) ? 0x210 : 0x310)\
+ 							+ 0x100 * (rdi))
+-#define CSID_RDI_IRQ_SUBSAMPLE_PATTERN(rdi)		((IS_LITE ? 0x214 : 0x314)\
++#define CSID_RDI_IRQ_SUBSAMPLE_PATTERN(rdi)		((csid_is_lite(csid) ? 0x214 : 0x314)\
+ 							+ 0x100 * (rdi))
+-#define CSID_RDI_IRQ_SUBSAMPLE_PERIOD(rdi)		((IS_LITE ? 0x218 : 0x318)\
++#define CSID_RDI_IRQ_SUBSAMPLE_PERIOD(rdi)		((csid_is_lite(csid) ? 0x218 : 0x318)\
+ 							+ 0x100 * (rdi))
+-#define CSID_RDI_RPP_PIX_DROP_PATTERN(rdi)		((IS_LITE ? 0x224 : 0x324)\
++#define CSID_RDI_RPP_PIX_DROP_PATTERN(rdi)		((csid_is_lite(csid) ? 0x224 : 0x324)\
+ 							+ 0x100 * (rdi))
+-#define CSID_RDI_RPP_PIX_DROP_PERIOD(rdi)		((IS_LITE ? 0x228 : 0x328)\
++#define CSID_RDI_RPP_PIX_DROP_PERIOD(rdi)		((csid_is_lite(csid) ? 0x228 : 0x328)\
+ 							+ 0x100 * (rdi))
+-#define CSID_RDI_RPP_LINE_DROP_PATTERN(rdi)		((IS_LITE ? 0x22C : 0x32C)\
++#define CSID_RDI_RPP_LINE_DROP_PATTERN(rdi)		((csid_is_lite(csid) ? 0x22C : 0x32C)\
+ 							+ 0x100 * (rdi))
+-#define CSID_RDI_RPP_LINE_DROP_PERIOD(rdi)		((IS_LITE ? 0x230 : 0x330)\
++#define CSID_RDI_RPP_LINE_DROP_PERIOD(rdi)		((csid_is_lite(csid) ? 0x230 : 0x330)\
+ 							+ 0x100 * (rdi))
+ 
+ #define CSID_TPG_CTRL		0x600
+diff --git a/drivers/media/platform/qcom/camss/camss-csid.c b/drivers/media/platform/qcom/camss/camss-csid.c
+index ac4ce1d0d9cc..676a8ee776c2 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid.c
++++ b/drivers/media/platform/qcom/camss/camss-csid.c
+@@ -1351,3 +1351,8 @@ void msm_csid_unregister_entity(struct csid_device *csid)
+ 	if (csid->testgen.nmodes != CSID_PAYLOAD_MODE_DISABLED)
+ 		v4l2_ctrl_handler_free(&csid->ctrls);
+ }
++
++inline bool csid_is_lite(struct csid_device *csid)
++{
++	return csid->camss->res->csid_res[csid->id].is_lite;
++}
+diff --git a/drivers/media/platform/qcom/camss/camss-csid.h b/drivers/media/platform/qcom/camss/camss-csid.h
+index 3e4d40404468..0e385d17c250 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid.h
++++ b/drivers/media/platform/qcom/camss/camss-csid.h
+@@ -228,5 +228,12 @@ extern const struct csid_hw_ops csid_ops_4_1;
+ extern const struct csid_hw_ops csid_ops_4_7;
+ extern const struct csid_hw_ops csid_ops_gen2;
+ 
++/*
++ * csid_is_lite - Check if CSID is CSID lite.
++ * @csid: CSID Device
++ *
++ * Return whether CSID is CSID lite
++ */
++bool csid_is_lite(struct csid_device *csid);
+ 
+ #endif /* QC_MSM_CAMSS_CSID_H */
+-- 
+2.25.1
+

@@ -8,7 +8,7 @@ PREFERRED_PROVIDER_virtual/${TARGET_PREFIX}g++ = "gcc-cross-${TARGET_ARCH}"
 PREFERRED_PROVIDER_virtual/${TARGET_PREFIX}compilerlibs = "gcc-runtime"
 PREFERRED_PROVIDER_gdb = "gdb"
 
-PREFERRED_PROVIDER_virtual/${SDK_PREFIX}binutils-crosssdk ?= "binutils-crosssdk-${SDK_SYS}"
+PREFERRED_PROVIDER_virtual/${SDK_PREFIX}binutils ?= "binutils-crosssdk-${SDK_SYS}"
 PREFERRED_PROVIDER_virtual/${SDK_PREFIX}gcc = "gcc-crosssdk-${SDK_SYS}"
 PREFERRED_PROVIDER_virtual/${SDK_PREFIX}g++ = "gcc-crosssdk-${SDK_SYS}"
 PREFERRED_PROVIDER_virtual/${SDK_PREFIX}compilerlibs = "nativesdk-gcc-runtime"
@@ -16,18 +16,15 @@ PREFERRED_PROVIDER_virtual/${SDK_PREFIX}compilerlibs = "nativesdk-gcc-runtime"
 # Default libc config
 PREFERRED_PROVIDER_virtual/gettext ??= "gettext"
 
-GCCVERSION ?= "11.%"
+GCCVERSION ?= "13.%"
 SDKGCCVERSION ?= "${GCCVERSION}"
-BINUVERSION ?= "2.38%"
-GDBVERSION ?= "11.%"
-GLIBCVERSION ?= "2.35"
-LINUXLIBCVERSION ?= "5.16%"
-QEMUVERSION ?= "6.2%"
-GOVERSION ?= "1.17%"
-# This can not use wildcards like 8.0.% since it is also used in mesa to denote
-# llvm version being used, so always bump it with llvm recipe version bump
-LLVMVERSION ?= "13.0.1"
-RUSTVERSION ?= "1.59%"
+BINUVERSION ?= "2.42%"
+GDBVERSION ?= "14.%"
+GLIBCVERSION ?= "2.39%"
+LINUXLIBCVERSION ?= "6.6%"
+QEMUVERSION ?= "8.2%"
+GOVERSION ?= "1.22%"
+RUSTVERSION ?= "1.75%"
 
 PREFERRED_VERSION_gcc ?= "${GCCVERSION}"
 PREFERRED_VERSION_gcc-cross-${TARGET_ARCH} ?= "${GCCVERSION}"
@@ -78,10 +75,6 @@ PREFERRED_VERSION_go-native ?= "${GOVERSION}"
 PREFERRED_VERSION_go-runtime ?= "${GOVERSION}"
 PREFERRED_VERSION_nativesdk-go ?= "${GOVERSION}"
 PREFERRED_VERSION_nativesdk-go-runtime ?= "${GOVERSION}"
-
-PREFERRED_VERSION_llvm = "${LLVMVERSION}"
-PREFERRED_VERSION_llvm-native = "${LLVMVERSION}"
-PREFERRED_VERSION_nativesdk-llvm = "${LLVMVERSION}"
 
 # Rust toolchain preferred versions:
 

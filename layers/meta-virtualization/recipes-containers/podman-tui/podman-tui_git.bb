@@ -17,10 +17,15 @@ DEPENDS = " \
     libgpg-error \
 "
 
-SRCREV = "ff962bb92d7f5fea9f819c4ef8a484bdceb3747b"
+SRCREV_FORMAT = "podmantui_storage"
+SRCREV_podmantui = "b4350927babdaa35fbf50424190683aeb9f5f66f"
+SRCREV_storage = "246ba3062e8b551026aef2708eee747014ce5c52"
 SRC_URI = " \
-    git://github.com/containers/podman-tui;protocol=https;branch=main \
+    git://github.com/containers/podman-tui;protocol=https;name=podmantui;branch=release-v0.17 \
 "
+# Due to some other API changes, we can't directly import containers/storage at
+# the right commit, so we instead extract a patch and apply it to the tree
+#SRC_URI += "git://github.com/containers/storage;protocol=https;name=storage;branch=release-v0.17;destsuffix=git/src/import/vendor/github.com/containers/storage"
 
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://src/import/LICENSE;md5=86d3f3a95c324c9479bd8986968f4327"
@@ -29,12 +34,14 @@ GO_IMPORT = "import"
 
 S = "${WORKDIR}/git"
 
-PV = "v0.3.0+git${SRCPV}"
+PV = "v0.17.0+git"
 
 PODMAN_PKG = "github.com/containers/podman-tui"
 
 inherit go goarch
 inherit pkgconfig
+
+COMPATIBLE_HOST = "^(?!mips).*"
 
 do_configure[noexec] = "1"
 
@@ -54,7 +61,7 @@ do_compile() {
 	export GOFLAGS="-mod=vendor"
 
 	# oe_runmake BUILDTAGS="${BUILDTAGS}"
-	${GO} build -tags "$(BUILDTAGS)" ${GO_LDFLAGS} -o bin/podman-tui
+	${GO} build -trimpath -tags "$(BUILDTAGS)" ${GO_LDFLAGS} -o bin/podman-tui
 }
 
 do_install() {

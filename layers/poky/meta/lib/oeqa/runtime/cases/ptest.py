@@ -1,4 +1,6 @@
 #
+# Copyright OpenEmbedded Contributors
+#
 # SPDX-License-Identifier: MIT
 #
 
@@ -81,17 +83,20 @@ class PtestRunnerTest(OERuntimeTestCase):
 
         extras['ptestresult.sections'] = sections
 
+        zerolength = []
         trans = str.maketrans("()", "__")
         for section in results:
             for test in results[section]:
                 result = results[section][test]
                 testname = "ptestresult." + (section or "No-section") + "." + "_".join(test.translate(trans).split())
                 extras[testname] = {'status': result}
+            if not results[section]:
+                zerolength.append(section)
 
         failed_tests = {}
 
         for section in sections:
-            if 'exitcode' in sections[section].keys():
+            if 'exitcode' in sections[section].keys() or 'timeout' in sections[section].keys():
                 failed_tests[section] = sections[section]["log"]
 
         for section in results:
@@ -105,7 +110,10 @@ class PtestRunnerTest(OERuntimeTestCase):
             failmsg = "ERROR: Processes were killed by the OOM Killer:\n%s\n" % output
 
         if failed_tests:
-            failmsg = failmsg + "Failed ptests:\n%s" % pprint.pformat(failed_tests)
+            failmsg = failmsg + "\nFailed ptests:\n%s\n" % pprint.pformat(failed_tests)
+
+        if zerolength:
+            failmsg = failmsg + "\nptests which had no test results:\n%s" % pprint.pformat(zerolength)
 
         if failmsg:
             self.logger.warning("There were failing ptests.")

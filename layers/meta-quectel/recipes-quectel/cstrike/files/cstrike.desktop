@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Counter-Strike
+Comment=Play Counter-Strike via Xash3D
+Exec=env LD_LIBRARY_PATH=/usr/share/games/cs /usr/share/games/cs/xash3d -game cstrike
+Icon=/usr/share/games/cs/cstrike/resource/icon.png
+Terminal=false
+Type=Application
+Categories=Game;ActionGame;
+StartupNotify=true

@@ -1,0 +1,91 @@
+From 78e288ebdd7792cf82d912cf2f679840981823ed Mon Sep 17 00:00:00 2001
+From: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Date: Fri, 9 May 2025 14:09:06 +0530
+Subject: [PATCH 20/26] FROMLIST: media: iris: Remove redundant buffer count
+ check in stream off
+
+Currently, the stream off process checks the count of buffers in
+v4l2_m2m_queues using v4l2_m2m_for_each_src_buf_safe and
+v4l2_m2m_for_each_dst_buf_safe APIs. If the count is non-zero, it
+returns an error. This check is redundant as the V4L2 framework already
+handles buffer management internally.
+
+Remove the unnecessary buffer count check in stream off, simplifying the
+process and relying on V4L2's internal mechanisms for buffer management.
+
+Acked-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-HDK
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-HDK
+Signed-off-by: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-media/20250509-video-iris-hevc-vp9-v5-20-59b4ff7d331c@quicinc.com/]
+---
+ drivers/media/platform/qcom/iris/iris_vdec.c | 36 --------------------
+ 1 file changed, 36 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/iris/iris_vdec.c b/drivers/media/platform/qcom/iris/iris_vdec.c
+index de4e3fe8ed5a..ce97c555192a 100644
+--- a/drivers/media/platform/qcom/iris/iris_vdec.c
++++ b/drivers/media/platform/qcom/iris/iris_vdec.c
+@@ -244,35 +244,6 @@ void iris_vdec_src_change(struct iris_inst *inst)
+ 	v4l2_event_queue_fh(&inst->fh, &event);
+ }
+ 
+-static int iris_vdec_get_num_queued_buffers(struct iris_inst *inst,
+-					    enum iris_buffer_type type)
+-{
+-	struct v4l2_m2m_ctx *m2m_ctx = inst->m2m_ctx;
+-	struct v4l2_m2m_buffer *buffer, *n;
+-	struct iris_buffer *buf;
+-	u32 count = 0;
+-
+-	switch (type) {
+-	case BUF_INPUT:
+-		v4l2_m2m_for_each_src_buf_safe(m2m_ctx, buffer, n) {
+-			buf = to_iris_buffer(&buffer->vb);
+-			if (!(buf->attr & BUF_ATTR_QUEUED))
+-				continue;
+-			count++;
+-		}
+-		return count;
+-	case BUF_OUTPUT:
+-		v4l2_m2m_for_each_dst_buf_safe(m2m_ctx, buffer, n) {
+-			buf = to_iris_buffer(&buffer->vb);
+-			if (!(buf->attr & BUF_ATTR_QUEUED))
+-				continue;
+-			count++;
+-		}
+-		return count;
+-	default:
+-		return count;
+-	}
+-}
+ 
+ static void iris_vdec_flush_deferred_buffers(struct iris_inst *inst,
+ 					     enum iris_buffer_type type)
+@@ -321,7 +292,6 @@ int iris_vdec_session_streamoff(struct iris_inst *inst, u32 plane)
+ {
+ 	const struct iris_hfi_command_ops *hfi_ops = inst->core->hfi_ops;
+ 	enum iris_buffer_type buffer_type;
+-	u32 count;
+ 	int ret;
+ 
+ 	switch (plane) {
+@@ -339,12 +309,6 @@ int iris_vdec_session_streamoff(struct iris_inst *inst, u32 plane)
+ 	if (ret)
+ 		goto error;
+ 
+-	count = iris_vdec_get_num_queued_buffers(inst, buffer_type);
+-	if (count) {
+-		ret = -EINVAL;
+-		goto error;
+-	}
+-
+ 	ret = iris_inst_state_change_streamoff(inst, plane);
+ 	if (ret)
+ 		goto error;
+-- 
+2.34.1
+

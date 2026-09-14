@@ -1,0 +1,33 @@
+From fc584d73e6b645cb6dc39824979407cf898d55e5 Mon Sep 17 00:00:00 2001
+From: Vikash Garodia <quic_vgarodia@quicinc.com>
+Date: Thu, 1 May 2025 02:16:51 +0530
+Subject: [PATCH 5/5] FROMLIST: arm64: dts: qcom: qcs8300-ride: enable video
+
+Enable video nodes on the qcs8300-ride board.
+
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-media/20250501-qcs8300_iris-v7-5-b229d5347990@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs8300-ride.dts | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+index 0547c18fbe44..6ae5c5926146 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
++++ b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+@@ -320,6 +320,10 @@ &gcc {
+ 		 <0>;
+ };
+ 
++&iris {
++	status = "okay";
++};
++
+ &psci {
+ 	reset-types {
+ 		mode-bootloader = <0x10001 0x2>;
+-- 
+2.34.1
+

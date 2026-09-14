@@ -51,13 +51,11 @@ fashion. Basically, during the development of a Yocto Project release,
 the Autobuilder tests if things work. The Autobuilder builds all test
 targets and runs all the tests.
 
-The Yocto Project uses now uses standard upstream
-Buildbot (`version 3.8 <https://docs.buildbot.net/3.8.0/>`__) to
-drive its integration and testing. Buildbot has a plug-in interface
-that the Yocto Project customizes using code from the
-``yocto-autobuilder2`` repository, adding its own console UI plugin. The
-resulting UI plug-in allows you to visualize builds in a way suited to
-the project's needs.
+The Yocto Project uses standard upstream Buildbot to drive its integration and
+testing. Buildbot has a plug-in interface that the Yocto Project customizes
+using code from the :yocto_git:`yocto-autobuilder2 </yocto-autobuilder2>`
+repository, adding its own console UI plugin. The resulting UI plug-in allows
+you to visualize builds in a way suited to the project's needs.
 
 A ``helper`` layer provides configuration and job management through
 scripts found in the ``yocto-autobuilder-helper`` repository. The
@@ -70,10 +68,9 @@ simple JSON files.
 .. note::
 
    The project uses Buildbot for historical reasons but also because
-   many of the project developers have knowledge of python. It is
+   many of the project developers have knowledge of Python. It is
    possible to use the outer layers from another Continuous Integration
-   (CI) system such as
-   `Jenkins <https://en.wikipedia.org/wiki/Jenkins_(software)>`__
+   (CI) system such as :wikipedia:`Jenkins <Jenkins_(software)>`
    instead of Buildbot.
 
 The following figure shows the Yocto Project Autobuilder stack with a
@@ -81,6 +78,7 @@ topology that includes a controller and a cluster of workers:
 
 .. image:: figures/ab-test-cluster.png
    :align: center
+   :width: 70%
 
 Yocto Project Tests --- Types of Testing Overview
 =================================================
@@ -98,12 +96,11 @@ the following types of tests:
    different configurations, such as different init systems. The
    Autobuilder tests literally hundreds of configurations and targets.
 
-   -  *Sanity Checks During the Build Process:* Tests initiated through
-      the :ref:`insane <ref-classes-insane>`
-      class. These checks ensure the output of the builds are correct.
-      For example, does the ELF architecture in the generated binaries
-      match the target system? ARM binaries would not work in a MIPS
-      system!
+   -  *Sanity Checks During the Build Process:* Tests initiated through the
+      :ref:`ref-classes-insane` class. These checks ensure the output of the
+      builds are correct. For example, does the ELF architecture in the
+      generated binaries match the target system? ARM binaries would not work
+      in a MIPS system!
 
 -  *Build Performance Testing:* Tests whether or not commonly used steps
    during builds work efficiently and avoid regressions. Tests to time
@@ -131,7 +128,9 @@ the following types of tests:
       $ bitbake image -c testimage
 
    The tests use the :ref:`ref-classes-testimage`
-   class and the :ref:`ref-tasks-testimage` task.
+   class and the :ref:`ref-tasks-testimage` task. See the
+   :ref:`test-manual/runtime-testing:Performing Automated Runtime Testing`
+   section of the Yocto Project Test Environment Manual for more information.
 
 -  *Layer Testing:* The Autobuilder has the possibility to test whether
    specific layers work with the test of the system. The layers tested
@@ -141,7 +140,7 @@ the following types of tests:
 -  *Package Testing:* A Package Test (ptest) runs tests against packages
    built by the OpenEmbedded build system on the target machine. See the
    :ref:`Testing Packages With
-   ptest <dev-manual/packages:Testing Packages With ptest>` section
+   ptest <test-manual/ptest:Testing Packages With ptest>` section
    in the Yocto Project Development Tasks Manual and the
    ":yocto_wiki:`Ptest </Ptest>`" Wiki page for more
    information on Ptest.
@@ -173,19 +172,25 @@ Tests map into the codebase as follows:
    which include the fetchers. The tests are located in
    ``bitbake/lib/*/tests``.
 
+   Some of these tests run the ``bitbake`` command, so ``bitbake/bin``
+   must be added to the ``PATH`` before running ``bitbake-selftest``.
    From within the BitBake repository, run the following::
 
+      $ export PATH=$PWD/bin:$PATH
+
+   After that, you can run the selftest script::
+
       $ bitbake-selftest
-
-   To skip tests that access the Internet, use the ``BB_SKIP_NETTESTS``
-   variable when running ``bitbake-selftest`` as follows::
-
-      $ BB_SKIP_NETTESTS=yes bitbake-selftest
 
    The default output is quiet and just prints a summary of what was
    run. To see more information, there is a verbose option::
 
       $ bitbake-selftest -v
+
+   To skip tests that access the Internet, use the ``BB_SKIP_NETTESTS``
+   variable when running ``bitbake-selftest`` as follows::
+
+      $ BB_SKIP_NETTESTS=yes bitbake-selftest
 
    Use this option when you wish to skip tests that access the network,
    which are mostly necessary to test the fetcher modules. To specify
@@ -507,8 +512,8 @@ workers, consider the following:
 
 **Running "cleanall" is not permitted.**
 
-This can delete files from DL_DIR which would potentially break other
-builds running in parallel. If this is required, DL_DIR must be set to
+This can delete files from :term:`DL_DIR` which would potentially break other
+builds running in parallel. If this is required, :term:`DL_DIR` must be set to
 an isolated directory.
 
 **Running "cleansstate" is not permitted.**

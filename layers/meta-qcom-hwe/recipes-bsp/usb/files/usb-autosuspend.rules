@@ -1,0 +1,45 @@
+#Copyright (c) 2025 Qualcomm Technologies, Inc. and/or its subsidiaries.
+#SPDX-License-Identifier: BSD-3-Clause-Clear
+
+# Set autosuspend delay and control for specific USB devices
+ACTION=="add", SUBSYSTEM=="udc", KERNEL=="a600000.usb", \
+RUN+="/bin/sh -c 'echo auto > /sys/bus/platform/devices/a600000.usb/power/control; \
+                  echo 3000 > /sys/bus/platform/devices/a600000.usb/power/autosuspend_delay_ms'"
+
+ACTION=="add", SUBSYSTEM=="udc", KERNEL=="a800000.usb", \
+RUN+="/bin/sh -c 'echo auto > /sys/bus/platform/devices/a800000.usb/power/control; \
+                  echo 1000 > /sys/bus/platform/devices/a800000.usb/power/autosuspend_delay_ms'"
+
+ACTION=="add", SUBSYSTEM=="udc", KERNEL=="a400000.usb", \
+RUN+="/bin/sh -c 'echo auto > /sys/bus/platform/devices/a400000.usb/power/control; \
+                  echo 1000 > /sys/bus/platform/devices/a400000.usb/power/autosuspend_delay_ms'"
+
+ACTION=="add", SUBSYSTEM=="udc", KERNEL=="8c00000.usb", \
+RUN+="/bin/sh -c 'echo auto > /sys/bus/platform/devices/8c00000.usb/power/control; \
+                  echo 1000 > /sys/bus/platform/devices/8c00000.usb/power/autosuspend_delay_ms'"
+
+ACTION=="add", SUBSYSTEM=="udc", KERNEL=="a400000.usb", \
+RUN+="/bin/sh -c 'echo auto > /sys/bus/platform/devices/a4f8800.usb/power/control; \
+                  echo 1000 > /sys/bus/platform/devices/a4f8800.usb/power/autosuspend_delay_ms'"
+
+ACTION=="add", SUBSYSTEM=="udc", KERNEL=="a600000.usb", \
+RUN+="/bin/sh -c 'echo auto > /sys/bus/platform/devices/a6f8800.usb/power/control; \
+                  echo 1000 > /sys/bus/platform/devices/a6f8800.usb/power/autosuspend_delay_ms'"
+
+ACTION=="add", SUBSYSTEM=="udc", KERNEL=="a800000.usb", \
+RUN+="/bin/sh -c 'echo auto > /sys/bus/platform/devices/a8f8800.usb/power/control; \
+                  echo 1000 > /sys/bus/platform/devices/a8f8800.usb/power/autosuspend_delay_ms'"
+
+# Power control and wakeup for all xHCI controllers (xhci-hcd.0.auto to xhci-hcd.125.auto)
+ACTION=="bind", SUBSYSTEM=="platform", KERNEL=="xhci-hcd.*.auto", \
+  RUN+="/bin/sh -c 'echo auto > /sys/bus/platform/devices/%k/power/control'"
+
+ACTION=="bind", SUBSYSTEM=="platform", KERNEL=="xhci-hcd.*.auto", \
+  RUN+="/bin/sh -c 'echo enabled > /sys/bus/platform/devices/%k/power/wakeup'"
+
+# USB root hub and child device power management (usb0 to usb125)
+ACTION=="bind", SUBSYSTEM=="usb", ENV{DEVPATH}=="*/usb[0-9]*/*", \
+  RUN+="/bin/sh -c 'echo auto > /sys/bus/usb/devices/%k/power/control'"
+
+ACTION=="bind", SUBSYSTEM=="usb", ENV{DEVPATH}=="*/usb[0-9]*/*", \
+  RUN+="/bin/sh -c 'echo enabled > /sys/bus/usb/devices/%k/power/wakeup'"

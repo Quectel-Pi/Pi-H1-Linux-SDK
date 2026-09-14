@@ -1,6 +1,6 @@
 DISTRO_NAME = "Qualcomm Linux"
 
-DISTRO_VERSION = "1.3-ver.1.1"
+DISTRO_VERSION = "1.7-ver.1.1"
 
 # Extend the version string of the Linux kernel to indicate distro
 LINUX_VERSION_EXTENSION = "-qli-${DISTRO_VERSION}"
@@ -21,7 +21,8 @@ TARGET_VENDOR = "-qcom"
 # to make the python below work. Local, site and auto.conf will override it.
 TCMODE ?= "default"
 
-DISTRO_FEATURES:append = " pam overlayfs acl xattr selinux ptest security virtualization tpm usrmerge sota"
+#DISTRO_FEATURES:append = " pam overlayfs acl xattr ptest security virtualization tpm usrmerge sota"
+DISTRO_FEATURES:append = " pam acl xattr ptest security virtualization"
 
 # Use systemd init manager for system initialization.
 INIT_MANAGER = "systemd"
@@ -38,7 +39,8 @@ IMAGE_FSTYPES:remove = "tar.gz"
 
 # Pull in the initrd image by default
 INITRAMFS_IMAGE_BUNDLE ?= "1"
-INITRAMFS_IMAGE = "${@bb.utils.contains('DISTRO_FEATURES', 'sota', 'initramfs-ostree-image', 'initramfs-qcom-image', d)}"
+#INITRAMFS_IMAGE = "${@bb.utils.contains('DISTRO_FEATURES', 'sota', 'initramfs-ostree-image', 'initramfs-qcom-image', d)}"
+INITRAMFS_IMAGE = "initramfs-qcom-image"
 
 INHERIT += "buildhistory"
 INHERIT += "image-buildinfo"
@@ -49,10 +51,19 @@ INHERIT += "recipe_sanity"
 # by symlinking /var/log to /var/volatile/log
 VOLATILE_LOG_DIR = "${@bb.utils.contains('PERFORMANCE_BUILD', '1', 'yes', 'no', d)}"
 
-# Drop console from Kernel cmdline.
-CONSOLE_CMDLINE = "${@oe.utils.conditional('PERFORMANCE_BUILD','1','console=','console=ttyMSM0,115200n8 earlycon',d)}"
-# Disable serial console
-SERIAL_CONSOLES = "${@oe.utils.conditional('PERFORMANCE_BUILD','1','','115200;ttyMSM0',d)}"
+SERIAL_CONSOLES ?= "${@oe.utils.conditional('PERFORMANCE_BUILD','1','','115200;ttyMSM0',d)}"
+# populate console value to be added to cmdline
+def get_console_val(d):
+    import re
+
+    console = "ttynull"
+    consoles = (d.getVar('SERIAL_CONSOLES') or "").split()
+    for entry in consoles:
+        baudrate = re.sub(r';.*', '', entry)
+        tty = re.sub(r'^[0-9]*;', '', entry)
+        tty = re.sub(r';.*', '', tty)
+        console = f"{tty},{baudrate}n8"
+    return f"console={console}"
 
 BUILDHISTORY_COMMIT = "1"
 
@@ -64,10 +75,10 @@ require conf/distro/include/yocto-uninative.inc
 INHERIT += "uninative"
 
 # GCC Version
-GCCVERSION = "11.5%"
+GCCVERSION = "13.4%"
 
 # Easily switch between rust versions just by changing RUST_VERSION variable
-RUST_VERSION ?= "1.73.0"
+RUST_VERSION ?= "1.75.0"
 
 PREFERRED_VERSION_cargo ?= "${RUST_VERSION}"
 PREFERRED_VERSION_cargo-native ?= "${RUST_VERSION}"
@@ -78,33 +89,15 @@ PREFERRED_VERSION_rust-llvm ?= "${RUST_VERSION}"
 PREFERRED_VERSION_rust-llvm-native ?= "${RUST_VERSION}"
 PREFERRED_VERSION_rust-native ?= "${RUST_VERSION}"
 
-# Selinux support
-DISTRO_FEATURES_FILTER_NATIVE:append = " selinux"
-DISTRO_FEATURES_FILTER_NATIVESDK:append = " selinux"
-DISTRO_EXTRA_RDEPENDS:append = " ${@bb.utils.contains('DISTRO_FEATURES','selinux', 'packagegroup-selinux-minimal', '', d)}"
-PREFERRED_PROVIDER_virtual/refpolicy = "refpolicy-targeted"
-
-# Disable selinux in default
-DEFAULT_ENFORCING ?= "disabled"
-
-IMAGE_CMD_TAR:append = "${@bb.utils.contains('DISTRO_FEATURES','selinux', ' --selinux', '', d)}"
-
 # Enable security compiler and linker flags.
 require qcom-security_flags.inc
 
 # Ostree variables
-OSTREE_BOOTLOADER ?= "none"
-OSTREE_SPLIT_BOOT = "1"
-OSTREE_LOADER_LINK = "0"
-BUILD_OTA_TARBALL = "1"
-OSTREE_KERNEL = "${EFI_LINUX_IMG}"
-OSTREE_KERNEL_ARGS_COMMON ?= "root=LABEL=otaroot rootfstype=ext4"
-OSTREE_KERNEL_ARGS ?= " ${OSTREE_KERNEL_ARGS_COMMON} ${KERNEL_CMDLINE_EXTRA} "
-OSTREE_KERNEL_ARGS:remove = "root=/dev/disk/by-partlabel/system"
-SOTA_CLIENT_PROV ?= ""
-OSTREE_DEPLOY_DEVICETREE = "0"
-OSTREE_DEVICETREE = "${KERNEL_DEVICETREE}"
-OSTREE_MULTI_DEVICETREE_SUPPORT = "0"
+
 
 # Set OPKGLIBDIR to /etc to support OSTree for OTA
 OPKGLIBDIR ?= "${@bb.utils.contains('DISTRO_FEATURES', 'sota', '/etc', '/var/lib', d)}"
+
+# Set PREFERRED_PROVIDER virtual/mesa and virtual/libgl as mesa-gl for qcom-custom-bsp when x11 is enabled
+PREFERRED_PROVIDER_virtual/mesa:qcom-custom-bsp = "${@bb.utils.contains('DISTRO_FEATURES', 'x11', 'mesa-gl', 'mesa', d)}"
+PREFERRED_PROVIDER_virtual/libgl:qcom-custom-bsp = "${@bb.utils.contains('DISTRO_FEATURES', 'x11', 'mesa-gl', 'mesa', d)}"

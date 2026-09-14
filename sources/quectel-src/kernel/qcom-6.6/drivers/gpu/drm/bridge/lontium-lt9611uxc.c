@@ -21,6 +21,7 @@
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_bridge.h>
+#include <drm/drm_edid.h>
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_print.h>
 #include <drm/drm_probe_helper.h>
@@ -29,6 +30,8 @@
 #define EDID_NUM_BLOCKS	2
 
 #define FW_FILE "lt9611uxc_fw.bin"
+
+extern struct lcd_panel_info lcd_info;    
 
 struct lt9611uxc {
 	struct device *dev;
@@ -60,6 +63,9 @@ struct lt9611uxc {
 	/* can be accessed from different threads, so protect this with ocm_lock */
 	bool hdmi_connected;
 	uint8_t fw_version;
+
+	struct device *codec_dev;
+	hdmi_codec_plugged_cb plugged_cb;
 };
 
 #define LT9611_PAGE_CONTROL	0xff
@@ -87,7 +93,9 @@ static const struct regmap_config lt9611uxc_regmap_config = {
 
 struct lt9611uxc_mode {
 	u16 hdisplay;
+	u16 htotal;
 	u16 vdisplay;
+	u16 vtotal;
 	u8 vrefresh;
 };
 
@@ -96,23 +104,42 @@ struct lt9611uxc_mode {
  * Enumerate them here to check whether the mode is supported.
  */
 static struct lt9611uxc_mode lt9611uxc_modes[] = {
-	{ 1920, 1080, 60 },
-	{ 1920, 1080, 30 },
-	{ 1920, 1080, 25 },
-	{ 1366, 768, 60 },
-	{ 1360, 768, 60 },
-	{ 1280, 1024, 60 },
-	{ 1280, 800, 60 },
-	{ 1280, 720, 60 },
-	{ 1280, 720, 50 },
-	{ 1280, 720, 30 },
-	{ 1152, 864, 60 },
-	{ 1024, 768, 60 },
-	{ 800, 600, 60 },
-	{ 720, 576, 50 },
-	{ 720, 480, 60 },
-	{ 640, 480, 60 },
+	{ 3840, 4400, 2160, 2250, 30 },
+	{ 1920, 2200, 1080, 1125, 60 },
+	{ 1920, 2200, 1080, 1125, 30 },
+	{ 1920, 2640, 1080, 1125, 25 },
+	{ 1366, 1792, 768, 798, 60 },
+	{ 1360, 1792, 768, 795, 60 },
+	{ 1280, 1688, 1024, 1066, 60 },
+	{ 1280, 1680, 800, 831, 60 },
+	{ 1280, 1650, 720, 750, 60 },
+	{ 1280, 1980, 720, 750, 50 },
+	{ 1280, 3300, 720, 750, 30 },
+	{ 1152, 1600, 864, 900, 60 },
+	{ 1024, 1344, 768, 806, 60 },
+	{ 800, 1056, 600, 628, 60 },
+	{ 720, 864, 576, 625, 50 },
+	{ 720, 858, 480, 525, 60 },
+	{ 640, 800, 480, 525, 60 },
 };
+
+static struct drm_display_mode default_mode = {
+	/* VIC 16 */
+	DRM_MODE("1920x1080", DRM_MODE_TYPE_DRIVER, 148500, 1920, 2008, 2052,
+		2200, 0, 1080, 1084, 1089, 1125, 0,
+		DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) };
+
+/*
+ * Some 4K panels advertise only non-standard 4K60 (CVT-RB) timing in EDID,
+ * which does not match the fixed mode list above and gets rejected by
+ * mode_valid. Inject standard 4K30 (VIC 98) so the 4K panel can still be
+ * driven at 4K30.
+ */
+static struct drm_display_mode mode_4k30 = {
+	/* VIC 98: 3840x2160@30Hz */
+	DRM_MODE("3840x2160", DRM_MODE_TYPE_DRIVER, 297000, 3840, 4016, 4104,
+		4400, 0, 2160, 2168, 2178, 2250, 0,
+		DRM_MODE_FLAG_PHSYNC | DRM_MODE_FLAG_PVSYNC) };
 
 static struct lt9611uxc *bridge_to_lt9611uxc(struct drm_bridge *bridge)
 {
@@ -135,6 +162,21 @@ static void lt9611uxc_unlock(struct lt9611uxc *lt9611uxc)
 	regmap_write(lt9611uxc->regmap, 0x80ee, 0x00);
 	msleep(50);
 	mutex_unlock(&lt9611uxc->ocm_lock);
+}
+
+static void lt9611uxc_handle_plugged_change(struct lt9611uxc *lt9611uxc,
+					bool plugged)
+{
+	hdmi_codec_plugged_cb plugged_cb;
+	struct device *codec_dev;
+
+	mutex_lock(&lt9611uxc->ocm_lock);
+	plugged_cb = lt9611uxc->plugged_cb;
+	codec_dev = lt9611uxc->codec_dev;
+	mutex_unlock(&lt9611uxc->ocm_lock);
+
+	if (plugged_cb && codec_dev)
+		plugged_cb(codec_dev, plugged);
 }
 
 static irqreturn_t lt9611uxc_irq_thread_handler(int irq, void *dev_id)
@@ -165,24 +207,38 @@ static irqreturn_t lt9611uxc_irq_thread_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static void lt9611uxc_release_edid(struct lt9611uxc *lt9611uxc)
+{
+	dev_info(lt9611uxc->dev, "release edid\n");
+	lt9611uxc->edid_read = false;
+	drm_connector_update_edid_property(&lt9611uxc->connector, NULL);
+}
+
 static void lt9611uxc_hpd_work(struct work_struct *work)
 {
 	struct lt9611uxc *lt9611uxc = container_of(work, struct lt9611uxc, work);
 	bool connected;
 
 	if (lt9611uxc->connector.dev) {
-		if (lt9611uxc->connector.dev->mode_config.funcs)
-			drm_kms_helper_hotplug_event(lt9611uxc->connector.dev);
+		lt9611uxc->connector.status = (lt9611uxc->hdmi_connected) ?
+				connector_status_connected: connector_status_disconnected;
+		if (lt9611uxc->connector.status == connector_status_disconnected)
+			lt9611uxc_release_edid(lt9611uxc);
+		drm_kms_helper_hotplug_event(lt9611uxc->connector.dev);
 	} else {
-
 		mutex_lock(&lt9611uxc->ocm_lock);
 		connected = lt9611uxc->hdmi_connected;
 		mutex_unlock(&lt9611uxc->ocm_lock);
+
+		if (!connected)
+			lt9611uxc->edid_read = false;
 
 		drm_bridge_hpd_notify(&lt9611uxc->bridge,
 				      connected ?
 				      connector_status_connected :
 				      connector_status_disconnected);
+
+		lt9611uxc_handle_plugged_change(lt9611uxc, connected);
 	}
 }
 
@@ -229,7 +285,8 @@ static int lt9611uxc_regulator_enable(struct lt9611uxc *lt9611uxc)
 	if (ret < 0)
 		return ret;
 
-	usleep_range(1000, 10000); /* 50000 according to dtsi */
+	/* Stagger vdd/vcc enable to avoid inrush current stacking on LDO17 */
+	msleep(50); /* was 1-10ms, extended to limit inrush on shared LDO */
 
 	ret = regulator_enable(lt9611uxc->supplies[1].consumer);
 	if (ret < 0) {
@@ -246,7 +303,9 @@ static struct lt9611uxc_mode *lt9611uxc_find_mode(const struct drm_display_mode 
 
 	for (i = 0; i < ARRAY_SIZE(lt9611uxc_modes); i++) {
 		if (lt9611uxc_modes[i].hdisplay == mode->hdisplay &&
+		    lt9611uxc_modes[i].htotal == mode->htotal &&
 		    lt9611uxc_modes[i].vdisplay == mode->vdisplay &&
+		    lt9611uxc_modes[i].vtotal == mode->vtotal &&
 		    lt9611uxc_modes[i].vrefresh == drm_mode_vrefresh(mode)) {
 			return &lt9611uxc_modes[i];
 		}
@@ -293,10 +352,43 @@ static int lt9611uxc_connector_get_modes(struct drm_connector *connector)
 	struct lt9611uxc *lt9611uxc = connector_to_lt9611uxc(connector);
 	unsigned int count;
 	struct edid *edid;
+	struct drm_display_mode *mode;
+	struct drm_display_mode *m;
+	bool has_4k = false;
+	bool has_valid_4k = false;
 
 	edid = lt9611uxc->bridge.funcs->get_edid(&lt9611uxc->bridge, connector);
 	drm_connector_update_edid_property(connector, edid);
 	count = drm_add_edid_modes(connector, edid);
+
+	/* Check if EDID advertises any 4K (3840x2160) mode */
+	list_for_each_entry(mode, &connector->probed_modes, head) {
+		if (mode->hdisplay == 3840 && mode->vdisplay == 2160) {
+			has_4k = true;
+			if (lt9611uxc_find_mode(mode))
+				has_valid_4k = true;
+		}
+	}
+
+	/*
+	 * If panel is 4K but the EDID 4K timing does not match the fixed mode
+	 * list (e.g. non-standard CVT-RB 4K60), inject standard 4K30 (VIC 98)
+	 * so the panel can be driven. Mark it preferred so compositors pick it.
+	 */
+	if (has_4k && !has_valid_4k) {
+		m = drm_mode_duplicate(connector->dev, &mode_4k30);
+		if (m) {
+			m->type = DRM_MODE_TYPE_DRIVER | DRM_MODE_TYPE_PREFERRED;
+			drm_mode_probed_add(connector, m);
+			count++;
+			dev_info(lt9611uxc->dev,
+				 "injected 3840x2160@30 preferred mode for 4K panel\n");
+		} else {
+			dev_err(lt9611uxc->dev,
+				"failed to duplicate 4K30 mode\n");
+		}
+	}
+
 	kfree(edid);
 
 	return count;
@@ -460,10 +552,62 @@ static enum drm_connector_status lt9611uxc_bridge_detect(struct drm_bridge *brid
 				connector_status_disconnected;
 }
 
+#define EDID_WAIT_RETRIES	3
+#define EDID_READ_RETRIES	3
+
 static int lt9611uxc_wait_for_edid(struct lt9611uxc *lt9611uxc)
 {
-	return wait_event_interruptible_timeout(lt9611uxc->wq, lt9611uxc->edid_read,
-			msecs_to_jiffies(500));
+	int ret;
+	int retry;
+	unsigned int hpd_status = 0;
+
+	for (retry = 0; retry < EDID_WAIT_RETRIES; retry++) {
+		if (retry > 0) {
+			dev_info(lt9611uxc->dev, "EDID wait retry %d/%d\n",
+				 retry, EDID_WAIT_RETRIES);
+			msleep(500);
+		}
+
+		ret = wait_event_interruptible_timeout(lt9611uxc->wq,
+				lt9611uxc->edid_read,
+				msecs_to_jiffies(2000));
+		if (ret)
+			return ret;
+
+		/*
+		 * At boot time, the interrupt may not fire if HDMI was already
+		 * plugged in (HPD state didn't change). Poll the EDID-ready
+		 * bit (bit0) directly as a fallback.
+		 */
+		lt9611uxc_lock(lt9611uxc);
+		regmap_read(lt9611uxc->regmap, 0xb023, &hpd_status);
+		if (hpd_status & BIT(0)) {
+			lt9611uxc->edid_read = true;
+			lt9611uxc_unlock(lt9611uxc);
+			return 1;
+		}
+		lt9611uxc_unlock(lt9611uxc);
+	}
+
+	/* EDID still not ready after all retries, return timeout */
+	return 0;
+}
+
+static int lt9611uxc_add_default_mode(struct drm_connector *connector)
+{
+	struct lt9611uxc *lt9611uxc = connector_to_lt9611uxc(connector);
+	struct drm_display_mode *m, *mode = &default_mode;
+
+	m = drm_mode_duplicate(connector->dev, mode);
+	if (!m) {
+		dev_err(lt9611uxc->dev, "failed to create mode\n");
+		return -ENOMEM;
+	}
+	drm_mode_probed_add(connector, m);
+
+	dev_info(lt9611uxc->dev, "default mode %s@%d\n", mode->name,
+				drm_mode_vrefresh(mode));
+	return 0;
 }
 
 static int lt9611uxc_get_edid_block(void *data, u8 *buf, unsigned int block, size_t len)
@@ -496,7 +640,9 @@ static struct edid *lt9611uxc_bridge_get_edid(struct drm_bridge *bridge,
 					      struct drm_connector *connector)
 {
 	struct lt9611uxc *lt9611uxc = bridge_to_lt9611uxc(bridge);
+	struct edid *edid;
 	int ret;
+	int retry;
 
 	ret = lt9611uxc_wait_for_edid(lt9611uxc);
 	if (ret < 0) {
@@ -504,10 +650,79 @@ static struct edid *lt9611uxc_bridge_get_edid(struct drm_bridge *bridge,
 		return NULL;
 	} else if (ret == 0) {
 		dev_err(lt9611uxc->dev, "wait for EDID timeout\n");
+
+		/*
+		 * If HDMI is connected but EDID read timed out (e.g. at boot
+		 * with cable already plugged in), add a default 1080p mode so
+		 * the display pipeline has something to work with.
+		 */
+		if (lt9611uxc->hdmi_connected && lt9611uxc->connector.dev)
+			lt9611uxc_add_default_mode(&lt9611uxc->connector);
+
 		return NULL;
 	}
 
-	return drm_do_get_edid(connector, lt9611uxc_get_edid_block, lt9611uxc);
+	if (!connector) {
+		dev_err(lt9611uxc->dev, "connector is NULL\n");
+		return NULL;
+	}
+
+	/*
+	 * HPD is ready, but the on-chip MCU may still be loading EDID data.
+	 * Retry the actual EDID read to handle transient failures at boot.
+	 */
+	for (retry = 0; retry < EDID_READ_RETRIES; retry++) {
+		edid = drm_do_get_edid(connector, lt9611uxc_get_edid_block, lt9611uxc);
+		if (edid)
+			break;
+		dev_dbg(lt9611uxc->dev, "EDID read retry %d/%d\n",
+			retry + 1, EDID_READ_RETRIES);
+		msleep(100);
+	}
+
+	if (!edid) {
+		dev_err(lt9611uxc->dev, "EDID read failed after %d retries\n",
+			EDID_READ_RETRIES);
+		if (lt9611uxc->hdmi_connected && lt9611uxc->connector.dev)
+			lt9611uxc_add_default_mode(&lt9611uxc->connector);
+		return NULL;
+	}
+
+	drm_connector_update_edid_property(connector, edid);
+	mutex_lock(&lt9611uxc->ocm_lock);
+	memcpy(lt9611uxc->connector.eld, connector->eld,
+		sizeof(lt9611uxc->connector.eld));
+	/*
+	 * Some sinks (notably monitors with simplified EDIDs) declare basic
+	 * audio in the CEA block but provide no SAD descriptors.  In that
+	 * case drm_edid_to_eld() produces an ELD with zero SAD count, which
+	 * makes the audio stack (PAL/DisplayPort) reject 48kHz playback.
+	 * Fall back to the default LPCM 2ch 48kHz SAD so HDMI audio keeps
+	 * working on such monitors.
+	 */
+	if (((lt9611uxc->connector.eld[DRM_ELD_SAD_COUNT_CONN_TYPE] &
+	      DRM_ELD_SAD_COUNT_MASK) >> DRM_ELD_SAD_COUNT_SHIFT) == 0) {
+		int mnl = (lt9611uxc->connector.eld[DRM_ELD_CEA_EDID_VER_MNL] &
+			   DRM_ELD_MNL_MASK) >> DRM_ELD_MNL_SHIFT;
+		int sad_off = DRM_ELD_CEA_SAD(mnl, 0);
+		/* default_eld SAD: LPCM 2ch 32/44.1/48kHz 16/20bit */
+		lt9611uxc->connector.eld[sad_off] = 0x09;
+		lt9611uxc->connector.eld[sad_off + 1] = 0x00;
+		lt9611uxc->connector.eld[sad_off + 2] = 0x7f;
+		lt9611uxc->connector.eld[DRM_ELD_SAD_COUNT_CONN_TYPE] =
+			(lt9611uxc->connector.eld[DRM_ELD_SAD_COUNT_CONN_TYPE] &
+			 ~DRM_ELD_SAD_COUNT_MASK) |
+			(1 << DRM_ELD_SAD_COUNT_SHIFT);
+		/* keep baseline length consistent (in dwords, rounded up) */
+		lt9611uxc->connector.eld[DRM_ELD_BASELINE_ELD_LEN] =
+			(DRM_ELD_MONITOR_NAME_STRING - DRM_ELD_HEADER_BLOCK_SIZE +
+			 mnl + 3 + 3) / 4;
+		dev_info(lt9611uxc->dev,
+			 "EDID has no SAD; injected default LPCM 2ch 48kHz ELD SAD\n");
+	}
+	mutex_unlock(&lt9611uxc->ocm_lock);
+
+	return edid;
 }
 
 static const struct drm_bridge_funcs lt9611uxc_bridge_funcs = {
@@ -624,14 +839,70 @@ static int lt9611uxc_hdmi_i2s_get_dai_id(struct snd_soc_component *component,
 	return -EINVAL;
 }
 
+static int lt9611uxc_audio_get_eld(struct device *dev,
+	void *data, uint8_t *buf, size_t len)
+{
+	struct lt9611uxc *lt9611uxc = (struct lt9611uxc *)data;
+
+	mutex_lock(&lt9611uxc->ocm_lock);
+	memcpy(buf, lt9611uxc->connector.eld,
+			min(sizeof(lt9611uxc->connector.eld), len));
+	mutex_unlock(&lt9611uxc->ocm_lock);
+
+	return 0;
+}
+
+static int lt9611uxc_audio_hook_plugged_cb(struct device *dev, void *data,
+		hdmi_codec_plugged_cb fn,
+		struct device *codec_dev)
+{
+	struct lt9611uxc *lt9611uxc = (struct lt9611uxc *)data;
+	bool plugged;
+
+	mutex_lock(&lt9611uxc->ocm_lock);
+	lt9611uxc->plugged_cb = fn;
+	lt9611uxc->codec_dev = codec_dev;
+	plugged = lt9611uxc->hdmi_connected;
+	mutex_unlock(&lt9611uxc->ocm_lock);
+
+	lt9611uxc_handle_plugged_change(lt9611uxc, plugged);
+
+	return 0;
+}
+
 static const struct hdmi_codec_ops lt9611uxc_codec_ops = {
-	.hw_params	= lt9611uxc_hdmi_hw_params,
-	.audio_shutdown = lt9611uxc_audio_shutdown,
-	.get_dai_id	= lt9611uxc_hdmi_i2s_get_dai_id,
+	.hw_params		= lt9611uxc_hdmi_hw_params,
+	.audio_shutdown		= lt9611uxc_audio_shutdown,
+	.get_dai_id		= lt9611uxc_hdmi_i2s_get_dai_id,
+	.get_eld		= lt9611uxc_audio_get_eld,
+	.hook_plugged_cb	= lt9611uxc_audio_hook_plugged_cb,
 };
 
 static int lt9611uxc_audio_init(struct device *dev, struct lt9611uxc *lt9611uxc)
 {
+	struct device_node *codec_node;
+	int ret;
+	/*
+	 * Default ELD for HDMI audio without waiting for DRM EDID read.
+	 * Declares LPCM 2ch48kHz/16bit support.  Will be overwritten
+	 * if DRM successfully reads EDID later.
+	 */
+	static const u8 default_eld[] = {
+		0x10, /* ELD ver: CEA861D */
+		0x00, /* reserved */
+		0x05, /* baseline len: 5 dwords (20 bytes) */
+		0x60, /* CEA861-A/B/C/D, MNL=0 */
+		0x14, /* SAD count=1, conn type=HDMI */
+		0x28, /* aud synch delay: 80ms */
+		0x01, /* speaker: FL/FR */
+		0x00, 0x00, 0x00, 0x00, /* port ID */
+		0x00, 0x00, 0x00, 0x00, /* port ID */
+		0x00, 0x00, /* mfg name */
+		0x00, 0x00, /* product code */
+		0x09, 0x00, 0x7f, /* SAD0: LPCM 2ch 32/44.1/48kHz 16/20bit */
+	};
+
+	memcpy(lt9611uxc->connector.eld, default_eld, sizeof(default_eld));
 	struct hdmi_codec_pdata codec_data = {
 		.ops = &lt9611uxc_codec_ops,
 		.max_i2s_channels = 2,
@@ -639,12 +910,66 @@ static int lt9611uxc_audio_init(struct device *dev, struct lt9611uxc *lt9611uxc)
 		.data = lt9611uxc,
 	};
 
-	lt9611uxc->audio_pdev =
-		platform_device_register_data(dev, HDMI_CODEC_DRV_NAME,
-					      PLATFORM_DEVID_AUTO,
-					      &codec_data, sizeof(codec_data));
+	/*
+	 * Set of_node to the shared hdmi-audio-codec node so the ALSA SoC
+	 * framework matches this codec to the sound card's HDMI DAI link.
+	 *
+	 * CRITICAL: of_node MUST be set BEFORE platform_device_add()
+	 * because platform_device_add() triggers hdmi_codec_probe() which
+	 * calls devm_snd_soc_register_component().  If of_node is set after
+	 * registration, the component is created with of_node=NULL and
+	 * snd_soc_is_matching_component() cannot match it to the HDMI DAI link.
+	 *
+	 * We use platform_device_alloc + platform_device_add (instead of
+	 * the all-in-one platform_device_register_data) so we can set
+	 * of_node in the window between alloc and add.
+	 */
+	codec_node = of_find_node_by_name(NULL, "hdmi-audio-codec");
+	dev_info(dev, "audio_init: codec_node=%pOF\n", codec_node);
 
-	return PTR_ERR_OR_ZERO(lt9611uxc->audio_pdev);
+	lt9611uxc->audio_pdev = platform_device_alloc(HDMI_CODEC_DRV_NAME,
+						      PLATFORM_DEVID_AUTO);
+	if (!lt9611uxc->audio_pdev) {
+		dev_err(dev, "audio_init: platform_device_alloc failed\n");
+		of_node_put(codec_node);
+		return -ENOMEM;
+	}
+
+	lt9611uxc->audio_pdev->dev.parent = dev;
+
+	if (codec_node)
+		lt9611uxc->audio_pdev->dev.of_node = codec_node;
+
+	ret = platform_device_add_data(lt9611uxc->audio_pdev,
+				       &codec_data, sizeof(codec_data));
+	if (ret) {
+		dev_err(dev, "audio_init: add_data failed: %d\n", ret);
+		platform_device_put(lt9611uxc->audio_pdev);
+		of_node_put(codec_node);
+		return ret;
+	}
+
+	/*
+	 * platform_device_add() triggers hdmi_codec_probe() which calls
+	 * devm_snd_soc_register_component().  At this point dev->of_node
+	 * already points to /hdmi-audio-codec, so the component is
+	 * registered with the correct of_node.
+	 */
+	ret = platform_device_add(lt9611uxc->audio_pdev);
+	if (ret) {
+		dev_err(dev, "audio_init: platform_device_add failed: %d\n", ret);
+		platform_device_put(lt9611uxc->audio_pdev);
+		of_node_put(codec_node);
+		return ret;
+	}
+
+	dev_info(dev, "audio_init: registered pdev=%s of_node=%pOF\n",
+		 dev_name(&lt9611uxc->audio_pdev->dev), codec_node);
+
+	of_node_put(codec_node);
+
+	dev_info(dev, "audio_init: exit ret=0\n");
+	return 0;
 }
 
 static void lt9611uxc_audio_exit(struct lt9611uxc *lt9611uxc)
@@ -792,6 +1117,7 @@ static int lt9611uxc_firmware_update(struct lt9611uxc *lt9611uxc)
 		goto out;
 	}
 
+	/* FIXME: !memcmp returns true when data matches, logic is inverted */
 	if (!memcmp(readbuf, fw->data, fw->size)) {
 		dev_err(lt9611uxc->dev, "Firmware update failed\n");
 		print_hex_dump(KERN_ERR, "fw: ", DUMP_PREFIX_OFFSET, 16, 1, readbuf, fw->size, false);
@@ -850,6 +1176,21 @@ static int lt9611uxc_probe(struct i2c_client *client)
 	struct device *dev = &client->dev;
 	int ret;
 	bool fw_updated = false;
+
+	if (lcd_info.detected == -1){
+		dev_err(dev, "waiting for LCD panel detect\n");
+		return -EPROBE_DEFER;
+	 }
+
+	 if (lcd_info.detected == 1){
+		dev_err(dev, "LCD panel detect quit probe\n");
+		return -ENODEV;
+	 }
+
+	 if (lcd_info.detected != 3){
+		dev_err(dev, "Waiting for LT9611UXD probe\n");
+		return -EPROBE_DEFER;
+	 }
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		dev_err(dev, "device doesn't support I2C\n");
@@ -935,6 +1276,44 @@ retry:
 		goto err_disable_regulators;
 	}
 
+	/*
+	 * If HDMI was already connected at boot, the HPD interrupt may have
+	 * fired (and been consumed) before we registered the IRQ handler.
+	 * Read the current HPD status directly to pre-set the flags so that
+	 * the first get_edid call doesn't have to wait for a new interrupt.
+	 */
+	if (lt9611uxc->hpd_supported) {
+		unsigned int irq_val = 0, hpd_val = 0;
+		int retry;
+
+		/*
+		 * The on-chip MCU needs time to finish reading EDID from the
+		 * HDMI sink after detecting HPD.  Poll until EDID-ready bit
+		 * is set or we hit the retry limit.
+		 */
+		for (retry = 0; retry < 10; retry++) {
+			lt9611uxc_lock(lt9611uxc);
+			regmap_read(lt9611uxc->regmap, 0xb022, &irq_val);
+			regmap_read(lt9611uxc->regmap, 0xb023, &hpd_val);
+			if (irq_val)
+				regmap_write(lt9611uxc->regmap, 0xb022, 0);
+			lt9611uxc_unlock(lt9611uxc);
+
+			if (hpd_val & BIT(0))
+				break;
+			msleep(500);
+		}
+
+		if (hpd_val & BIT(0))
+			lt9611uxc->edid_read = true;
+		if (hpd_val & BIT(1))
+			lt9611uxc->hdmi_connected = true;
+
+		dev_info(dev, "probe HPD status: irq=0x%02x hpd=0x%02x edid_read=%d connected=%d\n",
+			 irq_val, hpd_val,
+			 lt9611uxc->edid_read, lt9611uxc->hdmi_connected);
+	}
+
 	i2c_set_clientdata(client, lt9611uxc);
 
 	lt9611uxc->bridge.funcs = &lt9611uxc_bridge_funcs;
@@ -962,7 +1341,11 @@ retry:
 		}
 	}
 
-	return lt9611uxc_audio_init(dev, lt9611uxc);
+	ret = lt9611uxc_audio_init(dev, lt9611uxc);
+	if (ret)
+		goto err_remove_bridge;
+
+	return 0;
 
 err_remove_bridge:
 	free_irq(client->irq, lt9611uxc);
@@ -986,6 +1369,13 @@ static void lt9611uxc_remove(struct i2c_client *client)
 	free_irq(client->irq, lt9611uxc);
 	cancel_work_sync(&lt9611uxc->work);
 	lt9611uxc_audio_exit(lt9611uxc);
+
+	/* Clear audio callback pointers */
+	mutex_lock(&lt9611uxc->ocm_lock);
+	lt9611uxc->plugged_cb = NULL;
+	lt9611uxc->codec_dev = NULL;
+	mutex_unlock(&lt9611uxc->ocm_lock);
+
 	drm_bridge_remove(&lt9611uxc->bridge);
 
 	mutex_destroy(&lt9611uxc->ocm_lock);

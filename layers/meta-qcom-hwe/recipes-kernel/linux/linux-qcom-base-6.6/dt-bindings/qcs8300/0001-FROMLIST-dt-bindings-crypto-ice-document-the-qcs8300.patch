@@ -1,0 +1,30 @@
+From 3ca97534af398ef292a2fcaa735f68b046227d0d Mon Sep 17 00:00:00 2001
+From: Yuvaraj Ranganathan <quic_yrangana@quicinc.com>
+Date: Sun, 1 Dec 2024 16:15:10 +0530
+Subject: [PATCH] FROMLIST: dt-bindings: crypto: ice: document the qcs8300
+ inline crypto engine
+
+Add the compatible string for QCom ICE on qcs8300 SoCs.
+
+Acked-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Signed-off-by: Yuvaraj Ranganathan <quic_yrangana@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241125065801.1751256-2-quic_yrangana@quicinc.com/]
+---
+ .../devicetree/bindings/crypto/qcom,inline-crypto-engine.yaml    | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/crypto/qcom,inline-crypto-engine.yaml b/Documentation/devicetree/bindings/crypto/qcom,inline-crypto-engine.yaml
+index 7da9aa82d837..40e5c2e67377 100644
+--- a/Documentation/devicetree/bindings/crypto/qcom,inline-crypto-engine.yaml
++++ b/Documentation/devicetree/bindings/crypto/qcom,inline-crypto-engine.yaml
+@@ -13,6 +13,7 @@ properties:
+   compatible:
+     items:
+       - enum:
++          - qcom,qcs8300-inline-crypto-engine
+           - qcom,sm8450-inline-crypto-engine
+           - qcom,sm8550-inline-crypto-engine
+       - const: qcom,inline-crypto-engine
+--
+2.34.1
+

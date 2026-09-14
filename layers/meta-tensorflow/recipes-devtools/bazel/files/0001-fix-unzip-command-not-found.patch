@@ -1,0 +1,35 @@
+From 23e2aff67a03127572641c7286e306c2a20990e2 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Tue, 8 Dec 2020 11:05:13 +0800
+Subject: [PATCH] fix unzip: command not found
+
+If host does not provide unzip, build bazel will fail even though
+Yocto native sysroot does have unzip.
+
+The reason is var-PATH was not passed to bazel build in some cases.
+
+Remove hardcoded /bin and /usr/bin from PATH
+
+Upstream-Status: Inappropriate [wr-installer specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ .../devtools/build/lib/bazel/rules/BazelRuleClassProvider.java  | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/main/java/com/google/devtools/build/lib/bazel/rules/BazelRuleClassProvider.java b/src/main/java/com/google/devtools/build/lib/bazel/rules/BazelRuleClassProvider.java
+index 16252df..e7cd609 100755
+--- a/src/main/java/com/google/devtools/build/lib/bazel/rules/BazelRuleClassProvider.java
++++ b/src/main/java/com/google/devtools/build/lib/bazel/rules/BazelRuleClassProvider.java
+@@ -469,7 +469,7 @@ public class BazelRuleClassProvider {
+       // Note that --action_env does not propagate to the host config, so it is not a viable
+       // workaround when a genrule is itself built in the host config (e.g. nested genrules). See
+       // #8536.
+-      return "/bin:/usr/bin:/usr/local/bin";
++      return System.getenv("PATH");
+     }
+ 
+     String newPath = "";
+-- 
+2.18.2
+

@@ -1,0 +1,30 @@
+From 1816a58b23ad76898a685e95e14347122d8e3dc8 Mon Sep 17 00:00:00 2001
+From: Wasim Nazir <quic_wasimn@quicinc.com>
+Date: Tue, 19 Nov 2024 23:19:51 +0530
+Subject: [PATCH v4 2/7] FROMLIST: soc: qcom: socinfo: add QCS9075 SoC ID
+
+Update soc_id table for the Qualcomm QCS9075 SoC
+to represent qcs9075 machine.
+
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Wasim Nazir <quic_wasimn@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241217064856.2772305-3-quic_wasimn@quicinc.com/]
+---
+ drivers/soc/qcom/socinfo.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/soc/qcom/socinfo.c b/drivers/soc/qcom/socinfo.c
+index 05b1596a4bdd..6567d0a42753 100644
+--- a/drivers/soc/qcom/socinfo.c
++++ b/drivers/soc/qcom/socinfo.c
+@@ -417,6 +417,7 @@ static const struct soc_id soc_id[] = {
+ 	{ qcom_board_id(IPQ5302) },
+ 	{ qcom_board_id(IPQ5300) },
+ 	{ qcom_board_id(QCS9100) },
++	{ qcom_board_id(QCS9075) },
+ 	{ qcom_board_id(QCS615) },
+ };
+
+--
+2.47.0
+

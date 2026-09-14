@@ -1,10 +1,13 @@
 SUMMARY = "U-Boot bootloader tools"
-DEPENDS += "openssl"
+DEPENDS += "gnutls openssl util-linux swig-native"
 
-PROVIDES = "${MLPREFIX}u-boot-mkimage ${MLPREFIX}u-boot-mkenvimage"
-PROVIDES:class-native = "u-boot-mkimage-native u-boot-mkenvimage-native"
+inherit python3native
+export STAGING_INCDIR="${STAGING_INCDIR_NATIVE}"
 
-PACKAGES += "${PN}-mkimage ${PN}-mkenvimage"
+PROVIDES = "${MLPREFIX}u-boot-mkimage ${MLPREFIX}u-boot-mkenvimage ${MLPREFIX}u-boot-mkeficapsule"
+PROVIDES:class-native = "u-boot-mkimage-native u-boot-mkenvimage-native u-boot-mkeficapsule-native"
+
+PACKAGES += "${PN}-mkimage ${PN}-mkenvimage ${PN}-mkeficapsule"
 
 # Required for backward compatibility with "u-boot-mkimage-xxx.bb"
 RPROVIDES:${PN}-mkimage = "u-boot-mkimage"
@@ -21,6 +24,7 @@ SED_CONFIG_EFI:x86-64 = ''
 SED_CONFIG_EFI:arm = ''
 SED_CONFIG_EFI:armeb = ''
 SED_CONFIG_EFI:aarch64 = ''
+SED_CONFIG_EFI:loongarch64 = ''
 
 do_compile () {
 	# Yes, this is crazy. If you build on a system with git < 2.14 from scratch, the tree will
@@ -38,7 +42,7 @@ do_compile () {
 	# (i.e. creating a hardlink dirties the index)
 	cd ${S}; git diff; cd ${B}
 
-	oe_runmake -C ${S} sandbox_defconfig O=${B}
+	oe_runmake -C ${S} tools-only_defconfig O=${B}
 
 	# Disable CONFIG_CMD_LICENSE, license.h is not used by tools and
 	# generating it requires bin2header tool, which for target build
@@ -66,15 +70,20 @@ do_install () {
 	# fit_check_sign
 	install -m 0755 tools/fit_check_sign ${D}${bindir}/uboot-fit_check_sign
 	ln -sf uboot-fit_check_sign ${D}${bindir}/fit_check_sign
+
+	# mkeficapsule
+	install -m 0755 tools/mkeficapsule ${D}${bindir}/uboot-mkeficapsule
+	ln -sf uboot-mkeficapsule ${D}${bindir}/mkeficapsule
 }
 
 ALLOW_EMPTY:${PN} = "1"
 FILES:${PN} = ""
 FILES:${PN}-mkimage = "${bindir}/uboot-mkimage ${bindir}/mkimage ${bindir}/uboot-dumpimage ${bindir}/dumpimage ${bindir}/uboot-fit_check_sign ${bindir}/fit_check_sign"
 FILES:${PN}-mkenvimage = "${bindir}/uboot-mkenvimage ${bindir}/mkenvimage"
+FILES:${PN}-mkeficapsule = "${bindir}/uboot-mkeficapsule ${bindir}/mkeficapsule"
 
 RDEPENDS:${PN}-mkimage += "dtc"
-RDEPENDS:${PN} += "${PN}-mkimage ${PN}-mkenvimage"
+RDEPENDS:${PN} += "${PN}-mkimage ${PN}-mkenvimage ${PN}-mkeficapsule"
 RDEPENDS:${PN}:class-native = ""
 
 BBCLASSEXTEND = "native nativesdk"

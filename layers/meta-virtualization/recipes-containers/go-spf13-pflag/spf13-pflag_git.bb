@@ -7,16 +7,18 @@ LIC_FILES_CHKSUM = "file://src/${PKG_NAME}/LICENSE;md5=1e8b7dc8b906737639131047a
 SRCNAME = "pflag"
 
 PKG_NAME = "github.com/spf13/${SRCNAME}"
-SRC_URI = "git://${PKG_NAME}.git;destsuffix=git/src/${PKG_NAME};branch=master;protocol=https"
+SRC_URI = "git://${PKG_NAME};destsuffix=git/src/${PKG_NAME};branch=master;protocol=https"
 
 SRCREV = "d5e0c0615acee7028e1e2740a11102313be88de1"
-PV = "v1.0.5+git${SRCPV}"
+PV = "v1.0.5+git"
 
 S = "${WORKDIR}/git"
 
 # NO-OP the do compile rule because this recipe is source only.
 do_compile() {
 }
+
+inherit meta-virt-depreciated-warning
 
 do_install() {
 	install -d ${D}${prefix}/local/go/src/${PKG_NAME}

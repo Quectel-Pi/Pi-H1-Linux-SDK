@@ -3,7 +3,7 @@ From: Puneeth Prabhu <quic_pprabh@quicinc.com>
 Date: Mon, 4 Mar 2024 11:26:05 +0530
 Subject: [PATCH 3/6] libpulse: Initialize channel map for 7 & 8 channel audio
 
-Change-Id: I784ee909e221874197313ce4873b5c5bcdac31b0
+Upstream-Status: Pending
 Signed-off-by: Puneeth Prabhu <quic_pprabh@quicinc.com>
 ---
  src/pulse/channelmap.c | 21 +++++++++++++++++++++

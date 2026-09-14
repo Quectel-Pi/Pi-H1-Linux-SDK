@@ -1,0 +1,274 @@
+# USB Port 1 (物理端口1)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/1-1.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@1-%k.service"
+
+# USB Port 2 (物理端口2)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/1-1.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@2-%k.service"
+
+# type-C转OTG (物理端口3)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@3-%k.service"
+
+# type-C转OTG (物理端口4)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@4-%k.service"
+
+# type-C转OTG (物理端口5)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@5-%k.service"
+
+# type-C转OTG (物理端口6)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@6-%k.service"
+
+# type-C转OTG (物理端口7)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@7-%k.service"
+
+# type-C转OTG (物理端口8)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@8-%k.service"
+
+# type-C转OTG (物理端口9)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@9-%k.service"
+
+# type-C转OTG (物理端口10)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@10-%k.service"
+
+# type-C转OTG (物理端口11)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@11-%k.service"
+
+# type-C转OTG (物理端口12)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@12-%k.service"
+
+# type-C转OTG (物理端口13)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@13-%k.service"
+
+# type-C转OTG (物理端口14)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@14-%k.service"
+
+# type-C转OTG (物理端口15)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@15-%k.service"
+
+# type-C转OTG (物理端口16)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@16-%k.service"
+
+# type-C转OTG (物理端口17)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@17-%k.service"
+
+# type-C转OTG (物理端口18)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@18-%k.service"
+
+# type-C转OTG (物理端口19)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@19-%k.service"
+
+# type-C转OTG (物理端口20)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@20-%k.service"
+
+# type-C转OTG (物理端口21)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@21-%k.service"
+
+# type-C转OTG (物理端口22)
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@22-%k.service"
+
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.1.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@24-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.1.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@25-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.1.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@26-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.1.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@27-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.1.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@28-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.2.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@29-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.2.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@30-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.2.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@31-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.2.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@32-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.2.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@33-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.3.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@34-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.3.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@35-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.3.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@36-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.3.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@37-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.3.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@38-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.4.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@39-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.4.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@40-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.4.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@41-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.4.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@42-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.4.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@43-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.5.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@44-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.5.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@45-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.5.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@46-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.5.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@47-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1.5.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@48-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.1.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@49-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.1.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@50-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.1.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@51-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.1.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@52-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.1.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@53-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.2.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@54-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.2.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@55-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.2.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@56-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.2.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@57-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.2.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@58-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.3.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@59-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.3.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@60-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.3.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@61-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.3.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@62-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.3.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@63-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.4.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@64-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.4.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@65-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.4.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@66-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.4.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@67-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.4.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@68-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.5.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@69-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.5.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@70-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.5.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@71-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.5.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@72-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1.5.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@73-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.1.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@74-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.1.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@75-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.1.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@76-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.1.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@77-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.1.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@78-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.2.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@79-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.2.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@80-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.2.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@81-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.2.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@82-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.2.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@83-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.3.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@84-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.3.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@85-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.3.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@86-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.3.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@87-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.3.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@88-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.4.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@89-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.4.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@90-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.4.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@91-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.4.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@92-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.4.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@93-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.5.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@94-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.5.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@95-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.5.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@96-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.5.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@97-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1.5.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@98-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.1.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@99-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.1.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@100-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.1.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@101-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.1.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@102-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.1.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@103-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.2.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@104-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.2.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@105-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.2.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@106-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.2.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@107-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.2.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@108-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.3.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@109-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.3.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@110-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.3.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@111-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.3.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@112-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.3.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@113-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.4.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@114-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.4.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@115-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.4.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@116-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.4.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@117-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.4.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@118-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.5.1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@119-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.5.2:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@120-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.5.3:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@121-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.5.4:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@122-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1.5.5:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@123-%k.service"
+
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/2-1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@124-%k.service"
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/3-1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@125-%k.service"
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/4-1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@126-%k.service"
+ACTION=="add", SUBSYSTEM=="block", KERNEL=="sd[a-z][0-9]*", DEVPATH=="/devices/*/usb*/5-1:*/*", ENV{ID_FS_TYPE}=="?*", RUN+="/bin/systemctl start ucard-mount@127-%k.service"
+
+# 拔出时的处理
+ACTION=="remove", SUBSYSTEM=="block", RUN+="/bin/systemctl stop ucard-mount@*-%k.service"

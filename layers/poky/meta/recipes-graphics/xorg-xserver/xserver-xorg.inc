@@ -20,23 +20,22 @@ SRC_URI = "${XORG_MIRROR}/individual/xserver/${XORG_PN}-${PV}.tar.xz"
 UPSTREAM_CHECK_REGEX = "xorg-server-(?P<pver>\d+(\.(?!99)\d+)+)\.tar"
 
 CVE_PRODUCT = "xorg-server x_server"
-# This is specific to Debian's xserver-wrapper.c
-CVE_CHECK_IGNORE += "CVE-2011-4613"
-# As per upstream, exploiting this flaw is non-trivial and it requires exact
-# timing on the behalf of the attacker. Many graphical applications exit if their
-# connection to the X server is lost, so a typical desktop session is either
-# impossible or difficult to exploit. There is currently no upstream patch
-# available for this flaw.
-CVE_CHECK_IGNORE += "CVE-2020-25697"
-# This is specific to XQuartz, which is the macOS X server port
-CVE_CHECK_IGNORE += "CVE-2022-3553"
+
+CVE_STATUS[CVE-2011-4613] = "not-applicable-platform: This is specific to Debian's xserver-wrapper.c"
+CVE_STATUS[CVE-2020-25697] = "upstream-wontfix: \
+As per upstream, exploiting this flaw is non-trivial and it requires exact \
+timing on the behalf of the attacker. Many graphical applications exit if their \
+connection to the X server is lost, so a typical desktop session is either \
+impossible or difficult to exploit. There is currently no upstream patch \
+available for this flaw."
+CVE_STATUS[CVE-2022-3553] = "cpe-incorrect: This is specific to XQuartz, which is the macOS X server port"
 
 S = "${WORKDIR}/${XORG_PN}-${PV}"
 
 inherit meson pkgconfig
 
 inherit features_check
-#REQUIRED_DISTRO_FEATURES = "x11"
+REQUIRED_DISTRO_FEATURES = "x11"
 
 LIB_DEPS = "pixman libxfont2 xtrans libxau libxext libxdmcp libdrm libxkbfile libpciaccess libxcvt libtirpc"
 DEPENDS = "xorgproto ${LIB_DEPS} font-util"
@@ -117,15 +116,14 @@ FILES:xf86-video-modesetting = "${libdir}/xorg/modules/drivers/modesetting_drv.s
 
 EXTRA_OEMESON += " \
                  -Dxnest=false \
-                 -Dxvfb=true \
                  -Ddtrace=false \
                  -Dint10=x86emu \
                  -Dxkb_output_dir=/var/lib/xkb \
 "
 
 OPENGL_PKGCONFIGS = "dri glx glamor dri3"
-#${@bb.utils.contains('DISTRO_FEATURES', 'opengl', '${OPENGL_PKGCONFIGS}', '', d)}
 PACKAGECONFIG ??= "dga dri2 udev ${XORG_CRYPTO} \
+                   ${@bb.utils.contains('DISTRO_FEATURES', 'opengl', '${OPENGL_PKGCONFIGS}', '', d)} \
                    ${@bb.utils.contains('DISTRO_FEATURES', 'systemd', 'systemd-logind', '', d)} \
 "
 
@@ -133,12 +131,13 @@ PACKAGECONFIG[udev] = "-Dudev=true,-Dudev=false,udev"
 PACKAGECONFIG[dga] = "-Ddga=true,-Ddga=false"
 PACKAGECONFIG[dri] = "-Ddri1=true,-Ddri1=false,virtual/mesa"
 PACKAGECONFIG[dri2] = "-Ddri2=true,-Ddri2=false"
-PACKAGECONFIG[dri3] = "-Ddri3=true,-Ddri3=false,libxshmfence"
+PACKAGECONFIG[dri3] = "-Ddri3=true,-Ddri3=false"
 PACKAGECONFIG[glx] = "-Dglx=true,-Dglx=false,virtual/libgl virtual/libx11"
-PACKAGECONFIG[glamor] = "-Dglamor=true,-Dglamor=false,libepoxy virtual/libgbm,qcom-adreno"
+PACKAGECONFIG[glamor] = "-Dglamor=true,-Dglamor=false,libepoxy virtual/libgbm,libegl"
 PACKAGECONFIG[unwind] = "-Dlibunwind=true,-Dlibunwind=false,libunwind"
 PACKAGECONFIG[systemd-logind] = "-Dsystemd_logind=true,-Dsystemd_logind=false,dbus,"
 PACKAGECONFIG[xinerama] = "-Dxinerama=true,-Dxinerama=false"
+PACKAGECONFIG[xvfb] = "-Dxvfb=true,-Dxvfb=false"
 
 # Xorg requires a SHA1 implementation, pick one
 XORG_CRYPTO ??= "openssl"
@@ -176,3 +175,9 @@ python populate_packages:prepend() {
     d.appendVar("RPROVIDES:" + pn, " " + get_abi("input"))
     d.appendVar("RPROVIDES:" + pn, " " + get_abi("video"))
 }
+
+CVE_STATUS[CVE-2023-5574] = "${@bb.utils.contains('PACKAGECONFIG', 'xvfb', 'unpatched', 'not-applicable-config: specific to Xvfb', d)}"
+
+CVE_STATUS_GROUPS = "CVE_STATUS_REDHAT"
+CVE_STATUS_REDHAT = "CVE-2025-26594 CVE-2025-26595 CVE-2025-26596 CVE-2025-26597 CVE-2025-26598 CVE-2025-26599 CVE-2025-26600 CVE-2025-26601"
+CVE_STATUS_REDHAT[status] = "fixed-version: these are tracked as versionless redhat CVEs in NVD DB, fixed in 21.1.16"

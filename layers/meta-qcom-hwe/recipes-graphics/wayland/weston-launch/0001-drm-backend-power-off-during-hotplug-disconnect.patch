@@ -7,16 +7,14 @@ From: Rajavenu Kyatham <quic_rkyatham@quicinc.com>
 Date: Thu, 8 Aug 2024 13:13:57 +0530
 Subject: [PATCH] drm-backend: power off during hotplug disconnect.
 
+Upstream-Status: Inappropriate [Downstream]
 Signed-off-by: Rajavenu Kyatham <quic_rkyatham@quicinc.com>
 ---
- libweston/backend-drm/drm.c | 12 ++++++++++++
- 1 file changed, 12 insertions(+)
-
 diff --git a/libweston/backend-drm/drm.c b/libweston/backend-drm/drm.c
-index be440b8..a72de35 100644
+index b46ed63..8cb58bf 100644
 --- a/libweston/backend-drm/drm.c
 +++ b/libweston/backend-drm/drm.c
-@@ -2059,6 +2059,17 @@ drm_connector_fini(struct drm_connector *connector)
+@@ -2549,6 +2549,17 @@ drm_connector_fini(struct drm_connector *connector)
  	drm_property_info_free(connector->props, WDRM_CONNECTOR__COUNT);
  }
  
@@ -34,9 +32,9 @@ index be440b8..a72de35 100644
  static void
  drm_head_log_info(struct drm_head *head, const char *msg)
  {
-@@ -2069,6 +2080,7 @@ drm_head_log_info(struct drm_head *head, const char *msg)
- 			   head->base.make, head->base.model,
- 			   head->base.serial_number ?: "");
+@@ -2568,6 +2579,7 @@ drm_head_log_info(struct drm_head *head, const char *msg)
+ 		}
+ 		free(eotf_list);
  	} else {
 +		drm_head_output_power_off(head);
  		weston_log("DRM: head '%s' %s, connector %d is disconnected.\n",

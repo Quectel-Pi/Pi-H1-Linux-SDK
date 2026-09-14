@@ -1,0 +1,39 @@
+From 078b3efb85022c2685a1107c7f5c9dc69cbbd828 Mon Sep 17 00:00:00 2001
+From: Konrad Dybcio <konradybcio@kernel.org>
+Date: Tue, 13 Aug 2024 21:12:00 +0200
+Subject: [PATCH] UPSTREAM: PCI/pwrctl: pwrseq: add support for WCN6855
+
+Add support for ATH11K inside the WCN6855 package to the power
+sequencing PCI power control driver.
+
+Link: https://lore.kernel.org/r/20240813191201.155123-1-brgl@bgdev.pl
+[Bartosz: split Konrad's bigger patch, write the commit message]
+Co-developed-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Signed-off-by: Konrad Dybcio <konradybcio@kernel.org>
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Signed-off-by: Bjorn Helgaas <bhelgaas@google.com>
+Reviewed-by: Konrad Dybcio <konradybcio@kernel.org>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 0da59840f10141988e949d8519ed9182991caf17]
+---
+ drivers/pci/pwrctl/pci-pwrctl-pwrseq.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/drivers/pci/pwrctl/pci-pwrctl-pwrseq.c b/drivers/pci/pwrctl/pci-pwrctl-pwrseq.c
+index c7a113a76c0c..9a22f4528dd9 100644
+--- a/drivers/pci/pwrctl/pci-pwrctl-pwrseq.c
++++ b/drivers/pci/pwrctl/pci-pwrctl-pwrseq.c
+@@ -66,6 +66,11 @@ static const struct of_device_id pci_pwrctl_pwrseq_of_match[] = {
+ 		.compatible = "pci17cb,1101",
+ 		.data = "wlan",
+ 	},
++	{
++		/* ATH11K in WCN6855 package. */
++		.compatible = "pci17cb,1103",
++		.data = "wlan",
++	},
+ 	{
+ 		/* ATH12K in WCN7850 package. */
+ 		.compatible = "pci17cb,1107",
+-- 
+2.34.1
+

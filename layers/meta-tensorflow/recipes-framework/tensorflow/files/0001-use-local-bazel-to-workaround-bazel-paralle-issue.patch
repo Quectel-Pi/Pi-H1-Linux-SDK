@@ -1,0 +1,26 @@
+From 3a89b6024e27239d645b73804318fe23157787b8 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Sun, 15 May 2022 23:59:17 -0700
+Subject: [PATCH] use local bazel to workaround bazel paralle issue
+
+Upstream-Status: Inappropriate [oe specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+Signed-off-by: Julien STEPHAN <jstephan@baylibre.com>
+---
+ configure.py | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configure.py b/configure.py
+index c1cb2016201..a160912ba0b 100644
+--- a/configure.py
++++ b/configure.py
+@@ -423,7 +423,7 @@ def retrieve_bazel_version():
+   Returns:
+     The bazel version detected.
+   """
+-  bazel_executable = which('bazel')
++  bazel_executable = "%%WORKDIR%%/bazel/bazel"
+   if bazel_executable is None:
+     bazel_executable = which('bazelisk')
+     if bazel_executable is None:

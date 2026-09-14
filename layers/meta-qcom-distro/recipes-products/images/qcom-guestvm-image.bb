@@ -6,6 +6,7 @@ inherit core-image
 
 CORE_IMAGE_BASE_INSTALL += " \
     packagegroup-qcom-vm-guest \
+    packagegroup-qcom-display \
 "
 
 IMAGE_FEATURES += "ssh-server-openssh"

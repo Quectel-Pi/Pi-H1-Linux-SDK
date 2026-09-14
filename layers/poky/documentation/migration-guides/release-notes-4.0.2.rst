@@ -1,16 +1,18 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Release notes for Yocto-4.0.2 (Kirkstone)
 -----------------------------------------
 
 Security Fixes in Yocto-4.0.2
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
--  libxslt: Mark :cve:`2022-29824` as not applying
--  tiff: Add jbig PACKAGECONFIG and clarify IGNORE :cve:`2022-1210`
--  tiff: mark :cve:`2022-1622` and :cve:`2022-1623` as invalid
--  pcre2:fix :cve:`2022-1586` Out-of-bounds read
--  curl: fix :cve:`2022-22576`, :cve:`2022-27775`, :cve:`2022-27776`, :cve:`2022-27774`, :cve:`2022-30115`, :cve:`2022-27780`, :cve:`2022-27781`, :cve:`2022-27779` and :cve:`2022-27782`
--  qemu: fix :cve:`2021-4206` and :cve:`2021-4207`
--  freetype: fix :cve:`2022-27404`, :cve:`2022-27405` and :cve:`2022-27406`
+-  libxslt: Mark :cve_nist:`2022-29824` as not applying
+-  tiff: Add jbig :term:`PACKAGECONFIG` and clarify IGNORE :cve_nist:`2022-1210`
+-  tiff: mark :cve_nist:`2022-1622` and :cve_nist:`2022-1623` as invalid
+-  pcre2:fix :cve_nist:`2022-1586` Out-of-bounds read
+-  curl: fix :cve_nist:`2022-22576`, :cve_nist:`2022-27775`, :cve_nist:`2022-27776`, :cve_nist:`2022-27774`, :cve_nist:`2022-30115`, :cve_nist:`2022-27780`, :cve_nist:`2022-27781`, :cve_nist:`2022-27779` and :cve_nist:`2022-27782`
+-  qemu: fix :cve_nist:`2021-4206` and :cve_nist:`2021-4207`
+-  freetype: fix :cve_nist:`2022-27404`, :cve_nist:`2022-27405` and :cve_nist:`2022-27406`
 
 Fixes in Yocto-4.0.2
 ~~~~~~~~~~~~~~~~~~~~
@@ -23,7 +25,7 @@ Fixes in Yocto-4.0.2
 -  bash: submit patch upstream
 -  bind: upgrade 9.18.1 -> 9.18.2
 -  binutils: Bump to latest 2.38 release branch
--  bitbake.conf: Make TCLIBC and TCMODE lazy assigned
+-  bitbake.conf: Make :term:`TCLIBC` and :term:`TCMODE` lazy assigned
 -  bitbake: build: Add clean_stamp API function to allow removal of task stamps
 -  bitbake: data: Do not depend on vardepvalueexclude flag
 -  bitbake: fetch2/osc: Small fixes for osc fetcher
@@ -56,7 +58,7 @@ Fixes in Yocto-4.0.2
 -  gcc-source: Fix incorrect task dependencies from ${B}
 -  gcc: Upgrade to 11.3 release
 -  gcc: depend on zstd-native
--  git: fix override syntax in RDEPENDS
+-  git: fix override syntax in :term:`RDEPENDS`
 -  glib-2.0: upgrade 2.72.1 -> 2.72.2
 -  glibc: Drop make-native dependency
 -  go: upgrade 1.17.8 -> 1.17.10
@@ -83,7 +85,7 @@ Fixes in Yocto-4.0.2
 -  libpcre2: upgrade 10.39 -> 10.40
 -  librepo: upgrade 1.14.2 -> 1.14.3
 -  libseccomp: Add missing files for ptests
--  libseccomp: Correct LIC_FILES_CHKSUM
+-  libseccomp: Correct :term:`LIC_FILES_CHKSUM`
 -  libxkbcommon: upgrade 1.4.0 -> 1.4.1
 -  libxml2: Upgrade 2.9.13 -> 2.9.14
 -  license.bbclass: Bound beginline and endline in copy_license_files()
@@ -125,8 +127,8 @@ Fixes in Yocto-4.0.2
 -  perl: Add dependency on make-native to avoid race issues
 -  perl: Fix build with gcc-12
 -  poky.conf: bump version for 4.0.2
--  popt: fix override syntax in RDEPENDS
--  pypi.bbclass: Set CVE_PRODUCT to PYPI_PACKAGE
+-  popt: fix override syntax in :term:`RDEPENDS`
+-  pypi.bbclass: Set :term:`CVE_PRODUCT` to :term:`PYPI_PACKAGE`
 -  python3: Ensure stale empty python module directories don't break the build
 -  python3: Remove problematic paths from sysroot files
 -  python3: fix reproducibility issue with python3-core
@@ -143,7 +145,7 @@ Fixes in Yocto-4.0.2
 -  sanity: Don't warn about make 4.2.1 for mint
 -  sanity: Switch to make 4.0 as a minimum version
 -  sed: Specify shell for "nobody" user in run-ptest
--  selftest/imagefeatures/overlayfs: Always append to DISTRO_FEATURES
+-  selftest/imagefeatures/overlayfs: Always append to :term:`DISTRO_FEATURES`
 -  selftest/multiconfig: Test that multiconfigs in separate layers works
 -  sqlite3: upgrade to 3.38.5
 -  staging.bbclass: process direct dependencies in deterministic order
@@ -223,14 +225,14 @@ Contributors to Yocto-4.0.2
 -  Xiaobing Luo
 -  Yi Zhao
 -  leimaohui
--  wangmy
+-  Wang Mingyu
 
 Repositories / Downloads for Yocto-4.0.2
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 poky
 
--  Repository Location: https://git.yoctoproject.org/git/poky
+-  Repository Location: :yocto_git:`/poky`
 -  Branch: :yocto_git:`kirkstone </poky/log/?h=kirkstone>`
 -  Tag:  :yocto_git:`yocto-4.0.2 </poky/log/?h=yocto-4.0.2>`
 -  Git Revision: :yocto_git:`a5ea426b1da472fc8549459fff3c1b8c6e02f4b5 </poky/commit/?id=a5ea426b1da472fc8549459fff3c1b8c6e02f4b5>`
@@ -242,7 +244,7 @@ poky
 
 openembedded-core
 
--  Repository Location: https://git.openembedded.org/openembedded-core
+-  Repository Location: :oe_git:`/openembedded-core`
 -  Branch: :oe_git:`kirkstone </openembedded-core/log/?h=kirkstone>`
 -  Tag:  :oe_git:`yocto-4.0.2 </openembedded-core/log/?h=yocto-4.0.2>`
 -  Git Revision: :oe_git:`eea52e0c3d24c79464f4afdbc3c397e1cb982231 </openembedded-core/commit/?id=eea52e0c3d24c79464f4afdbc3c397e1cb982231>`
@@ -254,7 +256,7 @@ openembedded-core
 
 meta-mingw
 
--  Repository Location: https://git.yoctoproject.org/git/meta-mingw
+-  Repository Location: :yocto_git:`/meta-mingw`
 -  Branch: :yocto_git:`kirkstone </meta-mingw/log/?h=kirkstone>`
 -  Tag:  :yocto_git:`yocto-4.0.2 </meta-mingw/log/?h=yocto-4.0.2>`
 -  Git Revision: :yocto_git:`a90614a6498c3345704e9611f2842eb933dc51c1 </meta-mingw/commit/?id=a90614a6498c3345704e9611f2842eb933dc51c1>`
@@ -266,7 +268,7 @@ meta-mingw
 
 meta-gplv2
 
--  Repository Location: https://git.yoctoproject.org/git/meta-gplv2
+-  Repository Location: :yocto_git:`/meta-gplv2`
 -  Branch: :yocto_git:`kirkstone </meta-gplv2/log/?h=kirkstone>`
 -  Tag:  :yocto_git:`yocto-4.0.2 </meta-gplv2/log/?h=yocto-4.0.2>`
 -  Git Revision: :yocto_git:`d2f8b5cdb285b72a4ed93450f6703ca27aa42e8a </meta-gplv2/commit/?id=d2f8b5cdb285b72a4ed93450f6703ca27aa42e8a>`
@@ -278,7 +280,7 @@ meta-gplv2
 
 bitbake
 
--  Repository Location: https://git.openembedded.org/bitbake
+-  Repository Location: :oe_git:`/bitbake`
 -  Branch: :oe_git:`2.0 </bitbake/log/?h=2.0>`
 -  Tag:  :oe_git:`yocto-4.0.2 </bitbake/log/?h=yocto-4.0.2>`
 -  Git Revision: :oe_git:`b8fd6f5d9959d27176ea016c249cf6d35ac8ba03 </bitbake/commit/?id=b8fd6f5d9959d27176ea016c249cf6d35ac8ba03>`
@@ -290,7 +292,7 @@ bitbake
 
 yocto-docs
 
--  Repository Location: https://git.yoctoproject.org/git/yocto-docs
+-  Repository Location: :yocto_git:`/yocto-docs`
 -  Branch: :yocto_git:`kirkstone </yocto-docs/log/?h=kirkstone>`
 -  Tag: :yocto_git:`yocto-4.0.2 </yocto-docs/log/?h=yocto-4.0.2>`
 -  Git Revision: :yocto_git:`662294dccd028828d5c7e9fd8f5c8e14df53df4b </yocto-docs/commit/?id=662294dccd028828d5c7e9fd8f5c8e14df53df4b>`

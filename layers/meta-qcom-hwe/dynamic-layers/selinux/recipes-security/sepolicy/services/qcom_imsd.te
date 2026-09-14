@@ -1,0 +1,69 @@
+#Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+#SPDX-License-Identifier: BSD-3-Clause-Clear
+
+policy_module(qcom_imsd, 1.0)
+
+########################################
+#
+# imsd
+#
+
+# Define types
+type qcom_imsd_t;
+type qcom_imsd_exec_t;
+#type qcom_imsd_sock_t;
+
+# Initialize the domain
+init_daemon_domain(qcom_imsd_t, qcom_imsd_exec_t)
+
+# Allow the domain to create and use the socket
+#allow qcom_imsd_t qcom_imsd_sock_t:unix_stream_socket { create getattr setattr read write };
+#allow qcom_imsd_t qcom_imsd_sock_t:file { create unlink };
+
+# Associate the socket type with tmpfs
+#fs_associate_tmpfs(qcom_imsd_sock_t)
+#files_tmp_file(qcom_imsd_sock_t)
+#files_tmp_filetrans(qcom_imsd_t, qcom_imsd_sock_t, { file dir })
+
+# Allow the domain to create and manage processes
+allow qcom_imsd_t self:process { fork execmem execstack };
+allow qcom_imsd_t self:process { signal sigchld };
+
+# Allow the domain to create and use pipes
+allow qcom_imsd_t self:file { create read write getattr };
+
+# Additional permissions for logging and other operations
+logging_send_syslog_msg(qcom_imsd_t)
+logging_rw_runtime_sockets(qcom_imsd_t)
+allow qcom_imsd_t self:qipcrtr_socket create_socket_perms;
+allow qcom_imsd_t self:unix_stream_socket { create_stream_socket_perms sendto accept listen };
+allow qcom_imsd_t self:socket create_socket_perms;
+allow qcom_imsd_t self:capability kill;
+allow qcom_imsd_t self:process { signal sigkill };
+allow qcom_imsd_t self:unix_dgram_socket { create connect write sendto };
+init_search_runtime(qcom_imsd_t)
+miscfiles_read_localization(qcom_imsd_t)
+# allow qcom_imsd_t tmp_t:dir { search write add_name remove_name };
+# allow qcom_imsd_t tmp_t:sock_file { create unlink };
+kernel_read_system_state(qcom_imsd_t)
+qcom_coredump_read_write(qcom_imsd_t)
+
+allow qcom_imsd_t self:process { getsched setsched };
+
+dbus_send_system_bus(qcom_imsd_t)
+dbus_ipc(qcom_imsd_t)
+modemmanager_dbus_chat(qcom_imsd_t)
+allow qcom_imsd_t self:udp_socket { ioctl create };
+allow qcom_imsd_t self:fifo_file ioctl;
+allow qcom_imsd_t self:capability { net_admin };
+allow qcom_imsd_t self:netlink_route_socket { read write getattr bind setopt create nlmsg_write nlmsg_read };
+
+#will resolve busybox related denials
+busybox_nosuid_execute(qcom_imsd_t)
+
+#will resolve ifconfig and bin related denials
+#These denials are observed due to popen() calling
+sysnet_exec_ifconfig(qcom_imsd_t)
+
+#for shell_exec_t
+corecmd_check_exec_shell(qcom_imsd_t)

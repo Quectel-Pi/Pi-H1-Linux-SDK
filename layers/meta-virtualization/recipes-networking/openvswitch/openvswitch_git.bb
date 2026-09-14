@@ -14,19 +14,19 @@ RDEPENDS:${PN}-ptest += "\
 	"
 
 S = "${WORKDIR}/git"
-PV = "2.17.9+${SRCPV}"
-CVE_VERSION = "2.17.9"
+PV = "3.3.0"
+CVE_VERSION = "3.3.0"
 
 FILESEXTRAPATHS:append := "${THISDIR}/${PN}-git:"
 
-SRCREV = "0bea06d9957e3966d94c48873cd9afefba1c2677"
-SRC_URI += "git://github.com/openvswitch/ovs.git;protocol=https;branch=branch-2.17 \
+SRCREV = "1c1f173ce8a8534e262083bc4db3ee15f05231c0"
+SRC_URI += "git://github.com/openvswitch/ovs.git;protocol=https;branch=branch-3.3 \
             file://openvswitch-add-ptest-71d553b995d0bd527d3ab1e9fbaf5a2ae34de2f3.patch \
             file://run-ptest \
             file://disable_m4_check.patch \
-            file://kernel_module.patch \
             file://systemd-update-tool-paths.patch \
             file://systemd-create-runtime-dirs.patch \
+            file://Makefile.am-set-the-python3-interpreter-with-usr-bin.patch \
            "
 
 LIC_FILES_CHKSUM = "file://LICENSE;md5=1ce5d23a6429dff345518758f13aaeab"
@@ -52,6 +52,3 @@ do_install_ptest() {
 	oe_runmake test-install
 }
 
-do_install:append() {
-	oe_runmake modules_install INSTALL_MOD_PATH=${D}
-}

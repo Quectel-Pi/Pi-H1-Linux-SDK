@@ -14,6 +14,8 @@ IMAGE_INSTALL += " \
     ${XEN_KERNEL_MODULES} \
     xen-tools \
     qemu \
+    kernel-image \
+    kernel-vmlinux \
     "
 
 # The hypervisor may not be within the dom0 filesystem image but at least
@@ -50,20 +52,24 @@ do_check_xen_state() {
 
 addtask check_xen_state before do_rootfs
 
+# note: this may be unused, see the wic plugin
 syslinux_iso_populate:append() {
 	install -m 0444 ${STAGING_DATADIR}/syslinux/libcom32.c32 ${ISODIR}${ISOLINUXDIR}
 	install -m 0444 ${STAGING_DATADIR}/syslinux/mboot.c32 ${ISODIR}${ISOLINUXDIR}
 }
 
+# note: this may be unused, see the wic plugin
 syslinux_hddimg_populate:append() {
 	install -m 0444 ${STAGING_DATADIR}/syslinux/libcom32.c32 ${HDDDIR}${SYSLINUXDIR}
 	install -m 0444 ${STAGING_DATADIR}/syslinux/mboot.c32 ${HDDDIR}${SYSLINUXDIR}
 }
 
+# note: this may be unused, see the wic plugin
 grubefi_populate:append() {
 	install -m 0644 ${DEPLOY_DIR_IMAGE}/xen-${MACHINE}.gz ${DEST}${EFIDIR}/xen.gz
 }
 
+# note: this may be unused, see the wic plugin
 syslinux_populate:append() {
 	install -m 0644 ${DEPLOY_DIR_IMAGE}/xen-${MACHINE}.gz ${DEST}/xen.gz
 }
@@ -71,6 +77,7 @@ syslinux_populate:append() {
 SYSLINUX_XEN_ARGS ?= "loglvl=all guest_loglvl=all console=com1,vga com1=115200,8n1"
 SYSLINUX_KERNEL_ARGS ?= "ramdisk_size=32768 root=/dev/ram0 rw console=hvc0 earlyprintk=xen console=tty0 panic=10 LABEL=boot debugshell=5"
 
+# note: this may be unused, see the wic plugin
 build_syslinux_cfg () {
 	echo "ALLOWOPTIONS 1" > ${SYSLINUX_CFG}
 	echo "DEFAULT boot" >> ${SYSLINUX_CFG}
@@ -83,7 +90,9 @@ build_syslinux_cfg () {
 
 # Enable runqemu. eg: runqemu xen-image-minimal nographic slirp
 WKS_FILE:x86-64 = "directdisk-xen.wks"
+WKS_FILE_DEPENDS_DEFAULT:x86-64 = "syslinux-native"
 WKS_FILE:qemux86-64 = "qemuboot-xen-x86-64.wks"
+WKS_FILE_DEPENDS_DEFAULT:qemux86-64 = "syslinux-native"
 QB_MEM ?= "-m 400"
 QB_DEFAULT_KERNEL ?= "none"
 QB_DEFAULT_FSTYPE ?= "wic"
@@ -93,6 +102,7 @@ QB_SERIAL_OPT = "-serial mon:stdio"
 # qemux86-64 machine does not include 'wic' in IMAGE_FSTYPES, which is needed
 # to boot this image, so add it here:
 IMAGE_FSTYPES:qemux86-64 += "wic"
+do_image_wic[depends] += "xen:do_deploy"
 # Networking: the qemuboot.bbclass default virtio network device works ok
 # and so does the emulated e1000 -- choose according to the network device
 # drivers that are present in your dom0 Linux kernel. To switch to e1000:

@@ -1,18 +1,30 @@
-From 789e4dd982011cff1689f50565bea985d6bd5236 Mon Sep 17 00:00:00 2001
-From: Ravi Kumar Siddojigari <quic_rsiddoji@quicinc.com>
-Date: Mon, 3 Jun 2024 22:38:19 +0530
+From 03e83280cd7f1ecf28189f4024539437f7b2614a Mon Sep 17 00:00:00 2001
+From: Gargi Misra <quic_gmisra@quicinc.com>
+Date: Fri, 21 Mar 2025 15:25:21 +0530
 Subject: [PATCH] refpolicy: config: update ssh to login in sysadmin role
 
-this will enable ssh to login as sysadmin for root user.
+Upstream-status: Pending
+Signoff-by: gmisra@qti.qualcomm.com
 
-Change-Id: I3b27662c39d2958022f9d985c306a9748ed17b6b
-Signed-off-by: Ravi Kumar Siddojigari <quic_rsiddoji@quicinc.com>
+This will enable ssh to login as sysadmin for root user.
 ---
- config/appconfig-mls/root_default_contexts | 2 +-
- 1 file changed, 1 insertion(+), 1 deletion(-)
+ config/appconfig-mcs/root_default_contexts      | 2 +-
+ config/appconfig-mls/root_default_contexts      | 2 +-
+ config/appconfig-standard/root_default_contexts | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
 
+diff --git a/config/appconfig-mcs/root_default_contexts b/config/appconfig-mcs/root_default_contexts
+index 498b429f5..fc5ed3530 100644
+--- a/config/appconfig-mcs/root_default_contexts
++++ b/config/appconfig-mcs/root_default_contexts
+@@ -9,4 +9,4 @@ user_r:user_su_t:s0		unconfined_r:unconfined_t:s0 sysadm_r:sysadm_t:s0 staff_r:s
+ #
+ # Uncomment if you want to automatically login as sysadm_r
+ #
+-#system_r:sshd_t:s0		unconfined_r:unconfined_t:s0 sysadm_r:sysadm_t:s0 staff_r:staff_t:s0 user_r:user_t:s0
++system_r:sshd_t:s0		unconfined_r:unconfined_t:s0 sysadm_r:sysadm_t:s0 staff_r:staff_t:s0 user_r:user_t:s0
 diff --git a/config/appconfig-mls/root_default_contexts b/config/appconfig-mls/root_default_contexts
-index 498b429f55de..fc5ed35303ac 100644
+index 498b429f5..fc5ed3530 100644
 --- a/config/appconfig-mls/root_default_contexts
 +++ b/config/appconfig-mls/root_default_contexts
 @@ -9,4 +9,4 @@ user_r:user_su_t:s0		unconfined_r:unconfined_t:s0 sysadm_r:sysadm_t:s0 staff_r:s
@@ -21,7 +33,16 @@ index 498b429f55de..fc5ed35303ac 100644
  #
 -#system_r:sshd_t:s0		unconfined_r:unconfined_t:s0 sysadm_r:sysadm_t:s0 staff_r:staff_t:s0 user_r:user_t:s0
 +system_r:sshd_t:s0		unconfined_r:unconfined_t:s0 sysadm_r:sysadm_t:s0 staff_r:staff_t:s0 user_r:user_t:s0
+diff --git a/config/appconfig-standard/root_default_contexts b/config/appconfig-standard/root_default_contexts
+index 60080fb2a..d958bcc24 100644
+--- a/config/appconfig-standard/root_default_contexts
++++ b/config/appconfig-standard/root_default_contexts
+@@ -9,4 +9,4 @@ user_r:user_su_t	unconfined_r:unconfined_t sysadm_r:sysadm_t staff_r:staff_t use
+ #
+ # Uncomment if you want to automatically login as sysadm_r
+ #
+-#system_r:sshd_t	unconfined_r:unconfined_t sysadm_r:sysadm_t staff_r:staff_t user_r:user_t
++system_r:sshd_t	unconfined_r:unconfined_t sysadm_r:sysadm_t staff_r:staff_t user_r:user_t
 -- 
-The Qualcomm Innovation Center, Inc. is a member of the Code Aurora Forum,
-a Linux Foundation Collaborative Project
+2.34.1
 

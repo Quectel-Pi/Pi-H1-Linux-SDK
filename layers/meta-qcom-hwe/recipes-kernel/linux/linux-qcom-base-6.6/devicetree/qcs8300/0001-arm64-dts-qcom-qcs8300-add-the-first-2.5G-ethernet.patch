@@ -1,0 +1,83 @@
+From d0abe88e89232a80a679d85f7bb6e280f5c6e1b6 Mon Sep 17 00:00:00 2001
+From: Yijie Yang <quic_yijiyang@quicinc.com>
+Date: Thu, 23 Jan 2025 11:45:29 +0530
+Subject: [PATCH 1/2] arm64: dts: qcom: qcs8300: add the first 2.5G ethernet
+
+Add the node for the first ethernet interface on qcs8300 platform.
+Add the internal SGMII/SerDes PHY node as well.
+
+Change-Id: I03a685868b0d8445959bf659a07986b6eb0b62fe
+Reviewed-by: Konrad Dybcio <konrad.dybcio@oss.qualcomm.com>
+Signed-off-by: Yijie Yang <quic_yijiyang@quicinc.com>
+Link: https://lore.kernel.org/r/20241206-dts_qcs8300-v5-1-422e4fda292d@quicinc.com
+Signed-off-by: Bjorn Andersson <andersson@kernel.org>
+Signed-off-by: Mohd Ayaan Anwar <quic_mohdayaa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=86d32baddc7bac85f42eb917baff9914131dd393]
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 43 +++++++++++++++++++++++++++
+ 1 file changed, 43 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index f6c37f247df6..f037a399f98f 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -2179,6 +2179,15 @@ gpucc: clock-controller@3d90000 {
+ 			#power-domain-cells = <1>;
+ 		};
+ 
++		serdes0: phy@8909000 {
++			compatible = "qcom,qcs8300-dwmac-sgmii-phy", "qcom,sa8775p-dwmac-sgmii-phy";
++			reg = <0x0 0x08909000 0x0 0x00000e10>;
++			clocks = <&gcc GCC_SGMI_CLKREF_EN>;
++			clock-names = "sgmi_ref";
++			#phy-cells = <0>;
++			status = "disabled";
++		};
++
+ 		pmu@9091000 {
+ 			compatible = "qcom,qcs8300-llcc-bwmon", "qcom,sc7280-llcc-bwmon";
+ 			reg = <0x0 0x9091000 0x0 0x1000>;
+@@ -3867,6 +3876,40 @@ IPCC_MPROC_SIGNAL_GLINK_QMP
+ 			};
+ 		};
+ 
++		ethernet0: ethernet@23040000 {
++			compatible = "qcom,qcs8300-ethqos", "qcom,sa8775p-ethqos";
++			reg = <0x0 0x23040000 0x0 0x00010000>,
++			      <0x0 0x23056000 0x0 0x00000100>;
++			reg-names = "stmmaceth", "rgmii";
++
++			interrupts = <GIC_SPI 946 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 783 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "macirq", "sfty";
++
++			clocks = <&gcc GCC_EMAC0_AXI_CLK>,
++				 <&gcc GCC_EMAC0_SLV_AHB_CLK>,
++				 <&gcc GCC_EMAC0_PTP_CLK>,
++				 <&gcc GCC_EMAC0_PHY_AUX_CLK>;
++			clock-names = "stmmaceth",
++				      "pclk",
++				      "ptp_ref",
++				      "phyaux";
++			power-domains = <&gcc GCC_EMAC0_GDSC>;
++
++			phys = <&serdes0>;
++			phy-names = "serdes";
++
++			iommus = <&apps_smmu 0x120 0xf>;
++			dma-coherent;
++
++			snps,tso;
++			snps,pbl = <32>;
++			rx-fifo-depth = <16384>;
++			tx-fifo-depth = <20480>;
++
++			status = "disabled";
++		};
++
+ 		nspa_noc: interconnect@260c0000 {
+ 			compatible = "qcom,qcs8300-nspa-noc";
+ 			reg = <0x0 0x260c0000 0x0 0x16080>;
+-- 
+2.34.1
+

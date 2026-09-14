@@ -1,0 +1,98 @@
+From f657f74737d61784f55fbc04d569b9ec0d41d43f Mon Sep 17 00:00:00 2001
+From: Wangao Wang <quic_wangaow@quicinc.com>
+Date: Tue, 6 May 2025 10:55:22 +0800
+Subject: [PATCH 01/69] Revert "PENDING: arm64: dts: qcom: qcs8300: add video
+ codec node"
+
+This reverts commit b784cb0c7309795c059efac31499d4f6b969ac4b.
+
+Iris driver and qcs8300-iris dt need to update to the latest patch series.
+The existing dtb patch has dependencies that cause compilation errors.
+Currently, we are removing the iris node by reverting.
+
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Inappropriate [Revert]
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 66 ---------------------------
+ 1 file changed, 66 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index b695c60f649b..71ab411afe01 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -3454,72 +3454,6 @@ llcc: system-cache-controller@9200000 {
+ 			interrupts = <GIC_SPI 582 IRQ_TYPE_LEVEL_HIGH>;
+ 		};
+ 
+-		iris: video-codec@aa00000 {
+-			compatible = "qcom,qcs8300-iris";
+-
+-			reg = <0 0x0aa00000 0 0xf0000>;
+-			interrupts = <GIC_SPI 174 IRQ_TYPE_LEVEL_HIGH>;
+-
+-			power-domains = <&videocc VIDEO_CC_MVS0C_GDSC>,
+-			                <&videocc VIDEO_CC_MVS0_GDSC>,
+-			                <&rpmhpd RPMHPD_MX>,
+-			                <&rpmhpd RPMHPD_MMCX>;
+-			power-domain-names = "venus", "vcodec0", "mx", "mmcx";
+-			operating-points-v2 = <&iris_opp_table>;
+-
+-			clocks = <&gcc GCC_VIDEO_AXI0_CLK>,
+-			         <&videocc VIDEO_CC_MVS0C_CLK>,
+-			         <&videocc VIDEO_CC_MVS0_CLK>;
+-			clock-names = "iface", "core", "vcodec0_core";
+-
+-			interconnects =
+-				<&gem_noc MASTER_APPSS_PROC QCOM_ICC_TAG_ALWAYS
+-					&config_noc SLAVE_VENUS_CFG QCOM_ICC_TAG_ALWAYS>,
+-				<&mmss_noc MASTER_VIDEO_P0 QCOM_ICC_TAG_ALWAYS
+-					&mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
+-			interconnect-names = "cpu-cfg", "video-mem";
+-
+-			/* FW load region */
+-			memory-region = <&video_mem>;
+-
+-			resets = <&gcc GCC_VIDEO_AXI0_CLK_ARES>;
+-			reset-names = "bus";
+-
+-			iommus = <&apps_smmu 0x0880 0x0400>,
+-			         <&apps_smmu 0x0887 0x0400>;
+-			dma-coherent;
+-
+-			status = "okay";
+-
+-			iris_opp_table: opp-table {
+-				compatible = "operating-points-v2";
+-
+-				opp-366000000 {
+-					opp-hz = /bits/ 64 <366000000>;
+-					required-opps = <&rpmhpd_opp_svs_l1>,
+-					                <&rpmhpd_opp_svs_l1>;
+-				};
+-
+-				opp-444000000 {
+-					opp-hz = /bits/ 64 <444000000>;
+-					required-opps = <&rpmhpd_opp_nom>,
+-					                <&rpmhpd_opp_nom>;
+-				};
+-
+-				opp-533333334 {
+-					opp-hz = /bits/ 64 <533333334>;
+-					required-opps = <&rpmhpd_opp_turbo>,
+-					                <&rpmhpd_opp_turbo>;
+-				};
+-
+-				opp-560000000 {
+-					opp-hz = /bits/ 64 <560000000>;
+-					required-opps = <&rpmhpd_opp_turbo_l1>,
+-					                <&rpmhpd_opp_turbo_l1>;
+-				};
+-			};
+-		};
+-
+ 		pdc: interrupt-controller@b220000 {
+ 			compatible = "qcom,qcs8300-pdc", "qcom,pdc";
+ 			reg = <0x0 0xb220000 0x0 0x30000>,
+-- 
+2.34.1
+

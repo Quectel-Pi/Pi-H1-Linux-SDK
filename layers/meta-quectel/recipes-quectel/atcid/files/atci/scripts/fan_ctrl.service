@@ -1,0 +1,19 @@
+[Unit]
+Description=Fan LED Control by CPU Temperature
+After=local-fs.target
+Before=shutdown.target poweroff.target halt.target reboot.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash -c "while true; do /usr/sbin/fan_ctrl.sh; sleep 5; done"
+ExecStop=/bin/bash -c "echo '[FAN] ExecStop start' > /dev/kmsg; HWMON_DIR=''; for d in /sys/class/hwmon/hwmon*; do if [ -f \"$d/name\" ] && [ \"$(cat \"$d/name\" 2>/dev/null)\" = \"pwmfan\" ]; then HWMON_DIR=\"$d\"; break; fi; done; if [ -n \"$HWMON_DIR\" ]; then [ -w \"$HWMON_DIR/pwm1_enable\" ] && echo 0 > \"$HWMON_DIR/pwm1_enable\" || true; [ -w \"$HWMON_DIR/pwm1\" ] && echo 0 > \"$HWMON_DIR/pwm1\" || true; fi; logger -t fan_ctrl 'Fan stopped by ExecStop' || true; echo '[FAN] ExecStop done' > /dev/kmsg"
+RemainAfterExit=yes
+KillMode=process
+TimeoutStopSec=3
+
+Restart=always
+RestartSec=10
+User=root
+
+[Install]
+WantedBy=multi-user.target

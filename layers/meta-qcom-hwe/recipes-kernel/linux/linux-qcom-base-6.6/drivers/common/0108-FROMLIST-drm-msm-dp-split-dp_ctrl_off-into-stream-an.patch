@@ -1,0 +1,103 @@
+From 847504b354d1b2f1b6f8e295063f18021ca47597 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:31:42 -0800
+Subject: [PATCH 108/146] FROMLIST: drm/msm/dp: split dp_ctrl_off() into stream
+ and link parts
+
+Split dp_ctrl_off() into stream and link parts so that for MST
+cases we can control the link and pixel parts separately.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-11-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_ctrl.c    | 29 +++--------------------------
+ drivers/gpu/drm/msm/dp/dp_ctrl.h    |  2 +-
+ drivers/gpu/drm/msm/dp/dp_display.c |  4 +++-
+ 3 files changed, 7 insertions(+), 28 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_ctrl.c b/drivers/gpu/drm/msm/dp/dp_ctrl.c
+index 951401f8456f..61019de9a964 100644
+--- a/drivers/gpu/drm/msm/dp/dp_ctrl.c
++++ b/drivers/gpu/drm/msm/dp/dp_ctrl.c
+@@ -1761,7 +1761,8 @@ static int msm_dp_ctrl_process_phy_test_request(struct msm_dp_ctrl_private *ctrl
+ 	 * running. Add the global reset just before disabling the
+ 	 * link clocks and core clocks.
+ 	 */
+-	msm_dp_ctrl_off(&ctrl->msm_dp_ctrl);
++	msm_dp_ctrl_stream_clk_off(&ctrl->msm_dp_ctrl);
++	msm_dp_ctrl_off_link(&ctrl->msm_dp_ctrl);
+ 
+ 	ret = msm_dp_ctrl_on_link(&ctrl->msm_dp_ctrl);
+ 	if (ret) {
+@@ -2064,7 +2065,7 @@ int msm_dp_ctrl_on_stream(struct msm_dp_ctrl *msm_dp_ctrl, struct msm_dp_panel *
+ 	return ret;
+ }
+ 
+-static void msm_dp_ctrl_stream_clk_off(struct msm_dp_ctrl *msm_dp_ctrl)
++void msm_dp_ctrl_stream_clk_off(struct msm_dp_ctrl *msm_dp_ctrl)
+ {
+ 	struct msm_dp_ctrl_private *ctrl;
+ 
+@@ -2132,30 +2133,6 @@ void msm_dp_ctrl_off_link(struct msm_dp_ctrl *msm_dp_ctrl)
+ 		phy, phy->init_count, phy->power_count);
+ }
+ 
+-void msm_dp_ctrl_off(struct msm_dp_ctrl *msm_dp_ctrl)
+-{
+-	struct msm_dp_ctrl_private *ctrl;
+-	struct phy *phy;
+-
+-	ctrl = container_of(msm_dp_ctrl, struct msm_dp_ctrl_private, msm_dp_ctrl);
+-	phy = ctrl->phy;
+-
+-	msm_dp_catalog_panel_disable_vsc_sdp(ctrl->catalog);
+-
+-	msm_dp_catalog_ctrl_mainlink_ctrl(ctrl->catalog, false);
+-
+-	msm_dp_catalog_ctrl_reset(ctrl->catalog);
+-
+-	msm_dp_ctrl_stream_clk_off(msm_dp_ctrl);
+-
+-	dev_pm_opp_set_rate(ctrl->dev, 0);
+-	msm_dp_ctrl_link_clk_disable(&ctrl->msm_dp_ctrl);
+-
+-	phy_power_off(phy);
+-	drm_dbg_dp(ctrl->drm_dev, "phy=%p init=%d power_on=%d\n",
+-			phy, phy->init_count, phy->power_count);
+-}
+-
+ irqreturn_t msm_dp_ctrl_isr(struct msm_dp_ctrl *msm_dp_ctrl)
+ {
+ 	struct msm_dp_ctrl_private *ctrl;
+diff --git a/drivers/gpu/drm/msm/dp/dp_ctrl.h b/drivers/gpu/drm/msm/dp/dp_ctrl.h
+index 547155ffa50f..887cf5a866f0 100644
+--- a/drivers/gpu/drm/msm/dp/dp_ctrl.h
++++ b/drivers/gpu/drm/msm/dp/dp_ctrl.h
+@@ -22,7 +22,7 @@ int msm_dp_ctrl_on_stream(struct msm_dp_ctrl *msm_dp_ctrl, struct msm_dp_panel *
+ int msm_dp_ctrl_prepare_stream_on(struct msm_dp_ctrl *dp_ctrl, bool force_link_train);
+ void msm_dp_ctrl_off_link_stream(struct msm_dp_ctrl *msm_dp_ctrl);
+ void msm_dp_ctrl_off_link(struct msm_dp_ctrl *msm_dp_ctrl);
+-void msm_dp_ctrl_off(struct msm_dp_ctrl *msm_dp_ctrl);
++void msm_dp_ctrl_stream_clk_off(struct msm_dp_ctrl *msm_dp_ctrl);
+ void msm_dp_ctrl_push_idle(struct msm_dp_ctrl *msm_dp_ctrl);
+ irqreturn_t msm_dp_ctrl_isr(struct msm_dp_ctrl *msm_dp_ctrl);
+ void msm_dp_ctrl_handle_sink_request(struct msm_dp_ctrl *msm_dp_ctrl);
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 9d5ee34eeb7a..ad81b903b972 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -917,7 +917,9 @@ static int msm_dp_display_disable(struct msm_dp_display_private *dp)
+ 	if (dp->link->sink_count == 0)
+ 		msm_dp_ctrl_psm_config(dp->ctrl);
+ 
+-	msm_dp_ctrl_off(dp->ctrl);
++	msm_dp_ctrl_stream_clk_off(dp->ctrl);
++
++	msm_dp_ctrl_off_link(dp->ctrl);
+ 
+ 	/* re-init the PHY so that we can listen to Dongle disconnect */
+ 	if (dp->link->sink_count == 0)
+-- 
+2.34.1
+

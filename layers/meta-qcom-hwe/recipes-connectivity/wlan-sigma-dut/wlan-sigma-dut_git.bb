@@ -13,7 +13,7 @@ PACKAGE_ARCH ?= "${SOC_ARCH}"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le//platform/vendor/qcom-opensource/sigma-dut.git;protocol=https"
 SRCBRANCH  = "wlan-os-service.qclinux.1.1.r1-rel"
-SRCREV     = "e0e36f765531112d502db57f233ad2059c3d3495"
+SRCREV     = "957fdab4f8b70244f1c91066969d7afc80c553b4"
 
 SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=wlan/utils/sigma-dut \
            file://Makefile.patch"
@@ -25,7 +25,13 @@ CFLAGS += "-I ${STAGING_INCDIR}/libnl3"
 
 do_patch() {
     cd ${S}
-    patch -p1 < ${WORKDIR}/Makefile.patch
+    # Idempotent: if the patch is already applied (reverse dry-run succeeds), skip it.
+    # This makes do_patch safe to re-run (e.g. after stamp invalidation on rebuild).
+    if patch -p1 --dry-run --reverse < ${WORKDIR}/Makefile.patch >/dev/null 2>&1; then
+        bbnote "Makefile.patch already applied, skipping"
+    else
+        patch -p1 --batch < ${WORKDIR}/Makefile.patch
+    fi
 }
 
 do_install() {

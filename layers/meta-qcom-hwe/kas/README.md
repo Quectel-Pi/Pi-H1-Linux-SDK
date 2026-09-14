@@ -49,22 +49,22 @@ Create a workspace directory:
 mkdir "my-workspace" && cd "$_"
 ```
 
-If the meta-qcom-hwe layer hasn’t been downloaded yet, download it to `my-workspace` as it contains the KAS configuration.
+If the meta-qti-bsp layer hasn’t been downloaded yet, download it to my-workspace`as it contains the KAS configuration.
 ```bash
-git clone https://github.com/quic-yocto/meta-qcom-hwe -b kirkstone
+git clone "ssh://review-android.quicinc.com:29418/meta-qti-bsp" -b oemeta-internal.qclinux.1.0
 ```
 
 ### Build with KAS
 ```bash
-kas build meta-qcom-hwe/kas/qcs6490-rb3gen2-core-kit.yml
+kas build meta-qti-bsp/kas/qcs6490-rb3gen2-core-kit.yml
 ```
 
 ### Few more build commands
 ```bash
-KAS_BUILD_DIR=build-core-kit-custom KAS_TARGET=qcom-multimedia-image kas build meta-qcom-hwe/kas/qcs6490-rb3gen2-core-kit.yml
+KAS_BUILD_DIR=build-core-kit-custom KAS_TARGET=qcom-multimedia-image kas build meta-qti-bsp/kas/qcs6490-rb3gen2-core-kit.yml
 ```
 ```bash
-KAS_BUILD_DIR=build-vision-kit-base KAS_TARGET=qcom-console-image kas build meta-qcom-hwe/kas/qcs6490-rb3gen2-vision-kit.yml:meta-qcom-hwe/kas/bsp-base.yml
+KAS_BUILD_DIR=build-vision-kit-base KAS_TARGET=qcom-console-image kas build meta-qti-bsp/kas/qcs6490-rb3gen2-vision-kit.yml:meta-qti-bsp/kas/bsp-base.yml
 ```
 
 ## Maintainer(s)

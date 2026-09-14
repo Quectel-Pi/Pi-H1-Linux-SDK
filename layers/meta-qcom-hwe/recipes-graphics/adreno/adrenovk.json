@@ -1,7 +1,7 @@
 {
 	"file_format_version": "1.0.0",
 		"ICD": {
-			"library_path": "/usr/lib/libvulkan_adreno.so",
+			"library_path": "/usr/lib/libvulkan_adreno.so.1",
 			"api_version": "1.2.140"
 		}
 }

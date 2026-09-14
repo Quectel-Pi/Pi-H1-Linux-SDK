@@ -1,0 +1,100 @@
+From b5e16732f71432439d6772be8542eac3035457d9 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:32:05 -0800
+Subject: [PATCH 131/146] FROMLIST: drm/msm/dp: add support to re-use and clear
+ the panel edid
+
+During certain cases, the dp mst connector's panel edid can be
+re-used such as getting multiple get_modes() without irq_hpd and
+should be cleared in cases when the connector is destroyed or when
+irq hpd is received. Add support to handle these cases for the
+mst_connector's panel edid.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-34-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_mst_drm.c | 39 +++++++++++++++++++++++++++++
+ 1 file changed, 39 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_mst_drm.c b/drivers/gpu/drm/msm/dp/dp_mst_drm.c
+index 5d7b4210f690..9748dea13edd 100644
+--- a/drivers/gpu/drm/msm/dp/dp_mst_drm.c
++++ b/drivers/gpu/drm/msm/dp/dp_mst_drm.c
+@@ -542,6 +542,34 @@ static struct msm_dp_mst_bridge_state *msm_dp_mst_br_priv_state(struct drm_atomi
+ 										&bridge->obj));
+ }
+ 
++static void msm_dp_mst_clear_panel_edid(struct msm_dp *dp_display)
++{
++	struct msm_dp_mst *mst = dp_display->msm_dp_mst;
++	struct msm_dp_mst_connector *mst_conn;
++	struct msm_dp_panel *dp_panel;
++	struct msm_dp_mst_bridge *dp_bridge;
++	int i;
++
++	if (!dp_display) {
++		DRM_ERROR("invalid input\n");
++		return;
++	}
++
++	for (i = 0; i < mst->max_streams; i++) {
++		dp_bridge = &mst->mst_bridge[i];
++		mst_conn = to_msm_dp_mst_connector(dp_bridge->connector);
++		dp_panel = dp_bridge->msm_dp_panel;
++
++		if (!dp_panel || !mst_conn || !mst_conn->mst_port)
++			continue;
++
++		if (dp_panel->drm_edid) {
++			drm_edid_free(dp_panel->drm_edid);
++			dp_panel->drm_edid = NULL;
++		}
++	}
++}
++
+ /* DP MST HPD IRQ callback */
+ void msm_dp_mst_display_hpd_irq(struct msm_dp *dp_display)
+ {
+@@ -568,6 +596,9 @@ void msm_dp_mst_display_hpd_irq(struct msm_dp *dp_display)
+ 	if (handled) {
+ 		rc = drm_dp_dpcd_writeb(mst->dp_aux, esi_res, ack[1]);
+ 
++		if (ack[1] & DP_UP_REQ_MSG_RDY)
++			msm_dp_mst_clear_panel_edid(dp_display);
++
+ 		if (rc != 1)
+ 			DRM_ERROR("dpcd esi_res failed. rc=%d\n", rc);
+ 
+@@ -603,6 +634,9 @@ static int msm_dp_mst_connector_get_modes(struct drm_connector *connector)
+ 	struct msm_dp_mst *mst = dp_display->msm_dp_mst;
+ 	struct msm_dp_panel *dp_panel = mst_conn->dp_panel;
+ 
++	if (dp_panel->drm_edid)
++		goto duplicate_edid;
++
+ 	drm_edid_free(dp_panel->drm_edid);
+ 
+ 	dp_panel->drm_edid = drm_dp_mst_edid_read(connector, &mst->mst_mgr, mst_conn->mst_port);
+@@ -611,6 +645,7 @@ static int msm_dp_mst_connector_get_modes(struct drm_connector *connector)
+ 		return -EINVAL;
+ 	}
+ 
++duplicate_edid:
+ 	drm_edid_connector_update(connector, dp_panel->drm_edid);
+ 
+ 	return drm_edid_connector_add_modes(connector);
+@@ -877,6 +912,10 @@ static int msm_dp_mst_connector_atomic_check(struct drm_connector *connector,
+ static void dp_mst_connector_destroy(struct drm_connector *connector)
+ {
+ 	struct msm_dp_mst_connector *mst_conn = to_msm_dp_mst_connector(connector);
++	struct msm_dp_panel *dp_panel = mst_conn->dp_panel;
++
++	drm_edid_free(dp_panel->drm_edid);
++	dp_panel->drm_edid = NULL;
+ 
+ 	drm_connector_cleanup(connector);
+ 	drm_dp_mst_put_port_malloc(mst_conn->mst_port);
+-- 
+2.34.1
+

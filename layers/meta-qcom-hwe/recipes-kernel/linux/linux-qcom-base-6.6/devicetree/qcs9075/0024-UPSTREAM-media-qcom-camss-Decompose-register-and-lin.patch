@@ -1,0 +1,279 @@
+From 3b704ae403cc7a96a6d7af99131725fb6c6a5c17 Mon Sep 17 00:00:00 2001
+From: Atanas Filipov <quic_afilipov@quicinc.com>
+Date: Thu, 23 Nov 2023 15:42:59 +0200
+Subject: [PATCH 24/42] UPSTREAM: media: qcom: camss: Decompose register and
+ link operations
+
+Split link and register operations.
+Add dedicated link callback according to SoC identifier.
+
+Signed-off-by: Atanas Filipov <quic_afilipov@quicinc.com>
+Signed-off-by: Gjorgji Rosikopulos <quic_grosikop@quicinc.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Tested-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org> #sc8280xp/sm8250/sdm845/apq8016
+Acked-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 73ac545caf45fbb7a8ab45df47a0fd9e401d51f8]
+---
+ drivers/media/platform/qcom/camss/camss.c | 140 ++++++++++++----------
+ drivers/media/platform/qcom/camss/camss.h |   1 +
+ 2 files changed, 80 insertions(+), 61 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index a5320b8ee8c5..af0b66865ed5 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1429,72 +1429,30 @@ static int camss_init_subdevices(struct camss *camss)
+ }
+ 
+ /*
+- * camss_register_entities - Register subdev nodes and create links
++ * camss_link_entities - Register subdev nodes and create links
+  * @camss: CAMSS device
+  *
+  * Return 0 on success or a negative error code on failure
+  */
+-static int camss_register_entities(struct camss *camss)
++static int camss_link_entities(struct camss *camss)
+ {
+ 	int i, j, k;
+ 	int ret;
+ 
+-	for (i = 0; i < camss->res->csiphy_num; i++) {
+-		ret = msm_csiphy_register_entity(&camss->csiphy[i],
+-						 &camss->v4l2_dev);
+-		if (ret < 0) {
+-			dev_err(camss->dev,
+-				"Failed to register csiphy%d entity: %d\n",
+-				i, ret);
+-			goto err_reg_csiphy;
+-		}
+-	}
+-
+-	for (i = 0; i < camss->res->csid_num; i++) {
+-		ret = msm_csid_register_entity(&camss->csid[i],
+-					       &camss->v4l2_dev);
+-		if (ret < 0) {
+-			dev_err(camss->dev,
+-				"Failed to register csid%d entity: %d\n",
+-				i, ret);
+-			goto err_reg_csid;
+-		}
+-	}
+-
+-	ret = msm_ispif_register_entities(camss->ispif,
+-					  &camss->v4l2_dev);
+-	if (ret < 0) {
+-		dev_err(camss->dev, "Failed to register ispif entities: %d\n",
+-		ret);
+-		goto err_reg_ispif;
+-	}
+-
+-	for (i = 0; i < camss->vfe_total_num; i++) {
+-		ret = msm_vfe_register_entities(&camss->vfe[i],
+-						&camss->v4l2_dev);
+-		if (ret < 0) {
+-			dev_err(camss->dev,
+-				"Failed to register vfe%d entities: %d\n",
+-				i, ret);
+-			goto err_reg_vfe;
+-		}
+-	}
+-
+ 	for (i = 0; i < camss->res->csiphy_num; i++) {
+ 		for (j = 0; j < camss->res->csid_num; j++) {
+-			ret = media_create_pad_link(
+-				&camss->csiphy[i].subdev.entity,
+-				MSM_CSIPHY_PAD_SRC,
+-				&camss->csid[j].subdev.entity,
+-				MSM_CSID_PAD_SINK,
+-				0);
++			ret = media_create_pad_link(&camss->csiphy[i].subdev.entity,
++						    MSM_CSIPHY_PAD_SRC,
++						    &camss->csid[j].subdev.entity,
++						    MSM_CSID_PAD_SINK,
++						    0);
+ 			if (ret < 0) {
+ 				dev_err(camss->dev,
+ 					"Failed to link %s->%s entities: %d\n",
+ 					camss->csiphy[i].subdev.entity.name,
+ 					camss->csid[j].subdev.entity.name,
+ 					ret);
+-				goto err_link;
++				return ret;
+ 			}
+ 		}
+ 	}
+@@ -1502,19 +1460,18 @@ static int camss_register_entities(struct camss *camss)
+ 	if (camss->ispif) {
+ 		for (i = 0; i < camss->res->csid_num; i++) {
+ 			for (j = 0; j < camss->ispif->line_num; j++) {
+-				ret = media_create_pad_link(
+-					&camss->csid[i].subdev.entity,
+-					MSM_CSID_PAD_SRC,
+-					&camss->ispif->line[j].subdev.entity,
+-					MSM_ISPIF_PAD_SINK,
+-					0);
++				ret = media_create_pad_link(&camss->csid[i].subdev.entity,
++							    MSM_CSID_PAD_SRC,
++							    &camss->ispif->line[j].subdev.entity,
++							    MSM_ISPIF_PAD_SINK,
++							    0);
+ 				if (ret < 0) {
+ 					dev_err(camss->dev,
+ 						"Failed to link %s->%s entities: %d\n",
+ 						camss->csid[i].subdev.entity.name,
+ 						camss->ispif->line[j].subdev.entity.name,
+ 						ret);
+-					goto err_link;
++					return ret;
+ 				}
+ 			}
+ 		}
+@@ -1536,7 +1493,7 @@ static int camss_register_entities(struct camss *camss)
+ 							ispif->entity.name,
+ 							vfe->entity.name,
+ 							ret);
+-						goto err_link;
++						return ret;
+ 					}
+ 				}
+ 	} else {
+@@ -1557,15 +1514,67 @@ static int camss_register_entities(struct camss *camss)
+ 							csid->entity.name,
+ 							vfe->entity.name,
+ 							ret);
+-						goto err_link;
++						return ret;
+ 					}
+ 				}
+ 	}
+ 
++	return 0;
++}
++
++/*
++ * camss_register_entities - Register subdev nodes and create links
++ * @camss: CAMSS device
++ *
++ * Return 0 on success or a negative error code on failure
++ */
++static int camss_register_entities(struct camss *camss)
++{
++	int i;
++	int ret;
++
++	for (i = 0; i < camss->res->csiphy_num; i++) {
++		ret = msm_csiphy_register_entity(&camss->csiphy[i],
++						 &camss->v4l2_dev);
++		if (ret < 0) {
++			dev_err(camss->dev,
++				"Failed to register csiphy%d entity: %d\n",
++				i, ret);
++			goto err_reg_csiphy;
++		}
++	}
++
++	for (i = 0; i < camss->res->csid_num; i++) {
++		ret = msm_csid_register_entity(&camss->csid[i],
++					       &camss->v4l2_dev);
++		if (ret < 0) {
++			dev_err(camss->dev,
++				"Failed to register csid%d entity: %d\n",
++				i, ret);
++			goto err_reg_csid;
++		}
++	}
++
++	ret = msm_ispif_register_entities(camss->ispif,
++					  &camss->v4l2_dev);
++	if (ret < 0) {
++		dev_err(camss->dev, "Failed to register ispif entities: %d\n", ret);
++		goto err_reg_ispif;
++	}
++
++	for (i = 0; i < camss->vfe_total_num; i++) {
++		ret = msm_vfe_register_entities(&camss->vfe[i],
++						&camss->v4l2_dev);
++		if (ret < 0) {
++			dev_err(camss->dev,
++				"Failed to register vfe%d entities: %d\n",
++				i, ret);
++			goto err_reg_vfe;
++		}
++	}
++
+ 	return 0;
+ 
+-err_link:
+-	i = camss->vfe_total_num;
+ err_reg_vfe:
+ 	for (i--; i >= 0; i--)
+ 		msm_vfe_unregister_entities(&camss->vfe[i]);
+@@ -1864,6 +1873,10 @@ static int camss_probe(struct platform_device *pdev)
+ 	if (ret < 0)
+ 		goto err_v4l2_device_unregister;
+ 
++	ret = camss->res->link_entities(camss);
++	if (ret < 0)
++		goto err_register_subdevs;
++
+ 	if (num_subdevs) {
+ 		camss->notifier.ops = &camss_subdev_notifier_ops;
+ 
+@@ -1942,6 +1955,7 @@ static const struct camss_resources msm8916_resources = {
+ 	.csiphy_num = ARRAY_SIZE(csiphy_res_8x16),
+ 	.csid_num = ARRAY_SIZE(csid_res_8x16),
+ 	.vfe_num = ARRAY_SIZE(vfe_res_8x16),
++	.link_entities = camss_link_entities
+ };
+ 
+ static const struct camss_resources msm8996_resources = {
+@@ -1953,6 +1967,7 @@ static const struct camss_resources msm8996_resources = {
+ 	.csiphy_num = ARRAY_SIZE(csiphy_res_8x96),
+ 	.csid_num = ARRAY_SIZE(csid_res_8x96),
+ 	.vfe_num = ARRAY_SIZE(vfe_res_8x96),
++	.link_entities = camss_link_entities
+ };
+ 
+ static const struct camss_resources sdm660_resources = {
+@@ -1964,6 +1979,7 @@ static const struct camss_resources sdm660_resources = {
+ 	.csiphy_num = ARRAY_SIZE(csiphy_res_660),
+ 	.csid_num = ARRAY_SIZE(csid_res_660),
+ 	.vfe_num = ARRAY_SIZE(vfe_res_660),
++	.link_entities = camss_link_entities
+ };
+ 
+ static const struct camss_resources sdm845_resources = {
+@@ -1975,6 +1991,7 @@ static const struct camss_resources sdm845_resources = {
+ 	.csid_num = ARRAY_SIZE(csid_res_845),
+ 	.vfe_num = 2,
+ 	.vfe_lite_num = 1,
++	.link_entities = camss_link_entities
+ };
+ 
+ static const struct camss_resources sm8250_resources = {
+@@ -1988,6 +2005,7 @@ static const struct camss_resources sm8250_resources = {
+ 	.csid_num = ARRAY_SIZE(csid_res_8250),
+ 	.vfe_num = 2,
+ 	.vfe_lite_num = 2,
++	.link_entities = camss_link_entities
+ };
+ 
+ static const struct of_device_id camss_dt_match[] = {
+diff --git a/drivers/media/platform/qcom/camss/camss.h b/drivers/media/platform/qcom/camss/camss.h
+index 0ab3b7e01468..f91ecb0c2280 100644
+--- a/drivers/media/platform/qcom/camss/camss.h
++++ b/drivers/media/platform/qcom/camss/camss.h
+@@ -105,6 +105,7 @@ struct camss_resources {
+ 	const unsigned int csid_num;
+ 	const unsigned int vfe_num;
+ 	const unsigned int vfe_lite_num;
++	int (*link_entities)(struct camss *camss);
+ };
+ 
+ struct camss {
+-- 
+2.25.1
+

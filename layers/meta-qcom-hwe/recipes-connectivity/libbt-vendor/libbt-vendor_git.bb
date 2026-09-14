@@ -12,10 +12,15 @@ QCOM_HW_BT_SRCREV ?= "216da8dd028c739e82869447e64675f3c712ecf7"
 
 QCOM_BLUETOOTH_SRC ?= "git://git.codelinaro.org/clo/le/platform/vendor/qcom-opensource/bluetooth.git;protocol=https"
 QCOM_BLUETOOTH_SRCBRANCH ?= "bt-performant.qclinux.1.0.r1-rel"
-QCOM_BLUETOOTH_SRCREV ?= "1710c237b493454dc93f41de09b50cd8d109f970"
+QCOM_BLUETOOTH_SRCREV ?= "b908f6524be00474ceb402381f546d90ef15f330"
 
-SRC_URI = "${QCOM_HW_BT_SRC};branch=${QCOM_HW_BT_SRCBRANCH};rev=${QCOM_HW_BT_SRCREV};destsuffix=bluetooth/libbt-vendor \
-           ${QCOM_BLUETOOTH_SRC};branch=${QCOM_BLUETOOTH_SRCBRANCH};rev=${QCOM_BLUETOOTH_SRCREV};destsuffix=bluetooth/bt_audio"
+SRCREV_FORMAT = "hwbt_bluetooth"
+
+SRCREV_hwbt = "${QCOM_HW_BT_SRCREV}"
+SRCREV_bluetooth = "${QCOM_BLUETOOTH_SRCREV}"
+
+SRC_URI = "${QCOM_HW_BT_SRC};branch=${QCOM_HW_BT_SRCBRANCH};name=hwbt;destsuffix=bluetooth/libbt-vendor \
+           ${QCOM_BLUETOOTH_SRC};branch=${QCOM_BLUETOOTH_SRCBRANCH};name=bluetooth;destsuffix=bluetooth/bt_audio"
 
 S = "${WORKDIR}/bluetooth"
 

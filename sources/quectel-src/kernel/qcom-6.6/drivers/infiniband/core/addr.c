@@ -348,15 +348,15 @@ static int dst_fetch_ha(const struct dst_entry *dst,
 
 static bool has_gateway(const struct dst_entry *dst, sa_family_t family)
 {
-	struct rtable *rt;
-	struct rt6_info *rt6;
+	const struct rtable *rt;
+	const struct rt6_info *rt6;
 
 	if (family == AF_INET) {
 		rt = container_of(dst, struct rtable, dst);
 		return rt->rt_uses_gateway;
 	}
 
-	rt6 = container_of(dst, struct rt6_info, dst);
+	rt6 = dst_rt6_info(dst);
 	return rt6->rt6i_flags & RTF_GATEWAY;
 }
 
@@ -460,14 +460,10 @@ static int addr_resolve_neigh(const struct dst_entry *dst,
 {
 	int ret = 0;
 
-	if (ndev_flags & IFF_LOOPBACK) {
+	if (ndev_flags & IFF_LOOPBACK)
 		memcpy(addr->dst_dev_addr, addr->src_dev_addr, MAX_ADDR_LEN);
-	} else {
-		if (!(ndev_flags & IFF_NOARP)) {
-			/* If the device doesn't do ARP internally */
-			ret = fetch_ha(dst, addr, dst_in, seq);
-		}
-	}
+	else
+		ret = fetch_ha(dst, addr, dst_in, seq);
 	return ret;
 }
 

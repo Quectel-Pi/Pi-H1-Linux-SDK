@@ -1010,8 +1010,10 @@ static void dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
 	qcom->vbus_reg = devm_regulator_get_optional(qcom->dev,
 						"vbus_dwc3");
 	if (IS_ERR(qcom->vbus_reg)) {
-		dev_err(qcom->dev, "Unable to get vbus regulator err: %ld\n",
+		if (PTR_ERR(qcom->vbus_reg) != -ENODEV) {
+			dev_err(qcom->dev, "Unable to get vbus regulator err: %ld\n",
 							PTR_ERR(qcom->vbus_reg));
+		}
 		qcom->vbus_reg = NULL;
 		return;
 	}

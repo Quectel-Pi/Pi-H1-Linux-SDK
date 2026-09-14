@@ -17,4 +17,5 @@ PACKAGES = ' \
 
 RDEPENDS:packagegroup-qcom-vm-guest = "\
     qemu \
+    procps \
     "

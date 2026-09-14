@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 /dts-v1/;
@@ -24,8 +25,7 @@
 };
 
 &sound {
-	compatible = "qcom,qcm6490-sndcard";
-	model = "qcm6490-rb3-vc-snd-card";
+	model = "qcs6490-rb3gen2-video-snd-card";
 
 	audio-routing =
 		"SpkrLeft IN", "WSA_SPK1 OUT",
@@ -36,13 +36,6 @@
 		"VA DMIC3", "vdd-micb",
 		"VA DMIC4", "vdd-micb",
 		"VA DMIC5", "vdd-micb";
-
-	pinctrl-names = "default", "stub_aif1_active", "stub_aif1_sleep";
-	pinctrl-0 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
-		    <&mi2s0_sclk_sleep>, <&mi2s0_ws_sleep>;
-	pinctrl-1 = <&mi2s0_data0>, <&mi2s0_data1>, <&mi2s0_mclk>, <&mi2s0_sclk>, <&mi2s0_ws>;
-	pinctrl-2 = <&mi2s0_data0_sleep>, <&mi2s0_data1_sleep>, <&mi2s0_mclk_sleep>,
-		    <&mi2s0_sclk_sleep>, <&mi2s0_ws_sleep>;
 
 	mi2s-capture-dai-link {
 		link-name = "MI2S-LPAIF-TX-PRIMARY";
@@ -89,6 +82,18 @@
 
 		codec {
 			sound-dai = <&msm_stub_codec 0>;
+		};
+	};
+
+	mi2s1-playback-dai-link {
+		link-name = "MI2S-LPAIF-RX-SECONDARY";
+
+		cpu {
+			sound-dai = <&q6apmbedai SECONDARY_MI2S_RX>;
+		};
+
+		codec {
+			sound-dai = <&msm_stub_codec 2>;
 		};
 	};
 
@@ -175,7 +180,7 @@
 
 			map4 {
 				trip = <&b_bcl_lvl0>;
-				cooling-device = <&cdsp_sw 2 2>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 			};
 
 			map5 {
@@ -211,7 +216,7 @@
 
 			map1 {
 				trip = <&b_bcl_lvl1>;
-				cooling-device = <&cdsp_sw 4 4>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 			};
 
 			map2 {
@@ -237,7 +242,7 @@
 		cooling-maps {
 			map0 {
 				trip = <&b_bcl_lvl2>;
-				cooling-device = <&cdsp_sw 5 5>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 			};
 		};
 	};
@@ -283,6 +288,38 @@
 		bias-pull-down;
 		input-enable;
 	};
+
+	mi2s1_data0_sleep: mi2s1-data0-sleep {
+		pins = "gpio107";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	mi2s1_mclk_sleep: mi2s1-mclk-sleep {
+		pins = "gpio105";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	mi2s1_sclk_sleep: mi2s1-sclk-sleep {
+		pins = "gpio106";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
+
+	mi2s1_ws_sleep: mi2s1-ws-sleep {
+		pins = "gpio108";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-pull-down;
+		input-enable;
+	};
 };
 
 &uart4 {
@@ -312,6 +349,29 @@
 };
 
 &mi2s0_ws {
+	drive-strength = <8>;
+	bias-disable;
+	output-high;
+};
+
+&mi2s1_data0 {
+	drive-strength = <8>;
+	bias-disable;
+};
+
+&mi2s1_mclk {
+	drive-strength = <8>;
+	bias-disable;
+	output-high;
+};
+
+&mi2s1_sclk {
+	drive-strength = <8>;
+	bias-disable;
+	output-high;
+};
+
+&mi2s1_ws {
 	drive-strength = <8>;
 	bias-disable;
 	output-high;

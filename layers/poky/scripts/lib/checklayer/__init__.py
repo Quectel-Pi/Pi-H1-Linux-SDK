@@ -44,7 +44,7 @@ def _get_layer_collections(layer_path, lconf=None, data=None):
 
     ldata.setVar('LAYERDIR', layer_path)
     try:
-        ldata = bb.parse.handle(lconf, ldata, include=True)
+        ldata = bb.parse.handle(lconf, ldata, include=True, baseconfig=True)
     except:
         raise RuntimeError("Parsing of layer.conf from layer: %s failed" % layer_path)
     ldata.expandVarref('LAYERDIR')
@@ -307,7 +307,7 @@ def get_signatures(builddir, failsafe=False, machine=None, extravars=None):
     cmd += 'bitbake '
     if failsafe:
         cmd += '-k '
-    cmd += '-S none world'
+    cmd += '-S lockedsigs world'
     sigs_file = os.path.join(builddir, 'locked-sigs.inc')
     if os.path.exists(sigs_file):
         os.unlink(sigs_file)

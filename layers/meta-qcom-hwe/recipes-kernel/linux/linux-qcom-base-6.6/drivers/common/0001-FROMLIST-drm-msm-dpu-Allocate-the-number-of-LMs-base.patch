@@ -1,0 +1,33 @@
+From 96342c27b6147438d8d30489a426133e4791071b Mon Sep 17 00:00:00 2001
+From: Yongxing Mou <quic_yongmou@quicinc.com>
+Date: Tue, 11 Feb 2025 14:41:50 +0800
+Subject: [PATCH 143/146] FROMLIST: drm/msm/dpu: Allocate the number of LMs
+ based on max_mixer_width to support 4 streams MST case
+
+In 2x2 mst case, each 2k monitor will use 2 lms, but sa8775p only have 6
+lm2, so let 2k only use one lm to support such case.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250211-dp_lm-v1-1-deeca9ac9bd9@quicinc.com/]
+---
+ drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
+index b867532a348c..c22dc3525ebb 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
+@@ -643,7 +643,8 @@ static struct msm_display_topology dpu_encoder_get_topology(
+ 	else if (!dpu_kms->catalog->caps->has_3d_merge)
+ 		topology.num_lm = 1;
+ 	else
+-		topology.num_lm = (mode->hdisplay > MAX_HDISPLAY_SPLIT) ? 2 : 1;
++		topology.num_lm = (mode->hdisplay > dpu_kms->catalog->caps->max_mixer_width) ?
++				   2 : 1;
+ 
+ 	if (crtc_state->ctm)
+ 		topology.num_dspp = topology.num_lm;
+-- 
+2.34.1
+

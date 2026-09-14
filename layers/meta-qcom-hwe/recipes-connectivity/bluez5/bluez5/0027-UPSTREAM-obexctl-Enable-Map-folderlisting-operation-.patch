@@ -1,0 +1,44 @@
+From 5bf0f93de11193bddb6420e231e261dddddf7d5a Mon Sep 17 00:00:00 2001
+From: Amisha Jain <quic_amisjain@quicinc.com>
+Date: Fri, 13 Dec 2024 16:37:50 +0530
+Subject: [PATCH] UPSTREAM:obexctl: Enable Map folderlisting operation from
+ obexctl
+
+This change is required for passing below PTS testcase -
+
+1) MAP/MCE/MMB/BV-01-C
+Verify that the MCE can retrieve a Folders Listing on the MSE.
+
+As of now, user is able to initiate only map messagelisting
+operation with command 'ls <folder_name>' and there is no way to initiate
+folder listing with 'ls' command as second argument <options> is
+set as compulsary.
+In the obexctl code, map folderlisting gets triggered only when there is no
+arguments followed by 'ls' command.
+Therefore in 'ls' command, make the second argument as optional.
+
+This change will also enable pbap vcard listing operation which also
+gets triggered with 'ls' command with no args.
+
+Upstream-Status: Backport https://github.com/bluez/bluez/commit/c2caa26a4d621ad9fc2def9325d7ef8fad81ebdc
+Signed-off-by: Amisha Jain <quic_amisjain@quicinc.com>
+---
+ tools/obexctl.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/obexctl.c b/tools/obexctl.c
+index 8678b86..4b7bd71 100644
+--- a/tools/obexctl.c
++++ b/tools/obexctl.c
+@@ -1867,7 +1867,7 @@ static const struct bt_shell_menu main_menu = {
+ 	{ "pull",	  "<file>",   cmd_pull,
+ 					"Pull Vobject & stores in file" },
+ 	{ "cd",           "<path>",   cmd_cd, "Change current folder" },
+-	{ "ls",           "<options>", cmd_ls, "List current folder" },
++	{ "ls",           "[options]", cmd_ls, "List current folder" },
+ 	{ "cp",          "<source file> <destination file>",   cmd_cp,
+ 				"Copy source file to destination file" },
+ 	{ "mv",          "<source file> <destination file>",   cmd_mv,
+-- 
+2.34.1
+

@@ -7,10 +7,10 @@ LICENSE = "LGPL-2.1-only"
 LIC_FILES_CHKSUM = "file://COPYING;md5=fb919cc88dbe06ec0b0bd50e001ccf1f"
 
 SRCREV = "2c5d4255857531bc09d91dcd02e86545f29004d4"
-PV .= "+git${SRCPV}"
+PV .= "+git"
 
 SRC_URI = "git://pagure.io/netcf.git;protocol=https;branch=master \
-"
+           file://0001-Adopt-to-new-gnulib-read_file-fread_file-signature.patch"
 
 UPSTREAM_CHECK_GITTAGREGEX = "release-(?P<pver>(\d+(\.\d+)+))"
 

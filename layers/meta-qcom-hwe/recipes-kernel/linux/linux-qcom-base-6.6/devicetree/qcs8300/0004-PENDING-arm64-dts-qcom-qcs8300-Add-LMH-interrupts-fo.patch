@@ -1,0 +1,33 @@
+From e9d094cc7def992cf63785f5c09bf3eeaef4d368 Mon Sep 17 00:00:00 2001
+From: Imran Shaik <quic_imrashai@quicinc.com>
+Date: Tue, 26 Nov 2024 10:50:19 +0530
+Subject: [PATCH 4/6] PENDING: arm64: dts: qcom: qcs8300: Add LMH interrupts
+ for cpufreq_hw node
+
+Add LMH interrupts for cpufreq_hw node to indicate if there is any
+thermal throttle.
+
+Signed-off-by: Imran Shaik <quic_imrashai@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index 55b3123d8989..a39b5ab27f1c 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -3854,6 +3854,10 @@ cpufreq_hw: cpufreq@18591000 {
+ 			      <0x0 0x18594000 0x0 0x1000>,
+ 			      <0x0 0x18593000 0x0 0x1000>;
+ 			reg-names = "freq-domain0", "freq-domain1", "freq-domain2";
++			interrupts = <GIC_SPI 31 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 86 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 32 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "dcvsh-irq-0", "dcvsh-irq-1", "dcvsh-irq-2";
+ 
+ 			clocks = <&rpmhcc RPMH_CXO_CLK>, <&gcc GCC_GPLL0>;
+ 			clock-names = "xo", "alternate";
+-- 
+2.34.1
+

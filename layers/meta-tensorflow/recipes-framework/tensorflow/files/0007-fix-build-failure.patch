@@ -1,0 +1,51 @@
+From 5e62da8b26fc868d26b6d9dd1561ffdfd99998e9 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Mon, 4 Mar 2024 15:07:58 +0800
+Subject: [PATCH] fix build failure
+
+...
+ERROR: /buildarea/raid5/hjia/wrlinux-24/build_master-wr_ts_intel_2024030114/build/tmp-glibc/work/x86_64-linux/tensorflow-native/2.16.0/git/tensorflow/BUILD:1173:21: in cc_shared_library rule //tensorflow:libtensorflow_framework.so.2.16.0:
+Traceback (most recent call last):
+    File "/virtual_builtins_bzl/common/cc/experimental_cc_shared_library.bzl", line 453, column 105, in _cc_shared_library_impl
+    File "/virtual_builtins_bzl/common/cc/experimental_cc_shared_library.bzl", line 349, column 37, in _filter_inputs
+    File "/virtual_builtins_bzl/common/cc/experimental_cc_shared_library.bzl", line 386, column 9, in _throw_error_if_unaccounted_libs
+Error in fail: The following libraries cannot be linked either statically or dynamically:
+@riegeli//riegeli/bytes:fd_reader
+@riegeli//riegeli/bytes:fd_internal
+@riegeli//riegeli/bytes:fd_internal_for_headers
+@riegeli//riegeli/bytes:buffered_writer
+@riegeli//riegeli/records:record_reader
+@riegeli//riegeli/records:chunk_reader
+@riegeli//riegeli/records:record_position
+@riegeli//riegeli/records:block
+@riegeli//riegeli/bytes:string_writer
+@riegeli//riegeli/ordered_varint:ordered_varint_reading
+(and 74 others)
+
+To ignore which libraries get linked statically for now, add the following to 'static_deps':
+        "@riegeli//:__subpackages__",
+        "@org_brotli//:__subpackages__",
+        "@net_zstd//:__subpackages__",
+...
+
+Upstream-Status: Inappropriate [Yocto specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ tensorflow/BUILD | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/tensorflow/BUILD b/tensorflow/BUILD
+index 2a49fdfce60..24c2bbf82ef 100644
+--- a/tensorflow/BUILD
++++ b/tensorflow/BUILD
+@@ -131,6 +131,9 @@ PACKAGE_STATIC_DEPS = [
+     "@triton//:__subpackages__",
+     "@local_tsl//:__subpackages__",
+     "@local_xla//:__subpackages__",
++    "@riegeli//:__subpackages__",
++    "@org_brotli//:__subpackages__",
++    "@net_zstd//:__subpackages__",
+ ] + tsl_async_value_deps()
+ 
+ package(

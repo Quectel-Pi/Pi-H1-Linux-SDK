@@ -1,0 +1,40 @@
+From 8bf5ddaa35eea573730a56df7e78ffd612339310 Mon Sep 17 00:00:00 2001
+From: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Date: Mon, 14 Oct 2024 16:43:36 +0530
+Subject: [PATCH 7/8] FROMLIST: serial: qcom-geni: Load UART qup Firmware from
+ linux side
+
+Add provision to load firmware of Serial engine for UART protocol from
+Linux Execution Environment on running on APPS processor.
+
+Change-Id: I210a456c5f0bb9cba4a8db89b436adcccf63ca4c
+Co-developed-by: Mukesh Kumar Savaliya <quic_msavaliy@quicinc.com>
+Signed-off-by: Mukesh Kumar Savaliya <quic_msavaliy@quicinc.com>
+Signed-off-by: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Link: https://lore.kernel.org/linux-kernel/20241204150326.1470749-8-quic_vdadhani@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/linux-kernel/20241204150326.1470749-8-quic_vdadhani@quicinc.com/]
+---
+ drivers/tty/serial/qcom_geni_serial.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/tty/serial/qcom_geni_serial.c b/drivers/tty/serial/qcom_geni_serial.c
+index f820a09cb5c3..60688c5a8b16 100644
+--- a/drivers/tty/serial/qcom_geni_serial.c
++++ b/drivers/tty/serial/qcom_geni_serial.c
+@@ -1109,8 +1109,11 @@ static int qcom_geni_serial_port_setup(struct uart_port *uport)
+ 
+ 	proto = geni_se_read_proto(&port->se);
+ 	if (proto != GENI_SE_UART) {
+-		dev_err(uport->dev, "Invalid FW loaded, proto: %d\n", proto);
+-		return -ENXIO;
++		ret = geni_load_se_firmware(&port->se, GENI_SE_UART);
++		if (ret) {
++			dev_err(uport->dev, "UART firmware load failed ret: %d\n", ret);
++			return ret;
++		}
+ 	}
+ 
+ 	qcom_geni_serial_stop_rx(uport);
+-- 
+2.34.1
+

@@ -12,19 +12,24 @@ PROVIDES = "${PACKAGES}"
 PACKAGES = "${PN}"
 
 RDEPENDS:${PN} = "\
-    packagegroup-container \
-    packagegroup-qcom-k8s \
+    gstreamer1.0 \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-rtsp-server \
+    tensorflow-lite \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'virtualization', 'packagegroup-qcom-containers', '', d)} \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'virtualization', 'packagegroup-qcom-k8s', '', d)} \
     packagegroup-qcom-opencv \
-    python3-docker-compose \
+    packagegroup-qcom-camera \
     packagegroup-qcom-display \
+    packagegroup-qcom-audio \
     "
 
 RDEPENDS:${PN}:append:qcom-custom-distro = "\
-    packagegroup-qcom-audio \
-    packagegroup-qcom-camera \
-    packagegroup-qcom-display \
     packagegroup-qcom-fastcv \
     packagegroup-qcom-graphics \
     packagegroup-qcom-iot-base-utils \
     packagegroup-qcom-video \
     "
+

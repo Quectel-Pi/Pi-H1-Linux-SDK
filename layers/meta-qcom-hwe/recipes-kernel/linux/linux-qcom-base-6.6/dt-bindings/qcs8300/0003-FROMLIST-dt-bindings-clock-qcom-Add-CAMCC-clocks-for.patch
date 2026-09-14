@@ -1,0 +1,72 @@
+From 2396e2abbf025d45d0732cc25093df41e4b3fd6d Mon Sep 17 00:00:00 2001
+From: Imran Shaik <quic_imrashai@quicinc.com>
+Date: Wed, 6 Nov 2024 15:21:58 +0530
+Subject: [PATCH 3/6] FROMLIST: dt-bindings: clock: qcom: Add CAMCC clocks for
+ QCS8300
+
+The QCS8300 camera clock controller is mostly identical to SA8775P, but
+QCS8300 has one additional clock and minor differences. Hence, reuse the
+SA8775P camera bindings and add additional clock required for QCS8300.
+
+Signed-off-by: Imran Shaik <quic_imrashai@quicinc.com>
+Reviewed-by: Vladimir Zapolskiy <vladimir.zapolskiy@linaro.org>
+Acked-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Link: https://lore.kernel.org/all/20241106-qcs8300-mm-patches-v3-3-f611a8f87f15@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241106-qcs8300-mm-patches-v3-3-f611a8f87f15@quicinc.com/]
+---
+ .../bindings/clock/qcom,sa8775p-camcc.yaml       |  6 +++++-
+ include/dt-bindings/clock/qcom,qcs8300-camcc.h   | 16 ++++++++++++++++
+ 2 files changed, 21 insertions(+), 1 deletion(-)
+ create mode 100644 include/dt-bindings/clock/qcom,qcs8300-camcc.h
+
+diff --git a/Documentation/devicetree/bindings/clock/qcom,sa8775p-camcc.yaml b/Documentation/devicetree/bindings/clock/qcom,sa8775p-camcc.yaml
+index 36a60d8f5ae3..81623f59d11d 100644
+--- a/Documentation/devicetree/bindings/clock/qcom,sa8775p-camcc.yaml
++++ b/Documentation/devicetree/bindings/clock/qcom,sa8775p-camcc.yaml
+@@ -8,16 +8,20 @@ title: Qualcomm Camera Clock & Reset Controller on SA8775P
+ 
+ maintainers:
+   - Taniya Das <quic_tdas@quicinc.com>
++  - Imran Shaik <quic_imrashai@quicinc.com>
+ 
+ description: |
+   Qualcomm camera clock control module provides the clocks, resets and power
+   domains on SA8775p.
+ 
+-  See also: include/dt-bindings/clock/qcom,sa8775p-camcc.h
++  See also:
++    include/dt-bindings/clock/qcom,qcs8300-camcc.h
++    include/dt-bindings/clock/qcom,sa8775p-camcc.h
+ 
+ properties:
+   compatible:
+     enum:
++      - qcom,qcs8300-camcc
+       - qcom,sa8775p-camcc
+ 
+   clocks:
+diff --git a/include/dt-bindings/clock/qcom,qcs8300-camcc.h b/include/dt-bindings/clock/qcom,qcs8300-camcc.h
+new file mode 100644
+index 000000000000..fc535c847859
+--- /dev/null
++++ b/include/dt-bindings/clock/qcom,qcs8300-camcc.h
+@@ -0,0 +1,16 @@
++/* SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause) */
++/*
++ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++
++#ifndef _DT_BINDINGS_CLK_QCOM_QCS8300_CAM_CC_H
++#define _DT_BINDINGS_CLK_QCOM_QCS8300_CAM_CC_H
++
++#include "qcom,sa8775p-camcc.h"
++
++/* QCS8300 introduces below new clocks compared to SA8775P */
++
++/* CAM_CC clocks */
++#define CAM_CC_TITAN_TOP_ACCU_SHIFT_CLK				86
++
++#endif
+-- 
+2.34.1
+

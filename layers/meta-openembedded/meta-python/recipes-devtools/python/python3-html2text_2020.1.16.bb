@@ -14,8 +14,11 @@ SRC_URI += " \
 "
 
 RDEPENDS:${PN}-ptest += " \
-	${PYTHON_PN}-pytest \
+    python3-pytest \
+    python3-unittest-automake-output \
 "
+
+RDEPENDS:${PN} += "python3-cgitb"
 
 do_install_ptest() {
 	install -d ${D}${PTEST_PATH}/test

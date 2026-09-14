@@ -1,4 +1,4 @@
-DESCRIPTION = "Small image capable of booting a device with custom install scripts, \
+SUMMARY = "Small image capable of booting a device with custom install scripts, \
 adding a second rootfs, used for testing."
 
 # use -testfs live-install scripts
@@ -7,7 +7,6 @@ PACKAGE_INSTALL = "initramfs-live-boot initramfs-live-install-testfs initramfs-l
 # Do not pollute the initrd image with rootfs features
 IMAGE_FEATURES = ""
 
-export IMAGE_BASENAME = "core-image-testcontroller-initramfs"
 IMAGE_NAME_SUFFIX ?= ""
 IMAGE_LINGUAS = ""
 

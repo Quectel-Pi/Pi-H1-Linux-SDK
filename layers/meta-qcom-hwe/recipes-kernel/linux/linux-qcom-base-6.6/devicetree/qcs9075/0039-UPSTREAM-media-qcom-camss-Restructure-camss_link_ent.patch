@@ -1,0 +1,107 @@
+From b13c88f85f30e104432e06478e9473970aebe3d9 Mon Sep 17 00:00:00 2001
+From: Vikram Sharma <quic_vikramsa@quicinc.com>
+Date: Tue, 26 Nov 2024 15:31:26 +0530
+Subject: [PATCH 39/42] UPSTREAM: media: qcom: camss: Restructure
+ camss_link_entities
+
+Refactor the camss_link_entities function by breaking it down into
+three distinct functions. Each function will handle the linking of
+a specific entity separately.
+SC7280 and later targets mandates for 1:1 linking for csid -> vfe.
+i.e. csid0 can be mapped to vfe0 only.
+
+Signed-off-by: Suresh Vankadara <quic_svankada@quicinc.com>
+Signed-off-by: Trishansh Bhardwaj <quic_tbhardwa@quicinc.com>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil@xs4all.nl>
+[quic_vikramsa@quicinc.com: resolve trivial merge conflicts]
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git cc1ecabe67d92a2da0b0402f715598e8dbdc3b9e]
+---
+ drivers/media/platform/qcom/camss/camss.c | 57 +++++++++++++++++++++--
+ 1 file changed, 53 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index c2c9f26700d4..6426e6eb88aa 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1460,7 +1460,6 @@ static int camss_init_subdevices(struct camss *camss)
+ }
+ 
+ /*
+- * camss_link_entities - Register subdev nodes and create links
+  * camss_link_err - print error in case link creation fails
+  * @src_name: name for source of the link
+  * @sink_name: name for sink of the link
+@@ -1478,14 +1477,64 @@ inline void camss_link_err(struct camss *camss,
+ }
+ 
+ /*
+- * camss_link_entities - Register subdev nodes and create links
++ * camss_link_entities_csid - Register subdev nodes and create links
+  * @camss: CAMSS device
+  *
+  * Return 0 on success or a negative error code on failure
+  */
+-static int camss_link_entities(struct camss *camss)
++static int camss_link_entities_csid(struct camss *camss)
+ {
+-	int i, j, k;
++	struct media_entity *src_entity;
++	struct media_entity *sink_entity;
++	int ret, line_num;
++	u16 sink_pad;
++	u16 src_pad;
++	int i, j;
++
++	for (i = 0; i < camss->res->csid_num; i++) {
++		if (camss->ispif)
++			line_num = camss->ispif->line_num;
++		else
++			line_num = camss->vfe[i].res->line_num;
++
++		src_entity = &camss->csid[i].subdev.entity;
++		for (j = 0; j < line_num; j++) {
++			if (camss->ispif) {
++				sink_entity = &camss->ispif->line[j].subdev.entity;
++				src_pad = MSM_CSID_PAD_SRC;
++				sink_pad = MSM_ISPIF_PAD_SINK;
++			} else {
++				sink_entity = &camss->vfe[i].line[j].subdev.entity;
++				src_pad = MSM_CSID_PAD_FIRST_SRC + j;
++				sink_pad = MSM_VFE_PAD_SINK;
++			}
++
++			ret = media_create_pad_link(src_entity,
++						    src_pad,
++						    sink_entity,
++						    sink_pad,
++						    0);
++			if (ret < 0) {
++				camss_link_err(camss, src_entity->name,
++					       sink_entity->name,
++					       ret);
++				return ret;
++			}
++		}
++	}
++
++	return 0;
++}
++
++/*
++ * camss_link_entities_csiphy - Register subdev nodes and create links
++ * @camss: CAMSS device
++ *
++ * Return 0 on success or a negative error code on failure
++ */
++static int camss_link_entities_csiphy(struct camss *camss)
++{
++	int i, j;
+ 	int ret;
+ 
+ 	for (i = 0; i < camss->res->csiphy_num; i++) {
+-- 
+2.25.1
+

@@ -9,7 +9,7 @@ Subject: [PATCH 4/6] pulsecore: Update desired sample spec for requested
 - Update requested channel to desired sample spec when avoid resampling
   is enabled.
 
-Change-Id: I976fd6a3332e1cc5bb974016556075ab7747aa51
+Upstream-Status: Pending
 Signed-off-by: Puneeth Prabhu <quic_pprabh@quicinc.com>
 ---
  src/pulsecore/sink.c   | 3 ++-

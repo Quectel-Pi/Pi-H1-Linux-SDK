@@ -1,7 +1,7 @@
 HOMEPAGE = "https://github.com/containers/skopeo"
 SUMMARY = "Work with remote images registries - retrieving information, images, signing content"
 LICENSE = "Apache-2.0"
-LIC_FILES_CHKSUM = "file://src/import/LICENSE;md5=7e611105d3e369954840a6668c438584"
+LIC_FILES_CHKSUM = "file://LICENSE;md5=7e611105d3e369954840a6668c438584"
 
 DEPENDS = " \
     gpgme \
@@ -13,6 +13,8 @@ DEPENDS = " \
 
 inherit go
 
+COMPATIBLE_HOST = "^(?!mips).*"
+
 RDEPENDS:${PN} = " \
      gpgme \
      libgpg-error \
@@ -20,26 +22,24 @@ RDEPENDS:${PN} = " \
 "
 
 SRC_URI = " \
-    git://github.com/containers/skopeo;branch=main;protocol=https \
-    file://0001-Makefile-use-pkg-config-instead-of-gpgme-config.patch \
+    git://github.com/containers/skopeo;branch=release-1.14;protocol=https;destsuffix=git/src/github.com/containers/skopeo \
+    file://0001-makefile-add-GOBUILDFLAGS-to-go-build-call.patch \
 "
 
-SRCREV = "3e2defd6d37b742adde2aac6cb01f6c3c17da8e2"
-PV = "v1.6.1+git${SRCPV}"
+SRCREV = "1c2ab995059dd011aad74e2c37305d636ebd2675"
+PV = "v1.14.2+git"
 GO_IMPORT = "import"
 
-S = "${WORKDIR}/git"
+S = "${WORKDIR}/git/src/github.com/containers/skopeo"
 
 inherit goarch
 inherit pkgconfig
 
 inherit container-host
 
-# This CVE was fixed in the container image go library skopeo is using.
-# See:
 # https://bugzilla.redhat.com/show_bug.cgi?id=CVE-2019-10214
 # https://github.com/containers/image/issues/654
-CVE_CHECK_IGNORE += "CVE-2019-10214"
+CVE_STATUS[CVE-2019-10214] = "fixed-version: This CVE was fixed in the container image go library skopeo is using."
 
 # This disables seccomp and apparmor, which are on by default in the
 # go package. 
@@ -48,18 +48,8 @@ EXTRA_OEMAKE="BUILDTAGS=''"
 do_compile() {
 	export GOARCH="${TARGET_GOARCH}"
 
-	# Setup vendor directory so that it can be used in GOPATH.
-	#
-	# Go looks in a src directory under any directory in GOPATH but riddler
-	# uses 'vendor' instead of 'vendor/src'. We can fix this with a symlink.
-	#
-	# We also need to link in the ipallocator directory as that is not under
-	# a src directory.
-	ln -sfn . "${S}/src/import/vendor/src"
-	mkdir -p "${S}/src/import/vendor/src/github.com/projectatomic/skopeo"
-	ln -sfn "${S}/src/import/skopeo" "${S}/src/import/vendor/src/github.com/projectatomic/skopeo"
-	ln -sfn "${S}/src/import/version" "${S}/src/import/vendor/src/github.com/projectatomic/skopeo/version"
-	export GOPATH="${S}/src/import/vendor"
+	export GOPATH="${S}/src/import/.gopath:${S}/src/import/vendor:${STAGING_DIR_TARGET}/${prefix}/local/go:${WORKDIR}/git/"
+	cd ${S}
 
 	# Pass the needed cflags/ldflags so that cgo
 	# can find the needed headers files and libraries
@@ -68,9 +58,10 @@ do_compile() {
 	export LDFLAGS=""
 	export CGO_CFLAGS="${TARGET_CFLAGS}"
 	export CGO_LDFLAGS="${TARGET_LDFLAGS}"
-	cd ${S}/src/import
 
 	export GO111MODULE=off
+	export GOBUILDFLAGS="-trimpath"
+	export EXTRA_LDFLAGS="-s -w"
 
 	oe_runmake bin/skopeo
 }
@@ -79,7 +70,7 @@ do_install() {
 	install -d ${D}/${sbindir}
 	install -d ${D}/${sysconfdir}/containers
 
-	install ${S}/src/import/bin/skopeo ${D}/${sbindir}/
+	install ${S}/bin/skopeo ${D}/${sbindir}/
 }
 
 do_install:append:class-native() {
@@ -95,6 +86,6 @@ do_install:append:class-nativesdk() {
         --policy ${sysconfdir}/containers/policy.json
 }
 
-INSANE_SKIP:${PN} += "ldflags"
+INSANE_SKIP:${PN} += "ldflags already-stripped"
 
 BBCLASSEXTEND = "native nativesdk"

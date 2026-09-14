@@ -1,0 +1,40 @@
+From 02fdc6e139521328940aa9b972707d17ba0efd76 Mon Sep 17 00:00:00 2001
+From: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Date: Mon, 14 Oct 2024 16:35:57 +0530
+Subject: [PATCH 6/8] FROMLIST: spi: geni-qcom: Load spi qup Firmware from
+ linux side
+
+Add provision to load firmware of Serial engine for SPI protocol from
+Linux Execution Environment on running on APPS processor.
+
+Change-Id: Id2d2d60e1b1775289d93fb32caa2d8c84f0431fd
+Co-developed-by: Mukesh Kumar Savaliya <quic_msavaliy@quicinc.com>
+Signed-off-by: Mukesh Kumar Savaliya <quic_msavaliy@quicinc.com>
+Signed-off-by: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Link: https://lore.kernel.org/linux-kernel/20241204150326.1470749-7-quic_vdadhani@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/linux-kernel/20241204150326.1470749-7-quic_vdadhani@quicinc.com/]
+---
+ drivers/spi/spi-geni-qcom.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/spi/spi-geni-qcom.c b/drivers/spi/spi-geni-qcom.c
+index 6a3b41dbfa70..ed723191e3a8 100644
+--- a/drivers/spi/spi-geni-qcom.c
++++ b/drivers/spi/spi-geni-qcom.c
+@@ -664,8 +664,11 @@ static int spi_geni_init(struct spi_geni_master *mas)
+ 		}
+ 		spi_slv_setup(mas);
+ 	} else if (proto != GENI_SE_SPI) {
+-		dev_err(mas->dev, "Invalid proto %d\n", proto);
+-		goto out_pm;
++		ret = geni_load_se_firmware(se, GENI_SE_SPI);
++		if (ret) {
++			dev_err(mas->dev, "spi master firmware load failed ret: %d\n", ret);
++			goto out_pm;
++		}
+ 	}
+ 	mas->tx_fifo_depth = geni_se_get_tx_fifo_depth(se);
+ 
+-- 
+2.34.1
+

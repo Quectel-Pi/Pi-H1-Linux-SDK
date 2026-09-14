@@ -1,0 +1,42 @@
+From 516c2ffe3cfc18f791eb2ab831887e4eaabe2eb4 Mon Sep 17 00:00:00 2001
+From: Raghavender Reddy Bujala <quic_rbujala@quicinc.com>
+Date: Fri, 14 Feb 2025 09:37:47 +0530
+Subject: [PATCH] PENDING: Ofono Hfp Client version upgrade.
+
+Signed-off-by: Raghavender Reddy Bujala <quic_rbujala@quicinc.com>
+Upstream-Status: Pending
+---
+ plugins/hfp_hf_bluez5.c | 2 +-
+ src/hfp.h               | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/plugins/hfp_hf_bluez5.c b/plugins/hfp_hf_bluez5.c
+index bdeb3ca..2a25d5f 100644
+--- a/plugins/hfp_hf_bluez5.c
++++ b/plugins/hfp_hf_bluez5.c
+@@ -789,7 +789,7 @@ static void connect_handler(DBusConnection *conn, void *user_data)
+ 
+ 	DBG("Registering External Profile handler ...");
+ 
+-	bt_register_profile(conn, HFP_HS_UUID, HFP_VERSION_1_7, "hfp_hf",
++	bt_register_profile(conn, HFP_HS_UUID, HFP_VERSION_1_8, "hfp_hf",
+ 					HFP_EXT_PROFILE_PATH, NULL, features);
+ }
+ 
+diff --git a/src/hfp.h b/src/hfp.h
+index de4c950..fca1648 100644
+--- a/src/hfp.h
++++ b/src/hfp.h
+@@ -86,7 +86,8 @@ enum hfp_version {
+ 	HFP_VERSION_1_5 =	0x0105,
+ 	HFP_VERSION_1_6 =	0x0106,
+ 	HFP_VERSION_1_7 =	0x0107,
+-	HFP_VERSION_LATEST =	HFP_VERSION_1_7,
++	HFP_VERSION_1_8 =       0x0108,
++	HFP_VERSION_LATEST =	HFP_VERSION_1_8,
+ };
+ 
+ enum hfp_hf_indicator {
+-- 
+2.37.3
+

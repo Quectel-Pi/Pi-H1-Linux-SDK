@@ -1,0 +1,51 @@
+From 5ab0c9ce7ff8d62098ff878e0a9b6823fa54931f Mon Sep 17 00:00:00 2001
+From: Vikash Garodia <quic_vgarodia@quicinc.com>
+Date: Thu, 24 Apr 2025 14:20:46 +0530
+Subject: [PATCH 2/5] FROMGIT: media: iris: fix the order of compat strings
+
+Fix the order of compatible strings to make it in alpha numeric order.
+
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Reviewed-by: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Signed-off-by: Bryan O'Donoghue <bod@kernel.org>
+Signed-off-by: Hans Verkuil <hverkuil@xs4all.nl>
+Link: https://lore.kernel.org/linux-media/20250424-qcs8300_iris-v5-2-f118f505c300@quicinc.com
+Git-repo: https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
+Git-commit: 6490cf1653768a1d4cd9a717a8009785e50495e0
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/ 6490cf1653768a1d4cd9a717a8009785e50495e0]
+---
+ drivers/media/platform/qcom/iris/iris_probe.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/iris/iris_probe.c b/drivers/media/platform/qcom/iris/iris_probe.c
+index 7cd8650fbe9c..fa3b9c9b1493 100644
+--- a/drivers/media/platform/qcom/iris/iris_probe.c
++++ b/drivers/media/platform/qcom/iris/iris_probe.c
+@@ -335,16 +335,16 @@ static const struct dev_pm_ops iris_pm_ops = {
+ };
+ 
+ static const struct of_device_id iris_dt_match[] = {
++#if (!IS_ENABLED(CONFIG_VIDEO_QCOM_VENUS))
++	{
++		.compatible = "qcom,sm8250-venus",
++		.data = &sm8250_data,
++	},
++#endif
+ 	{
+ 		.compatible = "qcom,sm8550-iris",
+ 		.data = &sm8550_data,
+ 	},
+-#if (!IS_ENABLED(CONFIG_VIDEO_QCOM_VENUS))
+-		{
+-			.compatible = "qcom,sm8250-venus",
+-			.data = &sm8250_data,
+-		},
+-#endif
+ 	{
+ 		.compatible = "qcom,sm8650-iris",
+ 		.data = &sm8650_data,
+-- 
+2.34.1
+

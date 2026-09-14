@@ -2,7 +2,8 @@
 # Author: Richard Purdie
 # Some code and influence taken from srctree.bbclass:
 # Copyright (C) 2009 Chris Larson <clarson@kergoth.com>
-# Released under the MIT license (see COPYING.MIT for the terms)
+#
+# SPDX-License-Identifier: MIT
 #
 # externalsrc.bbclass enables use of an existing source tree, usually external to
 # the build system to build a piece of software rather than the usual fetch/unpack/patch
@@ -62,24 +63,17 @@ python () {
         else:
             d.setVar('B', '${WORKDIR}/${BPN}-${PV}')
 
-        if d.getVar('SRCREV', "INVALID") != "INVALID":
-            # Ensure SRCREV has been processed before accessing SRC_URI
-            bb.fetch.get_srcrev(d)
-
+        bb.fetch.get_hashvalue(d)
         local_srcuri = []
         fetch = bb.fetch2.Fetch((d.getVar('SRC_URI') or '').split(), d)
         for url in fetch.urls:
             url_data = fetch.ud[url]
             parm = url_data.parm
-            if (url_data.type == 'file' or
-                    url_data.type == 'npmsw' or url_data.type == 'crate' or
-                    'type' in parm and parm['type'] == 'kmeta'):
+            if url_data.type in ['file', 'npmsw', 'crate'] or parm.get('type') in ['kmeta', 'git-dependency']:
                 local_srcuri.append(url)
 
         d.setVar('SRC_URI', ' '.join(local_srcuri))
 
-        # Dummy value because the default function can't be called with blank SRC_URI
-        d.setVar('SRCPV', '999')
         # sstate is never going to work for external source trees, disable it
         d.setVar('SSTATE_SKIP_CREATION', '1')
 
@@ -110,6 +104,7 @@ python () {
         # If we deltask do_patch, there's no dependency to ensure do_unpack gets run, so add one
         # Note that we cannot use d.appendVarFlag() here because deps is expected to be a list object, not a string
         d.setVarFlag('do_configure', 'deps', (d.getVarFlag('do_configure', 'deps', False) or []) + ['do_unpack'])
+        d.setVarFlag('do_populate_lic', 'deps', (d.getVarFlag('do_populate_lic', 'deps', False) or []) + ['do_unpack'])
 
         for task in d.getVar("SRCTREECOVEREDTASKS").split():
             if local_srcuri and task in fetch_tasks:
@@ -130,6 +125,9 @@ python () {
 
         d.setVarFlag('do_compile', 'file-checksums', '${@srctree_hash_files(d)}')
         d.setVarFlag('do_configure', 'file-checksums', '${@srctree_configure_hash_files(d)}')
+
+        d.appendVarFlag('do_compile', 'prefuncs', ' fetcher_hashes_dummyfunc')
+        d.appendVarFlag('do_configure', 'prefuncs', ' fetcher_hashes_dummyfunc')
 
         # We don't want the workdir to go away
         d.appendVar('RM_WORK_EXCLUDE', ' ' + d.getVar('PN'))
@@ -255,6 +253,8 @@ def srctree_configure_hash_files(d):
     Get the list of files that should trigger do_configure to re-execute,
     based on the value of CONFIGURE_FILES
     """
+    import fnmatch
+
     in_files = (d.getVar('CONFIGURE_FILES') or '').split()
     out_items = []
     search_files = []
@@ -266,8 +266,8 @@ def srctree_configure_hash_files(d):
     if search_files:
         s_dir = d.getVar('EXTERNALSRC')
         for root, _, files in os.walk(s_dir):
-            for f in files:
-                if f in search_files:
+            for p in search_files:
+                for f in fnmatch.filter(files, p):
                     out_items.append('%s:True' % os.path.join(root, f))
     return ' '.join(out_items)
 

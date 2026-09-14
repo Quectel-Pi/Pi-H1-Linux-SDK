@@ -7,10 +7,10 @@ PROVIDES = "virtual/refpolicy"
 RPROVIDES:${PN} = "refpolicy"
 
 # Specific config files for Poky
-SRC_URI += "file://customizable_types  \
-	    file://setrans-mls.conf  \
-	    file://setrans-mcs.conf  \
-	   "
+SRC_URI += "file://customizable_types \
+            file://setrans-mls.conf \
+            file://setrans-mcs.conf \
+           "
 
 # Base patches applied to all Yocto-based platforms.  Your own version of
 # refpolicy should provide a version of these and place them in your own
@@ -26,87 +26,95 @@ SRC_URI += " \
         file://0008-fc-dmesg-apply-policy-to-dmesg-alternatives.patch \
         file://0009-fc-ssh-apply-policy-to-ssh-alternatives.patch \
         file://0010-fc-sysnetwork-apply-policy-to-network-commands-alter.patch \
-        file://0011-fc-udev-apply-policy-to-udevadm-in-libexec.patch \
-        file://0012-fc-rpm-apply-rpm_exec-policy-to-cpio-binaries.patch \
-        file://0013-fc-su-apply-policy-to-su-alternatives.patch \
-        file://0014-fc-fstools-fix-real-path-for-fstools.patch \
-        file://0015-fc-init-fix-update-alternatives-for-sysvinit.patch \
-        file://0016-fc-brctl-apply-policy-to-brctl-alternatives.patch \
-        file://0017-fc-corecommands-apply-policy-to-nologin-alternatives.patch \
-        file://0018-fc-locallogin-apply-policy-to-sulogin-alternatives.patch \
-        file://0019-fc-ntp-apply-policy-to-ntpd-alternatives.patch \
-        file://0020-fc-kerberos-apply-policy-to-kerberos-alternatives.patch \
-        file://0021-fc-ldap-apply-policy-to-ldap-alternatives.patch \
-        file://0022-fc-postgresql-apply-policy-to-postgresql-alternative.patch \
-        file://0023-fc-screen-apply-policy-to-screen-alternatives.patch \
-        file://0024-fc-usermanage-apply-policy-to-usermanage-alternative.patch \
-        file://0025-fc-getty-add-file-context-to-start_getty.patch \
-        file://0026-fc-vlock-apply-policy-to-vlock-alternatives.patch \
-        file://0027-fc-add-fcontext-for-init-scripts-and-systemd-service.patch \
-        file://0028-file_contexts.subs_dist-set-aliase-for-root-director.patch \
-        file://0029-policy-modules-system-logging-add-rules-for-the-syml.patch \
-        file://0030-policy-modules-system-logging-add-rules-for-syslogd-.patch \
-        file://0031-policy-modules-kernel-files-add-rules-for-the-symlin.patch \
-        file://0032-policy-modules-system-logging-fix-auditd-startup-fai.patch \
-        file://0033-policy-modules-kernel-terminal-don-t-audit-tty_devic.patch \
-        file://0034-policy-modules-system-modutils-allow-mod_t-to-access.patch \
-        file://0035-policy-modules-system-getty-allow-getty_t-to-search-.patch \
-        file://0036-policy-modules-services-rpcbind-allow-rpcbind_t-to-c.patch \
-        file://0037-policy-modules-admin-usermanage-allow-useradd-to-rel.patch \
-        file://0038-policy-modules-system-systemd-enable-support-for-sys.patch \
-        file://0039-policy-modules-system-systemd-fix-systemd-resolved-s.patch \
-        file://0040-policy-modules-system-systemd-allow-systemd_-_t-to-g.patch \
-        file://0041-policy-modules-system-logging-fix-syslogd-failures-f.patch \
-        file://0042-policy-modules-system-systemd-systemd-user-fixes.patch \
-        file://0043-policy-modules-system-sysnetwork-support-priviledge-.patch \
-        file://0044-policy-modules-system-modutils-allow-kmod_t-to-write.patch \
-        file://0045-policy-modules-system-systemd-allow-systemd_logind_t.patch \
-        file://0046-policy-modules-system-mount-make-mount_t-domain-MLS-.patch \
-        file://0047-policy-modules-roles-sysadm-MLS-sysadm-rw-to-clearan.patch \
-        file://0048-policy-modules-services-rpc-make-nfsd_t-domain-MLS-t.patch \
-        file://0049-policy-modules-admin-dmesg-make-dmesg_t-MLS-trusted-.patch \
-        file://0050-policy-modules-kernel-kernel-make-kernel_t-MLS-trust.patch \
-        file://0051-policy-modules-system-init-make-init_t-MLS-trusted-f.patch \
-        file://0052-policy-modules-system-systemd-make-systemd-tmpfiles_.patch \
-        file://0053-policy-modules-system-systemd-systemd-make-systemd_-.patch \
-        file://0054-policy-modules-system-logging-add-the-syslogd_t-to-t.patch \
-        file://0055-policy-modules-system-init-make-init_t-MLS-trusted-f.patch \
-        file://0056-policy-modules-system-init-all-init_t-to-read-any-le.patch \
-        file://0057-policy-modules-system-logging-allow-auditd_t-to-writ.patch \
-        file://0058-policy-modules-kernel-kernel-make-kernel_t-MLS-trust.patch \
-        file://0059-policy-modules-system-setrans-allow-setrans_t-use-fd.patch \
-        file://0060-policy-modules-system-systemd-make-_systemd_t-MLS-tr.patch \
-        file://0061-policy-modules-system-logging-make-syslogd_runtime_t.patch \
-        file://0062-systemd-systemd-resolved-is-linked-to-libselinux.patch \
-        file://0063-sysnetwork-systemd-allow-DNS-resolution-over-io.syst.patch \
-        file://0064-term-init-allow-systemd-to-watch-and-watch-reads-on-.patch \
-        file://0065-systemd-add-file-transition-for-systemd-networkd-run.patch \
-        file://0066-systemd-add-missing-file-context-for-run-systemd-net.patch \
-        file://0067-systemd-add-file-contexts-for-systemd-network-genera.patch \
-        file://0068-systemd-udev-allow-udev-to-read-systemd-networkd-run.patch \
-        file://0069-fc-fstools-apply-policy-to-findfs-alternative.patch \
+        file://0011-fc-rpm-apply-rpm_exec-policy-to-cpio-binaries.patch \
+        file://0012-fc-su-apply-policy-to-su-alternatives.patch \
+        file://0013-fc-fstools-fix-real-path-for-fstools.patch \
+        file://0014-fc-init-fix-update-alternatives-for-sysvinit.patch \
+        file://0015-fc-brctl-apply-policy-to-brctl-alternatives.patch \
+        file://0016-fc-corecommands-apply-policy-to-nologin-alternatives.patch \
+        file://0017-fc-locallogin-apply-policy-to-sulogin-alternatives.patch \
+        file://0018-fc-ntp-apply-policy-to-ntpd-alternatives.patch \
+        file://0019-fc-kerberos-apply-policy-to-kerberos-alternatives.patch \
+        file://0020-fc-ldap-apply-policy-to-ldap-alternatives.patch \
+        file://0021-fc-postgresql-apply-policy-to-postgresql-alternative.patch \
+        file://0022-fc-screen-apply-policy-to-screen-alternatives.patch \
+        file://0023-fc-usermanage-apply-policy-to-usermanage-alternative.patch \
+        file://0024-fc-getty-add-file-context-to-start_getty.patch \
+        file://0025-fc-vlock-apply-policy-to-vlock-alternatives.patch \
+        file://0026-fc-add-fcontext-for-init-scripts-and-systemd-service.patch \
+        file://0027-file_contexts.subs_dist-set-aliase-for-root-director.patch \
+        file://0028-policy-modules-system-logging-add-rules-for-the-syml.patch \
+        file://0029-policy-modules-system-logging-add-rules-for-syslogd-.patch \
+        file://0030-policy-modules-kernel-files-add-rules-for-the-symlin.patch \
+        file://0031-policy-modules-system-logging-fix-auditd-startup-fai.patch \
+        file://0032-policy-modules-kernel-terminal-don-t-audit-tty_devic.patch \
+        file://0033-policy-modules-services-rpcbind-allow-rpcbind_t-to-c.patch \
+        file://0034-policy-modules-system-systemd-enable-support-for-sys.patch \
+        file://0035-policy-modules-system-logging-allow-systemd-tmpfiles.patch \
+        file://0036-policy-modules-system-systemd-allow-systemd_logind_t.patch \
+        file://0037-policy-modules-roles-sysadm-allow-sysadm-to-use-init.patch \
+        file://0038-policy-modules-system-systemd-systemd-user-fixes.patch \
+        file://0039-policy-modules-system-authlogin-fix-login-errors-aft.patch \
+        file://0040-policy-modules-system-logging-grant-getpcap-capabili.patch \
+        file://0041-policy-modules-system-mount-make-mount_t-domain-MLS-.patch \
+        file://0042-policy-modules-roles-sysadm-MLS-sysadm-rw-to-clearan.patch \
+        file://0043-policy-modules-services-rpc-make-nfsd_t-domain-MLS-t.patch \
+        file://0044-policy-modules-admin-dmesg-make-dmesg_t-MLS-trusted-.patch \
+        file://0045-policy-modules-kernel-kernel-make-kernel_t-MLS-trust.patch \
+        file://0046-policy-modules-system-init-make-init_t-MLS-trusted-f.patch \
+        file://0047-policy-modules-system-systemd-make-systemd-tmpfiles_.patch \
+        file://0048-policy-modules-system-systemd-systemd-make-systemd_-.patch \
+        file://0049-policy-modules-system-logging-add-the-syslogd_t-to-t.patch \
+        file://0050-policy-modules-system-init-make-init_t-MLS-trusted-f.patch \
+        file://0051-policy-modules-system-init-all-init_t-to-read-any-le.patch \
+        file://0052-policy-modules-system-logging-allow-auditd_t-to-writ.patch \
+        file://0053-policy-modules-kernel-kernel-make-kernel_t-MLS-trust.patch \
+        file://0054-policy-modules-system-setrans-allow-setrans_t-use-fd.patch \
+        file://0055-policy-modules-system-systemd-make-_systemd_t-MLS-tr.patch \
+        file://0056-policy-modules-system-logging-make-syslogd_runtime_t.patch \
+        file://0057-policy-modules-system-authlogin-chkpwd_t-dac_read_se.patch \
+        file://0058-policy-modules-services-chronyd-allow_dac_read_searc.patch \
+        file://0059-policy-modules-system-unconfined-fix-oddjob-security.patch \
+        file://0060-policy-modules-services-firewalld-fix-lib_t-python_c.patch \
+        file://0061-policy-modules-services-firewalld-fix-firewalld_t-fi.patch \
+        file://0062-policy-modules-multiple-filetrans-run_machine_id-etc.patch \
+        file://0063-policy-modules-system-locallogin-dontaudit-sulogin_t.patch \
+        file://0064-policy-modules-system-locallogin-allow-sulogin_t-unc.patch \
+        file://0065-policy-modules-system-locallogin-allow-sulogin_t-use.patch \
+        file://0066-policy-modules-services-oddjob-allow-oddjob_mkhomedi.patch \
+        file://0067-fixdep-dbus.patch \
+        file://0068-fix-building-when-dbus-module-is-not-enabled.patch \
+        file://0069-policy-modules-services-oddjob-allow-oddjob_mkhomedi.patch \
+        file://0070-policy-modules-system-systemd-allow-systemd_generato.patch \
+        file://0071-policy-modules-system-unconfined-allow-firewalld_t-u.patch \
+        file://0072-policy-modules-services-chronyd-allow-chronyd_t-kern.patch \
+        file://0073-policy-modules-services-ssh-allow-sshd_t-kernel_t-sy.patch \
+        file://0074-policy-modules-services-ssh-allow-sshd_t-userdomain-.patch \
+        file://0075-policy-modules-services-dbus-allow-system_dbusd_t-un.patch \
+        file://0076-policy-modules-system-systemd-allow-systemd_logind_t.patch \
+        file://0077-policy-modules-kernel-files-add-files_delete_var_chr.patch \
         "
 
 S = "${WORKDIR}/refpolicy"
 
-CONFFILES:${PN} += "${sysconfdir}/selinux/config"
+CONFFILES:${PN} = "${sysconfdir}/selinux/config"
 FILES:${PN} += " \
-	${sysconfdir}/selinux/${POLICY_NAME}/ \
-	${datadir}/selinux/${POLICY_NAME}/*.pp \
-	${localstatedir}/lib/selinux/${POLICY_NAME}/ \
-	"
+    ${sysconfdir}/selinux/${POLICY_NAME}/ \
+    ${datadir}/selinux/${POLICY_NAME}/*.pp \
+    ${localstatedir}/lib/selinux/${POLICY_NAME}/ \
+    "
 FILES:${PN}-dev =+ " \
-        ${datadir}/selinux/${POLICY_NAME}/include/ \
-        ${sysconfdir}/selinux/sepolgen.conf \
-"
+    ${datadir}/selinux/${POLICY_NAME}/include/ \
+    ${sysconfdir}/selinux/sepolgen.conf \
+    "
 
 EXTRANATIVEPATH += "bzip2-native"
 
-DEPENDS += "bzip2-replacement-native checkpolicy-native policycoreutils-native semodule-utils-native m4-native"
+DEPENDS = "bzip2-replacement-native checkpolicy-native policycoreutils-native semodule-utils-native m4-native"
 
-RDEPENDS:${PN}-dev =+ " \
-        python3-core \
-"
+RDEPENDS:${PN}-dev = " \
+    python3-core \
+    "
 
 PACKAGE_ARCH = "${MACHINE_ARCH}"
 
@@ -129,83 +137,83 @@ POLICY_MLS_SENS ?= "16"
 POLICY_MLS_CATS ?= "1024"
 POLICY_MCS_CATS ?= "1024"
 
-EXTRA_OEMAKE += "NAME=${POLICY_NAME} \
-	TYPE=${POLICY_TYPE} \
-	DISTRO=${POLICY_DISTRO} \
-	UBAC=${POLICY_UBAC} \
-	UNK_PERMS=${POLICY_UNK_PERMS} \
-	DIRECT_INITRC=${POLICY_DIRECT_INITRC} \
-	SYSTEMD=${POLICY_SYSTEMD} \
-	MONOLITHIC=${POLICY_MONOLITHIC} \
-	CUSTOM_BUILDOPT=${POLICY_CUSTOM_BUILDOPT} \
-	QUIET=${POLICY_QUIET} \
-	MLS_SENS=${POLICY_MLS_SENS} \
-	MLS_CATS=${POLICY_MLS_CATS} \
-	MCS_CATS=${POLICY_MCS_CATS}"
+EXTRA_OEMAKE = "NAME=${POLICY_NAME} \
+    TYPE=${POLICY_TYPE} \
+    DISTRO=${POLICY_DISTRO} \
+    UBAC=${POLICY_UBAC} \
+    UNK_PERMS=${POLICY_UNK_PERMS} \
+    DIRECT_INITRC=${POLICY_DIRECT_INITRC} \
+    SYSTEMD=${POLICY_SYSTEMD} \
+    MONOLITHIC=${POLICY_MONOLITHIC} \
+    CUSTOM_BUILDOPT=${POLICY_CUSTOM_BUILDOPT} \
+    QUIET=${POLICY_QUIET} \
+    MLS_SENS=${POLICY_MLS_SENS} \
+    MLS_CATS=${POLICY_MLS_CATS} \
+    MCS_CATS=${POLICY_MCS_CATS}"
 
 EXTRA_OEMAKE += "tc_usrbindir=${STAGING_BINDIR_NATIVE}"
 EXTRA_OEMAKE += "OUTPUT_POLICY=`${STAGING_BINDIR_NATIVE}/checkpolicy -V | cut -d' ' -f1`"
 EXTRA_OEMAKE += "CC='${BUILD_CC}' CFLAGS='${BUILD_CFLAGS}' PYTHON='${PYTHON}'"
 
-python __anonymous () {
+python __anonymous() {
     import re
 
-    # make sure DEFAULT_ENFORCING is something sane
+    # Make sure DEFAULT_ENFORCING is something sane
     if not re.match('^(enforcing|permissive|disabled)$',
                     d.getVar('DEFAULT_ENFORCING'),
                     flags=0):
         d.setVar('DEFAULT_ENFORCING', 'permissive')
 }
 
-disable_policy_modules () {
-	for module in ${PURGE_POLICY_MODULES} ; do
-		sed -i "s/^\(\<${module}\>\) *= *.*$/\1 = off/" ${S}/policy/modules.conf
-	done
+disable_policy_modules() {
+    for module in ${PURGE_POLICY_MODULES} ; do
+        sed -i "s/^\(\<${module}\>\) *= *.*$/\1 = off/" ${S}/policy/modules.conf
+    done
 }
 
 do_compile() {
-	if [ -f "${WORKDIR}/modules.conf" ] ; then
-		cp -f ${WORKDIR}/modules.conf ${S}/policy/modules.conf
-	fi
-	oe_runmake conf
-	disable_policy_modules
-	oe_runmake policy
+    if [ -f "${WORKDIR}/modules.conf" ] ; then
+        cp -f ${WORKDIR}/modules.conf ${S}/policy/modules.conf
+    fi
+    oe_runmake conf
+    disable_policy_modules
+    oe_runmake policy
 }
 
-prepare_policy_store () {
-	oe_runmake 'DESTDIR=${D}' 'prefix=${D}${prefix}' install
-	POL_PRIORITY=100
-	POL_SRC=${D}${datadir}/selinux/${POLICY_NAME}
-	POL_STORE=${D}${localstatedir}/lib/selinux/${POLICY_NAME}
-	POL_ACTIVE_MODS=${POL_STORE}/active/modules/${POL_PRIORITY}
+prepare_policy_store() {
+    oe_runmake 'DESTDIR=${D}' 'prefix=${D}${prefix}' install
+    POL_PRIORITY=100
+    POL_SRC=${D}${datadir}/selinux/${POLICY_NAME}
+    POL_STORE=${D}${localstatedir}/lib/selinux/${POLICY_NAME}
+    POL_ACTIVE_MODS=${POL_STORE}/active/modules/${POL_PRIORITY}
 
-	# Prepare to create policy store
-	mkdir -p ${POL_STORE}
-	mkdir -p ${POL_ACTIVE_MODS}
+    # Prepare to create policy store
+    mkdir -p ${POL_STORE}
+    mkdir -p ${POL_ACTIVE_MODS}
 
-	# get hll type from suffix on base policy module
-	HLL_TYPE=$(echo ${POL_SRC}/base.* | awk -F . '{if (NF>1) {print $NF}}')
-	HLL_BIN=${STAGING_DIR_NATIVE}${prefix}/libexec/selinux/hll/${HLL_TYPE}
+    # Get hll type from suffix on base policy module
+    HLL_TYPE=$(echo ${POL_SRC}/base.* | awk -F . '{if (NF>1) {print $NF}}')
+    HLL_BIN=${STAGING_DIR_NATIVE}${prefix}/libexec/selinux/hll/${HLL_TYPE}
 
-	for i in ${POL_SRC}/*.${HLL_TYPE}; do
-		MOD_NAME=$(basename $i | sed "s/\.${HLL_TYPE}$//")
-		MOD_DIR=${POL_ACTIVE_MODS}/${MOD_NAME}
-		mkdir -p ${MOD_DIR}
-		echo -n "${HLL_TYPE}" > ${MOD_DIR}/lang_ext
-		if ! bzip2 -t $i >/dev/null 2>&1; then
-			${HLL_BIN} $i | bzip2 --stdout > ${MOD_DIR}/cil
-			bzip2 -f $i && mv -f $i.bz2 $i
-		else
-			bunzip2 --stdout $i | \
-				${HLL_BIN} | \
-				bzip2 --stdout > ${MOD_DIR}/cil
-		fi
-		cp $i ${MOD_DIR}/hll
-	done
+    for i in ${POL_SRC}/*.${HLL_TYPE}; do
+        MOD_NAME=$(basename $i | sed "s/\.${HLL_TYPE}$//")
+        MOD_DIR=${POL_ACTIVE_MODS}/${MOD_NAME}
+        mkdir -p ${MOD_DIR}
+        echo -n "${HLL_TYPE}" > ${MOD_DIR}/lang_ext
+        if ! bzip2 -t $i >/dev/null 2>&1; then
+            ${HLL_BIN} $i | bzip2 --stdout > ${MOD_DIR}/cil
+            bzip2 -f $i && mv -f $i.bz2 $i
+        else
+            bunzip2 --stdout $i | \
+                ${HLL_BIN} | \
+                bzip2 --stdout > ${MOD_DIR}/cil
+        fi
+        cp $i ${MOD_DIR}/hll
+    done
 }
 
-rebuild_policy () {
-	cat <<-EOF > ${D}${sysconfdir}/selinux/semanage.conf
+rebuild_policy() {
+    cat <<-EOF > ${D}${sysconfdir}/selinux/semanage.conf
 module-store = direct
 [setfiles]
 path = ${STAGING_DIR_NATIVE}${base_sbindir_native}/setfiles
@@ -219,29 +227,29 @@ args = \$@
 policy-version = 33
 EOF
 
-	# Create policy store and build the policy
-	semodule -p ${D} -s ${POLICY_NAME} -n -B
-	rm -f ${D}${sysconfdir}/selinux/semanage.conf
-	# no need to leave final dir created by semanage laying around
-	rm -rf ${D}${localstatedir}/lib/selinux/final
+    # Create policy store and build the policy
+    semodule -p ${D} -s ${POLICY_NAME} -n -B
+    rm -f ${D}${sysconfdir}/selinux/semanage.conf
+    # No need to leave final dir created by semanage laying around
+    rm -rf ${D}${localstatedir}/lib/selinux/final
 }
 
-install_misc_files () {
-	cat ${WORKDIR}/customizable_types >> \
-		${D}${sysconfdir}/selinux/${POLICY_NAME}/contexts/customizable_types
+install_misc_files() {
+    cat ${WORKDIR}/customizable_types >> \
+        ${D}${sysconfdir}/selinux/${POLICY_NAME}/contexts/customizable_types
 
-	# install setrans.conf for mls/mcs policy
-	if [ -f ${WORKDIR}/setrans-${POLICY_TYPE}.conf ]; then
-		install -m 0644 ${WORKDIR}/setrans-${POLICY_TYPE}.conf \
-			${D}${sysconfdir}/selinux/${POLICY_NAME}/setrans.conf
-	fi
+    # Install setrans.conf for mls/mcs policy
+    if [ -f ${WORKDIR}/setrans-${POLICY_TYPE}.conf ]; then
+        install -m 0644 ${WORKDIR}/setrans-${POLICY_TYPE}.conf \
+            ${D}${sysconfdir}/selinux/${POLICY_NAME}/setrans.conf
+    fi
 
-	# install policy headers
-	oe_runmake 'DESTDIR=${D}' 'prefix=${D}${prefix}' install-headers
+    # Install policy headers
+    oe_runmake 'DESTDIR=${D}' 'prefix=${D}${prefix}' install-headers
 }
 
-install_config () {
-	echo "\
+install_config() {
+    echo "\
 # This file controls the state of SELinux on the system.
 # SELINUX= can take one of these three values:
 #     enforcing - SELinux security policy is enforced.
@@ -256,22 +264,22 @@ SELINUX=${DEFAULT_ENFORCING}
 #     mcs - Multi Category Security protection.
 SELINUXTYPE=${POLICY_NAME}
 " > ${WORKDIR}/config
-	install -d ${D}/${sysconfdir}/selinux
-	install -m 0644 ${WORKDIR}/config ${D}/${sysconfdir}/selinux/
+    install -d ${D}/${sysconfdir}/selinux
+    install -m 0644 ${WORKDIR}/config ${D}/${sysconfdir}/selinux/
 }
 
-do_install () {
-	prepare_policy_store
-	rebuild_policy
-	install_misc_files
-	install_config
+do_install() {
+    prepare_policy_store
+    rebuild_policy
+    install_misc_files
+    install_config
 }
 
-do_install:append(){
-	# While building policies on target, Makefile will be searched from SELINUX_DEVEL_PATH
-	echo "SELINUX_DEVEL_PATH=${datadir}/selinux/${POLICY_NAME}/include" > ${D}${sysconfdir}/selinux/sepolgen.conf
+do_install:append() {
+    # While building policies on target, Makefile will be searched from SELINUX_DEVEL_PATH
+    echo "SELINUX_DEVEL_PATH=${datadir}/selinux/${POLICY_NAME}/include" > ${D}${sysconfdir}/selinux/sepolgen.conf
 }
 
-sysroot_stage_all:append () {
-	sysroot_stage_dir ${D}${sysconfdir} ${SYSROOT_DESTDIR}${sysconfdir}
+sysroot_stage_all:append() {
+    sysroot_stage_dir ${D}${sysconfdir} ${SYSROOT_DESTDIR}${sysconfdir}
 }

@@ -1,0 +1,134 @@
+From b06e01a7fd287b5474db24a85aa0b906cd46b2b1 Mon Sep 17 00:00:00 2001
+From: Paloma Arellano <quic_parellan@quicinc.com>
+Date: Thu, 22 Feb 2024 11:39:51 -0800
+Subject: [PATCH 056/146] UPSTREAM: drm/msm/dp: rename wide_bus_en to
+ wide_bus_supported
+
+Rename wide_bus_en to wide_bus_supported in dp_display_private to
+correctly establish that the parameter is referencing if wide bus is
+supported instead of enabled.
+
+Signed-off-by: Paloma Arellano <quic_parellan@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/579613/
+Link: https://lore.kernel.org/r/20240222194025.25329-7-quic_parellan@quicinc.com
+Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 3ed77f333bb0d9c21bf02014542928609aedc593]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 50 ++++++++++++++---------------
+ 1 file changed, 25 insertions(+), 25 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index da731d8b015c..eed09ef7f2b7 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -111,7 +111,7 @@ struct dp_display_private {
+ 	struct dp_event event_list[DP_EVENT_Q_MAX];
+ 	spinlock_t event_lock;
+ 
+-	bool wide_bus_en;
++	bool wide_bus_supported;
+ 
+ 	struct dp_audio *audio;
+ };
+@@ -120,14 +120,14 @@ struct msm_dp_desc {
+ 	phys_addr_t io_start;
+ 	unsigned int id;
+ 	unsigned int connector_type;
+-	bool wide_bus_en;
++	bool wide_bus_supported;
+ };
+ 
+ static const struct msm_dp_desc sa8775p_dp_descs[] = {
+-	{ .io_start = 0x0af54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_en = true },
+-	{ .io_start = 0x0af5c000, .id = MSM_DP_CONTROLLER_1, .wide_bus_en = true },
+-	{ .io_start = 0x22154000, .id = MSM_DP_CONTROLLER_2, .wide_bus_en = true },
+-	{ .io_start = 0x2215c000, .id = MSM_DP_CONTROLLER_3, .wide_bus_en = true },
++	{ .io_start = 0x0af54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true },
++	{ .io_start = 0x0af5c000, .id = MSM_DP_CONTROLLER_1, .wide_bus_supported = true },
++	{ .io_start = 0x22154000, .id = MSM_DP_CONTROLLER_2, .wide_bus_supported = true },
++	{ .io_start = 0x2215c000, .id = MSM_DP_CONTROLLER_3, .wide_bus_supported = true },
+ 	{}
+ };
+ 
+@@ -137,8 +137,8 @@ static const struct msm_dp_desc sc7180_dp_descs[] = {
+ };
+ 
+ static const struct msm_dp_desc sc7280_dp_descs[] = {
+-	{ .io_start = 0x0ae90000, .id = MSM_DP_CONTROLLER_0, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_en = true },
+-	{ .io_start = 0x0aea0000, .id = MSM_DP_CONTROLLER_1, .connector_type = DRM_MODE_CONNECTOR_eDP, .wide_bus_en = true },
++	{ .io_start = 0x0ae90000, .id = MSM_DP_CONTROLLER_0, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_supported = true },
++	{ .io_start = 0x0aea0000, .id = MSM_DP_CONTROLLER_1, .connector_type = DRM_MODE_CONNECTOR_eDP, .wide_bus_supported = true },
+ 	{}
+ };
+ 
+@@ -150,22 +150,22 @@ static const struct msm_dp_desc sc8180x_dp_descs[] = {
+ };
+ 
+ static const struct msm_dp_desc sc8280xp_dp_descs[] = {
+-	{ .io_start = 0x0ae90000, .id = MSM_DP_CONTROLLER_0, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_en = true },
+-	{ .io_start = 0x0ae98000, .id = MSM_DP_CONTROLLER_1, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_en = true },
+-	{ .io_start = 0x0ae9a000, .id = MSM_DP_CONTROLLER_2, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_en = true },
+-	{ .io_start = 0x0aea0000, .id = MSM_DP_CONTROLLER_3, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_en = true },
+-	{ .io_start = 0x22090000, .id = MSM_DP_CONTROLLER_0, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_en = true },
+-	{ .io_start = 0x22098000, .id = MSM_DP_CONTROLLER_1, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_en = true },
+-	{ .io_start = 0x2209a000, .id = MSM_DP_CONTROLLER_2, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_en = true },
+-	{ .io_start = 0x220a0000, .id = MSM_DP_CONTROLLER_3, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_en = true },
++	{ .io_start = 0x0ae90000, .id = MSM_DP_CONTROLLER_0, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_supported = true },
++	{ .io_start = 0x0ae98000, .id = MSM_DP_CONTROLLER_1, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_supported = true },
++	{ .io_start = 0x0ae9a000, .id = MSM_DP_CONTROLLER_2, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_supported = true },
++	{ .io_start = 0x0aea0000, .id = MSM_DP_CONTROLLER_3, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_supported = true },
++	{ .io_start = 0x22090000, .id = MSM_DP_CONTROLLER_0, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_supported = true },
++	{ .io_start = 0x22098000, .id = MSM_DP_CONTROLLER_1, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_supported = true },
++	{ .io_start = 0x2209a000, .id = MSM_DP_CONTROLLER_2, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_supported = true },
++	{ .io_start = 0x220a0000, .id = MSM_DP_CONTROLLER_3, .connector_type = DRM_MODE_CONNECTOR_DisplayPort, .wide_bus_supported = true },
+ 	{}
+ };
+ 
+ static const struct msm_dp_desc sc8280xp_edp_descs[] = {
+-	{ .io_start = 0x0ae9a000, .id = MSM_DP_CONTROLLER_2, .connector_type = DRM_MODE_CONNECTOR_eDP, .wide_bus_en = true },
+-	{ .io_start = 0x0aea0000, .id = MSM_DP_CONTROLLER_3, .connector_type = DRM_MODE_CONNECTOR_eDP, .wide_bus_en = true },
+-	{ .io_start = 0x2209a000, .id = MSM_DP_CONTROLLER_2, .connector_type = DRM_MODE_CONNECTOR_eDP, .wide_bus_en = true },
+-	{ .io_start = 0x220a0000, .id = MSM_DP_CONTROLLER_3, .connector_type = DRM_MODE_CONNECTOR_eDP, .wide_bus_en = true },
++	{ .io_start = 0x0ae9a000, .id = MSM_DP_CONTROLLER_2, .connector_type = DRM_MODE_CONNECTOR_eDP, .wide_bus_supported = true },
++	{ .io_start = 0x0aea0000, .id = MSM_DP_CONTROLLER_3, .connector_type = DRM_MODE_CONNECTOR_eDP, .wide_bus_supported = true },
++	{ .io_start = 0x2209a000, .id = MSM_DP_CONTROLLER_2, .connector_type = DRM_MODE_CONNECTOR_eDP, .wide_bus_supported = true },
++	{ .io_start = 0x220a0000, .id = MSM_DP_CONTROLLER_3, .connector_type = DRM_MODE_CONNECTOR_eDP, .wide_bus_supported = true },
+ 	{}
+ };
+ 
+@@ -804,9 +804,9 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
+ 		goto error_ctrl;
+ 	}
+ 
+-	/* populate wide_bus_en to differernt layers */
+-	dp->ctrl->wide_bus_en = dp->wide_bus_en;
+-	dp->catalog->wide_bus_en = dp->wide_bus_en;
++	/* populate wide_bus_supported to different layers */
++	dp->ctrl->wide_bus_en = dp->wide_bus_supported;
++	dp->catalog->wide_bus_en = dp->wide_bus_supported;
+ 
+ 	return rc;
+ 
+@@ -1304,7 +1304,7 @@ static int dp_display_probe(struct platform_device *pdev)
+ 	dp->name = "drm_dp";
+ 	dp->id = desc->id;
+ 	dp->dp_display.connector_type = dp_display_get_connector_type(pdev, desc);
+-	dp->wide_bus_en = desc->wide_bus_en;
++	dp->wide_bus_supported = desc->wide_bus_supported;
+ 	dp->dp_display.is_edp =
+ 		(dp->dp_display.connector_type == DRM_MODE_CONNECTOR_eDP);
+ 
+@@ -1440,7 +1440,7 @@ bool msm_dp_wide_bus_available(const struct msm_dp *dp_display)
+ 
+ 	dp = container_of(dp_display, struct dp_display_private, dp_display);
+ 
+-	return dp->wide_bus_en;
++	return dp->wide_bus_supported;
+ }
+ 
+ void dp_display_debugfs_init(struct msm_dp *dp_display, struct dentry *root, bool is_edp)
+-- 
+2.34.1
+

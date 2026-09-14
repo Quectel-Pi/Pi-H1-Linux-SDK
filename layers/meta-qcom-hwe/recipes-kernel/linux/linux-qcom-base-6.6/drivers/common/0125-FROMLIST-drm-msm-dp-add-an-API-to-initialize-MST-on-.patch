@@ -1,0 +1,70 @@
+From d42d80843f992a2c57b9331a43d884c376d65b76 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:31:59 -0800
+Subject: [PATCH 125/146] FROMLIST: drm/msm/dp: add an API to initialize MST on
+ sink side
+
+If the DP controller is capable of supporting multiple streams
+then initialize the DP sink in MST mode by programming the DP_MSTM_CTRL
+DPCD register to enable MST mode.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-28-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 32 +++++++++++++++++++++++++++++
+ 1 file changed, 32 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 657bf8ca8fbc..b1d83c15c434 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -386,6 +386,35 @@ static int msm_dp_display_send_hpd_notification(struct msm_dp_display_private *d
+ 	return 0;
+ }
+ 
++static void msm_dp_display_mst_init(struct msm_dp_display_private *dp)
++{
++	const unsigned long clear_mstm_ctrl_timeout_us = 100000;
++	u8 old_mstm_ctrl;
++	struct msm_dp *msm_dp = &dp->msm_dp_display;
++	int ret;
++
++	/* clear sink mst state */
++	drm_dp_dpcd_readb(dp->aux, DP_MSTM_CTRL, &old_mstm_ctrl);
++	drm_dp_dpcd_writeb(dp->aux, DP_MSTM_CTRL, 0);
++
++	/* add extra delay if MST state is not cleared */
++	if (old_mstm_ctrl) {
++		drm_dbg_dp(dp->drm_dev, "MSTM_CTRL is not cleared, wait %luus\n",
++			   clear_mstm_ctrl_timeout_us);
++		usleep_range(clear_mstm_ctrl_timeout_us,
++			     clear_mstm_ctrl_timeout_us + 1000);
++	}
++
++	ret = drm_dp_dpcd_writeb(dp->aux, DP_MSTM_CTRL,
++				 DP_MST_EN | DP_UP_REQ_EN | DP_UPSTREAM_IS_SRC);
++	if (ret < 0) {
++		DRM_ERROR("sink mst enablement failed\n");
++		return;
++	}
++
++	msm_dp->mst_active = true;
++}
++
+ static int msm_dp_display_process_hpd_high(struct msm_dp_display_private *dp)
+ {
+ 	struct drm_connector *connector = dp->msm_dp_display.connector;
+@@ -420,6 +449,9 @@ static int msm_dp_display_process_hpd_high(struct msm_dp_display_private *dp)
+ 	 */
+ 	msm_dp_link_psm_config(dp->link, &dp->panel->link_info, false);
+ 
++	if (dp->max_stream > DEFAULT_STREAM_COUNT && msm_dp_panel_read_mst_cap(dp->panel))
++		msm_dp_display_mst_init(dp);
++
+ 	msm_dp_link_reset_phy_params_vx_px(dp->link);
+ 	rc = msm_dp_ctrl_on_link(dp->ctrl, dp_display->mst_active);
+ 	if (rc) {
+-- 
+2.34.1
+

@@ -1,0 +1,51 @@
+From fd4ddedf9c5000088ebb16e53432da8b7f699b9c Mon Sep 17 00:00:00 2001
+From: Song Xue <quic_songxue@quicinc.com>
+Date: Tue, 22 Apr 2025 15:39:54 +0800
+Subject: [PATCH] FROMLIST: arm64: dts: qcom: qcs615-ride: Add PSCI
+ SYSTEM_RESET2 types
+
+Add properties to support Bootloader and Edl mode for PSCI system
+reset2 reboot modes. The cookie and magic values set will be used
+by SYSTEM_RESET2 call.
+
+Signed-off-by: Song Xue <quic_songxue@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250422-add_psci_sys_reset2_modes_for_qcs615-v1-1-7faaf877366e@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs615-ride.dts | 7 +++++++
+ arch/arm64/boot/dts/qcom/qcs615.dtsi     | 2 +-
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs615-ride.dts b/arch/arm64/boot/dts/qcom/qcs615-ride.dts
+index d9001ca9ebb0..0f5cf43443d5 100644
+--- a/arch/arm64/boot/dts/qcom/qcs615-ride.dts
++++ b/arch/arm64/boot/dts/qcom/qcs615-ride.dts
+@@ -293,6 +293,13 @@ &pon_resin {
+ 	status = "okay";
+ };
+ 
++&psci {
++	reset-types {
++		mode-bootloader = <0x10001 0x2>;
++		mode-edl = <0 0x1>;
++	};
++};
++
+ &qupv3_id_0 {
+ 	status = "okay";
+ };
+diff --git a/arch/arm64/boot/dts/qcom/qcs615.dtsi b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+index 0bf2b9bf5c57..188e2cfc46eb 100644
+--- a/arch/arm64/boot/dts/qcom/qcs615.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+@@ -388,7 +388,7 @@ opp-128000000 {
+ 		};
+ 	};
+ 
+-	psci {
++	psci: psci {
+ 		compatible = "arm,psci-1.0";
+ 		method = "smc";
+ 
+-- 
+2.25.1
+

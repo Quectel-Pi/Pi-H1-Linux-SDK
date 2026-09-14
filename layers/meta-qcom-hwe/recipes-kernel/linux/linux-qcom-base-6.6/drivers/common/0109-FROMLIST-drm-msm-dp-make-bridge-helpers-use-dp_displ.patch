@@ -1,0 +1,223 @@
+From 72aacc2b613b518e8539c41816d42df121d9097a Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:31:43 -0800
+Subject: [PATCH 109/146] FROMLIST: drm/msm/dp: make bridge helpers use
+ dp_display to allow re-use
+
+dp_bridge helpers take drm_bridge as an input and extract the
+dp_display object to be used in the dp_display module. Rather than
+doing it in a roundabout way, directly pass the dp_display object
+to these helpers so that the MST bridge can also re-use the same
+helpers.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-12-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 34 ++++++--------------
+ drivers/gpu/drm/msm/dp/dp_display.h |  9 ++++++
+ drivers/gpu/drm/msm/dp/dp_drm.c     | 49 ++++++++++++++++++++++++++++-
+ drivers/gpu/drm/msm/dp/dp_drm.h     | 12 -------
+ 4 files changed, 67 insertions(+), 37 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index ad81b903b972..0f3388d253fa 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -948,24 +948,21 @@ int msm_dp_display_set_plugged_cb(struct msm_dp *msm_dp_display,
+ 
+ /**
+  * msm_dp_bridge_mode_valid - callback to determine if specified mode is valid
+- * @bridge: Pointer to drm bridge structure
++ * @dp: Pointer to dp display structure
+  * @info: display info
+  * @mode: Pointer to drm mode structure
+  * Returns: Validity status for specified mode
+  */
+-enum drm_mode_status msm_dp_bridge_mode_valid(struct drm_bridge *bridge,
+-					  const struct drm_display_info *info,
+-					  const struct drm_display_mode *mode)
++enum drm_mode_status msm_dp_display_mode_valid(struct msm_dp *dp,
++					       const struct drm_display_info *info,
++					       const struct drm_display_mode *mode)
+ {
+ 	const u32 num_components = 3, default_bpp = 24;
+ 	struct msm_dp_display_private *msm_dp_display;
+ 	struct msm_dp_link_info *link_info;
+ 	u32 mode_rate_khz = 0, supported_rate_khz = 0, mode_bpp = 0;
+-	struct msm_dp *dp;
+ 	int mode_pclk_khz = mode->clock;
+ 
+-	dp = to_dp_bridge(bridge)->msm_dp_display;
+-
+ 	if (!dp || !mode_pclk_khz || !dp->connector) {
+ 		DRM_ERROR("invalid params\n");
+ 		return -EINVAL;
+@@ -1534,11 +1531,8 @@ int msm_dp_modeset_init(struct msm_dp *msm_dp_display, struct drm_device *dev,
+ 	return 0;
+ }
+ 
+-void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
+-			     struct drm_bridge_state *old_bridge_state)
++void msm_dp_display_atomic_enable(struct msm_dp *dp)
+ {
+-	struct msm_dp_bridge *msm_dp_bridge = to_dp_bridge(drm_bridge);
+-	struct msm_dp *dp = msm_dp_bridge->msm_dp_display;
+ 	int rc = 0;
+ 
+ 	struct msm_dp_display_private *msm_dp_display;
+@@ -1575,11 +1569,8 @@ void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
+ 	mutex_unlock(&msm_dp_display->event_mutex);
+ }
+ 
+-void msm_dp_bridge_atomic_disable(struct drm_bridge *drm_bridge,
+-			      struct drm_bridge_state *old_bridge_state)
++void msm_dp_display_atomic_disable(struct msm_dp *dp)
+ {
+-	struct msm_dp_bridge *msm_dp_bridge = to_dp_bridge(drm_bridge);
+-	struct msm_dp *dp = msm_dp_bridge->msm_dp_display;
+ 	struct msm_dp_display_private *msm_dp_display;
+ 
+ 	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
+@@ -1601,11 +1592,8 @@ static void msm_dp_display_unprepare(struct msm_dp_display_private *dp)
+ 	msm_dp_display->prepared = false;
+ }
+ 
+-void msm_dp_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
+-				   struct drm_bridge_state *old_bridge_state)
++void msm_dp_display_atomic_post_disable(struct msm_dp *dp)
+ {
+-	struct msm_dp_bridge *msm_dp_bridge = to_dp_bridge(drm_bridge);
+-	struct msm_dp *dp = msm_dp_bridge->msm_dp_display;
+ 	u32 state;
+ 	struct msm_dp_display_private *msm_dp_display;
+ 
+@@ -1638,12 +1626,10 @@ void msm_dp_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
+ 	mutex_unlock(&msm_dp_display->event_mutex);
+ }
+ 
+-void msm_dp_bridge_mode_set(struct drm_bridge *drm_bridge,
+-			const struct drm_display_mode *mode,
+-			const struct drm_display_mode *adjusted_mode)
++void msm_dp_display_mode_set(struct msm_dp *dp,
++			     const struct drm_display_mode *mode,
++			     const struct drm_display_mode *adjusted_mode)
+ {
+-	struct msm_dp_bridge *msm_dp_bridge = to_dp_bridge(drm_bridge);
+-	struct msm_dp *dp = msm_dp_bridge->msm_dp_display;
+ 	struct msm_dp_display_private *msm_dp_display;
+ 	struct msm_dp_panel *msm_dp_panel;
+ 	struct msm_dp_display_mode msm_dp_mode;
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.h b/drivers/gpu/drm/msm/dp/dp_display.h
+index 0165a80863e6..2a800164cd9c 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.h
++++ b/drivers/gpu/drm/msm/dp/dp_display.h
+@@ -41,5 +41,14 @@ void msm_dp_display_signal_audio_start(struct msm_dp *msm_dp_display);
+ void msm_dp_display_signal_audio_complete(struct msm_dp *msm_dp_display);
+ void msm_dp_display_set_psr(struct msm_dp *dp, bool enter);
+ void msm_dp_display_debugfs_init(struct msm_dp *msm_dp_display, struct dentry *dentry, bool is_edp);
++void msm_dp_display_atomic_post_disable(struct msm_dp *dp_display);
++void msm_dp_display_atomic_disable(struct msm_dp *dp_display);
++void msm_dp_display_atomic_enable(struct msm_dp *dp_display);
++void msm_dp_display_mode_set(struct msm_dp *dp,
++			     const struct drm_display_mode *mode,
++			     const struct drm_display_mode *adjusted_mode);
++enum drm_mode_status msm_dp_display_mode_valid(struct msm_dp *dp,
++					       const struct drm_display_info *info,
++					       const struct drm_display_mode *mode);
+ 
+ #endif /* _DP_DISPLAY_H_ */
+diff --git a/drivers/gpu/drm/msm/dp/dp_drm.c b/drivers/gpu/drm/msm/dp/dp_drm.c
+index d3e241ea6941..4ef3f16a6889 100644
+--- a/drivers/gpu/drm/msm/dp/dp_drm.c
++++ b/drivers/gpu/drm/msm/dp/dp_drm.c
+@@ -97,6 +97,53 @@ static void msm_dp_bridge_debugfs_init(struct drm_bridge *bridge, struct dentry
+ 	msm_dp_display_debugfs_init(dp, root, false);
+ }
+ 
++static void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
++					struct drm_bridge_state *old_bridge_state)
++{
++	struct msm_dp_bridge *dp_bridge = to_dp_bridge(drm_bridge);
++	struct msm_dp *dp = dp_bridge->msm_dp_display;
++
++	msm_dp_display_atomic_enable(dp);
++}
++
++static void msm_dp_bridge_atomic_disable(struct drm_bridge *drm_bridge,
++					 struct drm_bridge_state *old_bridge_state)
++{
++	struct msm_dp_bridge *dp_bridge = to_dp_bridge(drm_bridge);
++	struct msm_dp *dp = dp_bridge->msm_dp_display;
++
++	msm_dp_display_atomic_disable(dp);
++}
++
++static void msm_dp_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
++					      struct drm_bridge_state *old_bridge_state)
++{
++	struct msm_dp_bridge *dp_bridge = to_dp_bridge(drm_bridge);
++	struct msm_dp *dp = dp_bridge->msm_dp_display;
++
++	msm_dp_display_atomic_post_disable(dp);
++}
++
++static void msm_dp_bridge_mode_set(struct drm_bridge *drm_bridge,
++				   const struct drm_display_mode *mode,
++				   const struct drm_display_mode *adjusted_mode)
++{
++	struct msm_dp_bridge *dp_bridge = to_dp_bridge(drm_bridge);
++	struct msm_dp *dp = dp_bridge->msm_dp_display;
++
++	msm_dp_display_mode_set(dp, mode, adjusted_mode);
++}
++
++static enum drm_mode_status msm_dp_bridge_mode_valid(struct drm_bridge *drm_bridge,
++						     const struct drm_display_info *info,
++						     const struct drm_display_mode *mode)
++{
++	struct msm_dp_bridge *dp_bridge = to_dp_bridge(drm_bridge);
++	struct msm_dp *dp = dp_bridge->msm_dp_display;
++
++	return msm_dp_display_mode_valid(dp, info, mode);
++}
++
+ static const struct drm_bridge_funcs msm_dp_bridge_ops = {
+ 	.atomic_duplicate_state = drm_atomic_helper_bridge_duplicate_state,
+ 	.atomic_destroy_state   = drm_atomic_helper_bridge_destroy_state,
+@@ -163,7 +210,7 @@ static void msm_edp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
+ 		return;
+ 	}
+ 
+-	msm_dp_bridge_atomic_enable(drm_bridge, old_bridge_state);
++	msm_dp_display_atomic_enable(dp);
+ }
+ 
+ static void msm_edp_bridge_atomic_disable(struct drm_bridge *drm_bridge,
+diff --git a/drivers/gpu/drm/msm/dp/dp_drm.h b/drivers/gpu/drm/msm/dp/dp_drm.h
+index 8eae2f74839f..81e628c32279 100644
+--- a/drivers/gpu/drm/msm/dp/dp_drm.h
++++ b/drivers/gpu/drm/msm/dp/dp_drm.h
+@@ -25,18 +25,6 @@ int msm_dp_bridge_init(struct msm_dp *msm_dp_display, struct drm_device *dev,
+ 		   struct drm_encoder *encoder,
+ 		   bool yuv_supported);
+ 
+-void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
+-			     struct drm_bridge_state *old_bridge_state);
+-void msm_dp_bridge_atomic_disable(struct drm_bridge *drm_bridge,
+-			      struct drm_bridge_state *old_bridge_state);
+-void msm_dp_bridge_atomic_post_disable(struct drm_bridge *drm_bridge,
+-				   struct drm_bridge_state *old_bridge_state);
+-enum drm_mode_status msm_dp_bridge_mode_valid(struct drm_bridge *bridge,
+-					  const struct drm_display_info *info,
+-					  const struct drm_display_mode *mode);
+-void msm_dp_bridge_mode_set(struct drm_bridge *drm_bridge,
+-			const struct drm_display_mode *mode,
+-			const struct drm_display_mode *adjusted_mode);
+ void msm_dp_bridge_hpd_enable(struct drm_bridge *bridge);
+ void msm_dp_bridge_hpd_disable(struct drm_bridge *bridge);
+ void msm_dp_bridge_hpd_notify(struct drm_bridge *bridge,
+-- 
+2.34.1
+

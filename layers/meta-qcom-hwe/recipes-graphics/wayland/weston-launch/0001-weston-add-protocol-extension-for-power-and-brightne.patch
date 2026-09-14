@@ -2,36 +2,24 @@
 #
 #Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
 #SPDX-License-Identifier: BSD-3-Clause-Clear
-From 4f2fd3997ee33f3d6e5784d2ef3df356ed5eb418 Mon Sep 17 00:00:00 2001
-From: Devanshi Bansal <quic_devanshi@quicinc.com>
-Date: Wed, 31 Jul 2024 10:06:34 +0530
-Subject: [PATCH] weston: add protocol extension for power and brightness
- control
+commit 33bdd010af422a7508bed4773a56c0f6e4fe35ad
+Author: Devanshi Bansal <quic_devanshi@quicinc.com>
+Date:   Thu Nov 21 14:25:27 2024 +0530
 
-Change-Id: I6ec599ce57fb537bd89bfa282cb0a8969774c88f
+    weston: add protocol extension for power and brightness
+
+Upstream-Status: Inappropriate [Downstream]
 Signed-off-by: Devanshi Bansal <quic_devanshi@quicinc.com>
----
- clients/meson.build            |   9 ++
- clients/weston-qti-extn-test.c | 166 +++++++++++++++++++++++++++++++++
- libweston/meson.build          |   3 +
- libweston/weston-qti-extn.c    | 130 ++++++++++++++++++++++++++
- libweston/weston-qti-extn.h    |  71 ++++++++++++++
- protocol/meson.build           |   2 +
- protocol/weston-qti-extn.xml   |  69 ++++++++++++++
- 7 files changed, 450 insertions(+)
- create mode 100644 clients/weston-qti-extn-test.c
- create mode 100644 libweston/weston-qti-extn.c
- create mode 100644 libweston/weston-qti-extn.h
- create mode 100644 protocol/weston-qti-extn.xml
 
 diff --git a/clients/meson.build b/clients/meson.build
-index 3c3212d..762b882 100644
+index eb40d40..a40b5a6 100644
 --- a/clients/meson.build
 +++ b/clients/meson.build
-@@ -55,6 +55,15 @@ simple_clients = [
- 		],
- 		'dep_objs': [ dep_wayland_client, dep_libshared, dep_gbm ]
- 	},
+@@ -47,7 +47,16 @@ simple_clients_enabled = get_option('simple-clients')
+ simple_build_all = simple_clients_enabled.contains('all')
+
+ simple_clients = [
+-	{
 +        {
 +                'name': 'qti-extn-test',
 +                'sources': [
@@ -41,9 +29,10 @@ index 3c3212d..762b882 100644
 +                ],
 +                'dep_objs': [ dep_wayland_client, dep_libshared ]
 +        },
- 	{
- 		'name': 'damage',
- 		'sources': [
++        {
+		'name': 'damage',
+		'sources': [
+			'simple-damage.c',
 diff --git a/clients/weston-qti-extn-test.c b/clients/weston-qti-extn-test.c
 new file mode 100644
 index 0000000..53d3c5e
@@ -217,32 +206,32 @@ index 0000000..53d3c5e
 +  exit(0);
 +}
 diff --git a/libweston/meson.build b/libweston/meson.build
-index ffdab47..9494fd8 100644
+index 4dc92a6..3457eff 100644
 --- a/libweston/meson.build
 +++ b/libweston/meson.build
-@@ -38,6 +38,7 @@ srcs_libweston = [
- 	'weston-direct-display.c',
- 	'zoom.c',
- 	'gbm-buffer-backend.c',
-+        'weston-qti-extn.c',
- 	linux_dmabuf_unstable_v1_protocol_c,
- 	linux_dmabuf_unstable_v1_server_protocol_h,
- 	linux_explicit_synchronization_unstable_v1_protocol_c,
-@@ -72,6 +73,8 @@ srcs_libweston = [
- 	weston_direct_display_server_protocol_h,
- 	gbm_buffer_backend_protocol_c,
- 	gbm_buffer_backend_server_protocol_h,
-+        weston_qti_extn_protocol_c,
-+        weston_qti_extn_server_protocol_h,
+@@ -37,6 +37,7 @@ srcs_libweston = [
+	'weston-log-flight-rec.c',
+	'weston-log.c',
+	'weston-direct-display.c',
++  'weston-qti-extn.c',
+	linux_dmabuf_unstable_v1_protocol_c,
+	linux_dmabuf_unstable_v1_server_protocol_h,
+	linux_explicit_synchronization_unstable_v1_protocol_c,
+@@ -75,6 +76,8 @@ srcs_libweston = [
+	weston_output_capture_server_protocol_h,
+	tablet_unstable_v2_protocol_c,
+	tablet_unstable_v2_server_protocol_h,
++  weston_qti_extn_protocol_c,
++  weston_qti_extn_server_protocol_h,
  ]
- 
- if get_option('renderer-gl')
+
+ subdir('desktop')
 diff --git a/libweston/weston-qti-extn.c b/libweston/weston-qti-extn.c
 new file mode 100644
-index 0000000..3ad6add
+index 0000000..a891ac6
 --- /dev/null
 +++ b/libweston/weston-qti-extn.c
-@@ -0,0 +1,130 @@
+@@ -0,0 +1,127 @@
 +/*
 +* Copyright (c) 2021, The Linux Foundation. All rights reserved.
 +*
@@ -370,15 +359,12 @@ index 0000000..3ad6add
 +  }
 +  return 0;
 +}
-+
-+
-+
 diff --git a/libweston/weston-qti-extn.h b/libweston/weston-qti-extn.h
 new file mode 100644
-index 0000000..646331a
+index 0000000..52c710b
 --- /dev/null
 +++ b/libweston/weston-qti-extn.h
-@@ -0,0 +1,71 @@
+@@ -0,0 +1,70 @@
 +/*
 +* Copyright (c) 2021, The Linux Foundation. All rights reserved.
 +*
@@ -449,27 +435,26 @@ index 0000000..646331a
 +#endif
 +
 +#endif /* WESTON_POWERMODE_BACKLIGHT_BACKEND_H */
-+
 diff --git a/protocol/meson.build b/protocol/meson.build
-index 46074ba..4c9cf93 100644
+index b055816..0d6bbb7 100644
 --- a/protocol/meson.build
 +++ b/protocol/meson.build
-@@ -8,6 +8,7 @@ install_data(
- 	[
- 		'weston-debug.xml',
- 		'weston-direct-display.xml',
-+		'weston-qti-extn.xml',
- 		'gbm-buffer-backend.xml',
- 	],
- 	install_dir: join_paths(dir_data, dir_protocol_libweston)
+@@ -11,6 +11,7 @@ install_data(
+		'weston-debug.xml',
+		'weston-direct-display.xml',
+		'weston-output-capture.xml',
++    'weston-qti-extn.xml',
+	],
+	install_dir: join_paths(dir_data, dir_protocol_libweston)
+ )
 @@ -36,6 +37,7 @@ generated_protocols = [
- 	[ 'weston-touch-calibration', 'internal' ],
- 	[ 'weston-direct-display', 'internal' ],
- 	[ 'gbm-buffer-backend', 'internal' ],
-+	[ 'weston-qti-extn', 'internal' ],
- 	[ 'xdg-output', 'v1' ],
- 	[ 'xdg-shell', 'v6' ],
- 	[ 'xdg-shell', 'stable' ],
+	[ 'weston-debug', 'internal' ],
+	[ 'weston-desktop-shell', 'internal' ],
+	[ 'weston-output-capture', 'internal' ],
++  [ 'weston-qti-extn', 'internal' ],
+	[ 'weston-content-protection', 'internal' ],
+	[ 'weston-test', 'internal' ],
+	[ 'weston-touch-calibration', 'internal' ],
 diff --git a/protocol/weston-qti-extn.xml b/protocol/weston-qti-extn.xml
 new file mode 100644
 index 0000000..7377bf8

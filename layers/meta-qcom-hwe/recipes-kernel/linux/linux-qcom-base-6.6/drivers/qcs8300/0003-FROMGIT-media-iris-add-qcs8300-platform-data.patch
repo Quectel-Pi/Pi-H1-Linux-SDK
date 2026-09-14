@@ -1,0 +1,258 @@
+From e03ba3ecbc15cafd022d2c5e968ee3137bfe32fd Mon Sep 17 00:00:00 2001
+From: Vikash Garodia <quic_vgarodia@quicinc.com>
+Date: Thu, 24 Apr 2025 14:20:47 +0530
+Subject: [PATCH 3/5] FROMGIT: media: iris: add qcs8300 platform data
+
+Add platform data for QCS8300, which has different capabilities compared
+to SM8550. Introduce a QCS8300 header that defines these capabilities.
+
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Reviewed-by: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Signed-off-by: Bryan O'Donoghue <bod@kernel.org>
+Signed-off-by: Hans Verkuil <hverkuil@xs4all.nl>
+Link: https://lore.kernel.org/linux-media/20250424-qcs8300_iris-v5-3-f118f505c300@quicinc.com
+Git-repo: https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
+Git-commit: 146eadf3d1ef3b13d31e814ab213909c98c0427e
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/ 146eadf3d1ef3b13d31e814ab213909c98c0427e]
+---
+ .../platform/qcom/iris/iris_platform_common.h |   1 +
+ .../platform/qcom/iris/iris_platform_gen2.c   |  57 ++++++++
+ .../qcom/iris/iris_platform_qcs8300.h         | 124 ++++++++++++++++++
+ drivers/media/platform/qcom/iris/iris_probe.c |   4 +
+ 4 files changed, 186 insertions(+)
+ create mode 100644 drivers/media/platform/qcom/iris/iris_platform_qcs8300.h
+
+diff --git a/drivers/media/platform/qcom/iris/iris_platform_common.h b/drivers/media/platform/qcom/iris/iris_platform_common.h
+index 6bc3a7975b04..ac76d9e1ef9c 100644
+--- a/drivers/media/platform/qcom/iris/iris_platform_common.h
++++ b/drivers/media/platform/qcom/iris/iris_platform_common.h
+@@ -33,6 +33,7 @@ enum pipe_type {
+ 	PIPE_4 = 4,
+ };
+ 
++extern struct iris_platform_data qcs8300_data;
+ extern struct iris_platform_data sm8250_data;
+ extern struct iris_platform_data sm8550_data;
+ extern struct iris_platform_data sm8650_data;
+diff --git a/drivers/media/platform/qcom/iris/iris_platform_gen2.c b/drivers/media/platform/qcom/iris/iris_platform_gen2.c
+index 5ff82296ee8e..1e69ba15db0f 100644
+--- a/drivers/media/platform/qcom/iris/iris_platform_gen2.c
++++ b/drivers/media/platform/qcom/iris/iris_platform_gen2.c
+@@ -10,6 +10,7 @@
+ #include "iris_platform_common.h"
+ #include "iris_vpu_common.h"
+ 
++#include "iris_platform_qcs8300.h"
+ #include "iris_platform_sm8650.h"
+ 
+ #define VIDEO_ARCH_LX 1
+@@ -326,3 +327,59 @@ struct iris_platform_data sm8650_data = {
+ 	.dec_op_int_buf_tbl = sm8550_dec_op_int_buf_tbl,
+ 	.dec_op_int_buf_tbl_size = ARRAY_SIZE(sm8550_dec_op_int_buf_tbl),
+ };
++
++/*
++ * Shares most of SM8550 data except:
++ * - inst_caps to platform_inst_cap_qcs8300
++ * - inst_fw_caps to inst_fw_cap_qcs8300
++ */
++struct iris_platform_data qcs8300_data = {
++	.get_instance = iris_hfi_gen2_get_instance,
++	.init_hfi_command_ops = iris_hfi_gen2_command_ops_init,
++	.init_hfi_response_ops = iris_hfi_gen2_response_ops_init,
++	.vpu_ops = &iris_vpu3_ops,
++	.set_preset_registers = iris_set_sm8550_preset_registers,
++	.icc_tbl = sm8550_icc_table,
++	.icc_tbl_size = ARRAY_SIZE(sm8550_icc_table),
++	.clk_rst_tbl = sm8550_clk_reset_table,
++	.clk_rst_tbl_size = ARRAY_SIZE(sm8550_clk_reset_table),
++	.bw_tbl_dec = sm8550_bw_table_dec,
++	.bw_tbl_dec_size = ARRAY_SIZE(sm8550_bw_table_dec),
++	.pmdomain_tbl = sm8550_pmdomain_table,
++	.pmdomain_tbl_size = ARRAY_SIZE(sm8550_pmdomain_table),
++	.opp_pd_tbl = sm8550_opp_pd_table,
++	.opp_pd_tbl_size = ARRAY_SIZE(sm8550_opp_pd_table),
++	.clk_tbl = sm8550_clk_table,
++	.clk_tbl_size = ARRAY_SIZE(sm8550_clk_table),
++	/* Upper bound of DMA address range */
++	.dma_mask = 0xe0000000 - 1,
++	.fwname = "qcom/vpu/vpu30_p4_s6.mbn",
++	.pas_id = IRIS_PAS_ID,
++	.inst_caps = &platform_inst_cap_qcs8300,
++	.inst_fw_caps = inst_fw_cap_qcs8300,
++	.inst_fw_caps_size = ARRAY_SIZE(inst_fw_cap_qcs8300),
++	.tz_cp_config_data = &tz_cp_config_sm8550,
++	.core_arch = VIDEO_ARCH_LX,
++	.hw_response_timeout = HW_RESPONSE_TIMEOUT_VALUE,
++	.ubwc_config = &ubwc_config_sm8550,
++	.num_vpp_pipe = 2,
++	.max_session_count = 16,
++	.max_core_mbpf = ((4096 * 2176) / 256) * 4,
++	.input_config_params =
++		sm8550_vdec_input_config_params,
++	.input_config_params_size =
++		ARRAY_SIZE(sm8550_vdec_input_config_params),
++	.output_config_params =
++		sm8550_vdec_output_config_params,
++	.output_config_params_size =
++		ARRAY_SIZE(sm8550_vdec_output_config_params),
++	.dec_input_prop = sm8550_vdec_subscribe_input_properties,
++	.dec_input_prop_size = ARRAY_SIZE(sm8550_vdec_subscribe_input_properties),
++	.dec_output_prop = sm8550_vdec_subscribe_output_properties,
++	.dec_output_prop_size = ARRAY_SIZE(sm8550_vdec_subscribe_output_properties),
++
++	.dec_ip_int_buf_tbl = sm8550_dec_ip_int_buf_tbl,
++	.dec_ip_int_buf_tbl_size = ARRAY_SIZE(sm8550_dec_ip_int_buf_tbl),
++	.dec_op_int_buf_tbl = sm8550_dec_op_int_buf_tbl,
++	.dec_op_int_buf_tbl_size = ARRAY_SIZE(sm8550_dec_op_int_buf_tbl),
++};
+diff --git a/drivers/media/platform/qcom/iris/iris_platform_qcs8300.h b/drivers/media/platform/qcom/iris/iris_platform_qcs8300.h
+new file mode 100644
+index 000000000000..f82355d72fcf
+--- /dev/null
++++ b/drivers/media/platform/qcom/iris/iris_platform_qcs8300.h
+@@ -0,0 +1,124 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++/*
++ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++
++static struct platform_inst_fw_cap inst_fw_cap_qcs8300[] = {
++	{
++		.cap_id = PROFILE,
++		.min = V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE,
++		.max = V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_HIGH,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE) |
++			BIT(V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_HIGH) |
++			BIT(V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_BASELINE) |
++			BIT(V4L2_MPEG_VIDEO_H264_PROFILE_MAIN) |
++			BIT(V4L2_MPEG_VIDEO_H264_PROFILE_HIGH),
++		.value = V4L2_MPEG_VIDEO_H264_PROFILE_HIGH,
++		.hfi_id = HFI_PROP_PROFILE,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
++	{
++		.cap_id = LEVEL,
++		.min = V4L2_MPEG_VIDEO_H264_LEVEL_1_0,
++		.max = V4L2_MPEG_VIDEO_H264_LEVEL_6_2,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_0) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1B)  |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_1) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_2) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_3) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_2_0) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_2_1) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_2_2) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_3_0) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_3_1) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_3_2) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_4_0) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_4_1) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_4_2) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_5_0) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_5_1) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_5_2) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_6_0) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_6_1) |
++			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_6_2),
++		.value = V4L2_MPEG_VIDEO_H264_LEVEL_6_1,
++		.hfi_id = HFI_PROP_LEVEL,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
++	{
++		.cap_id = INPUT_BUF_HOST_MAX_COUNT,
++		.min = DEFAULT_MAX_HOST_BUF_COUNT,
++		.max = DEFAULT_MAX_HOST_BURST_BUF_COUNT,
++		.step_or_mask = 1,
++		.value = DEFAULT_MAX_HOST_BUF_COUNT,
++		.hfi_id = HFI_PROP_BUFFER_HOST_MAX_COUNT,
++		.flags = CAP_FLAG_INPUT_PORT,
++		.set = iris_set_u32,
++	},
++	{
++		.cap_id = STAGE,
++		.min = STAGE_1,
++		.max = STAGE_2,
++		.step_or_mask = 1,
++		.value = STAGE_2,
++		.hfi_id = HFI_PROP_STAGE,
++		.set = iris_set_stage,
++	},
++	{
++		.cap_id = PIPE,
++		.min = PIPE_1,
++		.max = PIPE_2,
++		.step_or_mask = 1,
++		.value = PIPE_2,
++		.hfi_id = HFI_PROP_PIPE,
++		.set = iris_set_pipe,
++	},
++	{
++		.cap_id = POC,
++		.min = 0,
++		.max = 2,
++		.step_or_mask = 1,
++		.value = 1,
++		.hfi_id = HFI_PROP_PIC_ORDER_CNT_TYPE,
++	},
++	{
++		.cap_id = CODED_FRAMES,
++		.min = CODED_FRAMES_PROGRESSIVE,
++		.max = CODED_FRAMES_PROGRESSIVE,
++		.step_or_mask = 0,
++		.value = CODED_FRAMES_PROGRESSIVE,
++		.hfi_id = HFI_PROP_CODED_FRAMES,
++	},
++	{
++		.cap_id = BIT_DEPTH,
++		.min = BIT_DEPTH_8,
++		.max = BIT_DEPTH_8,
++		.step_or_mask = 1,
++		.value = BIT_DEPTH_8,
++		.hfi_id = HFI_PROP_LUMA_CHROMA_BIT_DEPTH,
++	},
++	{
++		.cap_id = RAP_FRAME,
++		.min = 0,
++		.max = 1,
++		.step_or_mask = 1,
++		.value = 1,
++		.hfi_id = HFI_PROP_DEC_START_FROM_RAP_FRAME,
++		.flags = CAP_FLAG_INPUT_PORT,
++		.set = iris_set_u32,
++	},
++};
++
++static struct platform_inst_caps platform_inst_cap_qcs8300 = {
++	.min_frame_width = 96,
++	.max_frame_width = 4096,
++	.min_frame_height = 96,
++	.max_frame_height = 4096,
++	.max_mbpf = (4096 * 2176) / 256,
++	.mb_cycles_vpp = 200,
++	.mb_cycles_fw = 326389,
++	.mb_cycles_fw_vpp = 44156,
++	.num_comv = 0,
++};
+diff --git a/drivers/media/platform/qcom/iris/iris_probe.c b/drivers/media/platform/qcom/iris/iris_probe.c
+index fa3b9c9b1493..9a7ce142f700 100644
+--- a/drivers/media/platform/qcom/iris/iris_probe.c
++++ b/drivers/media/platform/qcom/iris/iris_probe.c
+@@ -335,6 +335,10 @@ static const struct dev_pm_ops iris_pm_ops = {
+ };
+ 
+ static const struct of_device_id iris_dt_match[] = {
++	{
++		.compatible = "qcom,qcs8300-iris",
++		.data = &qcs8300_data,
++	},
+ #if (!IS_ENABLED(CONFIG_VIDEO_QCOM_VENUS))
+ 	{
+ 		.compatible = "qcom,sm8250-venus",
+-- 
+2.34.1
+

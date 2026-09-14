@@ -1,0 +1,32 @@
+From e5c93d19bdadcb1891f6b7cf5aeb72e874797377 Mon Sep 17 00:00:00 2001
+From: Cheng Jiang <quic_chejiang@quicinc.com>
+Date: Tue, 11 Feb 2025 10:23:14 +0800
+Subject: [PATCH 4/4] FROMLIST: arm64: dts: qcom: Add firmware-name in BT
+ node
+
+The sa8775p-ride platform uses the QCA6698 Bluetooth chip. While the
+QCA6698 shares the same IP core as the WCN6855, it has different RF
+components and RAM sizes, requiring new firmware files. Use the
+firmware-name property to specify the NVM and rampatch firmware to load.
+
+Signed-off-by: Cheng Jiang <quic_chejiang@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/6bb889a8-08d1-4b28-987c-1218c99a7dc0@quicinc.com/].
+---
+ arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi b/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
+index cebff50f460e..0cb5d7136308 100644
+--- a/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
++++ b/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
+@@ -980,6 +980,7 @@ &uart17 {
+ 
+ 	bluetooth {
+ 		compatible = "qcom,wcn6855-bt";
++		firmware-name = "QCA6698/hpnv21", "QCA6698/hpbtfw21.tlv";
+ 
+ 		vddrfacmn-supply = <&vreg_pmu_rfa_cmn>;
+ 		vddaon-supply = <&vreg_pmu_aon_0p59>;
+-- 
+2.34.1
+

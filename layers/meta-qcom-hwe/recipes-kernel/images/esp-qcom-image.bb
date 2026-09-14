@@ -13,7 +13,7 @@ PACKAGE_INSTALL = " \
 KERNELDEPMODDEPEND = ""
 KERNEL_DEPLOY_DEPEND = ""
 
-inherit image qimage_types
+inherit image
 
 IMAGE_FSTYPES = "vfat"
 IMAGE_FSTYPES_DEBUGFS = ""

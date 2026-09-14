@@ -27,29 +27,38 @@ DESCRIPTION = "Linux container runtime \
 #     the curated docker-ce repository. This allows compatibility and
 #     functional equivalence, while allowing new features to be more
 #     easily added.
-#   - This could be called "docker-moby" or just "moby" in the future, but
-#     that would require the creation of a virtual/docker dependency, which
-#     is possible, but overkill at the moment (while we wait for the upstream
-#     to stop changing).
 #   - The common components of this recipe and docker-ce do need to be moved
 #     to a docker.inc recipe
+#
+# Packaging details:
+#
+# https://github.com/docker/docker-ce-packaging.git
+#  common.mk:
+#    DOCKER_CLI_REPO    ?= https://github.com/docker/cli.git
+#    DOCKER_ENGINE_REPO ?= https://github.com/docker/docker.git
+#    REF                ?= HEAD
+#    DOCKER_CLI_REF     ?= $(REF)
+#    DOCKER_ENGINE_REF  ?= $(REF)
+#
+# These follow the tags for our releases in the listed repositories
+# so we get that tag, and make it our SRCREVS:
+#
 
-SRCREV_moby = "791d8ab87747169b4cbfcdf2fd57c81952bae6d5"
-SRCREV_libnetwork = "dcdf8f176d1e13ad719e913e796fb698d846de98"
-SRCREV_cli = "911449ca245308472a3d34a7f1a98b918e65c8c3"
+SRCREV_moby = "f417435e5f6216828dec57958c490c4f8bae4f98"
+SRCREV_libnetwork = "67e0588f1ddfaf2faf4c8cae8b7ea2876434d91c"
+SRCREV_cli = "01f933261885c0126edb3f47fd56d048ae31265a"
 SRCREV_FORMAT = "moby_libnetwork"
 SRC_URI = "\
-    git://github.com/moby/moby.git;branch=20.10;name=moby;protocol=https \
-    git://github.com/docker/libnetwork.git;branch=master;name=libnetwork;destsuffix=git/libnetwork;protocol=https \
-    git://github.com/docker/cli;branch=20.10;name=cli;destsuffix=git/cli;protocol=https \
-    file://docker.init \
-    file://0001-libnetwork-use-GO-instead-of-go.patch \
-    file://0001-cli-use-external-GO111MODULE-and-cross-compiler.patch \
-    file://0001-dynbinary-use-go-cross-compiler.patch \
-    file://0001-Revert-go-updates-from-1.19.12-to-1.18.7.patch;patchdir=src/import \
-    file://0002-Revert-go-updates-from-1.18.7-to-1.17.13.patch;patchdir=src/import \
-    file://0003-builder.go-avoid-using-strings.Cut-from-go-1.18.patch;patchdir=src/import \
-"
+	git://github.com/moby/moby.git;branch=25.0;name=moby;protocol=https \
+	git://github.com/docker/libnetwork.git;branch=master;name=libnetwork;destsuffix=git/libnetwork;protocol=https \
+	git://github.com/docker/cli;branch=25.0;name=cli;destsuffix=git/cli;protocol=https \
+	file://docker.init \
+	file://0001-libnetwork-use-GO-instead-of-go.patch \
+        file://0001-cli-use-external-GO111MODULE-and-cross-compiler.patch \
+        file://0001-dynbinary-use-go-cross-compiler.patch;patchdir=src/import \
+        file://CVE-2024-36620.patch;patchdir=src/import \
+        file://CVE-2024-36621.patch;patchdir=src/import \
+	"
 
 DOCKER_COMMIT = "${SRCREV_moby}"
 
@@ -59,10 +68,7 @@ require docker.inc
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://src/import/LICENSE;md5=4859e97a9c7780e77972d989f0823f28"
 
-# 58 commits after v20.10.25 to include the fixes for go compatibility after
-# https://lists.openembedded.org/g/openembedded-core/message/185082
-# https://github.com/moby/moby/compare/v20.10.25...791d8ab87747169b4cbfcdf2fd57c81952bae6d5
-DOCKER_VERSION = "20.10.25"
+DOCKER_VERSION = "25.0.3"
 PV = "${DOCKER_VERSION}+git${SRCREV_moby}"
 
 CVE_PRODUCT = "docker mobyproject:moby"

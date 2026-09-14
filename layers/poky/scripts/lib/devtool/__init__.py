@@ -78,12 +78,15 @@ def exec_fakeroot(d, cmd, **kwargs):
     """Run a command under fakeroot (pseudo, in fact) so that it picks up the appropriate file permissions"""
     # Grab the command and check it actually exists
     fakerootcmd = d.getVar('FAKEROOTCMD')
+    fakerootenv = d.getVar('FAKEROOTENV')
+    exec_fakeroot_no_d(fakerootcmd, fakerootenv, cmd, kwargs)
+
+def exec_fakeroot_no_d(fakerootcmd, fakerootenv, cmd, **kwargs):
     if not os.path.exists(fakerootcmd):
         logger.error('pseudo executable %s could not be found - have you run a build yet? pseudo-native should install this and if you have run any build then that should have been built')
         return 2
     # Set up the appropriate environment
     newenv = dict(os.environ)
-    fakerootenv = d.getVar('FAKEROOTENV')
     for varvalue in fakerootenv.split():
         if '=' in varvalue:
             splitval = varvalue.split('=', 1)
@@ -232,6 +235,28 @@ def setup_git_repo(repodir, version, devbranch, basetag='devtool-base', d=None):
 
     bb.process.run('git checkout -b %s' % devbranch, cwd=repodir)
     bb.process.run('git tag -f %s' % basetag, cwd=repodir)
+
+    # if recipe unpacks another git repo inside S, we need to declare it as a regular git submodule now,
+    # so we will be able to tag branches on it and extract patches when doing finish/update on the recipe
+    stdout, _ = bb.process.run("git status --porcelain", cwd=repodir)
+    found = False
+    for line in stdout.splitlines():
+        if line.endswith("/"):
+            new_dir = line.split()[1]
+            for root, dirs, files in os.walk(os.path.join(repodir, new_dir)):
+                if ".git" in dirs + files:
+                    (stdout, _) = bb.process.run('git remote', cwd=root)
+                    remote = stdout.splitlines()[0]
+                    (stdout, _) = bb.process.run('git remote get-url %s' % remote, cwd=root)
+                    remote_url = stdout.splitlines()[0]
+                    logger.error(os.path.relpath(os.path.join(root, ".."), root))
+                    bb.process.run('git submodule add %s %s' % (remote_url, os.path.relpath(root, os.path.join(root, ".."))), cwd=os.path.join(root, ".."))
+                    found = True
+                if found:
+                    oe.patch.GitApplyTree.commitIgnored("Add additional submodule from SRC_URI", dir=os.path.join(root, ".."), d=d)
+                    found = False
+    if os.path.exists(os.path.join(repodir, '.gitmodules')):
+        bb.process.run('git submodule foreach --recursive  "git tag -f %s"' % basetag, cwd=repodir)
 
 def recipe_to_append(recipefile, config, wildcard=False):
     """

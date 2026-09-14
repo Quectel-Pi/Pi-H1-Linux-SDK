@@ -1,0 +1,53 @@
+From 50f17b641e136298694a7d911bae04e19e63766d Mon Sep 17 00:00:00 2001
+From: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Date: Fri, 9 May 2025 14:09:04 +0530
+Subject: [PATCH 18/26] FROMLIST: media: iris: Add handling for no show frames
+
+Firmware sends the picture type as NO_SHOW for frames which are not
+supposed to be displayed, add handling for the same in driver to drop
+them.
+
+Acked-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-HDK
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-HDK
+Signed-off-by: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-media/20250509-video-iris-hevc-vp9-v5-18-59b4ff7d331c@quicinc.com/]
+---
+ drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h  | 1 +
+ drivers/media/platform/qcom/iris/iris_hfi_gen2_response.c | 4 +++-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h b/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h
+index 806f8bb7f505..666061a612c3 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h
+@@ -113,6 +113,7 @@ enum hfi_picture_type {
+ 	HFI_PICTURE_I				= 0x00000008,
+ 	HFI_PICTURE_CRA				= 0x00000010,
+ 	HFI_PICTURE_BLA				= 0x00000020,
++	HFI_PICTURE_NOSHOW			= 0x00000040,
+ };
+ 
+ enum hfi_buffer_type {
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen2_response.c b/drivers/media/platform/qcom/iris/iris_hfi_gen2_response.c
+index d2cede2fe1b5..b6d0ff860d78 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen2_response.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen2_response.c
+@@ -91,7 +91,9 @@ static int iris_hfi_gen2_get_driver_buffer_flags(struct iris_inst *inst, u32 hfi
+ 	struct iris_inst_hfi_gen2 *inst_hfi_gen2 = to_iris_inst_hfi_gen2(inst);
+ 	u32 driver_flags = 0;
+ 
+-	if (inst_hfi_gen2->hfi_frame_info.picture_type & keyframe)
++	if (inst_hfi_gen2->hfi_frame_info.picture_type & HFI_PICTURE_NOSHOW)
++		driver_flags |= V4L2_BUF_FLAG_ERROR;
++	else if (inst_hfi_gen2->hfi_frame_info.picture_type & keyframe)
+ 		driver_flags |= V4L2_BUF_FLAG_KEYFRAME;
+ 	else if (inst_hfi_gen2->hfi_frame_info.picture_type & HFI_PICTURE_P)
+ 		driver_flags |= V4L2_BUF_FLAG_PFRAME;
+-- 
+2.34.1
+

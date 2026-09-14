@@ -1,10 +1,14 @@
 require samhain.inc
 
 SRC_URI += "file://samhain-not-run-ptest-on-host.patch \
+            file://0001-Don-t-expose-configure-args.patch \
             file://run-ptest \
 "
 
 PROVIDES += "samhain"
+
+MODE_NAME = "standalone"
+SAMHAIN_MODE = "no"
 
 SYSTEMD_SERVICE:${PN} = "samhain.service"
 

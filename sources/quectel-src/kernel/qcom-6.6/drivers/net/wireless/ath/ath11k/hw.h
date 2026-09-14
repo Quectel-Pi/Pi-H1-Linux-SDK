@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause-Clear */
 /*
  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #ifndef ATH11K_HW_H
@@ -167,7 +167,7 @@ struct ath11k_hw_params {
 	bool single_pdev_only;
 
 	bool rxdma1_enable;
-	int num_rxmda_per_pdev;
+	int num_rxdma_per_pdev;
 	bool rx_mac_buf_ring;
 	bool vdev_start_delay;
 	bool htt_peer_map_v2;
@@ -227,6 +227,9 @@ struct ath11k_hw_params {
 	bool smp2p_wow_exit;
 	bool support_fw_mac_sequence;
 	bool support_dual_stations;
+	bool cfr_support;
+	u32 cfr_num_stream_bufs;
+	u32 cfr_stream_buf_size;
 };
 
 struct ath11k_hw_ops {

@@ -1,23 +1,29 @@
-From 087db5fb27c97207cdd32dab538df45399caceb0 Mon Sep 17 00:00:00 2001
+From 2e89e46a650c5460a11d524f941604f4c3aac9a1 Mon Sep 17 00:00:00 2001
 From: Raghavender Reddy Bujala <quic_rbujala@quicinc.com>
-Date: Mon, 29 Apr 2024 14:34:12 +0530
+Date: Wed, 25 Sep 2024 15:32:54 +0530
 Subject: [PATCH] PENDING: Allow SE policy read and write access to dbus for
  ofono service
 
+Upstream-Status: Pending
+
 Signed-off-by: Raghavender Reddy Bujala <quic_rbujala@quicinc.com>
 ---
- policy/modules/services/dbus.te | 1 +
- 1 file changed, 1 insertion(+)
+ policy/modules/services/dbus.te | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/policy/modules/services/dbus.te b/policy/modules/services/dbus.te
-index 2d1d09d71..9e1288b77 100644
+index 672aeddf4..75aa378f0 100644
 --- a/policy/modules/services/dbus.te
 +++ b/policy/modules/services/dbus.te
-@@ -391,3 +391,4 @@ optional_policy(`
- 
- allow dbusd_unconfined { dbusd_session_bus_client dbusd_system_bus_client }:dbus send_msg;
- allow dbusd_unconfined { system_dbusd_t session_bus_type }:dbus all_dbus_perms;
+@@ -194,7 +194,7 @@ userdom_dontaudit_use_unpriv_user_fds(system_dbusd_t)
+ userdom_dontaudit_search_user_home_dirs(system_dbusd_t)
+ # read a file in ~/.local/share
+ userdom_read_user_home_content_files(system_dbusd_t)
+-
 +init_bt_socket_manage(system_dbusd_t)
+ ifdef(`init_systemd', `
+ 	# gdm3 causes system_dbusd_t to want this access
+ 	dev_rw_dri(system_dbusd_t)
 -- 
-2.17.1
+2.25.1
 

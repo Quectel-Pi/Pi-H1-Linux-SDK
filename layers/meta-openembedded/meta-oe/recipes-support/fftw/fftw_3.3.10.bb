@@ -55,6 +55,7 @@ do_configure() {
 do_compile() {
     for lib in fftw fftwl fftwf; do
         cd ${WORKDIR}/build-$lib
+        test -n "${TOOLCHAIN_OPTIONS}" && sed -i -e 's|${TOOLCHAIN_OPTIONS}||g' config.h
         autotools_do_compile
     done
 }
@@ -99,4 +100,4 @@ RDEPENDS:${PN}-dev = "libfftw libfftwl libfftwf"
 RDEPENDS:${PN}-ptest += "perl"
 RDEPENDS:${PN}-ptest:remove = "fftw"
 
-BBCLASSEXTEND = "native"
+BBCLASSEXTEND = "native nativesdk"

@@ -1,0 +1,28 @@
+From 66634f032738512b50bea790cf7b01a99deb0509 Mon Sep 17 00:00:00 2001
+From: Amisha Jain <quic_amisjain@quicinc.com>
+Date: Tue, 11 Feb 2025 15:56:17 +0530
+Subject: [PATCH] PENDING:sepolicy: Add sepolicy rules for obex server profile
+ connection
+
+Signed-off-by: Amisha Jain <quic_amisjain@quicinc.com>
+Upstream-Status: Pending [Pending]
+
+---
+ policy/modules/services/bluetooth.te | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/policy/modules/services/bluetooth.te b/policy/modules/services/bluetooth.te
+index 1712ffd36..eba502a5a 100644
+--- a/policy/modules/services/bluetooth.te
++++ b/policy/modules/services/bluetooth.te
+@@ -135,6 +135,7 @@ optional_policy(`
+ 	dbus_system_bus_client(bluetooth_t)
+ 	dbus_connect_system_bus(bluetooth_t)
+ 	init_dbus_send_script(bluetooth_t)
++	init_dbus_chat(bluetooth_t)
+ 
+ 	optional_policy(`
+ 		cups_dbus_chat(bluetooth_t)
+-- 
+2.34.1
+

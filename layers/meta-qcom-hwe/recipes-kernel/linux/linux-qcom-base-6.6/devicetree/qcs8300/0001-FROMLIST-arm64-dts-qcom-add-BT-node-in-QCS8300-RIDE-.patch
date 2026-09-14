@@ -1,0 +1,69 @@
+From dee66ff4ac4e2aa0b48ff51f64c9d2845bc61d57 Mon Sep 17 00:00:00 2001
+From: Cheng Jiang <quic_chejiang@quicinc.com>
+Date: Thu, 13 Feb 2025 18:04:51 +0800
+Subject: [PATCH] FROMLIST: arm64: dts: qcom: add BT node in QCS8300 RIDE dts
+
+The qcs8300-ride platform uses the QCA6698 Bluetooth chip. While the
+QCA6698 shares the same IP core as the WCN6855, it has different RF
+components and RAM sizes, requiring new firmware files. Use the
+firmware-name property to specify the NVM and rampatch firmware to load.
+
+Signed-off-by: Cheng Jiang <quic_chejiang@quicinc.com>
+Link: https://lore.kernel.org/linux-arm-msm/20250211104421.1172892-2-quic_chejiang@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/linux-arm-msm/20250211104421.1172892-2-quic_chejiang@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs8300-ride.dts | 24 +++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+index f5b7268554be..2d70ee145fe1 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
++++ b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+@@ -20,6 +20,7 @@ / {
+ 
+ 	aliases {
+ 		serial0 = &uart7;
++		serial1 = &uart2;
+ 	};
+ 
+ 	chosen {
+@@ -524,6 +525,13 @@ &serdes0 {
+ };
+ 
+ &tlmm {
++	bt_en_state: bt-en-state {
++		pins = "gpio55";
++		function = "normal";
++		output-low;
++		bias-pull-down;
++	};
++
+ 	ethernet0_default: ethernet0-default-state {
+ 		ethernet0_mdc: ethernet0-mdc-pins {
+ 			pins = "gpio5";
+@@ -594,6 +602,22 @@ wlan_en_state: wlan-en-state {
+ 	};
+ };
+ 
++&uart2 {
++	status = "okay";
++	bluetooth: bluetooth {
++		compatible = "qcom,wcn6855-bt";
++		firmware-name = "QCA6698/hpnv21", "QCA6698/hpbtfw21.tlv";
++
++		pinctrl-names = "default";
++		pinctrl-0 = <&bt_en_state>;
++		enable-gpios = <&tlmm 55 GPIO_ACTIVE_HIGH>; /* BT_EN */
++
++		vddio-supply       = <&vreg_conn_pa>;         /* bt-vdd-ctrl1-supply */
++		vddbtcxmx-supply   = <&vreg_conn_1p8>;        /* bt-vdd-ctrl2-supply */
++		max-speed = <3200000>;
++	};
++};
++
+ &uart7 {
+ 	status = "okay";
+ };
+-- 
+2.25.1
+

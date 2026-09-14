@@ -1,0 +1,59 @@
+From 97cd8f4885cfada4e951a36665157089c3f020f2 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:31:34 -0800
+Subject: [PATCH 100/146] FROMLIST: drm/msm/dp: fix the intf_type of MST
+ interfaces
+
+Interface type of MST interfaces is currently INTF_NONE.
+Fix this to INTF_DP.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-3-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_8_4_sa8775p.h | 8 ++++----
+ 1 file changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_8_4_sa8775p.h b/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_8_4_sa8775p.h
+index 907b4d7ceb47..2509e28e3d6b 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_8_4_sa8775p.h
++++ b/drivers/gpu/drm/msm/disp/dpu1/catalog/dpu_8_4_sa8775p.h
+@@ -375,7 +375,7 @@ static const struct dpu_intf_cfg sa8775p_intf[] = {
+ 		.name = "intf_3", .id = INTF_3,
+ 		.base = 0x37000, .len = 0x280,
+ 		.features = INTF_SC7280_MASK,
+-		.type = INTF_NONE,
++		.type = INTF_DP,
+ 		.controller_id = MSM_DP_CONTROLLER_0,	/* pair with intf_0 for DP MST */
+ 		.prog_fetch_lines_worst_case = 24,
+ 		.intr_underrun = DPU_IRQ_IDX(MDP_SSPP_TOP0_INTR, 30),
+@@ -393,7 +393,7 @@ static const struct dpu_intf_cfg sa8775p_intf[] = {
+ 		.name = "intf_6", .id = INTF_6,
+ 		.base = 0x3A000, .len = 0x280,
+ 		.features = INTF_SC7280_MASK,
+-		.type = INTF_NONE,
++		.type = INTF_DP,
+ 		.controller_id = MSM_DP_CONTROLLER_0,	/* pair with intf_0 for DP MST */
+ 		.prog_fetch_lines_worst_case = 24,
+ 		.intr_underrun = DPU_IRQ_IDX(MDP_SSPP_TOP0_INTR, 17),
+@@ -402,7 +402,7 @@ static const struct dpu_intf_cfg sa8775p_intf[] = {
+ 		.name = "intf_7", .id = INTF_7,
+ 		.base = 0x3b000, .len = 0x280,
+ 		.features = INTF_SC7280_MASK,
+-		.type = INTF_NONE,
++		.type = INTF_DP,
+ 		.controller_id = MSM_DP_CONTROLLER_0,	/* pair with intf_0 for DP MST */
+ 		.prog_fetch_lines_worst_case = 24,
+ 		.intr_underrun = DPU_IRQ_IDX(MDP_SSPP_TOP0_INTR, 18),
+@@ -411,7 +411,7 @@ static const struct dpu_intf_cfg sa8775p_intf[] = {
+ 		.name = "intf_8", .id = INTF_8,
+ 		.base = 0x3c000, .len = 0x280,
+ 		.features = INTF_SC7280_MASK,
+-		.type = INTF_NONE,
++		.type = INTF_DP,
+ 		.controller_id = MSM_DP_CONTROLLER_1,	/* pair with intf_4 for DP MST */
+ 		.prog_fetch_lines_worst_case = 24,
+ 		.intr_underrun = DPU_IRQ_IDX(MDP_SSPP_TOP0_INTR, 12),
+-- 
+2.34.1
+

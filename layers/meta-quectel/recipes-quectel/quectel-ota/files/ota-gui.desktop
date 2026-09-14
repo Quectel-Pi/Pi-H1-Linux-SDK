@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=TimeCapsule
+Name[zh_CN]=时间胶囊
+Comment=QuecPi system upgrade, rollback and snapshot management
+Comment[zh_CN]=QuecPi OTA 系统升级 / 回退 / 快照管理工具
+Exec=/usr/bin/quectel-ota-gui
+Icon=ota-gui
+Terminal=false
+Type=Application
+Categories=System;Settings;
+Keywords=ota;upgrade;rollback;snapshot;btrfs;system;时间胶囊;
+StartupNotify=true

@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Release 3.2 (gatesgarth)
 ========================
 
@@ -60,7 +62,7 @@ pseudo as the interprocess round trip to the server is avoided.
 
 There is a possible complication where some existing recipe may break, for
 example, a recipe was found to be writing to ``${B}/install`` for
-``make install`` in ``do_install`` and since ``${B}`` is listed as not to be tracked,
+``make install`` in :ref:`ref-tasks-install` and since ``${B}`` is listed as not to be tracked,
 there were errors trying to ``chown root`` for files in this location. Another
 example was the ``tcl`` recipe where the source directory :term:`S` is set to a
 subdirectory of the source tree but files were written out to the directory
@@ -86,7 +88,7 @@ value to be explicitly prepended to package names being added as
 dependencies (e.g. in :term:`RDEPENDS` and :term:`RRECOMMENDS` values)
 where the dependency is conditionally added.
 
-If you have anonymous python or in-line python conditionally adding
+If you have anonymous Python or in-line Python conditionally adding
 dependencies in your custom recipes, and you intend for those recipes to
 work with multilib, then you will need to ensure that ``${MLPREFIX}``
 is prefixed on the package names in the dependencies, for example
@@ -149,7 +151,7 @@ the upstream documentation for ``dhcpcd`` and ``kea`` for further details.
 Packaging changes
 -----------------
 
-- ``python3``: the ``urllib`` python package has now moved into the core package, as it is used more commonly than just netclient (e.g. email, xml, mimetypes, pydoc). In addition, the ``pathlib`` module is now also part of the core package.
+- ``python3``: the ``urllib`` Python package has now moved into the core package, as it is used more commonly than just netclient (e.g. email, xml, mimetypes, pydoc). In addition, the ``pathlib`` module is now also part of the core package.
 
 - ``iptables``: ``iptables-apply`` and ``ip6tables-apply`` have been split out to their own package to avoid a bash dependency in the main ``iptables`` package
 
@@ -175,13 +177,23 @@ errors:
 
 In addition, the following new checks were added and default to triggering an error:
 
-- :ref:`shebang-size <qa-check-shebang-size>`: Check for shebang (#!) lines longer than 128 characters, which can give an error at runtime depending on the operating system.
+- :ref:`shebang-size <qa-check-shebang-size>`: Check for shebang (#!) lines
+  longer than 128 characters, which can give an error at runtime depending on
+  the operating system.
 
-- :ref:`unhandled-features-check <qa-check-unhandled-features-check>`: Check if any of the variables supported by the :ref:`features_check <ref-classes-features_check>` class is set while not inheriting the class itself.
+- :ref:`unhandled-features-check <qa-check-unhandled-features-check>`: Check
+  if any of the variables supported by the :ref:`ref-classes-features_check`
+  class is set while not inheriting the class itself.
 
-- :ref:`missing-update-alternatives <qa-check-missing-update-alternatives>`: Check if the recipe sets the :term:`ALTERNATIVE` variable for any of its packages, and does not inherit the :ref:`update-alternatives <ref-classes-update-alternatives>` class.
+- :ref:`missing-update-alternatives <qa-check-missing-update-alternatives>`:
+  Check if the recipe sets the :term:`ALTERNATIVE` variable for any of its
+  packages, and does not inherit the :ref:`ref-classes-update-alternatives`
+  class.
 
-- A trailing slash or duplicated slashes in the value of :term:`S` or :term:`B` will now trigger a warning so that they can be removed and path comparisons can be more reliable --- remove any instances of these in your recipes if the warning is displayed.
+- A trailing slash or duplicated slashes in the value of :term:`S` or :term:`B`
+  will now trigger a warning so that they can be removed and path comparisons
+  can be more reliable --- remove any instances of these in your recipes if the
+  warning is displayed.
 
 
 .. _migration-3.2-src-uri-file-globbing:
@@ -191,7 +203,7 @@ Globbing no longer supported in ``file://`` entries in ``SRC_URI``
 
 Globbing (``*`` and ``?`` wildcards) in ``file://`` URLs within :term:`SRC_URI`
 did not properly support file checksums, thus changes to the source files
-would not always change the do_fetch task checksum, and consequently would
+would not always change the :ref:`ref-tasks-fetch` task checksum, and consequently would
 not ensure that the changed files would be incorporated in subsequent builds.
 
 Unfortunately it is not practical to make globbing work generically here, so
@@ -207,9 +219,18 @@ files into a subdirectory and reference that instead.
 deploy class now cleans ``DEPLOYDIR`` before ``do_deploy``
 ----------------------------------------------------------
 
-``do_deploy`` as implemented in the :ref:`deploy <ref-classes-deploy>` class now cleans up ${:term:`DEPLOYDIR`} before running, just as ``do_install`` cleans up ${:term:`D`} before running. This reduces the risk of :term:`DEPLOYDIR` being accidentally contaminated by files from previous runs, possibly even with different config, in case of incremental builds.
+:ref:`ref-tasks-deploy` as implemented in the :ref:`ref-classes-deploy` class
+now cleans up ${:term:`DEPLOYDIR`} before running, just as
+:ref:`ref-tasks-install` cleans up ${:term:`D`} before running. This reduces
+the risk of :term:`DEPLOYDIR` being accidentally contaminated by files from
+previous runs, possibly even with different config, in case of incremental
+builds.
 
-Most recipes and classes that inherit the :ref:`deploy <ref-classes-deploy>` class or interact with ``do_deploy`` are unlikely to be affected by this unless they add ``prefuncs`` to ``do_deploy`` *which also* put files into ``${DEPLOYDIR}`` --- these should be refactored to use ``do_deploy_prepend`` instead.
+Most recipes and classes that inherit the :ref:`ref-classes-deploy` class or
+interact with :ref:`ref-tasks-deploy` are unlikely to be affected by this
+unless they add ``prefuncs`` to :ref:`ref-tasks-deploy` *which also* put files
+into ``${DEPLOYDIR}`` --- these should be refactored to use
+``do_deploy_prepend`` instead.
 
 
 .. _migration-3.2-nativesdk-sdk-provides-dummy:
@@ -217,7 +238,13 @@ Most recipes and classes that inherit the :ref:`deploy <ref-classes-deploy>` cla
 Custom SDK / SDK-style recipes need to include ``nativesdk-sdk-provides-dummy``
 -------------------------------------------------------------------------------
 
-All ``nativesdk`` packages require ``/bin/sh`` due to their postinstall scriptlets, thus this package has to be dummy-provided within the SDK and ``nativesdk-sdk-provides-dummy`` now does this. If you have a custom SDK recipe (or your own SDK-style recipe similar to e.g. ``buildtools-tarball``), you will need to ensure ``nativesdk-sdk-provides-dummy`` or an equivalent is included in :term:`TOOLCHAIN_HOST_TASK`.
+All :ref:`ref-classes-nativesdk` packages require ``/bin/sh`` due
+to their postinstall scriptlets, thus this package has to be dummy-provided
+within the SDK and ``nativesdk-sdk-provides-dummy`` now does this. If you have
+a custom SDK recipe (or your own SDK-style recipe similar to e.g.
+``buildtools-tarball``), you will need to ensure
+``nativesdk-sdk-provides-dummy`` or an equivalent is included in
+:term:`TOOLCHAIN_HOST_TASK`.
 
 
 ``ld.so.conf`` now moved back to main ``glibc`` package
@@ -265,10 +292,10 @@ using the GL options.
 
 .. _migration-3.2-initramfs-suffix:
 
-initramfs images now use a blank suffix
+Initramfs images now use a blank suffix
 ---------------------------------------
 
-The reference initramfs images (``core-image-minimal-initramfs``,
+The reference :term:`Initramfs` images (``core-image-minimal-initramfs``,
 ``core-image-tiny-initramfs`` and ``core-image-testmaster-initramfs``) now
 set an empty string for :term:`IMAGE_NAME_SUFFIX`, which otherwise defaults
 to ``".rootfs"``. These images aren't root filesystems and thus the rootfs
@@ -283,7 +310,7 @@ Image artifact name variables now centralised in image-artifact-names class
 ---------------------------------------------------------------------------
 
 The defaults for the following image artifact name variables have been moved
-from bitbake.conf to a new ``image-artifact-names`` class:
+from ``bitbake.conf`` to a new ``image-artifact-names`` class:
 
 - :term:`IMAGE_BASENAME`
 - :term:`IMAGE_LINK_NAME`

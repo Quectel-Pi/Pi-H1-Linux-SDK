@@ -1,0 +1,4 @@
+deb http://ports.ubuntu.com/ubuntu-ports/ resolute main restricted
+deb http://ports.ubuntu.com/ubuntu-ports/ resolute universe multiverse
+deb http://ports.ubuntu.com/ubuntu-ports/ resolute-security main restricted universe multiverse
+deb http://ports.ubuntu.com/ubuntu-ports/ resolute-updates main restricted universe multiverse

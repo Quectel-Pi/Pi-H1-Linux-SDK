@@ -128,6 +128,16 @@ enum hwtstamp_tx_types {
 	 */
 	HWTSTAMP_TX_ONESTEP_P2P,
 
+	/*
+	 * Enables hardware time stamping for outgoing packets;
+	 * the sender of the packet decides which are to be
+	 * time stamped by setting %SOF_TIMESTAMPING_TX_SOFTWARE
+	 * before sending the packet.
+	 *.The clocks is sourced from external 64-bit reference
+	 * System Time input.
+	 */
+	HWTSTAMP_TX_EXTERNAL_TIME_SRC,
+
 	/* add new constants above here */
 	__HWTSTAMP_TX_CNT
 };

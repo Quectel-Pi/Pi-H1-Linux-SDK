@@ -1,0 +1,142 @@
+From 30f468834e739b4a083bfb8868a9f607b754ccab Mon Sep 17 00:00:00 2001
+From: Wasim Nazir <quic_wasimn@quicinc.com>
+Date: Sat, 9 Nov 2024 15:55:28 +0530
+Subject: [PATCH v4 5/7] FROMLIST: arm64: dts: qcom: Add support for QCS9075
+Ride & Ride-r3
+
+Add device tree support for QCS9075 Ride & Ride-r3 boards.
+
+QCS9075 lacks the safety monitoring features of Safety-Island (SAIL)
+subsystem which is available in QCS9100, and it affects thermal
+management.
+
+Also, between ride and ride-r3 ethernet phy is different.
+Ride uses 1G ethernet phy while ride-r3 uses 2.5G ethernet phy.
+
+Signed-off-by: Wasim Nazir <quic_wasimn@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241217064856.2772305-6-quic_wasimn@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/Makefile            |  2 +
+ arch/arm64/boot/dts/qcom/qcs9075-ride-r3.dts | 46 ++++++++++++++++++++
+ arch/arm64/boot/dts/qcom/qcs9075-ride.dts    | 46 ++++++++++++++++++++
+ 3 files changed, 94 insertions(+)
+ create mode 100644 arch/arm64/boot/dts/qcom/qcs9075-ride-r3.dts
+ create mode 100644 arch/arm64/boot/dts/qcom/qcs9075-ride.dts
+
+diff --git a/arch/arm64/boot/dts/qcom/Makefile b/arch/arm64/boot/dts/qcom/Makefile
+index 08e19621350f..223f75692434 100644
+--- a/arch/arm64/boot/dts/qcom/Makefile
++++ b/arch/arm64/boot/dts/qcom/Makefile
+@@ -227,3 +227,5 @@ dtb-$(CONFIG_ARCH_QCOM)	+= sm8550-qrd.dtb
+ dtb-$(CONFIG_ARCH_QCOM) += qcs9100-ride.dtb
+ dtb-$(CONFIG_ARCH_QCOM) += qcs9100-ride-r3.dtb
+ dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-rb8.dtb
++dtb-$(CONFIG_ARCH_QCOM) += qcs9075-ride.dtb
++dtb-$(CONFIG_ARCH_QCOM) += qcs9075-ride-r3.dtb
+diff --git a/arch/arm64/boot/dts/qcom/qcs9075-ride-r3.dts b/arch/arm64/boot/dts/qcom/qcs9075-ride-r3.dts
+new file mode 100644
+index 000000000000..d9a8956d3a76
+--- /dev/null
++++ b/arch/arm64/boot/dts/qcom/qcs9075-ride-r3.dts
+@@ -0,0 +1,46 @@
++// SPDX-License-Identifier: BSD-3-Clause
++/*
++ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++/dts-v1/;
++
++#include "sa8775p-ride.dtsi"
++
++/ {
++	model = "Qualcomm Technologies, Inc. QCS9075 Ride Rev3";
++	compatible = "qcom,qcs9075-ride-r3", "qcom,qcs9075", "qcom,sa8775p";
++};
++
++&ethernet0 {
++	phy-mode = "2500base-x";
++};
++
++&ethernet1 {
++	phy-mode = "2500base-x";
++};
++
++&mdio {
++	compatible = "snps,dwmac-mdio";
++	#address-cells = <1>;
++	#size-cells = <0>;
++
++	sgmii_phy0: phy@8 {
++		compatible = "ethernet-phy-id31c3.1c33";
++		reg = <0x8>;
++		device_type = "ethernet-phy";
++		interrupts-extended = <&tlmm 7 IRQ_TYPE_EDGE_FALLING>;
++		reset-gpios = <&pmm8654au_2_gpios 8 GPIO_ACTIVE_LOW>;
++		reset-assert-us = <11000>;
++		reset-deassert-us = <70000>;
++	};
++
++	sgmii_phy1: phy@0 {
++		compatible = "ethernet-phy-id31c3.1c33";
++		reg = <0x0>;
++		device_type = "ethernet-phy";
++		interrupts-extended = <&tlmm 26 IRQ_TYPE_EDGE_FALLING>;
++		reset-gpios = <&pmm8654au_2_gpios 9 GPIO_ACTIVE_LOW>;
++		reset-assert-us = <11000>;
++		reset-deassert-us = <70000>;
++	};
++};
+diff --git a/arch/arm64/boot/dts/qcom/qcs9075-ride.dts b/arch/arm64/boot/dts/qcom/qcs9075-ride.dts
+new file mode 100644
+index 000000000000..3b524359a72d
+--- /dev/null
++++ b/arch/arm64/boot/dts/qcom/qcs9075-ride.dts
+@@ -0,0 +1,46 @@
++// SPDX-License-Identifier: BSD-3-Clause
++/*
++ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++/dts-v1/;
++
++#include "sa8775p-ride.dtsi"
++
++/ {
++	model = "Qualcomm Technologies, Inc. QCS9075 Ride";
++	compatible = "qcom,qcs9075-ride", "qcom,qcs9075", "qcom,sa8775p";
++};
++
++&ethernet0 {
++	phy-mode = "sgmii";
++};
++
++&ethernet1 {
++	phy-mode = "sgmii";
++};
++
++&mdio {
++	compatible = "snps,dwmac-mdio";
++	#address-cells = <1>;
++	#size-cells = <0>;
++
++	sgmii_phy0: phy@8 {
++		compatible = "ethernet-phy-id0141.0dd4";
++		reg = <0x8>;
++		device_type = "ethernet-phy";
++		interrupts-extended = <&tlmm 7 IRQ_TYPE_EDGE_FALLING>;
++		reset-gpios = <&pmm8654au_2_gpios 8 GPIO_ACTIVE_LOW>;
++		reset-assert-us = <11000>;
++		reset-deassert-us = <70000>;
++	};
++
++	sgmii_phy1: phy@a {
++		compatible = "ethernet-phy-id0141.0dd4";
++		reg = <0xa>;
++		device_type = "ethernet-phy";
++		interrupts-extended = <&tlmm 26 IRQ_TYPE_EDGE_FALLING>;
++		reset-gpios = <&pmm8654au_2_gpios 9 GPIO_ACTIVE_LOW>;
++		reset-assert-us = <11000>;
++		reset-deassert-us = <70000>;
++	};
++};
+--
+2.47.0
+

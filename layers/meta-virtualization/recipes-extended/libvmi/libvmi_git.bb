@@ -4,15 +4,15 @@ HOMEPAGE = "https://github.com/libvmi/libvmi"
 LICENSE = "LGPL-3.0-only"
 LIC_FILES_CHKSUM = "file://COPYING.LESSER;md5=e6a600fd5e1d9cbde2d983680233ad02"
 SECTION = "console/tools"
-PV = "0.14.0+git${SRCPV}"
+PV = "0.14.0+git"
 
-DEPENDS = "libvirt libcheck bison fuse byacc-native"
+DEPENDS = "libvirt libcheck bison fuse bison-native flex-native autoconf-archive-native"
 
 SRC_URI = "git://github.com/libvmi/libvmi.git;branch=master;protocol=https \
            file://0001-Build-vbd-only-when-xen-is-enabled.patch \
 "
 
-SRCREV = "41600b602815a9c42620cd5a96c5b88739fc6d9b"
+SRCREV = "df8547ff075d4352db2eb802775b7fa7a92756db"
 
 S = "${WORKDIR}/git"
 

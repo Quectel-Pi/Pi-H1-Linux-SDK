@@ -3,10 +3,10 @@ LICENSE = "GPL-2.0-only"
 LIC_FILES_CHKSUM = "file://COPYING;md5=b234ee4d69f5fce4486a80fdaf4a4263"
 PRIORITY = "optional"
 
-SRCREV_crun = "3b3061afdeb49d691cfbbeaca09c0a0f45694cb2"
-SRCREV_libocispec = "fb3c221d5849de9184f88b6929ce4a8c8fb55be9"
-SRCREV_ispec = "54a822e528b91c8db63b873ad56daf200a2e5e61"
-SRCREV_rspec = "ab23082b188344f6fbb63a441ea00ffc2852d06d"
+SRCREV_crun = "89d44467e3b410b73f2065756a12789be45b855b"
+SRCREV_libocispec = "19c05670c37a42c217caa7b141bcaada7867cc15"
+SRCREV_ispec = "9615142d016838b5dfe7453f80af0be74feb5c7c"
+SRCREV_rspec = "720792f25ae6e9ee6b1332db698f37659e69ce8d"
 SRCREV_yajl = "f344d21280c3e4094919fd318bc5ce75da91fc06"
 
 SRCREV_FORMAT = "crun_rspec"
@@ -15,25 +15,23 @@ SRC_URI = "git://github.com/containers/crun.git;branch=main;name=crun;protocol=h
            git://github.com/opencontainers/runtime-spec.git;branch=main;name=rspec;destsuffix=git/libocispec/runtime-spec;protocol=https \
            git://github.com/opencontainers/image-spec.git;branch=main;name=ispec;destsuffix=git/libocispec/image-spec;protocol=https \
            git://github.com/containers/yajl.git;branch=main;name=yajl;destsuffix=git/libocispec/yajl;protocol=https \
+           file://CVE-2025-24965.patch \
           "
 
-PV = "1.4.3+git${SRCREV_crun}"
+PV = "v1.14.3+git${SRCREV_crun}"
 S = "${WORKDIR}/git"
 
-REQUIRED_DISTRO_FEATURES ?= "systemd"
+REQUIRED_DISTRO_FEATURES ?= "systemd seccomp"
 
 inherit autotools-brokensep pkgconfig features_check
 
 PACKAGECONFIG ??= ""
 
-inherit features_check
-REQUIRED_DISTRO_FEATURES ?= "seccomp"
-
 DEPENDS = "yajl libcap go-md2man-native m4-native"
 # TODO: is there a packageconfig to turn this off ?
 DEPENDS += "libseccomp"
 DEPENDS += "systemd"
-DEPENDS += "oci-image-spec oci-runtime-spec"
+DEPENDS:append:libc-musl = " argp-standalone"
 
 do_configure:prepend () {
     # extracted from autogen.sh in crun source. This avoids

@@ -1,0 +1,95 @@
+From c0b0b65b194aefb7df8076c3bf6bff58baa92ba0 Mon Sep 17 00:00:00 2001
+From: Vikram Sharma <quic_vikramsa@quicinc.com>
+Date: Tue, 26 Nov 2024 15:31:25 +0530
+Subject: [PATCH 38/42] UPSTREAM: media: qcom: camss: reducing the repitious
+ error message string
+
+Introducing a new function camss_link_err to avoid repition of
+same error message, improving code maintainability.
+
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil@xs4all.nl>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 53b01a5fdb41762db79a3f3192b209f6ccff805b]
+---
+ drivers/media/platform/qcom/camss/camss.c | 42 ++++++++++++++++-------
+ 1 file changed, 29 insertions(+), 13 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 741ddfa0541b..c2c9f26700d4 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1459,6 +1459,24 @@ static int camss_init_subdevices(struct camss *camss)
+ 	return 0;
+ }
+ 
++/*
++ * camss_link_entities - Register subdev nodes and create links
++ * camss_link_err - print error in case link creation fails
++ * @src_name: name for source of the link
++ * @sink_name: name for sink of the link
++ */
++inline void camss_link_err(struct camss *camss,
++			   const char *src_name,
++			   const char *sink_name,
++			   int ret)
++{
++	dev_err(camss->dev,
++		"Failed to link %s->%s entities: %d\n",
++		src_name,
++		sink_name,
++		ret);
++}
++
+ /*
+  * camss_link_entities - Register subdev nodes and create links
+  * @camss: CAMSS device
+@@ -1478,11 +1496,10 @@ static int camss_link_entities(struct camss *camss)
+ 						    MSM_CSID_PAD_SINK,
+ 						    0);
+ 			if (ret < 0) {
+-				dev_err(camss->dev,
+-					"Failed to link %s->%s entities: %d\n",
+-					camss->csiphy[i].subdev.entity.name,
+-					camss->csid[j].subdev.entity.name,
+-					ret);
++				camss_link_err(camss,
++					       camss->csiphy[i].subdev.entity.name,
++					       camss->csid[j].subdev.entity.name,
++					       ret);
+ 				return ret;
+ 			}
+ 		}
+@@ -1513,11 +1530,10 @@ static int camss_link_entities_ispif(struct camss *camss)
+ 							    MSM_VFE_PAD_SINK,
+ 							    0);
+ 				if (ret < 0) {
+-					dev_err(camss->dev,
+-						"Failed to link %s->%s entities: %d\n",
+-						ispif->entity.name,
+-						vfe->entity.name,
+-						ret);
++					camss_link_err(camss,
++						       ispif->entity.name,
++						       vfe->entity.name,
++						       ret);
+ 					return ret;
+ 				}
+ 			}
+@@ -1688,9 +1704,9 @@ static int camss_subdev_notifier_complete(struct v4l2_async_notifier *async)
+ 				input, MSM_CSIPHY_PAD_SINK,
+ 				MEDIA_LNK_FL_IMMUTABLE | MEDIA_LNK_FL_ENABLED);
+ 			if (ret < 0) {
+-				dev_err(camss->dev,
+-					"Failed to link %s->%s entities: %d\n",
+-					sensor->name, input->name, ret);
++				camss_link_err(camss, sensor->name,
++					       input->name,
++					       ret);
+ 				return ret;
+ 			}
+ 		}
+-- 
+2.25.1
+

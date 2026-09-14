@@ -36,7 +36,7 @@ section:
    use the BitBake ``-e`` option to examine variable values after a
    recipe has been parsed.
 
--  ":ref:`dev-manual/debugging:viewing package information with \`\`oe-pkgdata-util\`\``"
+-  ":ref:`dev-manual/debugging:viewing package information with ``oe-pkgdata-util```"
    describes how to use the ``oe-pkgdata-util`` utility to query
    :term:`PKGDATA_DIR` and
    display package-related information for built packages.
@@ -270,13 +270,17 @@ format and can be converted to images (e.g. using the ``dot`` tool from
       displays paths between graph nodes.
 
 You can use a different method to view dependency information by using
-the following command::
+either::
 
    $ bitbake -g -u taskexp recipename
 
-This command
-displays a GUI window from which you can view build-time and runtime
-dependencies for the recipes involved in building recipename.
+or::
+
+   $ bitbake -g -u taskexp_ncurses recipename
+
+The ``-u taskdep`` option GUI window from which you can view build-time and
+runtime dependencies for the recipes involved in building recipename. The
+``-u taskexp_ncurses`` option uses ncurses instead of GTK to render the UI.
 
 Viewing Task Variable Dependencies
 ==================================
@@ -1179,6 +1183,21 @@ To support this kind of debugging, you need do the following:
 
    Consider that this will reduce the application's performance and is
    recommended only for debugging purposes.
+
+Enabling Minidebuginfo
+======================
+
+Enabling the :term:`DISTRO_FEATURES` minidebuginfo adds a compressed ELF section ``.gnu_debugdata``
+to all binary files, containing only function names, and thus increasing the size of the
+binaries only by 5 to 10%. For comparison, full debug symbols can be 10 times as big as
+a stripped binary, and it is thus not always possible to deploy full debug symbols.
+Minidebuginfo data allows, on the one side, to retrieve a call-stack using
+GDB (command backtrace) without deploying full debug symbols to the target. It also
+allows to retrieve a symbolicated call-stack when using ``systemd-coredump`` to manage
+coredumps (commands ``coredumpctl list`` and ``coredumpctl info``).
+
+This feature was created by Fedora, see https://fedoraproject.org/wiki/Features/MiniDebugInfo for
+more details.
 
 Other Debugging Tips
 ====================

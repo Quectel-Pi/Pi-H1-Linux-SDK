@@ -1,4 +1,6 @@
 #
+# Copyright OpenEmbedded Contributors
+#
 # SPDX-License-Identifier: MIT
 #
 
@@ -73,48 +75,43 @@ class DnfRepoTest(DnfTest):
     def test_dnf_makecache(self):
         self.dnf_with_repo('makecache')
 
-
-# Does not work when repo is specified on the command line
-#    @OETestDepends(['dnf.DnfRepoTest.test_dnf_makecache'])
-#    def test_dnf_repolist(self):
-#        self.dnf_with_repo('repolist')
-
     @OETestDepends(['dnf.DnfRepoTest.test_dnf_makecache'])
     def test_dnf_repoinfo(self):
         self.dnf_with_repo('repoinfo')
 
     @OETestDepends(['dnf.DnfRepoTest.test_dnf_makecache'])
     def test_dnf_install(self):
-        output = self.dnf_with_repo('list run-postinsts-dev')
-        if 'Installed Packages' in output:
-            self.dnf_with_repo('remove -y run-postinsts-dev')
-        self.dnf_with_repo('install -y run-postinsts-dev')
+        self.dnf_with_repo('remove -y dnf-test-*')
+        self.dnf_with_repo('install -y dnf-test-dep')
 
     @OETestDepends(['dnf.DnfRepoTest.test_dnf_install'])
     def test_dnf_install_dependency(self):
-        self.dnf_with_repo('remove -y run-postinsts')
-        self.dnf_with_repo('install -y run-postinsts-dev')
+        self.dnf_with_repo('remove -y dnf-test-*')
+        self.dnf_with_repo('install -y dnf-test-main')
+        output = self.dnf('list --installed dnf-test-*')
+        self.assertIn("dnf-test-main.", output)
+        self.assertIn("dnf-test-dep.", output)
 
     @OETestDepends(['dnf.DnfRepoTest.test_dnf_install_dependency'])
     def test_dnf_install_from_disk(self):
-        self.dnf_with_repo('remove -y run-postinsts-dev')
-        self.dnf_with_repo('install -y --downloadonly run-postinsts-dev')
-        status, output = self.target.run('find /var/cache/dnf -name run-postinsts-dev*rpm', 1500)
+        self.dnf_with_repo('remove -y dnf-test-dep')
+        self.dnf_with_repo('install -y --downloadonly dnf-test-dep')
+        status, output = self.target.run('find /var/cache/dnf -name dnf-test-dep*rpm')
         self.assertEqual(status, 0, output)
         self.dnf_with_repo('install -y %s' % output)
 
     @OETestDepends(['dnf.DnfRepoTest.test_dnf_install_from_disk'])
     def test_dnf_install_from_http(self):
-        output = subprocess.check_output('%s %s -name run-postinsts-dev*' % (bb.utils.which(os.getenv('PATH'), "find"),
+        output = subprocess.check_output('%s %s -name dnf-test-dep*' % (bb.utils.which(os.getenv('PATH'), "find"),
                                                                            os.path.join(self.tc.td['WORKDIR'], 'oe-testimage-repo')), shell=True).decode("utf-8")
         rpm_path = output.split("/")[-2] + "/" + output.split("/")[-1]
         url = 'http://%s:%s/%s' %(self.target.server_ip, self.repo_server.port, rpm_path)
-        self.dnf_with_repo('remove -y run-postinsts-dev')
+        self.dnf_with_repo('remove -y dnf-test-dep')
         self.dnf_with_repo('install -y %s' % url)
 
     @OETestDepends(['dnf.DnfRepoTest.test_dnf_install'])
     def test_dnf_reinstall(self):
-        self.dnf_with_repo('reinstall -y run-postinsts-dev')
+        self.dnf_with_repo('reinstall -y dnf-test-main')
 
     @OETestDepends(['dnf.DnfRepoTest.test_dnf_makecache'])
     @skipIfInDataVar('DISTRO_FEATURES', 'usrmerge', 'Test run when not enable usrmerge')
@@ -137,7 +134,7 @@ class DnfRepoTest(DnfTest):
         self.target.run('cp -r /etc/dnf %s/etc' % rootpath, 1500)
         self.target.run('cp /bin/sh %s/bin' % rootpath, 1500)
         self.target.run('mount -o bind /dev %s/dev/' % rootpath, 1500)
-        self.dnf_with_repo('install --installroot=%s -v -y --rpmverbosity=debug busybox run-postinsts' % rootpath)
+        self.dnf_with_repo('install --installroot=%s -v -y --rpmverbosity=debug busybox' % rootpath)
         status, output = self.target.run('test -e %s/var/cache/dnf' % rootpath, 1500)
         self.assertEqual(0, status, output)
         status, output = self.target.run('test -e %s/bin/busybox' % rootpath, 1500)
@@ -150,42 +147,27 @@ class DnfRepoTest(DnfTest):
         rootpath = '/home/root/chroot/test'
         #Copy necessary files to avoid errors with not yet installed tools on
         #installroot directory.
-        self.target.run('mkdir -p %s/etc' % rootpath, 1500)
-        self.target.run('mkdir -p %s/usr/bin %s/usr/sbin' % (rootpath, rootpath), 1500)
-        self.target.run('ln -sf -r %s/usr/bin %s/bin'  % (rootpath, rootpath), 1500)
-        self.target.run('ln -sf -r %s/usr/sbin %s/sbin'  % (rootpath, rootpath), 1500)
-        self.target.run('mkdir -p %s/dev' % rootpath, 1500)
+        self.target.run('mkdir -p %s/etc' % rootpath)
+        self.target.run('mkdir -p %s/usr/bin %s/usr/sbin' % (rootpath, rootpath))
+        self.target.run('ln -sf usr/bin %s/bin'  % (rootpath))
+        self.target.run('ln -sf usr/sbin %s/sbin'  % (rootpath))
+        self.target.run('mkdir -p %s/dev' % rootpath)
         #Handle different architectures lib dirs
-        self.target.run('mkdir -p %s/usr/lib' % rootpath, 1500)
-        self.target.run('mkdir -p %s/usr/libx32' % rootpath, 1500)
-        self.target.run('mkdir -p %s/usr/lib64' % rootpath, 1500)
-        self.target.run('cp /lib/libtinfo.so.5 %s/usr/lib' % rootpath, 1500)
-        self.target.run('cp /libx32/libtinfo.so.5 %s/usr/libx32' % rootpath, 1500)
-        self.target.run('cp /lib64/libtinfo.so.5 %s/usr/lib64' % rootpath, 1500)
-        self.target.run('ln -sf -r %s/lib %s/usr/lib' % (rootpath,rootpath), 1500)
-        self.target.run('ln -sf -r %s/libx32 %s/usr/libx32' % (rootpath,rootpath), 1500)
-        self.target.run('ln -sf -r %s/lib64 %s/usr/lib64' % (rootpath,rootpath), 1500)
-        self.target.run('cp -r /etc/rpm %s/etc' % rootpath, 1500)
-        self.target.run('cp -r /etc/dnf %s/etc' % rootpath, 1500)
-        self.target.run('cp /bin/sh %s/bin' % rootpath, 1500)
-        self.target.run('mount -o bind /dev %s/dev/' % rootpath, 1500)
-        self.dnf_with_repo('install --installroot=%s -v -y --rpmverbosity=debug busybox run-postinsts' % rootpath)
-        status, output = self.target.run('test -e %s/var/cache/dnf' % rootpath, 1500)
+        self.target.run("for l in /lib*; do mkdir -p %s/usr/$l; ln -s usr/$l %s/$l; done" % (rootpath, rootpath))
+        self.target.run('cp -r /etc/rpm %s/etc' % rootpath)
+        self.target.run('cp -r /etc/dnf %s/etc' % rootpath)
+        self.target.run('cp /bin/busybox %s/bin/sh' % rootpath)
+        self.target.run('mount -o bind /dev %s/dev/' % rootpath)
+        self.dnf_with_repo('install --installroot=%s -v -y --rpmverbosity=debug busybox' % rootpath)
+        status, output = self.target.run('test -e %s/var/cache/dnf' % rootpath)
         self.assertEqual(0, status, output)
-        status, output = self.target.run('test -e %s/bin/busybox' % rootpath, 1500)
+        status, output = self.target.run('test -e %s/bin/busybox' % rootpath)
         self.assertEqual(0, status, output)
 
     @OETestDepends(['dnf.DnfRepoTest.test_dnf_makecache'])
     def test_dnf_exclude(self):
-        excludepkg = 'curl-dev'
-        self.dnf_with_repo('install -y curl*')
-        self.dnf('list %s' % excludepkg, 0)
-        #Avoid remove dependencies to skip some errors on different archs and images
-        self.dnf_with_repo('remove --setopt=clean_requirements_on_remove=0 -y curl*')
-        #check curl-dev is not installed adter removing all curl occurrences
-        status, output = self.target.run('dnf list --installed | grep %s'% excludepkg, 1500)
-        self.assertEqual(1, status, "%s was not removed,  is listed as installed"%excludepkg)
-        self.dnf_with_repo('install -y --exclude=%s --exclude=curl-staticdev curl*' % excludepkg)
-        #check curl-dev is not installed after being excluded
-        status, output = self.target.run('dnf list --installed | grep %s'% excludepkg , 1500)
-        self.assertEqual(1, status, "%s was not excluded, is listed as installed"%excludepkg)
+        self.dnf_with_repo('remove -y dnf-test-*')
+        self.dnf_with_repo('install -y --exclude=dnf-test-dep dnf-test-*')
+        output = self.dnf('list --installed dnf-test-*')
+        self.assertIn("dnf-test-main.", output)
+        self.assertNotIn("dnf-test-dev.", output)

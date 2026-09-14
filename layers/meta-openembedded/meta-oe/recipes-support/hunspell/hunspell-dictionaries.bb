@@ -133,9 +133,9 @@ LIC_FILES_CHKSUM = " \
 
 RDEPENDS:${PN} = "hunspell"
 
-PV = "0.0.0+git${SRCPV}"
+PV = "0.0.0+git"
 SRCREV = "820a65e539e34a3a8c2a855d2450b84745c624ee"
-SRC_URI = "git://github.com/wooorm/dictionaries.git;branch=master;protocol=https"
+SRC_URI = "git://github.com/wooorm/dictionaries.git;branch=main;protocol=https"
 
 S = "${WORKDIR}/git"
 

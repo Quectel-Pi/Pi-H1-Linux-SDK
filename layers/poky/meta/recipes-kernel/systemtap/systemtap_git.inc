@@ -1,14 +1,19 @@
 LICENSE = "GPL-2.0-only"
 LIC_FILES_CHKSUM = "file://COPYING;md5=b234ee4d69f5fce4486a80fdaf4a4263"
-SRCREV = "2e9f2f6967e44ce2bf8f34932b5bdd738ece2161"
-PV = "4.6"
+SRCREV = "e72dc118e563c645d93a1a2d771e8d90e8fec1ae"
+PV = "5.0"
 
-SRC_URI = "git://sourceware.org/git/systemtap.git;branch=master \
+SRC_URI = "git://sourceware.org/git/systemtap.git;branch=master;protocol=https \
            file://0001-Do-not-let-configure-write-a-python-location-into-th.patch \
            file://0001-Install-python-modules-to-correct-library-dir.patch \
            file://0001-staprun-stapbpf-don-t-support-installing-a-non-root.patch \
-           file://0001-PR28778-gcc-warning-tweak-for-sprintf-precision-para.patch \
-           file://0001-PR28804-tune-default-stap-s-buffer-size-on-small-RAM.patch \
+           file://0001-Makefile.am-remove-runtime-linux-uprobes-and-runtime.patch \
+           file://0001-prerelease-datestamp-fixes.patch \
+           file://0001-configure.ac-fix-broken-libdebuginfod-library-auto-d.patch \
+           file://0001-bpf-translate.cxx-fix-build-against-upcoming-gcc-14-.patch \
+           file://0001-staprun-fix-build-against-upcoming-gcc-14-Werror-cal.patch \
+           file://0001-elaborate.cxx-gcc-version-compatibility-hack.patch \
+           file://0001-elaborate.cxx-gcc-version-compatibility-hack-redux.patch \
            "
 
 COMPATIBLE_HOST = '(x86_64|i.86|powerpc|arm|aarch64|microblazeel|mips|riscv64).*-linux'

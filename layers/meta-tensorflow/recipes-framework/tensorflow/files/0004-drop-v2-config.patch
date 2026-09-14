@@ -1,0 +1,26 @@
+From bf8ccc7a5907b2d241d77dbb7ef4f7f979e651e2 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Mon, 16 May 2022 00:10:55 -0700
+Subject: [PATCH] drop v2 config
+
+Upstream-Status: Inappropriate [oe specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ .bazelrc | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/.bazelrc b/.bazelrc
+index 315669e7930..deb1a918146 100644
+--- a/.bazelrc
++++ b/.bazelrc
+@@ -117,9 +117,6 @@ build --define=with_xla_support=true
+ # TODO(mihaimaruseac): Document this option or remove if no longer needed
+ build --config=short_logs
+ 
+-# TODO(mihaimaruseac): Document this option or remove if no longer needed
+-build --config=v2
+-
+ # Disable AWS/HDFS support by default
+ build --define=no_aws_support=true
+ build --define=no_hdfs_support=true

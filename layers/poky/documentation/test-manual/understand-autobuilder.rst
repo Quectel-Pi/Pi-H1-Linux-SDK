@@ -10,7 +10,7 @@ Execution Flow within the Autobuilder
 The "a-full" and "a-quick" targets are the usual entry points into the
 Autobuilder and it makes sense to follow the process through the system
 starting there. This is best visualized from the :yocto_ab:`Autobuilder
-Console view </typhoon/#/console>`.
+Console view </valkyrie/#/console>`.
 
 Each item along the top of that view represents some "target build" and
 these targets are all run in parallel. The 'full' build will trigger the
@@ -171,7 +171,7 @@ the system can checkout repositories.
 Shared DL_DIR
 -------------
 
-The Workers are all connected over NFS which allows DL_DIR to be shared
+The Workers are all connected over NFS which allows :term:`DL_DIR` to be shared
 between them. This reduces network accesses from the system and allows
 the build to be sped up. The usage of the directory within the build system
 is designed to be able to be shared over NFS.
@@ -207,11 +207,7 @@ are general setup steps that are run once and include:
 
 #. Set up any :term:`buildtools` tarball if configured.
 
-<<<<<<< HEAD
-#. Call "buildhistory-init" if buildhistory is configured.
-=======
 #. Call ``buildhistory-init`` if :ref:`ref-classes-buildhistory` is configured.
->>>>>>> 7c4f616f77 (test-manual: text and formatting fixes)
 
 For each step that is configured in ``config.json``, it will perform the
 following:
@@ -247,7 +243,7 @@ of post-build steps, including:
 #. Call ``scripts/upload-error-reports`` to send any error reports
    generated to the remote server.
 
-#. Cleanup the build directory using
+#. Cleanup the :term:`Build Directory` using
    :ref:`test-manual/understand-autobuilder:clobberdir` if the build was successful,
    else rename it to "build-renamed" for potential future debugging.
 

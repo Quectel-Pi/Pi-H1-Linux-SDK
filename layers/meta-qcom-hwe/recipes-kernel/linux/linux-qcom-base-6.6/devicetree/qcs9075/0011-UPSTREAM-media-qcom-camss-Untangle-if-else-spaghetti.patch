@@ -1,0 +1,186 @@
+From a39164f90cb1f104899a451aed2a3aaa5e0900e7 Mon Sep 17 00:00:00 2001
+From: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Date: Mon, 25 Sep 2023 16:47:00 +0100
+Subject: [PATCH 11/42] UPSTREAM: media: qcom: camss: Untangle if/else
+ spaghetti in camss
+
+We have a very convoluted if/else legacy here which needs to be
+rationalised to make it more sustainable.
+
+Adding in another Soc or two will make some of these if statements into
+increasingly large multi-clause behemoths.
+
+Introduce switches in the obvious places to despaghetiify.
+
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Acked-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Suresh Vankadara <quic_svankada@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 2de3a6546aeee6807b4315107a0131081fd0205e]
+---
+ .../media/platform/qcom/camss/camss-csiphy.c  | 16 +++++----
+ drivers/media/platform/qcom/camss/camss-vfe.c | 33 +++++++++++--------
+ .../media/platform/qcom/camss/camss-video.c   | 17 +++++-----
+ 3 files changed, 37 insertions(+), 29 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csiphy.c b/drivers/media/platform/qcom/camss/camss-csiphy.c
+index 4310a132dcbe..18f9a4defb2a 100644
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.c
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.c
+@@ -558,19 +558,21 @@ int msm_csiphy_subdev_init(struct camss *camss,
+ 	csiphy->cfg.combo_mode = 0;
+ 	csiphy->ops = res->ops;
+ 
+-	if (camss->res->version == CAMSS_8x16) {
++	switch (camss->res->version) {
++	case CAMSS_8x16:
+ 		csiphy->formats = csiphy_formats_8x16;
+ 		csiphy->nformats = ARRAY_SIZE(csiphy_formats_8x16);
+-	} else if (camss->res->version == CAMSS_8x96 ||
+-		   camss->res->version == CAMSS_660) {
++		break;
++	case CAMSS_8x96:
++	case CAMSS_660:
+ 		csiphy->formats = csiphy_formats_8x96;
+ 		csiphy->nformats = ARRAY_SIZE(csiphy_formats_8x96);
+-	} else if (camss->res->version == CAMSS_845 ||
+-		   camss->res->version == CAMSS_8250) {
++		break;
++	case CAMSS_845:
++	case CAMSS_8250:
+ 		csiphy->formats = csiphy_formats_sdm845;
+ 		csiphy->nformats = ARRAY_SIZE(csiphy_formats_sdm845);
+-	} else {
+-		return -EINVAL;
++		break;
+ 	}
+ 
+ 	/* Memory */
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.c b/drivers/media/platform/qcom/camss/camss-vfe.c
+index 4d5c32d3dddb..db8f68819ded 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c
+@@ -170,7 +170,8 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ {
+ 	struct vfe_device *vfe = to_vfe(line);
+ 
+-	if (vfe->camss->res->version == CAMSS_8x16)
++	switch (vfe->camss->res->version) {
++	case CAMSS_8x16:
+ 		switch (sink_code) {
+ 		case MEDIA_BUS_FMT_YUYV8_1X16:
+ 		{
+@@ -218,10 +219,11 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ 
+ 			return sink_code;
+ 		}
+-	else if (vfe->camss->res->version == CAMSS_8x96 ||
+-		 vfe->camss->res->version == CAMSS_660 ||
+-		 vfe->camss->res->version == CAMSS_845 ||
+-		 vfe->camss->res->version == CAMSS_8250)
++		break;
++	case CAMSS_8x96:
++	case CAMSS_660:
++	case CAMSS_845:
++	case CAMSS_8250:
+ 		switch (sink_code) {
+ 		case MEDIA_BUS_FMT_YUYV8_1X16:
+ 		{
+@@ -281,8 +283,9 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ 
+ 			return sink_code;
+ 		}
+-	else
+-		return 0;
++		break;
++	}
++	return 0;
+ }
+ 
+ int vfe_reset(struct vfe_device *vfe)
+@@ -1379,7 +1382,8 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
+ 		init_completion(&l->output.sof);
+ 		init_completion(&l->output.reg_update);
+ 
+-		if (camss->res->version == CAMSS_8x16) {
++		switch (camss->res->version) {
++		case CAMSS_8x16:
+ 			if (i == VFE_LINE_PIX) {
+ 				l->formats = formats_pix_8x16;
+ 				l->nformats = ARRAY_SIZE(formats_pix_8x16);
+@@ -1387,8 +1391,9 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
+ 				l->formats = formats_rdi_8x16;
+ 				l->nformats = ARRAY_SIZE(formats_rdi_8x16);
+ 			}
+-		} else if (camss->res->version == CAMSS_8x96 ||
+-			   camss->res->version == CAMSS_660) {
++			break;
++		case CAMSS_8x96:
++		case CAMSS_660:
+ 			if (i == VFE_LINE_PIX) {
+ 				l->formats = formats_pix_8x96;
+ 				l->nformats = ARRAY_SIZE(formats_pix_8x96);
+@@ -1396,12 +1401,12 @@ int msm_vfe_subdev_init(struct camss *camss, struct vfe_device *vfe,
+ 				l->formats = formats_rdi_8x96;
+ 				l->nformats = ARRAY_SIZE(formats_rdi_8x96);
+ 			}
+-		} else if (camss->res->version == CAMSS_845 ||
+-			   camss->res->version == CAMSS_8250) {
++			break;
++		case CAMSS_845:
++		case CAMSS_8250:
+ 			l->formats = formats_rdi_845;
+ 			l->nformats = ARRAY_SIZE(formats_rdi_845);
+-		} else {
+-			return -EINVAL;
++			break;
+ 		}
+ 	}
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss-video.c b/drivers/media/platform/qcom/camss/camss-video.c
+index 1ed61c7263ed..56cc4b8c7d5d 100644
+--- a/drivers/media/platform/qcom/camss/camss-video.c
++++ b/drivers/media/platform/qcom/camss/camss-video.c
+@@ -1000,7 +1000,8 @@ int msm_video_register(struct camss_video *video, struct v4l2_device *v4l2_dev,
+ 
+ 	mutex_init(&video->lock);
+ 
+-	if (video->camss->res->version == CAMSS_8x16) {
++	switch (video->camss->res->version) {
++	case CAMSS_8x16:
+ 		if (is_pix) {
+ 			video->formats = formats_pix_8x16;
+ 			video->nformats = ARRAY_SIZE(formats_pix_8x16);
+@@ -1008,8 +1009,9 @@ int msm_video_register(struct camss_video *video, struct v4l2_device *v4l2_dev,
+ 			video->formats = formats_rdi_8x16;
+ 			video->nformats = ARRAY_SIZE(formats_rdi_8x16);
+ 		}
+-	} else if (video->camss->res->version == CAMSS_8x96 ||
+-		   video->camss->res->version == CAMSS_660) {
++		break;
++	case CAMSS_8x96:
++	case CAMSS_660:
+ 		if (is_pix) {
+ 			video->formats = formats_pix_8x96;
+ 			video->nformats = ARRAY_SIZE(formats_pix_8x96);
+@@ -1017,13 +1019,12 @@ int msm_video_register(struct camss_video *video, struct v4l2_device *v4l2_dev,
+ 			video->formats = formats_rdi_8x96;
+ 			video->nformats = ARRAY_SIZE(formats_rdi_8x96);
+ 		}
+-	}  else if (video->camss->res->version == CAMSS_845 ||
+-		    video->camss->res->version == CAMSS_8250) {
++		break;
++	case CAMSS_845:
++	case CAMSS_8250:
+ 		video->formats = formats_rdi_845;
+ 		video->nformats = ARRAY_SIZE(formats_rdi_845);
+-	} else {
+-		ret = -EINVAL;
+-		goto error_video_register;
++		break;
+ 	}
+ 
+ 	ret = msm_video_init_format(video);
+-- 
+2.25.1
+

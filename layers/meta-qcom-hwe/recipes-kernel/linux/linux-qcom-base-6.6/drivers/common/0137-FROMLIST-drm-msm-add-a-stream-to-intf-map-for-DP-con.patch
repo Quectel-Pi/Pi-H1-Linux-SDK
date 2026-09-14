@@ -1,0 +1,128 @@
+From 649db0ef61f1c1ae3981470ebb3b712279332b1c Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:32:11 -0800
+Subject: [PATCH 137/146] FROMLIST: drm/msm: add a stream to intf map for DP
+ controller
+
+Each DP controller capable of MST can support multiple streams
+and each of the streams maps to an interface block ID which can
+vary based on chipset. Add a stream to interface map for MST capable
+DP controllers.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-40-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 46 +++++++++++++++++++++++++++--
+ drivers/gpu/drm/msm/msm_drv.h       |  7 +++++
+ 2 files changed, 51 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 8bc16c9d78eb..b16afee1ea59 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -116,6 +116,8 @@ struct msm_dp_display_private {
+ 
+ 	u32 active_stream_cnt;
+ 
++	const unsigned int *intf_map;
++
+ 	struct msm_dp_audio *audio;
+ };
+ 
+@@ -124,11 +126,36 @@ struct msm_dp_desc {
+ 	unsigned int id;
+ 	unsigned int connector_type;
+ 	bool wide_bus_supported;
++	const unsigned int *intf_map;
++};
++
++/* to be kept in sync with enum dpu_intf of dpu_hw_mdss.h */
++enum dp_mst_intf {
++	INTF_0 = 1,
++	INTF_1,
++	INTF_2,
++	INTF_3,
++	INTF_4,
++	INTF_5,
++	INTF_6,
++	INTF_7,
++	INTF_8,
++	INTF_MAX
++};
++
++static const unsigned int stream_intf_map_sa_8775p[][DP_STREAM_MAX] = {
++	{INTF_0, INTF_3},
++	{INTF_4, INTF_8},
++	{}
+ };
+ 
+ static const struct msm_dp_desc msm_dp_desc_sa8775p[] = {
+-	{ .io_start = 0x0af54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true },
+-	{ .io_start = 0x0af5c000, .id = MSM_DP_CONTROLLER_1, .wide_bus_supported = true },
++	{ .io_start = 0x0af54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true,
++	  .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_0],
++	},
++	{ .io_start = 0x0af5c000, .id = MSM_DP_CONTROLLER_1, .wide_bus_supported = true,
++	  .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_1],
++	},
+ 	{ .io_start = 0x22154000, .id = MSM_DP_CONTROLLER_2, .wide_bus_supported = true },
+ 	{ .io_start = 0x2215c000, .id = MSM_DP_CONTROLLER_3, .wide_bus_supported = true },
+ 	{}
+@@ -1495,6 +1522,9 @@ static int msm_dp_display_probe(struct platform_device *pdev)
+ 		(dp->msm_dp_display.connector_type == DRM_MODE_CONNECTOR_eDP);
+ 
+ 	dp->max_stream = DEFAULT_STREAM_COUNT;
++
++	dp->intf_map = desc->intf_map;
++
+ 	rc = msm_dp_init_sub_modules(dp);
+ 	if (rc) {
+ 		DRM_ERROR("init sub module failed\n");
+@@ -1652,6 +1682,18 @@ bool msm_dp_wide_bus_available(const struct msm_dp *msm_dp_display)
+ 	return dp->wide_bus_supported;
+ }
+ 
++int msm_dp_get_mst_intf_id(struct msm_dp *dp_display, int stream_id)
++{
++	struct msm_dp_display_private *dp;
++
++	dp = container_of(dp_display, struct msm_dp_display_private, msm_dp_display);
++
++	if (dp->intf_map)
++		return dp->intf_map[stream_id];
++
++	return 0;
++}
++
+ void msm_dp_display_debugfs_init(struct msm_dp *msm_dp_display, struct dentry *root, bool is_edp)
+ {
+ 	struct msm_dp_display_private *dp;
+diff --git a/drivers/gpu/drm/msm/msm_drv.h b/drivers/gpu/drm/msm/msm_drv.h
+index 9d0085f84c07..d563109192ef 100644
+--- a/drivers/gpu/drm/msm/msm_drv.h
++++ b/drivers/gpu/drm/msm/msm_drv.h
+@@ -393,6 +393,8 @@ int msm_dp_mst_bridge_init(struct msm_dp *dp_display, struct drm_encoder *encode
+ 
+ int msm_dp_mst_register(struct msm_dp *dp_display);
+ 
++int msm_dp_get_mst_intf_id(struct msm_dp *dp_display, int stream_id);
++
+ #else
+ static inline int __init msm_dp_register(void)
+ {
+@@ -445,6 +447,11 @@ static inline bool msm_dp_wide_bus_available(const struct msm_dp *dp_display)
+ 	return false;
+ }
+ 
++int msm_dp_get_mst_intf_id(struct msm_dp *dp_display, int stream_id)
++{
++	return -EINVAL;
++}
++
+ #endif
+ 
+ #ifdef CONFIG_DRM_MSM_MDP4
+-- 
+2.34.1
+

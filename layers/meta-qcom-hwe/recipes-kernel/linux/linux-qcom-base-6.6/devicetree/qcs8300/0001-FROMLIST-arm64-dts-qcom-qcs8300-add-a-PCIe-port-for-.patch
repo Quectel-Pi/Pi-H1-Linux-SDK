@@ -1,0 +1,39 @@
+From cb99851a6cc5573b9c6832a99e24562072c44c6f Mon Sep 17 00:00:00 2001
+From: Stone Zhang <quic_stonez@quicinc.com>
+Date: Mon, 10 Feb 2025 14:29:09 +0800
+Subject: [PATCH 1/2] FROMLIST: arm64: dts: qcom: qcs8300: add a PCIe port for
+ WLAN
+
+Add an original PCIe port for WLAN. This port will be
+referenced and supplemented by specific WLAN devices.
+
+Reviewed-by: Konrad Dybcio <konrad.dybcio@oss.qualcomm.com>
+Signed-off-by: Stone Zhang <quic_stonez@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250210062910.3618336-2-quic_stonez@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index 7d60416fec7b..6a4dfd1847c9 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -2099,6 +2099,15 @@ opp-32000000 {
+ 					opp-peak-kBps = <3938000 1>;
+ 				};
+ 			};
++
++			pcieport0: pcie@0 {
++				device_type = "pci";
++				reg = <0x0 0x0 0x0 0x0 0x0>;
++				#address-cells = <3>;
++				#size-cells = <2>;
++				ranges;
++				bus-range = <0x01 0xff>;
++			};
+ 		};
+ 
+ 		pcie0_phy: phy@1c04000 {
+-- 
+2.34.1
+

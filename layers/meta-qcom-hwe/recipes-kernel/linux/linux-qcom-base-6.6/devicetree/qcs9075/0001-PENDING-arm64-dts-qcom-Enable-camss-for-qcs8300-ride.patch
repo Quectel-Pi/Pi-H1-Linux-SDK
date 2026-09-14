@@ -1,0 +1,31 @@
+From 95cd06279e83a5bfa2cb1a3c7cd059bc03958184 Mon Sep 17 00:00:00 2001
+From: Vikram Sharma <quic_vikramsa@quicinc.com>
+Date: Wed, 22 Jan 2025 16:29:18 +0530
+Subject: [PATCH] PENDING: arm64: dts: qcom: Enable camss for qcs8300-ride
+
+This change enables camera driver for QCS8300 ride board.
+
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/qcs8300-ride.dts | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+index 86ea2dbf29d8..2235f5913069 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
++++ b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+@@ -213,6 +213,10 @@ vreg_l9c: ldo9 {
+ 	};
+ };
+ 
++&camss {
++       status = "okay";
++};
++
+ &gcc {
+ 	clocks = <&rpmhcc RPMH_CXO_CLK>,
+ 		 <&sleep_clk>,
+-- 
+2.25.1
+

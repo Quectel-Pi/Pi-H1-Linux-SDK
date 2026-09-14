@@ -1,0 +1,69 @@
+From ffb6c7868e2a568a90e195704ccf42bbc67d8447 Mon Sep 17 00:00:00 2001
+From: Puranam V G Tejaswi <quic_pvgtejas@quicinc.com>
+Date: Fri, 7 Mar 2025 23:03:44 +0530
+Subject: [PATCH] QCLINUX: Add support to compile msm_display.ko
+
+msm would be duplicated as msm_default during source unpacking.
+Add support to include msm_default during compilation. Also rename
+msm.o to msm_display.o in msm as support for gpu probe is removed.
+
+Signed-off-by: Puranam V G Tejaswi <quic_pvgtejas@quicinc.com>
+Upstream-Status: Pending
+
+diff --git a/drivers/gpu/drm/Makefile b/drivers/gpu/drm/Makefile
+index 2e57e84071e4..d2fe17879fb9 100644
+--- a/drivers/gpu/drm/Makefile
++++ b/drivers/gpu/drm/Makefile
+@@ -167,6 +167,7 @@ obj-y			+= tilcdc/
+ obj-$(CONFIG_DRM_QXL) += qxl/
+ obj-$(CONFIG_DRM_VIRTIO_GPU) += virtio/
+ obj-$(CONFIG_DRM_MSM) += msm/
++obj-$(CONFIG_DRM_MSM) += msm_default/
+ obj-$(CONFIG_DRM_TEGRA) += tegra/
+ obj-$(CONFIG_DRM_STM) += stm/
+ obj-$(CONFIG_DRM_STI) += sti/
+diff --git a/drivers/gpu/drm/msm/Makefile b/drivers/gpu/drm/msm/Makefile
+index b1985794c4ef..fdbb63d1f1aa 100644
+--- a/drivers/gpu/drm/msm/Makefile
++++ b/drivers/gpu/drm/msm/Makefile
+@@ -147,4 +147,5 @@ msm-$(CONFIG_DRM_MSM_DSI_14NM_PHY) += dsi/phy/dsi_phy_14nm.o
+ msm-$(CONFIG_DRM_MSM_DSI_10NM_PHY) += dsi/phy/dsi_phy_10nm.o
+ msm-$(CONFIG_DRM_MSM_DSI_7NM_PHY) += dsi/phy/dsi_phy_7nm.o
+ 
+-obj-$(CONFIG_DRM_MSM)	+= msm.o
++obj-$(CONFIG_DRM_MSM)	+= msm_display.o
++msm_display-y := $(msm-y)
+diff --git a/drivers/gpu/drm/msm/msm_drv.c b/drivers/gpu/drm/msm/msm_drv.c
+index c4762dd9080e..2276cc5d563c 100644
+--- a/drivers/gpu/drm/msm/msm_drv.c
++++ b/drivers/gpu/drm/msm/msm_drv.c
+@@ -1253,10 +1253,6 @@ int msm_drv_probe(struct device *master_dev,
+ 			return ret;
+ 	}
+ 
+-	ret = add_gpu_components(master_dev, &match);
+-	if (ret)
+-		return ret;
+-
+ 	/* on all devices that I am aware of, iommu's which can map
+ 	 * any address the cpu can see are used:
+ 	 */
+@@ -1325,7 +1321,6 @@ static int __init msm_drm_register(void)
+ 	msm_dsi_register();
+ 	msm_hdmi_register();
+ 	msm_dp_register();
+-	adreno_register();
+ 	msm_mdp4_register();
+ 	msm_mdss_register();
+ 	return platform_driver_register(&msm_platform_driver);
+@@ -1339,7 +1334,6 @@ static void __exit msm_drm_unregister(void)
+ 	msm_mdp4_unregister();
+ 	msm_dp_unregister();
+ 	msm_hdmi_unregister();
+-	adreno_unregister();
+ 	msm_dsi_unregister();
+ 	msm_mdp_unregister();
+ 	msm_dpu_unregister();
+-- 
+2.34.1
+

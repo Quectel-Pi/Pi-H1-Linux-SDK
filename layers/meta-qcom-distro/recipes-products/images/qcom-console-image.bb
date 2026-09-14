@@ -17,5 +17,5 @@ CORE_IMAGE_EXTRA_INSTALL += " \
 "
 
 # docker pulls runc/containerd, which in turn recommend lxc unecessarily
-
 BAD_RECOMMENDATIONS:append = " lxc"
+BAD_RECOMMENDATIONS:append = " lxc-ptest"

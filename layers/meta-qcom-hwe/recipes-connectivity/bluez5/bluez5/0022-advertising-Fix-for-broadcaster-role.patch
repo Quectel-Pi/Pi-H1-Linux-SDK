@@ -1,0 +1,45 @@
+From 385f0f357d98ddc5a021c0951740571139169994 Mon Sep 17 00:00:00 2001
+From: Prathibha Madugonde <quic_prathm@quicinc.com>
+Date: Wed, 20 Nov 2024 21:17:55 +0530
+Subject: [PATCH BlueZ v1] advertising: Fix for broadcaster role
+
+src/advertising.c
+Include check for broadcast mode:
+AD flags shall never be set for broadcast
+
+Test steps:
+From DUT, bluetoothctl go to menu advertise
+advertise.secondary 1M/2M
+advertise.name on
+advertise broadcast
+
+Signed-off-by: Prathibha Madugonde <quic_prathm@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/bluetooth/bluez.git/commit/?id=385f0f357d98ddc5a021c0951740571139169994]
+---
+ src/advertising.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/src/advertising.c b/src/advertising.c
+index bd121e525..2fc6f917d 100644
+--- a/src/advertising.c
++++ b/src/advertising.c
+@@ -759,10 +759,15 @@ static bool parse_discoverable(DBusMessageIter *iter,
+ 
+ 	dbus_message_iter_get_basic(iter, &discoverable);
+ 
++	/* For broadcast mode, need not add any flags
++	 * just return true without adding flags.
++	 */
+ 	if (discoverable)
+ 		flags = BT_AD_FLAG_GENERAL;
+-	else
++	else if (client->type != AD_TYPE_BROADCAST)
+ 		flags = 0x00;
++	else
++		return true;
+ 
+ 	if (!set_flags(client , flags))
+ 		goto fail;
+-- 
+2.34.1
+

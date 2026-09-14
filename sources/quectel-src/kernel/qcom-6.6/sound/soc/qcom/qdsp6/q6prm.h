@@ -1,7 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0 */
+//Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
+//Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
 
 #ifndef __Q6PRM_H__
 #define __Q6PRM_H__
+
+#define LPAIF_MI2S_MCLK 1
+#define LPAIF_MI2S_BCLK 2
+#define LPAIF_MI2S_ECLK 3
 
 /* Clock ID for Primary I2S IBIT */
 #define Q6PRM_LPASS_CLK_ID_PRI_MI2S_IBIT                          0x100
@@ -72,6 +78,20 @@
 #define Q6PRM_LPASS_CLK_ID_QUIN_TDM_IBIT			0x208
 /* Clock ID for QUINARY TDM EBIT */
 #define Q6PRM_LPASS_CLK_ID_QUIN_TDM_EBIT			0x209
+
+/* Clock ID for MCLK1 */
+#define Q6PRM_LPASS_CLK_ID_MCLK_1				0x300
+/* Clock ID for MCLK2 */
+#define Q6PRM_LPASS_CLK_ID_MCLK_2				0x301
+/* Clock ID for MCLK3 */
+#define Q6PRM_LPASS_CLK_ID_MCLK_3				0x302
+/* Clock ID for MCLK4 */
+#define Q6PRM_LPASS_CLK_ID_MCLK_4				0x303
+/* Clock ID for MCLK5 */
+#define Q6PRM_LPASS_CLK_ID_MCLK_5                               0x304
+
+/* Clock ID for Internal Digital Codec Core */
+#define Q6PRM_LPASS_CLK_ID_INTERNAL_DIGITAL_CODEC_CORE		0x303
 
 #define Q6PRM_LPASS_CLK_ID_WSA_CORE_MCLK			0x305
 #define Q6PRM_LPASS_CLK_ID_WSA_CORE_NPL_MCLK			0x306

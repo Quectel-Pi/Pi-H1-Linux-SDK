@@ -12,7 +12,7 @@ known security vulnerabilities, as tracked by the public
 database.
 
 The Yocto Project maintains a `list of known vulnerabilities
-<https://autobuilder.yocto.io/pub/non-release/patchmetrics/>`__
+<https://valkyrie.yocto.io/pub/non-release/patchmetrics/>`__
 for packages in Poky and OE-Core, tracking the evolution of the number of
 unpatched CVEs and the status of patches. Such information is available for
 the current development version and for each supported release.
@@ -62,37 +62,77 @@ found in ``build/tmp/deploy/cve``.
 
 For example the CVE check report for the ``flex-native`` recipe looks like::
 
-   $ cat poky/build/tmp/deploy/cve/flex-native
-   LAYER: meta
-   PACKAGE NAME: flex-native
-   PACKAGE VERSION: 2.6.4
-   CVE: CVE-2016-6354
-   CVE STATUS: Patched
-   CVE SUMMARY: Heap-based buffer overflow in the yy_get_next_buffer function in Flex before 2.6.1 might allow context-dependent attackers to cause a denial of service or possibly execute arbitrary code via vectors involving num_to_read.
-   CVSS v2 BASE SCORE: 7.5
-   CVSS v3 BASE SCORE: 9.8
-   VECTOR: NETWORK
-   MORE INFORMATION: https://nvd.nist.gov/vuln/detail/CVE-2016-6354
-
-   LAYER: meta
-   PACKAGE NAME: flex-native
-   PACKAGE VERSION: 2.6.4
-   CVE: CVE-2019-6293
-   CVE STATUS: Ignored
-   CVE SUMMARY: An issue was discovered in the function mark_beginning_as_normal in nfa.c in flex 2.6.4. There is a stack exhaustion problem caused by the mark_beginning_as_normal function making recursive calls to itself in certain scenarios involving lots of '*' characters. Remote attackers could leverage this vulnerability to cause a denial-of-service.
-   CVSS v2 BASE SCORE: 4.3
-   CVSS v3 BASE SCORE: 5.5
-   VECTOR: NETWORK
-   MORE INFORMATION: https://nvd.nist.gov/vuln/detail/CVE-2019-6293
+   $ cat ./tmp/deploy/cve/flex-native_cve.json
+   {
+     "version": "1",
+     "package": [
+       {
+         "name": "flex-native",
+         "layer": "meta",
+         "version": "2.6.4",
+         "products": [
+           {
+             "product": "flex",
+             "cvesInRecord": "No"
+           },
+           {
+             "product": "flex",
+             "cvesInRecord": "Yes"
+           }
+         ],
+         "issue": [
+           {
+             "id": "CVE-2006-0459",
+             "status": "Patched",
+             "link": "https://nvd.nist.gov/vuln/detail/CVE-2006-0459",
+             "summary": "flex.skl in Will Estes and John Millaway Fast Lexical Analyzer Generator (flex) before 2.5.33 does not allocate enough memory for grammars containing (1) REJECT statements or (2) trailing context rules, which causes flex to generate code that contains a buffer overflow that might allow context-dependent attackers to execute arbitrary code.",
+             "scorev2": "7.5",
+             "scorev3": "0.0",
+             "scorev4": "0.0",
+             "modified": "2024-11-21T00:06Z",
+             "vector": "NETWORK",
+             "vectorString": "AV:N/AC:L/Au:N/C:P/I:P/A:P",
+             "detail": "version-not-in-range"
+           },
+           {
+             "id": "CVE-2016-6354",
+             "status": "Patched",
+             "link": "https://nvd.nist.gov/vuln/detail/CVE-2016-6354",
+             "summary": "Heap-based buffer overflow in the yy_get_next_buffer function in Flex before 2.6.1 might allow context-dependent attackers to cause a denial of service or possibly execute arbitrary code via vectors involving num_to_read.",
+             "scorev2": "7.5",
+             "scorev3": "9.8",
+             "scorev4": "0.0",
+             "modified": "2024-11-21T02:55Z",
+             "vector": "NETWORK",
+             "vectorString": "AV:N/AC:L/Au:N/C:P/I:P/A:P",
+             "detail": "version-not-in-range"
+           },
+           {
+             "id": "CVE-2019-6293",
+             "status": "Ignored",
+             "link": "https://nvd.nist.gov/vuln/detail/CVE-2019-6293",
+             "summary": "An issue was discovered in the function mark_beginning_as_normal in nfa.c in flex 2.6.4. There is a stack exhaustion problem caused by the mark_beginning_as_normal function making recursive calls to itself in certain scenarios involving lots of '*' characters. Remote attackers could leverage this vulnerability to cause a denial-of-service.",
+             "scorev2": "4.3",
+             "scorev3": "5.5",
+             "scorev4": "0.0",
+             "modified": "2024-11-21T04:46Z",
+             "vector": "NETWORK",
+             "vectorString": "AV:N/AC:M/Au:N/C:N/I:N/A:P",
+             "detail": "upstream-wontfix",
+             "description": "there is stack exhaustion but no bug and it is building the parser, not running it, effectively similar to a compiler ICE. Upstream no plans to address this."
+           }
+         ]
+       }
+     ]
+   }
 
 For images, a summary of all recipes included in the image and their CVEs is also
-generated in textual and JSON formats. These ``.cve`` and ``.json`` reports can be found
+generated in the JSON format. These ``.json`` reports can be found
 in the ``tmp/deploy/images`` directory for each compiled image.
 
 At build time CVE check will also throw warnings about ``Unpatched`` CVEs::
 
-   WARNING: flex-2.6.4-r0 do_cve_check: Found unpatched CVE (CVE-2019-6293), for more information check /poky/build/tmp/work/core2-64-poky-linux/flex/2.6.4-r0/temp/cve.log
-   WARNING: libarchive-3.5.1-r0 do_cve_check: Found unpatched CVE (CVE-2021-36976), for more information check /poky/build/tmp/work/core2-64-poky-linux/libarchive/3.5.1-r0/temp/cve.log
+   WARNING: qemu-native-9.2.0-r0 do_cve_check: Found unpatched CVE (CVE-2023-1386)
 
 It is also possible to check the CVE status of individual packages as follows::
 
@@ -111,10 +151,10 @@ upstream `NIST CVE database <https://nvd.nist.gov/>`__.
 
 The variable supports using vendor and product names like this::
 
-   CVE_PRODUCT = "flex_project:flex"
+   CVE_PRODUCT = "flex_project:flex westes:flex"
 
-In this example the vendor name used in the CVE database is ``flex_project`` and the
-product is ``flex``. With this setting the ``flex`` recipe only maps to this specific
+In this example we have two possible vendors names,  ``flex_project`` and ``westes``,
+with the product name ``flex``. With this setting the ``flex`` recipe only maps to this specific
 product and not products from other vendors with same name ``flex``.
 
 Similarly, when the recipe version :term:`PV` is not compatible with software versions used by
@@ -129,38 +169,114 @@ NVD about CVE entries can be provided through the `NVD contact form <https://nvd
 Fixing vulnerabilities in recipes
 =================================
 
-If a CVE security issue impacts a software component, it can be fixed by updating to a newer
-version of the software component or by applying a patch. For Poky and OE-Core master branches, updating
-to a newer software component release with fixes is the best option, but patches can be applied
-if releases are not yet available.
+Suppose a CVE security issue impacts a software component. In that case, it can
+be fixed by updating to a newer version, by applying a patch, or by marking it
+as patched via :term:`CVE_STATUS` variable flag. For Poky and OE-Core master
+branches, updating to a more recent software component release with fixes is
+the best option, but patches can be applied if releases are not yet available.
 
-For stable branches, it is preferred to apply patches for the issues. For some software
-components minor version updates can also be applied if they are backwards compatible.
+For stable branches, we want to avoid API (Application Programming Interface)
+or ABI (Application Binary Interface) breakages. When submitting an update,
+a minor version update of a component is preferred if the version is
+backward-compatible. Many software components have backward-compatible stable
+versions, with a notable example of the Linux kernel. However, if the new
+version does or likely might introduce incompatibilities, extracting and
+backporting patches is preferred.
 
 Here is an example of fixing CVE security issues with patch files,
-an example from the :oe_layerindex:`ffmpeg recipe</layerindex/recipe/47350>`::
+an example from the :oe_layerindex:`ffmpeg recipe for dunfell </layerindex/recipe/122174>`::
 
    SRC_URI = "https://www.ffmpeg.org/releases/${BP}.tar.xz \
+              file://mips64_cpu_detection.patch \
+              file://CVE-2020-12284.patch \
               file://0001-libavutil-include-assembly-with-full-path-from-sourc.patch \
-              file://fix-CVE-2020-20446.patch \
-              file://fix-CVE-2020-20453.patch \
-              file://fix-CVE-2020-22015.patch \
-              file://fix-CVE-2020-22021.patch \
-              file://fix-CVE-2020-22033-CVE-2020-22019.patch \
-              file://fix-CVE-2021-33815.patch \
+              file://CVE-2021-3566.patch \
+              file://CVE-2021-38291.patch \
+              file://CVE-2022-1475.patch \
+              file://CVE-2022-3109.patch \
+              file://CVE-2022-3341.patch \
+              file://CVE-2022-48434.patch \
+          "
 
-A good practice is to include the CVE identifier in both the patch file name
-and inside the patch file commit message using the format::
+The recipe has both generic and security-related fixes. The CVE patch files are named
+according to the CVE they fix.
 
-   CVE: CVE-2020-22033
+When preparing the patch file, take the original patch from the upstream repository.
+Do not use patches from different distributions, except if it is the only available source.
+
+Modify the patch adding OE-related metadata. We will follow the example of the
+``CVE-2022-3341.patch``.
+
+The original `commit message <https://github.com/FFmpeg/FFmpeg/commit/9cf652cef49d74afe3d454f27d49eb1a1394951e.patch/>`__
+is::
+
+   From 9cf652cef49d74afe3d454f27d49eb1a1394951e Mon Sep 17 00:00:00 2001
+   From: Jiasheng Jiang <jiasheng@iscas.ac.cn>
+   Date: Wed, 23 Feb 2022 10:31:59 +0800
+   Subject: [PATCH] avformat/nutdec: Add check for avformat_new_stream
+
+   Check for failure of avformat_new_stream() and propagate
+   the error code.
+
+   Signed-off-by: Michael Niedermayer <michael@niedermayer.cc>
+   ---
+    libavformat/nutdec.c | 16 ++++++++++++----
+    1 file changed, 12 insertions(+), 4 deletions(-)
+
+
+For the correct operations of the ``cve-check``, it requires the CVE
+identification in a ``CVE:`` tag of the patch file commit message using
+the format::
+
+   CVE: CVE-2022-3341
+
+It is also recommended to add the ``Upstream-Status:`` tag with a link
+to the original patch and sign-off by people working on the backport.
+If there are any modifications to the original patch, note them in
+the ``Comments:`` tag.
+
+With the additional information, the header of the patch file in OE-core becomes::
+
+   From 9cf652cef49d74afe3d454f27d49eb1a1394951e Mon Sep 17 00:00:00 2001
+   From: Jiasheng Jiang <jiasheng@iscas.ac.cn>
+   Date: Wed, 23 Feb 2022 10:31:59 +0800
+   Subject: [PATCH] avformat/nutdec: Add check for avformat_new_stream
+
+   Check for failure of avformat_new_stream() and propagate
+   the error code.
+
+   Signed-off-by: Michael Niedermayer <michael@niedermayer.cc>
+
+   CVE: CVE-2022-3341
+
+   Upstream-Status: Backport [https://github.com/FFmpeg/FFmpeg/commit/9cf652cef49d74afe3d454f27d49eb1a1394951e]
+
+   Comments: Refreshed Hunk
+   Signed-off-by: Narpat Mali <narpat.mali@windriver.com>
+   Signed-off-by: Bhabu Bindu <bhabu.bindu@kpit.com>
+   ---
+    libavformat/nutdec.c | 16 ++++++++++++----
+    1 file changed, 12 insertions(+), 4 deletions(-)
+
+A good practice is to include the CVE identifier in the patch file name, the patch file
+commit message and optionally in the recipe commit message.
 
 CVE checker will then capture this information and change the CVE status to ``Patched``
 in the generated reports.
 
 If analysis shows that the CVE issue does not impact the recipe due to configuration, platform,
-version or other reasons, the CVE can be marked as ``Ignored`` using the :term:`CVE_CHECK_IGNORE` variable.
-As mentioned previously, if data in the CVE database is wrong, it is recommend to fix those
-issues in the CVE database directly.
+version or other reasons, the CVE can be marked as ``Ignored`` by using
+the :term:`CVE_STATUS` variable flag with appropriate reason which is mapped to ``Ignored``.
+The entry should have the format like::
+
+   CVE_STATUS[CVE-2016-10642] = "cpe-incorrect: This is specific to the npm package that installs cmake, so isn't relevant to OpenEmbedded"
+
+As mentioned previously, if data in the CVE database is wrong, it is recommended
+to fix those issues in the CVE database (NVD in the case of OE-core and Poky)
+directly.
+
+Note that if there are many CVEs with the same status and reason, those can be
+shared by using the :term:`CVE_STATUS_GROUPS` variable.
 
 Recipes can be completely skipped by CVE check by including the recipe name in
 the :term:`CVE_CHECK_SKIP_RECIPE` variable.
@@ -175,6 +291,8 @@ is found in the name of the file, the corresponding CVE is considered as patched
 Don't forget that if multiple CVE IDs are found in the filename, only the last
 one is considered. Then, the code looks for ``CVE: CVE-ID`` lines in the patch
 file. The found CVE IDs are also considered as patched.
+Additionally ``CVE_STATUS`` variable flags are parsed for reasons mapped to ``Patched``
+and these are also considered as patched.
 
 Then, the code looks up all the CVE IDs in the NIST database for all the
 products defined in :term:`CVE_PRODUCT`. Then, for each found CVE:
@@ -182,8 +300,9 @@ products defined in :term:`CVE_PRODUCT`. Then, for each found CVE:
 -  If the package name (:term:`PN`) is part of
    :term:`CVE_CHECK_SKIP_RECIPE`, it is considered as ``Patched``.
 
--  If the CVE ID is part of :term:`CVE_CHECK_IGNORE`, it is
-   set as ``Ignored``.
+-  If the CVE ID has status ``CVE_STATUS[<CVE ID>] = "ignored"`` or if it's set to
+   any reason which is mapped to status ``Ignored`` via ``CVE_CHECK_STATUSMAP``,
+   it is  set as ``Ignored``.
 
 -  If the CVE ID is part of the patched CVE for the recipe, it is
    already considered as ``Patched``.
@@ -195,7 +314,7 @@ products defined in :term:`CVE_PRODUCT`. Then, for each found CVE:
 The CVE database is stored in :term:`DL_DIR` and can be inspected using
 ``sqlite3`` command as follows::
 
-   sqlite3 downloads/CVE_CHECK/nvdcve_1.1.db .dump | grep CVE-2021-37462
+   sqlite3 downloads/CVE_CHECK/nvd*.db .dump | grep CVE-2021-37462
 
 When analyzing CVEs, it is recommended to:
 

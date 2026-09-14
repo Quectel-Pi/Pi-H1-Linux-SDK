@@ -1,0 +1,216 @@
+From 9bdc50538a9d454dccf69d0d86a08fb84e2e429c Mon Sep 17 00:00:00 2001
+From: Pratyush Brahma <quic_pbrahma@quicinc.com>
+Date: Thu, 23 Jan 2025 10:50:21 +0530
+Subject: [PATCH 2/2] PENDING: arm64: dts: qcom: qcs9xxx: Update memory map for
+ qcs9xxx boards
+
+Update the memory map for qcs9xxx series boards to update the
+new carveouts and base addresses of existing carveouts
+as per iot memory map.
+
+Signed-off-by: Pratyush Brahma <quic_pbrahma@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/qcs9075-rb8.dts      |   3 +-
+ arch/arm64/boot/dts/qcom/qcs9075-ride-r3.dts  |   3 +-
+ arch/arm64/boot/dts/qcom/qcs9075-ride.dts     |   3 +-
+ arch/arm64/boot/dts/qcom/qcs9100-ride-r3.dts  |   2 +
+ arch/arm64/boot/dts/qcom/qcs9100-ride.dts     |   1 +
+ .../dts/qcom/qcs9xxx-reserved-memory.dtsi     | 106 ++++++++++++++++++
+ 6 files changed, 115 insertions(+), 3 deletions(-)
+ create mode 100644 arch/arm64/boot/dts/qcom/qcs9xxx-reserved-memory.dtsi
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts b/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
+index 1c944037a005..214970878f48 100644
+--- a/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
++++ b/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
+@@ -1,6 +1,6 @@
+ // SPDX-License-Identifier: BSD-3-Clause
+ /*
+- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2024,2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ /dts-v1/;
+ 
+@@ -9,6 +9,7 @@
+ 
+ #include "sa8775p.dtsi"
+ #include "sa8775p-pmics.dtsi"
++#include "qcs9xxx-reserved-memory.dtsi"
+ 
+ / {
+ 	model = "Qualcomm Technologies, Inc. Robotics RB8";
+diff --git a/arch/arm64/boot/dts/qcom/qcs9075-ride-r3.dts b/arch/arm64/boot/dts/qcom/qcs9075-ride-r3.dts
+index d9a8956d3a76..cec9670d00b7 100644
+--- a/arch/arm64/boot/dts/qcom/qcs9075-ride-r3.dts
++++ b/arch/arm64/boot/dts/qcom/qcs9075-ride-r3.dts
+@@ -1,10 +1,11 @@
+ // SPDX-License-Identifier: BSD-3-Clause
+ /*
+- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2024,2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ /dts-v1/;
+ 
+ #include "sa8775p-ride.dtsi"
++#include "qcs9xxx-reserved-memory.dtsi"
+ 
+ / {
+ 	model = "Qualcomm Technologies, Inc. QCS9075 Ride Rev3";
+diff --git a/arch/arm64/boot/dts/qcom/qcs9075-ride.dts b/arch/arm64/boot/dts/qcom/qcs9075-ride.dts
+index 3b524359a72d..5cef9c308dc7 100644
+--- a/arch/arm64/boot/dts/qcom/qcs9075-ride.dts
++++ b/arch/arm64/boot/dts/qcom/qcs9075-ride.dts
+@@ -1,10 +1,11 @@
+ // SPDX-License-Identifier: BSD-3-Clause
+ /*
+- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2024,2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ /dts-v1/;
+ 
+ #include "sa8775p-ride.dtsi"
++#include "qcs9xxx-reserved-memory.dtsi"
+ 
+ / {
+ 	model = "Qualcomm Technologies, Inc. QCS9075 Ride";
+diff --git a/arch/arm64/boot/dts/qcom/qcs9100-ride-r3.dts b/arch/arm64/boot/dts/qcom/qcs9100-ride-r3.dts
+index cd7f182b81e2..7c7dca96aae0 100644
+--- a/arch/arm64/boot/dts/qcom/qcs9100-ride-r3.dts
++++ b/arch/arm64/boot/dts/qcom/qcs9100-ride-r3.dts
+@@ -5,6 +5,8 @@
+ /dts-v1/;
+ 
+ #include "sa8775p-ride-r3.dts"
++#include "qcs9xxx-reserved-memory.dtsi"
++
+ / {
+ 	model = "Qualcomm QCS9100 Ride Rev3";
+ 	compatible = "qcom,qcs9100-ride-r3", "qcom,qcs9100", "qcom,sa8775p";
+diff --git a/arch/arm64/boot/dts/qcom/qcs9100-ride.dts b/arch/arm64/boot/dts/qcom/qcs9100-ride.dts
+index 73cae96a5361..907b2891301c 100644
+--- a/arch/arm64/boot/dts/qcom/qcs9100-ride.dts
++++ b/arch/arm64/boot/dts/qcom/qcs9100-ride.dts
+@@ -5,6 +5,7 @@
+ /dts-v1/;
+ 
+ #include "sa8775p-ride.dts"
++#include "qcs9xxx-reserved-memory.dtsi"
+ / {
+ 	model = "Qualcomm QCS9100 Ride";
+ 	compatible = "qcom,qcs9100-ride", "qcom,qcs9100", "qcom,sa8775p";
+diff --git a/arch/arm64/boot/dts/qcom/qcs9xxx-reserved-memory.dtsi b/arch/arm64/boot/dts/qcom/qcs9xxx-reserved-memory.dtsi
+new file mode 100644
+index 000000000000..d7d6c5f4c5b2
+--- /dev/null
++++ b/arch/arm64/boot/dts/qcom/qcs9xxx-reserved-memory.dtsi
+@@ -0,0 +1,106 @@
++// SPDX-License-Identifier: BSD-3-Clause
++/*
++ * Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++
++/delete-node/ &pil_adsp_mem;
++/delete-node/ &pil_gdsp0_mem;
++/delete-node/ &pil_gdsp1_mem;
++/delete-node/ &pil_cdsp0_mem;
++/delete-node/ &pil_gpu_mem;
++/delete-node/ &pil_cdsp1_mem;
++/delete-node/ &pil_cvp_mem;
++/delete-node/ &pil_video_mem;
++/delete-node/ &audio_mdf_mem;
++/delete-node/ &trusted_apps_mem;
++/delete-node/ &hyptz_reserved_mem;
++/delete-node/ &tz_ffi_mem;
++
++/ {
++	reserved-memory {
++		#address-cells = <2>;
++		#size-cells = <2>;
++		ranges;
++
++		gunyah_md_mem: gunyah-md@91a80000 {
++			reg = <0x0 0x91a80000 0x0 0x80000>;
++			no-map;
++		};
++
++		pil_adsp_mem: pil-adsp@95900000 {
++			reg = <0x0 0x95900000 0x0 0x1e00000>;
++			no-map;
++		};
++
++		q6_adsp_dtb_mem: q6-adsp-dtb@97700000 {
++			reg = <0x0 0x97700000 0x0 0x80000>;
++			no-map;
++		};
++
++		q6_gdsp0_dtb_mem: q6-gdsp0-dtb@97780000 {
++			reg = <0x0 0x97780000 0x0 0x80000>;
++			no-map;
++		};
++
++		pil_gdsp0_mem: pil-gdsp0@97800000 {
++			reg = <0x0 0x97800000 0x0 0x1e00000>;
++			no-map;
++		};
++
++		pil_gdsp1_mem: pil-gdsp1@99600000 {
++			reg = <0x0 0x99600000 0x0 0x1e00000>;
++			no-map;
++		};
++
++		q6_gdsp1_dtb_mem: q6-gdsp1-dtb@9b400000 {
++			reg = <0x0 0x9b400000 0x0 0x80000>;
++			no-map;
++		};
++
++		q6_cdsp0_dtb_mem: q6-cdsp0-dtb@9b480000 {
++			reg = <0x0 0x9b480000 0x0 0x80000>;
++			no-map;
++		};
++
++		pil_cdsp0_mem: pil-cdsp0@9b500000 {
++			reg = <0x0 0x9b500000 0x0 0x1e00000>;
++			no-map;
++		};
++
++		pil_gpu_mem: pil-gpu@9d300000 {
++			reg = <0x0 0x9d300000 0x0 0x2000>;
++			no-map;
++		};
++
++		q6_cdsp1_dtb_mem: q6-cdsp1-dtb@9d380000 {
++			reg = <0x0 0x9d380000 0x0 0x80000>;
++			no-map;
++		};
++
++		pil_cdsp1_mem: pil-cdsp1@9d400000 {
++			reg = <0x0 0x9d400000 0x0 0x1e00000>;
++			no-map;
++		};
++
++		pil_cvp_mem: pil-cvp@9f200000 {
++			reg = <0x0 0x9f200000 0x0 0x700000>;
++			no-map;
++		};
++
++		pil_video_mem: pil-video@9f900000 {
++			reg = <0x0 0x9f900000 0x0 0x1000000>;
++			no-map;
++		};
++
++		trusted_apps_mem: trusted-apps@d1900000 {
++			reg = <0x0 0xd1900000 0x0 0x1c00000>;
++			no-map;
++		};
++	};
++
++	firmware {
++		scm {
++			/delete-property/ memory-region;
++		};
++	};
++};
+-- 
+2.46.0
+

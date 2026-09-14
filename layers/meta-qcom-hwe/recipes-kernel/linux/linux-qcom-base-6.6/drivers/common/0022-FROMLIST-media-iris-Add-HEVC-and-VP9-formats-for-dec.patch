@@ -1,0 +1,301 @@
+From 6d867239608d11f962d3b18bdc3e251c62ae9c4e Mon Sep 17 00:00:00 2001
+From: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Date: Fri, 9 May 2025 14:09:08 +0530
+Subject: [PATCH 22/26] FROMLIST: media: iris: Add HEVC and VP9 formats for
+ decoder
+
+Extend the decoder driver's supported formats to include HEVC (H.265)
+and VP9. This change updates the format enumeration (VIDIOC_ENUM_FMT)
+and allows setting these formats via VIDIOC_S_FMT.
+
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Acked-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-HDK
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-HDK
+Signed-off-by: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-media/20250509-video-iris-hevc-vp9-v5-22-59b4ff7d331c@quicinc.com/]
+---
+ .../qcom/iris/iris_hfi_gen1_command.c         | 15 +++-
+ .../qcom/iris/iris_hfi_gen1_defines.h         |  2 +
+ .../qcom/iris/iris_hfi_gen2_command.c         | 14 +++-
+ .../qcom/iris/iris_hfi_gen2_defines.h         |  3 +
+ .../media/platform/qcom/iris/iris_instance.h  |  2 +
+ drivers/media/platform/qcom/iris/iris_vdec.c  | 69 +++++++++++++++++--
+ drivers/media/platform/qcom/iris/iris_vdec.h  | 11 +++
+ drivers/media/platform/qcom/iris/iris_vidc.c  |  3 -
+ 8 files changed, 108 insertions(+), 11 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c b/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
+index bd9d86220e61..dbb1b1dab097 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen1_command.c
+@@ -88,16 +88,29 @@ static int iris_hfi_gen1_sys_pc_prep(struct iris_core *core)
+ static int iris_hfi_gen1_session_open(struct iris_inst *inst)
+ {
+ 	struct hfi_session_open_pkt packet;
++	u32 codec = 0;
+ 	int ret;
+ 
+ 	if (inst->state != IRIS_INST_DEINIT)
+ 		return -EALREADY;
+ 
++	switch (inst->codec) {
++	case V4L2_PIX_FMT_H264:
++		codec = HFI_VIDEO_CODEC_H264;
++		break;
++	case V4L2_PIX_FMT_HEVC:
++		codec = HFI_VIDEO_CODEC_HEVC;
++		break;
++	case V4L2_PIX_FMT_VP9:
++		codec = HFI_VIDEO_CODEC_VP9;
++		break;
++	}
++
+ 	packet.shdr.hdr.size = sizeof(struct hfi_session_open_pkt);
+ 	packet.shdr.hdr.pkt_type = HFI_CMD_SYS_SESSION_INIT;
+ 	packet.shdr.session_id = inst->session_id;
+ 	packet.session_domain = HFI_SESSION_TYPE_DEC;
+-	packet.session_codec = HFI_VIDEO_CODEC_H264;
++	packet.session_codec = codec;
+ 
+ 	reinit_completion(&inst->completion);
+ 
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen1_defines.h b/drivers/media/platform/qcom/iris/iris_hfi_gen1_defines.h
+index adffcead58ea..d4d119ca98b0 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen1_defines.h
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen1_defines.h
+@@ -13,6 +13,8 @@
+ #define HFI_SESSION_TYPE_DEC				2
+ 
+ #define HFI_VIDEO_CODEC_H264				0x00000002
++#define HFI_VIDEO_CODEC_HEVC				0x00002000
++#define HFI_VIDEO_CODEC_VP9				0x00004000
+ 
+ #define HFI_ERR_NONE					0x0
+ 
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen2_command.c b/drivers/media/platform/qcom/iris/iris_hfi_gen2_command.c
+index 802fa62c26eb..f23be2340658 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen2_command.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen2_command.c
+@@ -416,7 +416,19 @@ static int iris_hfi_gen2_session_set_config_params(struct iris_inst *inst, u32 p
+ static int iris_hfi_gen2_session_set_codec(struct iris_inst *inst)
+ {
+ 	struct iris_inst_hfi_gen2 *inst_hfi_gen2 = to_iris_inst_hfi_gen2(inst);
+-	u32 codec = HFI_CODEC_DECODE_AVC;
++	u32 codec = 0;
++
++	switch (inst->codec) {
++	case V4L2_PIX_FMT_H264:
++		codec = HFI_CODEC_DECODE_AVC;
++		break;
++	case V4L2_PIX_FMT_HEVC:
++		codec = HFI_CODEC_DECODE_HEVC;
++		break;
++	case V4L2_PIX_FMT_VP9:
++		codec = HFI_CODEC_DECODE_VP9;
++		break;
++	}
+ 
+ 	iris_hfi_gen2_packet_session_property(inst,
+ 					      HFI_PROP_CODEC,
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h b/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h
+index 666061a612c3..283d2f27e4c8 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h
+@@ -104,6 +104,9 @@ enum hfi_color_format {
+ enum hfi_codec_type {
+ 	HFI_CODEC_DECODE_AVC			= 1,
+ 	HFI_CODEC_ENCODE_AVC			= 2,
++	HFI_CODEC_DECODE_HEVC			= 3,
++	HFI_CODEC_ENCODE_HEVC			= 4,
++	HFI_CODEC_DECODE_VP9			= 5,
+ };
+ 
+ enum hfi_picture_type {
+diff --git a/drivers/media/platform/qcom/iris/iris_instance.h b/drivers/media/platform/qcom/iris/iris_instance.h
+index 5ec6368b2af7..0e1f5799b72d 100644
+--- a/drivers/media/platform/qcom/iris/iris_instance.h
++++ b/drivers/media/platform/qcom/iris/iris_instance.h
+@@ -43,6 +43,7 @@
+  * @sequence_out: a sequence counter for output queue
+  * @tss: timestamp metadata
+  * @metadata_idx: index for metadata buffer
++ * @codec: codec type
+  * @last_buffer_dequeued: a flag to indicate that last buffer is sent by driver
+  */
+ 
+@@ -75,6 +76,7 @@ struct iris_inst {
+ 	u32				sequence_out;
+ 	struct iris_ts_metadata		tss[VIDEO_MAX_FRAME];
+ 	u32				metadata_idx;
++	u32				codec;
+ 	bool				last_buffer_dequeued;
+ };
+ 
+diff --git a/drivers/media/platform/qcom/iris/iris_vdec.c b/drivers/media/platform/qcom/iris/iris_vdec.c
+index ce97c555192a..d670b51c5839 100644
+--- a/drivers/media/platform/qcom/iris/iris_vdec.c
++++ b/drivers/media/platform/qcom/iris/iris_vdec.c
+@@ -32,6 +32,7 @@ int iris_vdec_inst_init(struct iris_inst *inst)
+ 	f->fmt.pix_mp.width = DEFAULT_WIDTH;
+ 	f->fmt.pix_mp.height = DEFAULT_HEIGHT;
+ 	f->fmt.pix_mp.pixelformat = V4L2_PIX_FMT_H264;
++	inst->codec = f->fmt.pix_mp.pixelformat;
+ 	f->fmt.pix_mp.num_planes = 1;
+ 	f->fmt.pix_mp.plane_fmt[0].bytesperline = 0;
+ 	f->fmt.pix_mp.plane_fmt[0].sizeimage = iris_get_buffer_size(inst, BUF_INPUT);
+@@ -67,14 +68,67 @@ void iris_vdec_inst_deinit(struct iris_inst *inst)
+ 	kfree(inst->fmt_src);
+ }
+ 
++static const struct iris_fmt iris_vdec_formats[] = {
++	[IRIS_FMT_H264] = {
++		.pixfmt = V4L2_PIX_FMT_H264,
++		.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
++	},
++	[IRIS_FMT_HEVC] = {
++		.pixfmt = V4L2_PIX_FMT_HEVC,
++		.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
++	},
++	[IRIS_FMT_VP9] = {
++		.pixfmt = V4L2_PIX_FMT_VP9,
++		.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
++	},
++};
++
++static const struct iris_fmt *
++find_format(struct iris_inst *inst, u32 pixfmt, u32 type)
++{
++	unsigned int size = ARRAY_SIZE(iris_vdec_formats);
++	const struct iris_fmt *fmt = iris_vdec_formats;
++	unsigned int i;
++
++	for (i = 0; i < size; i++) {
++		if (fmt[i].pixfmt == pixfmt)
++			break;
++	}
++
++	if (i == size || fmt[i].type != type)
++		return NULL;
++
++	return &fmt[i];
++}
++
++static const struct iris_fmt *
++find_format_by_index(struct iris_inst *inst, u32 index, u32 type)
++{
++	const struct iris_fmt *fmt = iris_vdec_formats;
++	unsigned int size = ARRAY_SIZE(iris_vdec_formats);
++
++	if (index >= size || fmt[index].type != type)
++		return NULL;
++
++	return &fmt[index];
++}
++
+ int iris_vdec_enum_fmt(struct iris_inst *inst, struct v4l2_fmtdesc *f)
+ {
++	const struct iris_fmt *fmt;
++
+ 	switch (f->type) {
+ 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
+-		f->pixelformat = V4L2_PIX_FMT_H264;
++		fmt = find_format_by_index(inst, f->index, f->type);
++		if (!fmt)
++			return -EINVAL;
++
++		f->pixelformat = fmt->pixfmt;
+ 		f->flags = V4L2_FMT_FLAG_COMPRESSED | V4L2_FMT_FLAG_DYN_RESOLUTION;
+ 		break;
+ 	case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
++		if (f->index)
++			return -EINVAL;
+ 		f->pixelformat = V4L2_PIX_FMT_NV12;
+ 		break;
+ 	default:
+@@ -88,13 +142,15 @@ int iris_vdec_try_fmt(struct iris_inst *inst, struct v4l2_format *f)
+ {
+ 	struct v4l2_pix_format_mplane *pixmp = &f->fmt.pix_mp;
+ 	struct v4l2_m2m_ctx *m2m_ctx = inst->m2m_ctx;
++	const struct iris_fmt *fmt;
+ 	struct v4l2_format *f_inst;
+ 	struct vb2_queue *src_q;
+ 
+ 	memset(pixmp->reserved, 0, sizeof(pixmp->reserved));
++	fmt = find_format(inst, pixmp->pixelformat, f->type);
+ 	switch (f->type) {
+ 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
+-		if (f->fmt.pix_mp.pixelformat != V4L2_PIX_FMT_H264) {
++		if (!fmt) {
+ 			f_inst = inst->fmt_src;
+ 			f->fmt.pix_mp.width = f_inst->fmt.pix_mp.width;
+ 			f->fmt.pix_mp.height = f_inst->fmt.pix_mp.height;
+@@ -102,7 +158,7 @@ int iris_vdec_try_fmt(struct iris_inst *inst, struct v4l2_format *f)
+ 		}
+ 		break;
+ 	case V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE:
+-		if (f->fmt.pix_mp.pixelformat != V4L2_PIX_FMT_NV12) {
++		if (!fmt) {
+ 			f_inst = inst->fmt_dst;
+ 			f->fmt.pix_mp.pixelformat = f_inst->fmt.pix_mp.pixelformat;
+ 			f->fmt.pix_mp.width = f_inst->fmt.pix_mp.width;
+@@ -145,13 +201,14 @@ int iris_vdec_s_fmt(struct iris_inst *inst, struct v4l2_format *f)
+ 
+ 	switch (f->type) {
+ 	case V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE:
+-		if (f->fmt.pix_mp.pixelformat != V4L2_PIX_FMT_H264)
++		if (!(find_format(inst, f->fmt.pix_mp.pixelformat, f->type)))
+ 			return -EINVAL;
+ 
+ 		fmt = inst->fmt_src;
+ 		fmt->type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+-
+-		codec_align = DEFAULT_CODEC_ALIGNMENT;
++		fmt->fmt.pix_mp.pixelformat = f->fmt.pix_mp.pixelformat;
++		inst->codec = fmt->fmt.pix_mp.pixelformat;
++		codec_align = inst->codec == V4L2_PIX_FMT_HEVC ? 32 : 16;
+ 		fmt->fmt.pix_mp.width = ALIGN(f->fmt.pix_mp.width, codec_align);
+ 		fmt->fmt.pix_mp.height = ALIGN(f->fmt.pix_mp.height, codec_align);
+ 		fmt->fmt.pix_mp.num_planes = 1;
+diff --git a/drivers/media/platform/qcom/iris/iris_vdec.h b/drivers/media/platform/qcom/iris/iris_vdec.h
+index b24932dc511a..cd7aab66dc7c 100644
+--- a/drivers/media/platform/qcom/iris/iris_vdec.h
++++ b/drivers/media/platform/qcom/iris/iris_vdec.h
+@@ -8,6 +8,17 @@
+ 
+ struct iris_inst;
+ 
++enum iris_fmt_type {
++	IRIS_FMT_H264,
++	IRIS_FMT_HEVC,
++	IRIS_FMT_VP9,
++};
++
++struct iris_fmt {
++	u32 pixfmt;
++	u32 type;
++};
++
+ int iris_vdec_inst_init(struct iris_inst *inst);
+ void iris_vdec_inst_deinit(struct iris_inst *inst);
+ int iris_vdec_enum_fmt(struct iris_inst *inst, struct v4l2_fmtdesc *f);
+diff --git a/drivers/media/platform/qcom/iris/iris_vidc.c b/drivers/media/platform/qcom/iris/iris_vidc.c
+index a8144595cc78..c417e8c31f80 100644
+--- a/drivers/media/platform/qcom/iris/iris_vidc.c
++++ b/drivers/media/platform/qcom/iris/iris_vidc.c
+@@ -278,9 +278,6 @@ static int iris_enum_fmt(struct file *filp, void *fh, struct v4l2_fmtdesc *f)
+ {
+ 	struct iris_inst *inst = iris_get_inst(filp, NULL);
+ 
+-	if (f->index)
+-		return -EINVAL;
+-
+ 	return iris_vdec_enum_fmt(inst, f);
+ }
+ 
+-- 
+2.34.1
+

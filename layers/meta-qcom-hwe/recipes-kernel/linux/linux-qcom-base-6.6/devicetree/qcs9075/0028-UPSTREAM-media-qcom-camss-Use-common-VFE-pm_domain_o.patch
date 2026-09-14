@@ -1,0 +1,272 @@
+From 86879a35087d90b204abe83807a15a3dfe636106 Mon Sep 17 00:00:00 2001
+From: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Date: Thu, 23 Nov 2023 17:03:02 +0000
+Subject: [PATCH 28/42] UPSTREAM: media: qcom: camss: Use common VFE
+ pm_domain_on/pm_domain_off where applicable
+
+For the various versions of VFE we have a boiler-plate
+pm_domain_on/pm_domain_off callback pair of the general form.
+
+- Error check.
+  Not always done but applicable to all.
+
+- device_link_add (DL_FLAG_STATELESS | DL_FLAG_PM_RUNTIME |
+                   DL_FLAG_RPM_ACTIVE);
+
+- Error check returning -EINVAL on error.
+
+- Return 0
+
+Reduce the pattern down to a common callback. VFE 4.1 is a special case
+which to me also indicates that it is worthwhile maintaining an indirection
+for the vfe_pm_domain_{on|off} for now.
+
+Otherwise lets chuck out a bunch of needlessly replicated code.
+
+Reviewed-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Suggested-by: Matti Lehtimäki <matti.lehtimaki@gmail.com>
+Tested-by: Matti Lehtimäki <matti.lehtimaki@gmail.com>
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git eb73facec2c261c92ad271e87ee37894e0bef9a8]
+---
+ .../media/platform/qcom/camss/camss-vfe-4-1.c |  8 ++---
+ .../media/platform/qcom/camss/camss-vfe-4-7.c | 31 ----------------
+ .../media/platform/qcom/camss/camss-vfe-4-8.c | 28 ---------------
+ .../media/platform/qcom/camss/camss-vfe-480.c | 35 -------------------
+ drivers/media/platform/qcom/camss/camss-vfe.c | 34 ++++++++++++++++++
+ drivers/media/platform/qcom/camss/camss-vfe.h | 12 +++++++
+ 6 files changed, 50 insertions(+), 98 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe-4-1.c b/drivers/media/platform/qcom/camss/camss-vfe-4-1.c
+index 7ebb94537ab6..1bd3a6ef1d04 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe-4-1.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe-4-1.c
+@@ -936,7 +936,7 @@ static irqreturn_t vfe_isr(int irq, void *dev)
+  * vfe_pm_domain_off - Disable power domains specific to this VFE.
+  * @vfe: VFE Device
+  */
+-static void vfe_pm_domain_off(struct vfe_device *vfe)
++static void vfe_4_1_pm_domain_off(struct vfe_device *vfe)
+ {
+ 	/* nop */
+ }
+@@ -945,7 +945,7 @@ static void vfe_pm_domain_off(struct vfe_device *vfe)
+  * vfe_pm_domain_on - Enable power domains specific to this VFE.
+  * @vfe: VFE Device
+  */
+-static int vfe_pm_domain_on(struct vfe_device *vfe)
++static int vfe_4_1_pm_domain_on(struct vfe_device *vfe)
+ {
+ 	return 0;
+ }
+@@ -999,8 +999,8 @@ const struct vfe_hw_ops vfe_ops_4_1 = {
+ 	.hw_version = vfe_hw_version,
+ 	.isr_read = vfe_isr_read,
+ 	.isr = vfe_isr,
+-	.pm_domain_off = vfe_pm_domain_off,
+-	.pm_domain_on = vfe_pm_domain_on,
++	.pm_domain_off = vfe_4_1_pm_domain_off,
++	.pm_domain_on = vfe_4_1_pm_domain_on,
+ 	.reg_update_clear = vfe_reg_update_clear,
+ 	.reg_update = vfe_reg_update,
+ 	.subdev_init = vfe_subdev_init,
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe-4-7.c b/drivers/media/platform/qcom/camss/camss-vfe-4-7.c
+index b968d0579bbc..ce0719106bd3 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe-4-7.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe-4-7.c
+@@ -1103,37 +1103,6 @@ static void vfe_isr_read(struct vfe_device *vfe, u32 *value0, u32 *value1)
+ 	writel_relaxed(VFE_0_IRQ_CMD_GLOBAL_CLEAR, vfe->base + VFE_0_IRQ_CMD);
+ }
+ 
+-/*
+- * vfe_pm_domain_off - Disable power domains specific to this VFE.
+- * @vfe: VFE Device
+- */
+-static void vfe_pm_domain_off(struct vfe_device *vfe)
+-{
+-	if (!vfe)
+-		return;
+-
+-	device_link_del(vfe->genpd_link);
+-}
+-
+-/*
+- * vfe_pm_domain_on - Enable power domains specific to this VFE.
+- * @vfe: VFE Device
+- */
+-static int vfe_pm_domain_on(struct vfe_device *vfe)
+-{
+-	struct camss *camss = vfe->camss;
+-
+-	vfe->genpd_link = device_link_add(camss->dev, vfe->genpd, DL_FLAG_STATELESS |
+-					  DL_FLAG_PM_RUNTIME | DL_FLAG_RPM_ACTIVE);
+-
+-	if (!vfe->genpd_link) {
+-		dev_err(vfe->camss->dev, "Failed to add VFE#%d to power domain\n", vfe->id);
+-		return -EINVAL;
+-	}
+-
+-	return 0;
+-}
+-
+ static void vfe_violation_read(struct vfe_device *vfe)
+ {
+ 	u32 violation = readl_relaxed(vfe->base + VFE_0_VIOLATION_STATUS);
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe-4-8.c b/drivers/media/platform/qcom/camss/camss-vfe-4-8.c
+index 5e76d6efc850..6b59c8107a3c 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe-4-8.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe-4-8.c
+@@ -1093,34 +1093,6 @@ static void vfe_isr_read(struct vfe_device *vfe, u32 *value0, u32 *value1)
+ 	writel_relaxed(VFE_0_IRQ_CMD_GLOBAL_CLEAR, vfe->base + VFE_0_IRQ_CMD);
+ }
+ 
+-/*
+- * vfe_pm_domain_off - Disable power domains specific to this VFE.
+- * @vfe: VFE Device
+- */
+-static void vfe_pm_domain_off(struct vfe_device *vfe)
+-{
+-	device_link_del(vfe->genpd_link);
+-}
+-
+-/*
+- * vfe_pm_domain_on - Enable power domains specific to this VFE.
+- * @vfe: VFE Device
+- */
+-static int vfe_pm_domain_on(struct vfe_device *vfe)
+-{
+-	struct camss *camss = vfe->camss;
+-
+-	vfe->genpd_link = device_link_add(camss->dev, vfe->genpd, DL_FLAG_STATELESS |
+-					  DL_FLAG_PM_RUNTIME | DL_FLAG_RPM_ACTIVE);
+-
+-	if (!vfe->genpd_link) {
+-		dev_err(vfe->camss->dev, "Failed to add VFE#%d to power domain\n", vfe->id);
+-		return -EINVAL;
+-	}
+-
+-	return 0;
+-}
+-
+ static void vfe_violation_read(struct vfe_device *vfe)
+ {
+ 	u32 violation = readl_relaxed(vfe->base + VFE_0_VIOLATION_STATUS);
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe-480.c b/drivers/media/platform/qcom/camss/camss-vfe-480.c
+index f299b010a6fd..d51d57108d5e 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe-480.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe-480.c
+@@ -452,41 +452,6 @@ static void vfe_isr_wm_done(struct vfe_device *vfe, u8 wm)
+ 	spin_unlock_irqrestore(&vfe->output_lock, flags);
+ }
+ 
+-/*
+- * vfe_pm_domain_off - Disable power domains specific to this VFE.
+- * @vfe: VFE Device
+- */
+-static void vfe_pm_domain_off(struct vfe_device *vfe)
+-{
+-	struct camss *camss = vfe->camss;
+-
+-	if (vfe->id >= camss->res->vfe_num)
+-		return;
+-
+-	device_link_del(vfe->genpd_link);
+-}
+-
+-/*
+- * vfe_pm_domain_on - Enable power domains specific to this VFE.
+- * @vfe: VFE Device
+- */
+-static int vfe_pm_domain_on(struct vfe_device *vfe)
+-{
+-	struct camss *camss = vfe->camss;
+-
+-	if (vfe->id >= camss->res->vfe_num)
+-		return 0;
+-
+-	vfe->genpd_link = device_link_add(camss->dev, vfe->genpd,
+-					  DL_FLAG_STATELESS |
+-					  DL_FLAG_PM_RUNTIME |
+-					  DL_FLAG_RPM_ACTIVE);
+-	if (!vfe->genpd_link)
+-		return -EINVAL;
+-
+-	return 0;
+-}
+-
+ /*
+  * vfe_queue_buffer - Add empty buffer
+  * @vid: Video device structure
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.c b/drivers/media/platform/qcom/camss/camss-vfe.c
+index 2000c645d91a..acd9002b8b0b 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c
+@@ -586,6 +586,40 @@ void vfe_isr_reset_ack(struct vfe_device *vfe)
+ 	complete(&vfe->reset_complete);
+ }
+ 
++/*
++ * vfe_pm_domain_off - Disable power domains specific to this VFE.
++ * @vfe: VFE Device
++ */
++void vfe_pm_domain_off(struct vfe_device *vfe)
++{
++	if (!vfe->genpd)
++		return;
++
++	device_link_del(vfe->genpd_link);
++	vfe->genpd_link = NULL;
++}
++
++/*
++ * vfe_pm_domain_on - Enable power domains specific to this VFE.
++ * @vfe: VFE Device
++ */
++int vfe_pm_domain_on(struct vfe_device *vfe)
++{
++	struct camss *camss = vfe->camss;
++
++	if (!vfe->genpd)
++		return 0;
++
++	vfe->genpd_link = device_link_add(camss->dev, vfe->genpd,
++					  DL_FLAG_STATELESS |
++					  DL_FLAG_PM_RUNTIME |
++					  DL_FLAG_RPM_ACTIVE);
++	if (!vfe->genpd_link)
++		return -EINVAL;
++
++	return 0;
++}
++
+ static int vfe_match_clock_names(struct vfe_device *vfe,
+ 				 struct camss_clock *clock)
+ {
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.h b/drivers/media/platform/qcom/camss/camss-vfe.h
+index 16ac469c48f9..4a80ae612771 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.h
++++ b/drivers/media/platform/qcom/camss/camss-vfe.h
+@@ -210,6 +210,18 @@ int vfe_reset(struct vfe_device *vfe);
+  */
+ int vfe_disable(struct vfe_line *line);
+ 
++/*
++ * vfe_pm_domain_off - Disable power domains specific to this VFE.
++ * @vfe: VFE Device
++ */
++void vfe_pm_domain_off(struct vfe_device *vfe);
++
++/*
++ * vfe_pm_domain_on - Enable power domains specific to this VFE.
++ * @vfe: VFE Device
++ */
++int vfe_pm_domain_on(struct vfe_device *vfe);
++
+ extern const struct camss_formats vfe_formats_rdi_8x16;
+ extern const struct camss_formats vfe_formats_pix_8x16;
+ extern const struct camss_formats vfe_formats_rdi_8x96;
+-- 
+2.25.1
+

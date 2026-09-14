@@ -1,0 +1,186 @@
+From d47f9242dbf7f2b7d2c9fb44c9db8d71c90654ef Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:32:09 -0800
+Subject: [PATCH 135/146] FROMLIST: drm/msm: initialize DRM MST encoders for DP
+ controllers
+
+Initiliaze a DPMST encoder for each  MST capable DP controller
+and the number of encoders it supports depends on the number
+of streams it supports. Replace the opencoded instances of max_stream
+with the newly introduced API to centralize the usage.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-38-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.h |  2 ++
+ drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c     | 23 +++++++++++++++++-
+ drivers/gpu/drm/msm/dp/dp_display.c         | 26 +++++++++++++++++----
+ drivers/gpu/drm/msm/msm_drv.h               | 14 +++++++++++
+ 4 files changed, 59 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.h b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.h
+index 76be77e30954..c35c8745f6a5 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.h
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.h
+@@ -26,6 +26,7 @@
+  * @h_tile_instance:    Controller instance used per tile. Number of elements is
+  *                      based on num_of_h_tiles
+  * @is_cmd_mode		Boolean to indicate if the CMD mode is requested
++ * @stream_id		stream id for which the interface needs to be acquired
+  * @is_te_using_watchdog_timer:  Boolean to indicate watchdog TE is
+  *				 used instead of panel TE in cmd mode panels
+  */
+@@ -34,6 +35,7 @@ struct msm_display_info {
+ 	uint32_t num_of_h_tiles;
+ 	uint32_t h_tile_instance[MAX_H_TILES_PER_DISPLAY];
+ 	bool is_cmd_mode;
++	int stream_id;
+ 	bool is_te_using_watchdog_timer;
+ };
+ 
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c
+index 1ff23c7ef66d..2a6aef12521d 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c
+@@ -567,7 +567,8 @@ static int _dpu_kms_initialize_displayport(struct drm_device *dev,
+ 	struct msm_display_info info;
+ 	bool yuv_supported;
+ 	int rc;
+-	int i;
++	int i, stream_id;
++	int stream_cnt;
+ 
+ 	for (i = 0; i < ARRAY_SIZE(priv->dp); i++) {
+ 		if (!priv->dp[i])
+@@ -590,6 +591,26 @@ static int _dpu_kms_initialize_displayport(struct drm_device *dev,
+ 			DPU_ERROR("modeset_init failed for DP, rc = %d\n", rc);
+ 			return rc;
+ 		}
++
++		stream_cnt = msm_dp_get_mst_max_stream(priv->dp[i]);
++
++		if (stream_cnt > 1) {
++			for (stream_id = 0; stream_id < stream_cnt; stream_id++) {
++				info.stream_id = stream_id;
++				encoder = dpu_encoder_init(dev, DRM_MODE_ENCODER_DPMST, &info);
++				if (IS_ERR(encoder)) {
++					DPU_ERROR("encoder init failed for dp mst display\n");
++					return PTR_ERR(encoder);
++				}
++
++				rc = msm_dp_mst_bridge_init(priv->dp[i], encoder);
++				if (rc) {
++					DPU_ERROR("dp mst bridge %d init failed, %d\n",
++						  stream_id, rc);
++					continue;
++				}
++			}
++		}
+ 	}
+ 
+ 	return 0;
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 01e35d2981ad..8804ae3d31af 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -438,7 +438,8 @@ static int msm_dp_display_process_hpd_high(struct msm_dp_display_private *dp)
+ 	if (rc)
+ 		goto end;
+ 
+-	if (dp->max_stream <= DEFAULT_STREAM_COUNT || !msm_dp_panel_read_mst_cap(dp->panel)) {
++	if (msm_dp_get_mst_max_stream(dp_display) <= DEFAULT_STREAM_COUNT ||
++	    !msm_dp_panel_read_mst_cap(dp->panel)) {
+ 		rc = msm_dp_panel_read_edid(dp->panel, connector);
+ 		if (rc)
+ 			goto end;
+@@ -463,7 +464,8 @@ static int msm_dp_display_process_hpd_high(struct msm_dp_display_private *dp)
+ 	 */
+ 	msm_dp_link_psm_config(dp->link, &dp->panel->link_info, false);
+ 
+-	if (dp->max_stream > DEFAULT_STREAM_COUNT && msm_dp_panel_read_mst_cap(dp->panel))
++	if (msm_dp_get_mst_max_stream(dp_display) > DEFAULT_STREAM_COUNT &&
++	    msm_dp_panel_read_mst_cap(dp->panel))
+ 		msm_dp_display_mst_init(dp);
+ 
+ 	msm_dp_link_reset_phy_params_vx_px(dp->link);
+@@ -983,7 +985,7 @@ static int msm_dp_display_enable(struct msm_dp_display_private *dp,
+ 
+ 	drm_dbg_dp(dp->drm_dev, "sink_count=%d\n", dp->link->sink_count);
+ 
+-	rc = msm_dp_ctrl_on_stream(dp->ctrl, msm_dp_panel, dp->max_stream);
++	rc = msm_dp_ctrl_on_stream(dp->ctrl, msm_dp_panel, msm_dp_get_mst_max_stream(&dp->msm_dp_display));
+ 
+ 	return rc;
+ }
+@@ -1418,6 +1420,20 @@ static int msm_dp_display_get_connector_type(struct platform_device *pdev,
+ 	return connector_type;
+ }
+ 
++int msm_dp_get_mst_max_stream(const struct msm_dp *dp_display)
++{
++	struct msm_dp_display_private *dp_priv;
++
++	dp_priv = container_of(dp_display, struct msm_dp_display_private, msm_dp_display);
++
++	return dp_priv->max_stream;
++}
++
++int msm_dp_mst_bridge_init(struct msm_dp *dp_display, struct drm_encoder *encoder)
++{
++	return msm_dp_mst_drm_bridge_init(dp_display, encoder);
++}
++
+ static int msm_dp_display_probe_tail(struct device *dev)
+ {
+ 	struct msm_dp *dp = dev_get_drvdata(dev);
+@@ -1751,12 +1767,12 @@ void msm_dp_display_disable_helper(struct msm_dp *dp, struct msm_dp_panel *msm_d
+ 		return;
+ 	}
+ 
+-	if (msm_dp_display->max_stream > DEFAULT_STREAM_COUNT)
++	if (msm_dp_get_mst_max_stream(dp) > DEFAULT_STREAM_COUNT)
+ 		msm_dp_ctrl_push_vcpf(msm_dp_display->ctrl, msm_dp_panel);
+ 	else
+ 		msm_dp_ctrl_push_idle(msm_dp_display->ctrl);
+ 
+-	if (msm_dp_display->max_stream > DEFAULT_STREAM_COUNT) {
++	if (msm_dp_get_mst_max_stream(dp) > DEFAULT_STREAM_COUNT) {
+ 		msm_dp_ctrl_mst_stream_channel_slot_setup(msm_dp_display->ctrl,
+ 							  msm_dp_display->max_stream);
+ 		msm_dp_ctrl_mst_send_act(msm_dp_display->ctrl);
+diff --git a/drivers/gpu/drm/msm/msm_drv.h b/drivers/gpu/drm/msm/msm_drv.h
+index 541e7e3cf06b..4bab970b8be2 100644
+--- a/drivers/gpu/drm/msm/msm_drv.h
++++ b/drivers/gpu/drm/msm/msm_drv.h
+@@ -387,6 +387,10 @@ bool msm_dp_needs_periph_flush(const struct msm_dp *dp_display,
+ 			       const struct drm_display_mode *mode);
+ bool msm_dp_wide_bus_available(const struct msm_dp *dp_display);
+ 
++int msm_dp_get_mst_max_stream(const struct msm_dp *dp_display);
++
++int msm_dp_mst_bridge_init(struct msm_dp *dp_display, struct drm_encoder *encoder);
++
+ #else
+ static inline int __init msm_dp_register(void)
+ {
+@@ -403,6 +407,16 @@ static inline int msm_dp_modeset_init(struct msm_dp *dp_display,
+ 	return -EINVAL;
+ }
+ 
++static inline int msm_dp_get_mst_max_stream(struct msm_dp *dp_display)
++{
++	return -EINVAL;
++}
++
++static inline int msm_dp_mst_bridge_init(struct msm_dp *dp_display, struct drm_encoder *encoder)
++{
++	return -EINVAL;
++}
++
+ static inline void msm_dp_snapshot(struct msm_disp_state *disp_state, struct msm_dp *dp_display)
+ {
+ }
+-- 
+2.34.1
+

@@ -8,6 +8,7 @@ DEPENDS += "base-passwd virtual/crypt"
 
 SRCREV = "2845bf5bff2b820d2336c8c8061cbfc5f271e720"
 SRC_URI = "git://github.com/blueness/${BPN};branch=master;protocol=https \
+           file://0001-Define-_GNU_SOURCE-if-HAVE_SIGSET-is-set.patch \
            file://thttpd.service \
            file://thttpd.conf \
            file://init"
@@ -56,3 +57,5 @@ SYSTEMD_SERVICE:${PN} = "thttpd.service"
 
 FILES:${PN} += "${SRV_DIR}"
 FILES:${PN}-dbg += "${SRV_DIR}/cgi-bin/.debug"
+
+CVE_STATUS[CVE-2017-10671] = "fixed-version: No action required. The current version (2.27.1) is not affected by the CVE."

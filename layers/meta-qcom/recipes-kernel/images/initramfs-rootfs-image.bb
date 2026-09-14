@@ -5,6 +5,7 @@ PACKAGE_INSTALL = " \
     initramfs-module-copy-modules \
     initramfs-module-rootfs \
     initramfs-module-udev \
+    initramfs-module-ota \
     ${VIRTUAL-RUNTIME_base-utils} \
     ${MACHINE_ESSENTIAL_EXTRA_RDEPENDS} \
     ${ROOTFS_BOOTSTRAP_INSTALL} \
@@ -17,6 +18,7 @@ IMAGE_LINGUAS = ""
 LICENSE = "MIT"
 
 IMAGE_FSTYPES = "${INITRAMFS_FSTYPES}"
+IMAGE_NAME_SUFFIX ?= ""
 inherit core-image
 
 IMAGE_ROOTFS_SIZE = "8192"

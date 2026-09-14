@@ -1,7 +1,7 @@
-From 93f056cecf9d2634f1fcf962d253b3a8c3d0ef99 Mon Sep 17 00:00:00 2001
+From 1158c45f9d2a149d0c6120f9b2bb8c7626193afd Mon Sep 17 00:00:00 2001
 From: Abhinav Kumar <quic_abhinavk@quicinc.com>
 Date: Tue, 12 Dec 2023 12:52:51 -0800
-Subject: [PATCH 32/33] UPSTREAM: drm/msm/dpu: reserve cdm blocks for writeback
+Subject: [PATCH 1/1] UPSTREAM: drm/msm/dpu: reserve cdm blocks for writeback
  in case of YUV output
 
 Reserve CDM blocks for writeback if the format of the output fb
@@ -28,7 +28,7 @@ Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torva
  1 file changed, 37 insertions(+)
 
 diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
-index 3a3ea16d9c44..11fb4f1d6bb6 100644
+index f3bb265bea7c..102b6cc1af31 100644
 --- a/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
 +++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_encoder.c
 @@ -16,6 +16,7 @@
@@ -47,7 +47,7 @@ index 3a3ea16d9c44..11fb4f1d6bb6 100644
  #include "dpu_formats.h"
  #include "dpu_encoder_phys.h"
  #include "dpu_crtc.h"
-@@ -624,6 +626,7 @@ static int dpu_encoder_virt_atomic_check(
+@@ -627,6 +629,7 @@ static int dpu_encoder_virt_atomic_check(
  	struct drm_display_mode *adj_mode;
  	struct msm_display_topology topology;
  	struct dpu_global_state *global_state;
@@ -55,7 +55,7 @@ index 3a3ea16d9c44..11fb4f1d6bb6 100644
  	struct drm_dsc_config *dsc;
  	int i = 0;
  	int ret = 0;
-@@ -664,6 +667,22 @@ static int dpu_encoder_virt_atomic_check(
+@@ -667,6 +670,22 @@ static int dpu_encoder_virt_atomic_check(
  
  	topology = dpu_encoder_get_topology(dpu_enc, dpu_kms, adj_mode, crtc_state, dsc);
  
@@ -77,8 +77,8 @@ index 3a3ea16d9c44..11fb4f1d6bb6 100644
 +
  	/*
  	 * Release and Allocate resources on every modeset
- 	 * Dont allocate when active is false.
-@@ -1104,6 +1123,15 @@ static void dpu_encoder_virt_atomic_mode_set(struct drm_encoder *drm_enc,
+ 	 */
+@@ -1106,6 +1125,15 @@ static void dpu_encoder_virt_atomic_mode_set(struct drm_encoder *drm_enc,
  
  	dpu_enc->dsc_mask = dsc_mask;
  
@@ -94,7 +94,7 @@ index 3a3ea16d9c44..11fb4f1d6bb6 100644
  	cstate = to_dpu_crtc_state(crtc_state);
  
  	for (i = 0; i < num_lm; i++) {
-@@ -2082,6 +2110,15 @@ void dpu_encoder_helper_phys_cleanup(struct dpu_encoder_phys *phys_enc)
+@@ -2088,6 +2116,15 @@ void dpu_encoder_helper_phys_cleanup(struct dpu_encoder_phys *phys_enc)
  					phys_enc->hw_pp->merge_3d->idx);
  	}
  
@@ -111,5 +111,5 @@ index 3a3ea16d9c44..11fb4f1d6bb6 100644
  		dpu_encoder_unprep_dsc(dpu_enc);
  		dpu_enc->dsc = NULL;
 -- 
-2.34.1
+2.25.1
 

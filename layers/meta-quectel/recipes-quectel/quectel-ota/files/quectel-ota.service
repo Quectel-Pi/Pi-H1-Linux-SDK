@@ -1,0 +1,13 @@
+[Unit]
+Description=Quectel OTA service
+DefaultDependencies=no
+After=local-fs.target
+ConditionPathExists=/var/persist/fct_done_flag
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ota_run
+RemainAfterExit=true
+
+[Install]
+WantedBy=multi-user.target

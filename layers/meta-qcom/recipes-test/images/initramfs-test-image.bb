@@ -9,6 +9,7 @@ PACKAGE_INSTALL += " \
     alsa-utils-speakertest \
     bluez5 \
     bootrr \
+    debugcc \
     dhcpcd \
     diag \
     dropbear \
@@ -25,6 +26,7 @@ PACKAGE_INSTALL += " \
     lava-test-shell \
     libdrm-tests \
     lrzsz \
+    mybw \
     pciutils \
     pd-mapper \
     qrtr \
@@ -49,7 +51,9 @@ PACKAGE_INSTALL_openembedded-layer += " \
     devmem2 \
     lmsensors-config-libsensors \
     lmsensors-sensors \
+    media-ctl \
     read-edid \
+    yavta \
 "
 
 PACKAGE_INSTALL_networking-layer += " \

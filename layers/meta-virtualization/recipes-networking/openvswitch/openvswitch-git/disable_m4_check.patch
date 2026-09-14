@@ -3,17 +3,19 @@ From: Amy Fong <amy.fong@windriver.com>
 Date: Thu, 29 Jan 2015 09:56:03 -0500
 Subject: [PATCH] Disable m4 file test where sources are built from git.
 
+Upstream-Status: Inappropriate [embedded specific]
+
 Signed-off-by: Amy Fong <amy.fong@windriver.com>
 
 ---
  Makefile.am | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
-diff --git a/Makefile.am b/Makefile.am
-index ff7d70a..2fc1f13 100644
---- a/Makefile.am
-+++ b/Makefile.am
-@@ -187,7 +187,7 @@ CLEAN_LOCAL += clean-pycov
+Index: git/Makefile.am
+===================================================================
+--- git.orig/Makefile.am
++++ git/Makefile.am
+@@ -194,7 +194,7 @@
  
  # If we're checked out from a Git repository, make sure that every
  # file that is in Git is distributed.
@@ -21,4 +23,4 @@ index ff7d70a..2fc1f13 100644
 +# ALL_LOCAL += dist-hook-git
  dist-hook-git: distfiles
  	@if test -e $(srcdir)/.git && (git --version) >/dev/null 2>&1; then \
- 	  (cd datapath && $(MAKE) distfiles); \
+ 	  (cd $(srcdir) && git ls-files) | grep -v '\.gitignore$$' | \

@@ -13,19 +13,22 @@ EXCLUDE_FROM_WORLD = "1"
 
 LIC_FILES_CHKSUM = "file://COPYING;md5=412de458544c1cb6a2b512cd399286e2"
 
-SRCREV = "4f8f295e57e68740699479d12c1ad251e6dd859f"
-PV = "3.17+git${SRCPV}"
+SRCREV = "f8b14286b092853a4485813e1efd564109df9123"
+PV = "3.19.0+git"
 
 SRC_URI = "git://github.com/checkpoint-restore/criu.git;branch=master;protocol=https \
            file://0001-criu-Skip-documentation-install.patch \
            file://0002-criu-Change-libraries-install-directory.patch \
-           file://0003-lib-Makefile-overwrite-install-lib-to-allow-multiarc.patch \
-          "
+           file://0003-crit-pycriu-build-and-install-wheels.patch \
+           file://0004-pycriu-attr-pycriu.version.__version__.patch \
+           file://0005-pycriu-skip-dependency-check-during-build.patch \
+           file://0006-criu-Adjust-to-glibc-__rseq_size-semantic-change.patch \
+           "
 
 COMPATIBLE_HOST = "(x86_64|arm|aarch64).*-linux"
 
-DEPENDS += "libnl libcap protobuf-c-native protobuf-c util-linux-native libbsd libnet"
-RDEPENDS:${PN} = "bash"
+DEPENDS += "libnl libcap protobuf-c-native protobuf-c util-linux-native libbsd libnet python3-protobuf-native"
+RDEPENDS:${PN} = "bash cgroup-lite python3-ctypes python3-fcntl python3-protobuf"
 
 S = "${WORKDIR}/git"
 
@@ -41,7 +44,7 @@ EXTRA_OEMAKE:aarch64 += "ARCH=aarch64 WERROR=0"
 EXTRA_OEMAKE:append = " SBINDIR=${sbindir} LIBDIR=${libdir} INCLUDEDIR=${includedir} PIEGEN=no"
 EXTRA_OEMAKE:append = " LOGROTATEDIR=${sysconfdir} SYSTEMDUNITDIR=${systemd_unitdir}"
 
-CFLAGS += "-D__USE_GNU -D_GNU_SOURCE " 
+CFLAGS += "-D__USE_GNU -D_GNU_SOURCE "
 
 CFLAGS += " -I${STAGING_INCDIR} -I${STAGING_INCDIR}/libnl3"
 CFLAGS:arm += "-D__WORDSIZE"
@@ -54,7 +57,7 @@ export BUILD_SYS
 export HOST_SYS
 export HOSTCFLAGS = "${BUILD_CFLAGS}"
 
-inherit setuptools3
+inherit python_setuptools_build_meta
 inherit pkgconfig
 
 B = "${S}"
@@ -64,30 +67,44 @@ PACKAGECONFIG[selinux] = ",,libselinux"
 
 CLEANBROKEN = "1"
 
+# WARNING: criu-3.17.1 do_package_qa: QA Issue: criu: ELF binary /usr/sbin/criu has relocations in .text [textrel]
+INSANE_SKIP:${PN} += "textrel"
+
 do_compile:prepend() {
     rm -rf ${S}/images/google/protobuf/descriptor.proto
     ln -s  ${PKG_CONFIG_SYSROOT_DIR}/usr/include/google/protobuf/descriptor.proto ${S}/images/google/protobuf/descriptor.proto
 }
 
 do_compile () {
-	oe_runmake FULL_PYTHON=${PYTHON} PYTHON=python3
+	oe_runmake FULL_PYTHON=${PYTHON} PYTHON=nativepython3
 }
 
 do_install () {
     export INSTALL_LIB="${libdir}/${PYTHON_DIR}/site-packages"
-    oe_runmake PREFIX=${exec_prefix} LIBDIR=${libdir} DESTDIR="${D}" PLUGINDIR="${localstatedir}/lib" FULL_PYTHON=${PYTHON} PYTHON=python3 install
+    export PEP517_WHEEL_PATH="${PEP517_WHEEL_PATH}"
+    export USRBINPATH="${USRBINPATH}"
+    export PEP517_INSTALL_PYTHON="${PEP517_INSTALL_PYTHON}"
+    oe_runmake PREFIX=${exec_prefix} LIBDIR=${libdir} DESTDIR="${D}" PLUGINDIR="${localstatedir}/lib" FULL_PYTHON=${PYTHON} PYTHON=nativepython3 install
 
     # python3's distutils has a feature of rewriting the interpeter on setup installed
     # scripts. 'crit' is one of those scripts. The "executable" or "e" option to the
     # setup call should fix it, but it is being ignored. So to avoid getting our native
     # intepreter replaced in the script, we'll do an explicit update ourselves.
-    sed -i 's%^\#\!.*%\#\!/usr/bin/env python3%' ${D}/usr/bin/crit ${D}${libdir}/python3*/site-packages/crit-0.0.1-py3*.egg/EGG-INFO/scripts/crit
+    #
+    # we're building wheels now, so EGG-INFO need not apply
+    #sed -i 's%^\#\!.*%\#\!/usr/bin/env python3%' ${D}/usr/bin/crit ${D}${libdir}/python3*/site-packages/crit-*-py3*.egg/EGG-INFO/scripts/crit
+
+    # all the __pycache__ contains references to TMPDIR and these will be built the first time
+    # it runs on the target anyway
+    for pycachedir in $(find ${D} -name __pycache__); do
+        rm -rf $pycachedir
+    done
 }
 
 FILES:${PN} += "${systemd_unitdir}/ \
-            ${libdir}/python3*/site-packages/ \
-            ${libdir}/pycriu/ \
-            ${libdir}/crit-0.0.1-py3*.egg-info \
+            #${libdir}/python3*/site-packages/ \
+            #${libdir}/pycriu/ \
+            #${libdir}/crit-0.0.1-py3*.egg-info \
             "
 
 FILES:${PN}-staticdev += " \

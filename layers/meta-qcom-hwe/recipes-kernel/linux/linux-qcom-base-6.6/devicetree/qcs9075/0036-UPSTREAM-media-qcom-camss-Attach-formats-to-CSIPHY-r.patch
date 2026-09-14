@@ -1,0 +1,397 @@
+From 59bcdae91c3c23e4a68932d508a59a4b93915105 Mon Sep 17 00:00:00 2001
+From: Radoslav Tsvetkov <quic_rtsvetko@quicinc.com>
+Date: Wed, 22 May 2024 18:46:55 +0300
+Subject: [PATCH 36/42] UPSTREAM: media: qcom: camss: Attach formats to CSIPHY
+ resources
+
+Following the example of VFE and CSID, attach the CSIPHY
+formats to the subdevices resources.
+
+Signed-off-by: Radoslav Tsvetkov <quic_rtsvetko@quicinc.com>
+Signed-off-by: Gjorgji Rosikopulos <quic_grosikop@quicinc.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Tested-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org> # sc8280xp/sm8250/sdm845/apq8016
+Acked-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git e05d1be95880cc359c5a32f9f168e18b4538d776]
+---
+ .../media/platform/qcom/camss/camss-csiphy.c  | 59 ++++++++-----------
+ .../media/platform/qcom/camss/camss-csiphy.h  | 17 +++++-
+ drivers/media/platform/qcom/camss/camss.c     | 54 +++++++++++------
+ 3 files changed, 77 insertions(+), 53 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csiphy.c b/drivers/media/platform/qcom/camss/camss-csiphy.c
+index 2fbe6efaf1a9..cf1a444d0341 100644
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.c
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.c
+@@ -24,12 +24,7 @@
+ 
+ #define MSM_CSIPHY_NAME "msm_csiphy"
+ 
+-struct csiphy_format {
+-	u32 code;
+-	u8 bpp;
+-};
+-
+-static const struct csiphy_format csiphy_formats_8x16[] = {
++static const struct csiphy_format_info formats_8x16[] = {
+ 	{ MEDIA_BUS_FMT_UYVY8_1X16, 8 },
+ 	{ MEDIA_BUS_FMT_VYUY8_1X16, 8 },
+ 	{ MEDIA_BUS_FMT_YUYV8_1X16, 8 },
+@@ -49,7 +44,7 @@ static const struct csiphy_format csiphy_formats_8x16[] = {
+ 	{ MEDIA_BUS_FMT_Y10_1X10, 10 },
+ };
+ 
+-static const struct csiphy_format csiphy_formats_8x96[] = {
++static const struct csiphy_format_info formats_8x96[] = {
+ 	{ MEDIA_BUS_FMT_UYVY8_1X16, 8 },
+ 	{ MEDIA_BUS_FMT_VYUY8_1X16, 8 },
+ 	{ MEDIA_BUS_FMT_YUYV8_1X16, 8 },
+@@ -73,7 +68,7 @@ static const struct csiphy_format csiphy_formats_8x96[] = {
+ 	{ MEDIA_BUS_FMT_Y10_1X10, 10 },
+ };
+ 
+-static const struct csiphy_format csiphy_formats_sdm845[] = {
++static const struct csiphy_format_info formats_sdm845[] = {
+ 	{ MEDIA_BUS_FMT_UYVY8_1X16, 8 },
+ 	{ MEDIA_BUS_FMT_VYUY8_1X16, 8 },
+ 	{ MEDIA_BUS_FMT_YUYV8_1X16, 8 },
+@@ -98,6 +93,21 @@ static const struct csiphy_format csiphy_formats_sdm845[] = {
+ 	{ MEDIA_BUS_FMT_Y10_1X10, 10 },
+ };
+ 
++const struct csiphy_formats csiphy_formats_8x16 = {
++	.nformats = ARRAY_SIZE(formats_8x16),
++	.formats = formats_8x16
++};
++
++const struct csiphy_formats csiphy_formats_8x96 = {
++	.nformats = ARRAY_SIZE(formats_8x96),
++	.formats = formats_8x96
++};
++
++const struct csiphy_formats csiphy_formats_sdm845 = {
++	.nformats = ARRAY_SIZE(formats_sdm845),
++	.formats = formats_sdm845
++};
++
+ /*
+  * csiphy_get_bpp - map media bus format to bits per pixel
+  * @formats: supported media bus formats array
+@@ -106,7 +116,7 @@ static const struct csiphy_format csiphy_formats_sdm845[] = {
+  *
+  * Return number of bits per pixel
+  */
+-static u8 csiphy_get_bpp(const struct csiphy_format *formats,
++static u8 csiphy_get_bpp(const struct csiphy_format_info *formats,
+ 			 unsigned int nformats, u32 code)
+ {
+ 	unsigned int i;
+@@ -131,7 +141,7 @@ static int csiphy_set_clock_rates(struct csiphy_device *csiphy)
+ 	int i, j;
+ 	int ret;
+ 
+-	u8 bpp = csiphy_get_bpp(csiphy->formats, csiphy->nformats,
++	u8 bpp = csiphy_get_bpp(csiphy->res->formats->formats, csiphy->res->formats->nformats,
+ 				csiphy->fmt[MSM_CSIPHY_PAD_SINK].code);
+ 	u8 num_lanes = csiphy->cfg.csi2->lane_cfg.num_data;
+ 
+@@ -244,7 +254,7 @@ static int csiphy_stream_on(struct csiphy_device *csiphy)
+ 	struct csiphy_config *cfg = &csiphy->cfg;
+ 	s64 link_freq;
+ 	u8 lane_mask = csiphy->res->hw_ops->get_lane_mask(&cfg->csi2->lane_cfg);
+-	u8 bpp = csiphy_get_bpp(csiphy->formats, csiphy->nformats,
++	u8 bpp = csiphy_get_bpp(csiphy->res->formats->formats, csiphy->res->formats->nformats,
+ 				csiphy->fmt[MSM_CSIPHY_PAD_SINK].code);
+ 	u8 num_lanes = csiphy->cfg.csi2->lane_cfg.num_data;
+ 	u8 val;
+@@ -351,12 +361,12 @@ static void csiphy_try_format(struct csiphy_device *csiphy,
+ 	case MSM_CSIPHY_PAD_SINK:
+ 		/* Set format on sink pad */
+ 
+-		for (i = 0; i < csiphy->nformats; i++)
+-			if (fmt->code == csiphy->formats[i].code)
++		for (i = 0; i < csiphy->res->formats->nformats; i++)
++			if (fmt->code == csiphy->res->formats->formats[i].code)
+ 				break;
+ 
+ 		/* If not found, use UYVY as default */
+-		if (i >= csiphy->nformats)
++		if (i >= csiphy->res->formats->nformats)
+ 			fmt->code = MEDIA_BUS_FMT_UYVY8_1X16;
+ 
+ 		fmt->width = clamp_t(u32, fmt->width, 1, 8191);
+@@ -393,10 +403,10 @@ static int csiphy_enum_mbus_code(struct v4l2_subdev *sd,
+ 	struct v4l2_mbus_framefmt *format;
+ 
+ 	if (code->pad == MSM_CSIPHY_PAD_SINK) {
+-		if (code->index >= csiphy->nformats)
++		if (code->index >= csiphy->res->formats->nformats)
+ 			return -EINVAL;
+ 
+-		code->code = csiphy->formats[code->index].code;
++		code->code = csiphy->res->formats->formats[code->index].code;
+ 	} else {
+ 		if (code->index > 0)
+ 			return -EINVAL;
+@@ -567,23 +577,6 @@ int msm_csiphy_subdev_init(struct camss *camss,
+ 	csiphy->cfg.combo_mode = 0;
+ 	csiphy->res = &res->csiphy;
+ 
+-	switch (camss->res->version) {
+-	case CAMSS_8x16:
+-		csiphy->formats = csiphy_formats_8x16;
+-		csiphy->nformats = ARRAY_SIZE(csiphy_formats_8x16);
+-		break;
+-	case CAMSS_8x96:
+-	case CAMSS_660:
+-		csiphy->formats = csiphy_formats_8x96;
+-		csiphy->nformats = ARRAY_SIZE(csiphy_formats_8x96);
+-		break;
+-	case CAMSS_845:
+-	case CAMSS_8250:
+-		csiphy->formats = csiphy_formats_sdm845;
+-		csiphy->nformats = ARRAY_SIZE(csiphy_formats_sdm845);
+-		break;
+-	}
+-
+ 	/* Memory */
+ 
+ 	csiphy->base = devm_platform_ioremap_resource_byname(pdev, res->reg[0]);
+diff --git a/drivers/media/platform/qcom/camss/camss-csiphy.h b/drivers/media/platform/qcom/camss/camss-csiphy.h
+index 7bd68129ca49..47f0b6b09eba 100644
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.h
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.h
+@@ -42,6 +42,16 @@ struct csiphy_config {
+ 	struct csiphy_csi2_cfg *csi2;
+ };
+ 
++struct csiphy_format_info {
++	u32 code;
++	u8 bpp;
++};
++
++struct csiphy_formats {
++	unsigned int nformats;
++	const struct csiphy_format_info *formats;
++};
++
+ struct csiphy_device;
+ 
+ struct csiphy_hw_ops {
+@@ -65,6 +75,7 @@ struct csiphy_hw_ops {
+ 
+ struct csiphy_subdev_resources {
+ 	const struct csiphy_hw_ops *hw_ops;
++	const struct csiphy_formats *formats;
+ };
+ 
+ struct csiphy_device {
+@@ -83,8 +94,6 @@ struct csiphy_device {
+ 	struct csiphy_config cfg;
+ 	struct v4l2_mbus_framefmt fmt[MSM_CSIPHY_PADS_NUM];
+ 	const struct csiphy_subdev_resources *res;
+-	const struct csiphy_format *formats;
+-	unsigned int nformats;
+ };
+ 
+ struct camss_subdev_resources;
+@@ -98,6 +107,10 @@ int msm_csiphy_register_entity(struct csiphy_device *csiphy,
+ 
+ void msm_csiphy_unregister_entity(struct csiphy_device *csiphy);
+ 
++extern const struct csiphy_formats csiphy_formats_8x16;
++extern const struct csiphy_formats csiphy_formats_8x96;
++extern const struct csiphy_formats csiphy_formats_sdm845;
++
+ extern const struct csiphy_hw_ops csiphy_ops_2ph_1_0;
+ extern const struct csiphy_hw_ops csiphy_ops_3ph_1_0;
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index efd8355ea360..f8def1f2bd1a 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -45,7 +45,8 @@ static const struct camss_subdev_resources csiphy_res_8x16[] = {
+ 		.interrupt = { "csiphy0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_2ph_1_0
++			.hw_ops = &csiphy_ops_2ph_1_0,
++			.formats = &csiphy_formats_8x16
+ 		}
+ 	},
+ 
+@@ -61,7 +62,8 @@ static const struct camss_subdev_resources csiphy_res_8x16[] = {
+ 		.interrupt = { "csiphy1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_2ph_1_0
++			.hw_ops = &csiphy_ops_2ph_1_0,
++			.formats = &csiphy_formats_8x16
+ 		}
+ 	}
+ };
+@@ -165,7 +167,8 @@ static const struct camss_subdev_resources csiphy_res_8x96[] = {
+ 		.interrupt = { "csiphy0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_8x96
+ 		}
+ 	},
+ 
+@@ -181,7 +184,8 @@ static const struct camss_subdev_resources csiphy_res_8x96[] = {
+ 		.interrupt = { "csiphy1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_8x96
+ 		}
+ 	},
+ 
+@@ -197,7 +201,8 @@ static const struct camss_subdev_resources csiphy_res_8x96[] = {
+ 		.interrupt = { "csiphy2" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_8x96
+ 		}
+ 	}
+ };
+@@ -374,7 +379,8 @@ static const struct camss_subdev_resources csiphy_res_660[] = {
+ 		.interrupt = { "csiphy0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_8x96
+ 		}
+ 	},
+ 
+@@ -392,7 +398,8 @@ static const struct camss_subdev_resources csiphy_res_660[] = {
+ 		.interrupt = { "csiphy1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_8x96
+ 		}
+ 	},
+ 
+@@ -410,7 +417,8 @@ static const struct camss_subdev_resources csiphy_res_660[] = {
+ 		.interrupt = { "csiphy2" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_8x96
+ 		}
+ 	}
+ };
+@@ -609,7 +617,8 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
+ 		.interrupt = { "csiphy0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_sdm845
+ 		}
+ 	},
+ 
+@@ -631,7 +640,8 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
+ 		.interrupt = { "csiphy1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_sdm845
+ 		}
+ 	},
+ 
+@@ -653,7 +663,8 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
+ 		.interrupt = { "csiphy2" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_sdm845
+ 		}
+ 	},
+ 
+@@ -675,7 +686,8 @@ static const struct camss_subdev_resources csiphy_res_845[] = {
+ 		.interrupt = { "csiphy3" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_sdm845
+ 		}
+ 	}
+ };
+@@ -858,7 +870,8 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 		.interrupt = { "csiphy0" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_sdm845
+ 		}
+ 	},
+ 	/* CSIPHY1 */
+@@ -871,7 +884,8 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 		.interrupt = { "csiphy1" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_sdm845
+ 		}
+ 	},
+ 	/* CSIPHY2 */
+@@ -884,7 +898,8 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 		.interrupt = { "csiphy2" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_sdm845
+ 		}
+ 	},
+ 	/* CSIPHY3 */
+@@ -897,7 +912,8 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 		.interrupt = { "csiphy3" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_sdm845
+ 		}
+ 	},
+ 	/* CSIPHY4 */
+@@ -910,7 +926,8 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 		.interrupt = { "csiphy4" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_sdm845
+ 		}
+ 	},
+ 	/* CSIPHY5 */
+@@ -923,7 +940,8 @@ static const struct camss_subdev_resources csiphy_res_8250[] = {
+ 		.interrupt = { "csiphy5" },
+ 		.type = CAMSS_SUBDEV_TYPE_CSIPHY,
+ 		.csiphy = {
+-			.hw_ops = &csiphy_ops_3ph_1_0
++			.hw_ops = &csiphy_ops_3ph_1_0,
++			.formats = &csiphy_formats_sdm845
+ 		}
+ 	}
+ };
+-- 
+2.25.1
+

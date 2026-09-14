@@ -1,14 +1,16 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Release notes for 3.4.4 (honister)
 ----------------------------------
 
 Security Fixes in 3.4.4
 ~~~~~~~~~~~~~~~~~~~~~~~
 
--  tiff: fix :cve:`2022-0865`, :cve:`2022-0891`, :cve:`2022-0907`, :cve:`2022-0908`, :cve:`2022-0909` and :cve:`2022-0924`
+-  tiff: fix :cve_nist:`2022-0865`, :cve_nist:`2022-0891`, :cve_nist:`2022-0907`, :cve_nist:`2022-0908`, :cve_nist:`2022-0909` and :cve_nist:`2022-0924`
 -  xz: fix `CVE-2022-1271 <https://security-tracker.debian.org/tracker/CVE-2022-1271>`__
 -  unzip: fix `CVE-2021-4217 <https://security-tracker.debian.org/tracker/CVE-2021-4217>`__
--  zlib: fix :cve:`2018-25032`
--  grub: ignore :cve:`2021-46705`
+-  zlib: fix :cve_nist:`2018-25032`
+-  grub: ignore :cve_nist:`2021-46705`
 
 Fixes in 3.4.4
 ~~~~~~~~~~~~~~
@@ -19,20 +21,20 @@ Fixes in 3.4.4
 -  bitbake: knotty: reduce keep-alive timeout from 5000s (83 minutes) to 10 minutes
 -  bitbake: server/process: Disable gc around critical section
 -  bitbake: server/xmlrpcserver: Add missing xmlrpcclient import
--  bitbake: toaster: Fix IMAGE_INSTALL issues with _append vs :append
+-  bitbake: toaster: Fix :term:`IMAGE_INSTALL` issues with _append vs :append
 -  bitbake: toaster: fixtures replace gatesgarth
 -  build-appliance-image: Update to honister head revision
 -  conf.py/poky.yaml: Move version information to poky.yaml and read in conf.py
 -  conf/machine: fix QEMU x86 sound options
--  devupstream: fix handling of SRC_URI
+-  devupstream: fix handling of :term:`SRC_URI`
 -  documentation: update for 3.4.4 release
 -  externalsrc/devtool: Fix to work with fixed export funcition flags handling
 -  gmp: add missing COPYINGv3
--  gnu-config: update SRC_URI
+-  gnu-config: update :term:`SRC_URI`
 -  libxml2: fix CVE-2022-23308 regression
 -  libxml2: move to gitlab.gnome.org
 -  libxml2: update to 2.9.13
--  libxshmfence: Correct LICENSE to HPND
+-  libxshmfence: Correct :term:`LICENSE` to HPND
 -  license_image.bbclass: close package.manifest file
 -  linux-firmware: correct license for ar3k firmware
 -  linux-firmware: upgrade 20220310 -> 20220411
@@ -54,7 +56,7 @@ Fixes in 3.4.4
 -  u-boot: Inherit pkgconfig
 -  uninative: Upgrade to 3.6 with gcc 12 support
 -  vim: Upgrade 8.2.4524 -> 8.2.4681
--  virglrenderer: update SRC_URI
+-  virglrenderer: update :term:`SRC_URI`
 -  webkitgtk: update to 2.32.4
 -  wireless-regdb: upgrade 2022.02.18 -> 2022.04.08
 
@@ -81,17 +83,17 @@ Contributors to 3.4.4
 -  Richard Purdie
 -  Ross Burton
 -  Tim Orling
--  wangmy
--  zhengruoqin
+-  Wang Mingyu
+-  Zheng Ruoqin
 
 Repositories / Downloads for 3.4.4
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 poky
 
--  Repository Location: https://git.yoctoproject.org/poky/
+-  Repository Location: :yocto_git:`/poky`
 -  Branch: :yocto_git:`honister </poky/log/?h=honister>`
--  Tag: `yocto-3.4.4 <https://git.yoctoproject.org/poky/tag/?h=yocto-3.4.4>`__
+-  Tag: :yocto_git:`yocto-3.4.4 </poky/tag/?h=yocto-3.4.4>`
 -  Git Revision: :yocto_git:`780eeec8851950ee6ac07a2a398ba937206bd2e4 </poky/commit/?id=780eeec8851950ee6ac07a2a398ba937206bd2e4>`
 -  Release Artefact: poky-780eeec8851950ee6ac07a2a398ba937206bd2e4
 -  sha: 09558927064454ec2492da376156b716d9fd14aae57196435d742db7bfdb4b95
@@ -113,7 +115,7 @@ openembedded-core
 
 meta-mingw
 
--  Repository Location: https://git.yoctoproject.org/meta-mingw
+-  Repository Location: :yocto_git:`/meta-mingw`
 -  Branch: :yocto_git:`honister </meta-mingw/log/?h=honister>`
 -  Tag: :yocto_git:`yocto-3.4.4 </meta-mingw/tag/?h=yocto-3.4.4>`
 -  Git Revision: :yocto_git:`f5d761cbd5c957e4405c5d40b0c236d263c916a8 </meta-mingw/commit/?id=f5d761cbd5c957e4405c5d40b0c236d263c916a8>`
@@ -125,7 +127,7 @@ meta-mingw
 
 meta-gplv2
 
--  Repository Location: https://git.yoctoproject.org/meta-gplv2
+-  Repository Location: :yocto_git:`/meta-gplv2`
 -  Branch: :yocto_git:`honister </meta-gplv2/log/?h=honister>`
 -  Tag: :yocto_git:`yocto-3.4.4 </meta-gplv2/tag/?h=yocto-3.4.4>`
 -  Git Revision: :yocto_git:`f04e4369bf9dd3385165281b9fa2ed1043b0e400 </meta-gplv2/commit/?id=f04e4369bf9dd3385165281b9fa2ed1043b0e400>`
@@ -149,7 +151,7 @@ bitbake
 
 yocto-docs
 
--  Repository Location: https://git.yoctoproject.org/yocto-docs
+-  Repository Location: :yocto_git:`/yocto-docs`
 -  Branch: :yocto_git:`honister </yocto-docs/log/?h=honister>`
 -  Tag: :yocto_git:`yocto-3.4.4 </yocto-docs/tag/?h=yocto-3.4.4>`
 -  Git Revision: :yocto_git:`5ead7d39aaf9044078dff27f462e29a8e31d89e4 </yocto-docs/commit/?5ead7d39aaf9044078dff27f462e29a8e31d89e4>`

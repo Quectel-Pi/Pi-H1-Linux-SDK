@@ -14,9 +14,9 @@ DEPENDS += "cairo"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/vendor/qcom-opensource/gst-plugins-qti-oss.git;protocol=https"
 SRCBRANCH  = "imsdk.lnx.2.0.0.r2-rel"
-SRCREV     = "49256b26148d10257959b2b8d55879f72888cb0f"
+SRCREV     = "dcb4b8252b66304545c5efb5cb7c8fecc26b6680"
 
-SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};rev=${SRCREV};subpath=gst-plugin-mlvpose"
+SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};subpath=gst-plugin-mlvpose"
 S = "${WORKDIR}/gst-plugin-mlvpose"
 
 # Install directories.
@@ -43,3 +43,8 @@ FILES:${PN} += "${INSTALL_LIBDIR}"
 
 SOLIBS = ".so*"
 FILES_SOLIBSDEV = ""
+
+python do_package:prepend() {
+    bb.warn("This mlvpose plugin will be deprecated in the future! "
+        "Use qtimlpostprocess instead.")
+}

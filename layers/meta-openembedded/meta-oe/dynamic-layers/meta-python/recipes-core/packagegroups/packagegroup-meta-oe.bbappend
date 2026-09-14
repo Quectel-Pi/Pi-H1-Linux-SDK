@@ -1,8 +1,6 @@
 RDEPENDS:packagegroup-meta-oe-devtools += "\
     python3-distutils-extra \
     rwmem \
-    speedtest-cli \
-    mongodb \
 "
 
 RDEPENDS:packagegroup-meta-oe-connectivity += "\
@@ -11,9 +9,9 @@ RDEPENDS:packagegroup-meta-oe-connectivity += "\
 
 RDEPENDS:packagegroup-meta-oe-extended += "\
     lcdproc \
-    mozjs-91 \
 "
 RDEPENDS:packagegroup-meta-oe-support += "\
+    nvmetcli \
     smem \
 "
 RDEPENDS:packagegroup-meta-oe-extended:remove:libc-musl = "lcdproc"

@@ -1,0 +1,167 @@
+From f0046ce13f75153f5c2f82f48c5f91ac85481929 Mon Sep 17 00:00:00 2001
+From: Jie Zhang <quic_jiezh@quicinc.com>
+Date: Wed, 26 Feb 2025 15:00:09 +0800
+Subject: [PATCH] Subject: [PATCH 2/2] FROMLIST: drm/msm/a6xx: Add support for
+ Adreno 623
+
+Add support for Adreno 623 GPU found in QCS8300 chipsets.
+
+Signed-off-by: Jie Zhang <quic_jiezh@quicinc.com>
+Signed-off-by: Akhil P Oommen <quic_akhilpo@quicinc.com>
+Patchwork: https://patchwork.freedesktop.org/patch/637041/
+Link: https://lore.kernel.org/lkml/20250213-a623-gpu-support-v1-2-993c65c39fd2@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/lkml/20250213-a623-gpu-support-v1-2-993c65c39fd2@quicinc.com/]
+---
+ drivers/gpu/drm/msm/adreno/a6xx_gpu.c       | 13 +++++++-
+ drivers/gpu/drm/msm/adreno/a6xx_gpu_state.c |  2 +-
+ drivers/gpu/drm/msm/adreno/a6xx_hfi.c       | 33 +++++++++++++++++++++
+ drivers/gpu/drm/msm/adreno/adreno_device.c  | 14 +++++++++
+ drivers/gpu/drm/msm/adreno/adreno_gpu.h     |  5 ++++
+ 5 files changed, 65 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/adreno/a6xx_gpu.c b/drivers/gpu/drm/msm/adreno/a6xx_gpu.c
+index e9256e0647fb..e132ea848a60 100644
+--- a/drivers/gpu/drm/msm/adreno/a6xx_gpu.c
++++ b/drivers/gpu/drm/msm/adreno/a6xx_gpu.c
+@@ -967,7 +967,8 @@ static void a6xx_set_cp_protect(struct msm_gpu *gpu)
+ 	const u32 *regs = a6xx_protect;
+ 	unsigned i, count, count_max;
+ 
+-	if (adreno_is_a650(adreno_gpu) || adreno_is_a621(adreno_gpu)) {
++	if (adreno_is_a650(adreno_gpu) || adreno_is_a621(adreno_gpu)
++	    || adreno_is_a623(adreno_gpu)) {
+ 		regs = a650_protect;
+ 		count = ARRAY_SIZE(a650_protect);
+ 		count_max = 48;
+@@ -1061,6 +1062,14 @@ static void a6xx_set_ubwc_config(struct msm_gpu *gpu)
+ 		uavflagprd_inv = 2;
+ 	}
+ 
++	if (adreno_is_a623(adreno_gpu)) {
++		hbb_lo = 3;
++		amsbc = 1;
++		rgb565_predicator = 1;
++		uavflagprd_inv = 2;
++		macrotile_mode = 1;
++	}
++
+ 	if (adreno_is_a640_family(adreno_gpu))
+ 		amsbc = 1;
+ 
+@@ -1451,6 +1460,8 @@ static int hw_init(struct msm_gpu *gpu)
+ 	/* Setting the primFifo thresholds default values,
+ 	 * and vccCacheSkipDis=1 bit (0x200) for A640 and newer
+ 	*/
++
++	// TBD for a623 and a621
+ 	if (adreno_is_a650(adreno_gpu) || adreno_is_a660(adreno_gpu) ||
+ 			adreno_is_a663(adreno_gpu) || adreno_is_a690(adreno_gpu))
+ 		gpu_write(gpu, REG_A6XX_PC_DBG_ECO_CNTL, 0x00300200);
+diff --git a/drivers/gpu/drm/msm/adreno/a6xx_gpu_state.c b/drivers/gpu/drm/msm/adreno/a6xx_gpu_state.c
+index df266d049481..146435becde7 100644
+--- a/drivers/gpu/drm/msm/adreno/a6xx_gpu_state.c
++++ b/drivers/gpu/drm/msm/adreno/a6xx_gpu_state.c
+@@ -830,7 +830,7 @@ static void a6xx_get_gmu_registers(struct msm_gpu *gpu,
+ 	_a6xx_get_gmu_registers(gpu, a6xx_state, &a6xx_gmu_reglist[1],
+ 		&a6xx_state->gmu_registers[1], true);
+ 
+-	if (adreno_is_a621(adreno_gpu))
++	if (adreno_is_a621(adreno_gpu) || adreno_is_a623(adreno_gpu))
+ 		_a6xx_get_gmu_registers(gpu, a6xx_state, &a621_gpucc_reg,
+ 			&a6xx_state->gmu_registers[2], false);
+ 	else
+diff --git a/drivers/gpu/drm/msm/adreno/a6xx_hfi.c b/drivers/gpu/drm/msm/adreno/a6xx_hfi.c
+index 5a361f6443ca..0d9b496b9195 100644
+--- a/drivers/gpu/drm/msm/adreno/a6xx_hfi.c
++++ b/drivers/gpu/drm/msm/adreno/a6xx_hfi.c
+@@ -507,6 +507,37 @@ static void a663_build_bw_table(struct a6xx_hfi_msg_bw_table *msg)
+ 	msg->cnoc_cmds_data[1][0] =  0x60000001;
+ }
+ 
++static void a623_build_bw_table(struct a6xx_hfi_msg_bw_table *msg)
++{
++	/*
++	 * Send a single "off" entry just to get things running
++	 * TODO: bus scaling
++	 */
++	msg->bw_level_num = 1;
++
++	msg->ddr_cmds_num = 3;
++	msg->ddr_wait_bitmask = 0x07;
++
++	msg->ddr_cmds_addrs[0] = 0x50004;
++	msg->ddr_cmds_addrs[1] = 0x50000;
++	msg->ddr_cmds_addrs[2] = 0x500b4;
++
++	msg->ddr_cmds_data[0][0] =  0x40000000;
++	msg->ddr_cmds_data[0][1] =  0x40000000;
++	msg->ddr_cmds_data[0][2] =  0x40000000;
++
++	/*
++	 * These are the CX (CNOC) votes - these are used by the GMU but the
++	 * votes are known and fixed for the target
++	 */
++	msg->cnoc_cmds_num = 1;
++	msg->cnoc_wait_bitmask = 0x01;
++
++	msg->cnoc_cmds_addrs[0] = 0x50058;
++	msg->cnoc_cmds_data[0][0] =  0x40000000;
++	msg->cnoc_cmds_data[1][0] =  0x60000001;
++}
++
+ static void adreno_7c3_build_bw_table(struct a6xx_hfi_msg_bw_table *msg)
+ {
+ 	/*
+@@ -595,6 +626,8 @@ static int a6xx_hfi_send_bw_table(struct a6xx_gmu *gmu)
+ 		a660_build_bw_table(&msg);
+ 	else if (adreno_is_a663(adreno_gpu))
+ 		a663_build_bw_table(&msg);
++	else if (adreno_is_a623(adreno_gpu))
++		a623_build_bw_table(&msg);
+ 	else if (adreno_is_a690(adreno_gpu))
+ 		a690_build_bw_table(&msg);
+ 	else
+diff --git a/drivers/gpu/drm/msm/adreno/adreno_device.c b/drivers/gpu/drm/msm/adreno/adreno_device.c
+index e9fb36dcc0b6..ee5461d8168a 100644
+--- a/drivers/gpu/drm/msm/adreno/adreno_device.c
++++ b/drivers/gpu/drm/msm/adreno/adreno_device.c
+@@ -380,6 +380,20 @@ static const struct adreno_info gpulist[] = {
+ 			{ 169, 2 },
+ 			{ 180, 1 },
+ 		),
++	}, {
++		.chip_ids = ADRENO_CHIP_IDS(0x06020300),
++		.family = ADRENO_6XX_GEN3,
++		.fw = {
++			[ADRENO_FW_SQE] = "a650_sqe.fw",
++			[ADRENO_FW_GMU] = "a623_gmu.bin",
++		},
++		.gmem = SZ_512K,
++		.inactive_period = DRM_MSM_INACTIVE_PERIOD,
++		.quirks = ADRENO_QUIRK_HAS_CACHED_COHERENT |
++			ADRENO_QUIRK_HAS_HW_APRIV,
++		.init = a6xx_gpu_init,
++		.hwcg = a690_hwcg,
++		.address_space_size = SZ_16G,
+ 	}, {
+ 		.chip_ids = ADRENO_CHIP_IDS(
+ 			0x06030001,
+diff --git a/drivers/gpu/drm/msm/adreno/adreno_gpu.h b/drivers/gpu/drm/msm/adreno/adreno_gpu.h
+index 9f0227743e95..dcc7ec976973 100644
+--- a/drivers/gpu/drm/msm/adreno/adreno_gpu.h
++++ b/drivers/gpu/drm/msm/adreno/adreno_gpu.h
+@@ -346,6 +346,11 @@ static inline int adreno_is_a621(const struct adreno_gpu *gpu)
+ 	return gpu->info->chip_ids[0] == 0x06020100;
+ }
+ 
++static inline int adreno_is_a623(const struct adreno_gpu *gpu)
++{
++	return gpu->info->chip_ids[0] == 0x06020300;
++}
++
+ static inline int adreno_is_a630(const struct adreno_gpu *gpu)
+ {
+ 	return adreno_is_revn(gpu, 630);
+-- 
+2.34.1
+

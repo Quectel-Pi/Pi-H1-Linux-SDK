@@ -1,0 +1,101 @@
+From ef9c689e754a4814b0b6d6d8236bb1400d386514 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:32:14 -0800
+Subject: [PATCH 140/146] FROMLIST: drm/msm/dp: populate the max_streams for
+ sa8775 mst controller
+
+Populate the max_streams for DP controllers to indicate MST support.
+
+If the pixel clock handle for the second stream fails, treat it as
+SST case rather than a complete failure.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-43-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_ctrl.c    |  9 +++++++++
+ drivers/gpu/drm/msm/dp/dp_ctrl.h    |  2 ++
+ drivers/gpu/drm/msm/dp/dp_display.c | 13 ++++++++++---
+ 3 files changed, 21 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_ctrl.c b/drivers/gpu/drm/msm/dp/dp_ctrl.c
+index cd6fe7748205..eb6f5df86084 100644
+--- a/drivers/gpu/drm/msm/dp/dp_ctrl.c
++++ b/drivers/gpu/drm/msm/dp/dp_ctrl.c
+@@ -2460,6 +2460,15 @@ static int msm_dp_ctrl_clk_init(struct msm_dp_ctrl *msm_dp_ctrl)
+ 	return 0;
+ }
+ 
++int msm_dp_ctrl_get_stream_cnt(struct msm_dp_ctrl *msm_dp_ctrl)
++{
++	struct msm_dp_ctrl_private *ctrl;
++
++	ctrl = container_of(msm_dp_ctrl, struct msm_dp_ctrl_private, msm_dp_ctrl);
++
++	return ctrl->num_pixel_clks;
++}
++
+ struct msm_dp_ctrl *msm_dp_ctrl_get(struct device *dev, struct msm_dp_link *link,
+ 			struct msm_dp_panel *panel,	struct drm_dp_aux *aux,
+ 			struct msm_dp_catalog *catalog,
+diff --git a/drivers/gpu/drm/msm/dp/dp_ctrl.h b/drivers/gpu/drm/msm/dp/dp_ctrl.h
+index 9ad7022d6217..f72a499809ec 100644
+--- a/drivers/gpu/drm/msm/dp/dp_ctrl.h
++++ b/drivers/gpu/drm/msm/dp/dp_ctrl.h
+@@ -54,4 +54,6 @@ void msm_dp_ctrl_set_mst_channel_info(struct msm_dp_ctrl *msm_dp_ctrl,
+ 				      u32 start_slot, u32 tot_slots);
+ void msm_dp_ctrl_push_vcpf(struct msm_dp_ctrl *dp_ctrl, struct msm_dp_panel *msm_dp_panel);
+ 
++int msm_dp_ctrl_get_stream_cnt(struct msm_dp_ctrl *dp_ctrl);
++
+ #endif /* _DP_CTRL_H_ */
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 5bebb6763b37..856e9fff7a25 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -127,6 +127,7 @@ struct msm_dp_desc {
+ 	unsigned int connector_type;
+ 	bool wide_bus_supported;
+ 	const unsigned int *intf_map;
++	unsigned int max_streams;
+ };
+ 
+ /* to be kept in sync with enum dpu_intf of dpu_hw_mdss.h */
+@@ -150,10 +151,10 @@ static const unsigned int stream_intf_map_sa_8775p[][DP_STREAM_MAX] = {
+ };
+ 
+ static const struct msm_dp_desc msm_dp_desc_sa8775p[] = {
+-	{ .io_start = 0x0af54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true,
++	{ .io_start = 0x0af54000, .id = MSM_DP_CONTROLLER_0, .wide_bus_supported = true, .max_streams = 2,
+ 	  .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_0],
+ 	},
+-	{ .io_start = 0x0af5c000, .id = MSM_DP_CONTROLLER_1, .wide_bus_supported = true,
++	{ .io_start = 0x0af5c000, .id = MSM_DP_CONTROLLER_1, .wide_bus_supported = true, .max_streams = 2,
+ 	  .intf_map = stream_intf_map_sa_8775p[MSM_DP_CONTROLLER_1],
+ 	},
+ 	{ .io_start = 0x22154000, .id = MSM_DP_CONTROLLER_2, .wide_bus_supported = true },
+@@ -1455,7 +1456,10 @@ int msm_dp_get_mst_max_stream(const struct msm_dp *dp_display)
+ 
+ 	dp_priv = container_of(dp_display, struct msm_dp_display_private, msm_dp_display);
+ 
+-	return dp_priv->max_stream;
++	if (dp_priv->max_stream == msm_dp_ctrl_get_stream_cnt(dp_priv->ctrl))
++		return dp_priv->max_stream;
++	else
++		return DEFAULT_STREAM_COUNT;
+ }
+ 
+ int msm_dp_mst_bridge_init(struct msm_dp *dp_display, struct drm_encoder *encoder)
+@@ -1523,6 +1527,9 @@ static int msm_dp_display_probe(struct platform_device *pdev)
+ 
+ 	dp->max_stream = DEFAULT_STREAM_COUNT;
+ 
++	if (desc->max_streams > DEFAULT_STREAM_COUNT)
++		dp->max_stream = desc->max_streams;
++
+ 	dp->intf_map = desc->intf_map;
+ 
+ 	rc = msm_dp_init_sub_modules(dp);
+-- 
+2.34.1
+

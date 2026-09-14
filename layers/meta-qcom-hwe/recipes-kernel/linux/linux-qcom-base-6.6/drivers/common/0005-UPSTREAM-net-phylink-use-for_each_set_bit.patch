@@ -1,0 +1,50 @@
+From a727a25f5cdc0c265af78986b765daed184e1f05 Mon Sep 17 00:00:00 2001
+From: "Russell King (Oracle)" <rmk+kernel@armlinux.org.uk>
+Date: Sun, 19 Nov 2023 21:07:43 +0000
+Subject: [PATCH 05/39] UPSTREAM: net: phylink: use for_each_set_bit()
+
+Use for_each_set_bit() rather than open coding the for() test_bit()
+loop.
+
+Reviewed-by: Andrew Lunn <andrew@lunn.ch>
+Signed-off-by: Russell King (Oracle) <rmk+kernel@armlinux.org.uk>
+Reviewed-by: Wojciech Drewek <wojciech.drewek@intel.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 335662889f5a5f4d5668ed6c8b5fd58913d91d15]
+---
+ drivers/net/phy/phylink.c | 18 ++++++++----------
+ 1 file changed, 8 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/net/phy/phylink.c b/drivers/net/phy/phylink.c
+index b5f012619e42..7c4f7d0be5de 100644
+--- a/drivers/net/phy/phylink.c
++++ b/drivers/net/phy/phylink.c
+@@ -712,18 +712,16 @@ static int phylink_validate_mask(struct phylink *pl, unsigned long *supported,
+ 	__ETHTOOL_DECLARE_LINK_MODE_MASK(all_s) = { 0, };
+ 	__ETHTOOL_DECLARE_LINK_MODE_MASK(s);
+ 	struct phylink_link_state t;
+-	int intf;
++	int interface;
+ 
+-	for (intf = 0; intf < PHY_INTERFACE_MODE_MAX; intf++) {
+-		if (test_bit(intf, interfaces)) {
+-			linkmode_copy(s, supported);
++	for_each_set_bit(interface, interfaces, PHY_INTERFACE_MODE_MAX) {
++		linkmode_copy(s, supported);
+ 
+-			t = *state;
+-			t.interface = intf;
+-			if (!phylink_validate_mac_and_pcs(pl, s, &t)) {
+-				linkmode_or(all_s, all_s, s);
+-				linkmode_or(all_adv, all_adv, t.advertising);
+-			}
++		t = *state;
++		t.interface = interface;
++		if (!phylink_validate_mac_and_pcs(pl, s, &t)) {
++			linkmode_or(all_s, all_s, s);
++			linkmode_or(all_adv, all_adv, t.advertising);
+ 		}
+ 	}
+ 
+-- 
+2.34.1
+

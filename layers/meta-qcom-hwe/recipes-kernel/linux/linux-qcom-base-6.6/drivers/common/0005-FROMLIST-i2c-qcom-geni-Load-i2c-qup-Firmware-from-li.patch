@@ -1,0 +1,44 @@
+From cc913e638812f47013b8ee7096a7ef00faeb6201 Mon Sep 17 00:00:00 2001
+From: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Date: Mon, 14 Oct 2024 16:32:25 +0530
+Subject: [PATCH 5/8] FROMLIST: i2c: qcom-geni: Load i2c qup Firmware from
+ linux side
+
+Add provision to load firmware of Serial engine for I2C protocol from
+Linux Execution Environment on running on APPS processor.
+
+Change-Id: Icd71857c91fba9a4ba139745543cfc14f01c9643
+Co-developed-by: Mukesh Kumar Savaliya <quic_msavaliy@quicinc.com>
+Signed-off-by: Mukesh Kumar Savaliya <quic_msavaliy@quicinc.com>
+Signed-off-by: Viken Dadhaniya <quic_vdadhani@quicinc.com>
+Link: https://lore.kernel.org/linux-kernel/20241204150326.1470749-6-quic_vdadhani@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/linux-kernel/20241204150326.1470749-6-quic_vdadhani@quicinc.com/]
+---
+ drivers/i2c/busses/i2c-qcom-geni.c | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/i2c/busses/i2c-qcom-geni.c b/drivers/i2c/busses/i2c-qcom-geni.c
+index 350f7827fbac..5d4431159e26 100644
+--- a/drivers/i2c/busses/i2c-qcom-geni.c
++++ b/drivers/i2c/busses/i2c-qcom-geni.c
+@@ -860,10 +860,13 @@ static int geni_i2c_probe(struct platform_device *pdev)
+ 	}
+ 	proto = geni_se_read_proto(&gi2c->se);
+ 	if (proto != GENI_SE_I2C) {
+-		dev_err(dev, "Invalid proto %d\n", proto);
+-		geni_se_resources_off(&gi2c->se);
+-		clk_disable_unprepare(gi2c->core_clk);
+-		return -ENXIO;
++		ret = geni_load_se_firmware(&gi2c->se, GENI_SE_I2C);
++		if (ret) {
++			dev_err(gi2c->se.dev, "i2c firmware load failed ret: %d\n", ret);
++			geni_se_resources_off(&gi2c->se);
++			clk_disable_unprepare(gi2c->core_clk);
++			return ret;
++		}
+ 	}
+ 
+ 	if (desc && desc->no_dma_support)
+-- 
+2.34.1
+

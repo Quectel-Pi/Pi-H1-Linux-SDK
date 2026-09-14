@@ -87,7 +87,7 @@ IMAGE_CMD:ota () {
 	echo "{\"${ostree_target_hash}\":\"${GARAGE_TARGET_NAME}-${target_version}\"}" > ${OTA_SYSROOT}/ostree/deploy/${OSTREE_OSNAME}/var/sota/import/installed_versions
 }
 
-EXTRA_IMAGECMD:ota-ext4 = "-L otaroot -i 4096 -t ext4"
+EXTRA_IMAGECMD:ota-ext4 ?= "-L otaroot -i 4096 -t ext4"
 IMAGE_TYPEDEP:ota-ext4 = "ota"
 IMAGE_ROOTFS:task-image-ota-ext4 = "${OTA_SYSROOT}"
 IMAGE_CMD:ota-ext4 () {
@@ -96,4 +96,22 @@ IMAGE_CMD:ota-ext4 () {
 	oe_mkext234fs ota-ext4 ${EXTRA_IMAGECMD}
 }
 do_image_ota_ext4[depends] += "e2fsprogs-native:do_populate_sysroot"
-do_image_wic[depends] += "${@bb.utils.contains('DISTRO_FEATURES', 'sota', '%s:do_image_ota_ext4' % d.getVar('PN'), '', d)}"
+do_image_wic[depends] += "${@bb.utils.contains('IMAGE_FSTYPES', 'ota-ext4', '%s:do_image_ota_ext4' % d.getVar('PN'), '', d)}"
+
+EXTRA_IMAGECMD:ota-btrfs ?= "-L otaroot -n 4096 --shrink"
+IMAGE_TYPEDEP:ota-btrfs = "ota"
+IMAGE_ROOTFS:task-image-ota-btrfs = "${OTA_SYSROOT}"
+MIN_BTRFS_SIZE ?= "16384"
+IMAGE_CMD:ota-btrfs () {
+	# Pristine copy from
+	# https://git.openembedded.org/openembedded-core/tree/meta/classes-recipe/image_types.bbclass#n103
+	size=${ROOTFS_SIZE}
+	if [ ${size} -lt ${MIN_BTRFS_SIZE} ] ; then
+		size=${MIN_BTRFS_SIZE}
+		bbwarn "Rootfs size is too small for BTRFS. Filesystem will be extended to ${size}K"
+	fi
+	dd if=/dev/zero of=${IMGDEPLOYDIR}/${IMAGE_NAME}.btrfs seek=${size} count=0 bs=1024
+	mkfs.btrfs ${EXTRA_IMAGECMD} -r ${OTA_SYSROOT} ${IMGDEPLOYDIR}/${IMAGE_NAME}.btrfs
+}
+do_image_ota_btrfs[depends] += "btrfs-tools-native:do_populate_sysroot"
+do_image_wic[depends] += "${@bb.utils.contains('IMAGE_FSTYPES', 'ota-btrfs', '%s:do_image_ota_btrfs' % d.getVar('PN'), '', d)}"

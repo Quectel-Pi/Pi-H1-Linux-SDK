@@ -1,0 +1,75 @@
+From 685094a7327961604354a34636a528fe4b4dd1b5 Mon Sep 17 00:00:00 2001
+From: Kyle Deng <quic_chunkaid@quicinc.com>
+Date: Wed, 7 May 2025 18:26:13 +0800
+Subject: [PATCH 3/6] FROMLIST: arm64: dts: qcom: qcs615: Add mproc node for
+ SEMP2P
+
+The Shared Memory Point to Point (SMP2P) protocol facilitates
+communication of a single 32-bit value between two processors.
+Add these two nodes for remoteproc enablement on QCS615 SoC.
+
+Signed-off-by: Kyle Deng <quic_chunkaid@quicinc.com>
+Link: https://lore.kernel.org/all/20250507-add_qcs615_remoteproc_support-v2-3-52ac6cb43a39@quicinc.com/
+Signed-off-by: Lijuan Gao <quic_lijuang@quicinc.com>
+Upstream-Status: Submitted[https://lore.kernel.org/all/20250507-add_qcs615_remoteproc_support-v2-3-52ac6cb43a39@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs615.dtsi | 43 ++++++++++++++++++++++++++++
+ 1 file changed, 43 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs615.dtsi b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+index 3186fade5a8b..97469be3756f 100644
+--- a/arch/arm64/boot/dts/qcom/qcs615.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+@@ -371,6 +371,49 @@ mc_virt: interconnect-2 {
+ 		qcom,bcm-voters = <&apps_bcm_voter>;
+ 	};
+ 
++	smp2p-adsp {
++		compatible = "qcom,smp2p";
++		qcom,smem = <443>, <429>;
++		interrupts = <GIC_SPI 172 IRQ_TYPE_EDGE_RISING>;
++		mboxes = <&apss_shared 26>;
++
++		qcom,local-pid = <0>;
++		qcom,remote-pid = <2>;
++
++		adsp_smp2p_out: master-kernel {
++			qcom,entry-name = "master-kernel";
++			#qcom,smem-state-cells = <1>;
++		};
++
++		adsp_smp2p_in: slave-kernel {
++			qcom,entry-name = "slave-kernel";
++			interrupt-controller;
++			#interrupt-cells = <2>;
++		};
++	};
++
++	smp2p-cdsp {
++		compatible = "qcom,smp2p";
++		qcom,smem = <94>, <432>;
++		interrupts = <GIC_SPI 576 IRQ_TYPE_EDGE_RISING>;
++		mboxes = <&apss_shared 6>;
++
++		qcom,local-pid = <0>;
++		qcom,remote-pid = <5>;
++
++		cdsp_smp2p_out: master-kernel {
++			qcom,entry-name = "master-kernel";
++			#qcom,smem-state-cells = <1>;
++		};
++
++		cdsp_smp2p_in: slave-kernel {
++			qcom,entry-name = "slave-kernel";
++			interrupt-controller;
++			#interrupt-cells = <2>;
++		};
++
++	};
++
+ 	qup_opp_table: opp-table-qup {
+ 		compatible = "operating-points-v2";
+ 
+-- 
+2.34.1
+

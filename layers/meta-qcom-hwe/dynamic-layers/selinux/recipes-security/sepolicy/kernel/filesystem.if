@@ -1,42 +1,6 @@
 # Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
-########################################
-## <summary>
-##      Search functionfs directories
-## </summary>
-## <param name="domain">
-##      <summary>
-##      Domain allowed access.
-##      </summary>
-## </param>
-#
-interface(`fs_list_functionfs_dirs',`
-        gen_require(`
-                type functionfs_t;
-        ')
-
-        allow $1 functionfs_t:dir list_dir_perms;
-')
-
-########################################
-## <summary>
-##      Read and write functionfs files.
-## </summary>
-## <param name="domain">
-##      <summary>
-##      Domain allowed access.
-##      </summary>
-## </param>
-#
-interface(`fs_rw_functionfs_files',`
-        gen_require(`
-                type functionfs_t;
-        ')
-
-        rw_files_pattern($1, functionfs_t, functionfs_t)
-')
-
 #######################################
 ## <summary>
 ##	Create, read, write, and unlink symbolic links
@@ -54,24 +18,6 @@ interface(`fs_manage_configfs_lnk_files',`
 	')
 
 	manage_lnk_files_pattern($1, configfs_t, configfs_t)
-')
-
-########################################
-## <summary>
-##	Allow permissions for function_fs mounting
-## </summary>
-## <param name="domain">
-##	<summary>
-##	Domain allowed to mount f_fs.
-##	</summary>
-## </param>
-#
-interface(`fs_mount_functionfs',`
-	gen_require(`
-		type functionfs_t;
-	')
-
-	allow $1 functionfs_t:filesystem {mount};
 ')
 
 ########################################
@@ -102,10 +48,10 @@ interface(`fs_map_tmpfs_file',`
 ##	</summary>
 ## </param>
 #
-interface(`fs_unmount_functionfs',`
+interface(`fs_unmount_usbfs',`
 	gen_require(`
-		type functionfs_t;
+		type usbfs_t;
 	')
 
-	allow $1 functionfs_t:filesystem { unmount };
+	allow $1 usbfs_t:filesystem { unmount };
 ')

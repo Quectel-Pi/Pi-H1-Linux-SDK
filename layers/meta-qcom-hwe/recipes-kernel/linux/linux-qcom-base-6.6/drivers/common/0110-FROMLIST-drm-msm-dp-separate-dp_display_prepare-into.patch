@@ -1,0 +1,102 @@
+From ff9561bd2bfa81d0b1ffba49b37107cc4ee66ca0 Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:31:44 -0800
+Subject: [PATCH 110/146] FROMLIST: drm/msm/dp: separate dp_display_prepare()
+ into its own API
+
+dp_display_prepare() only prepares the link in case its not
+already ready before dp_display_enable(). Hence separate it into
+its own API.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-13-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 24 +++++++++++++++++-------
+ drivers/gpu/drm/msm/dp/dp_display.h |  1 +
+ drivers/gpu/drm/msm/dp/dp_drm.c     |  2 ++
+ 3 files changed, 20 insertions(+), 7 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 0f3388d253fa..fede5aa87fcf 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -1531,26 +1531,36 @@ int msm_dp_modeset_init(struct msm_dp *msm_dp_display, struct drm_device *dev,
+ 	return 0;
+ }
+ 
+-void msm_dp_display_atomic_enable(struct msm_dp *dp)
++void msm_dp_display_atomic_prepare(struct msm_dp *dp)
+ {
+ 	int rc = 0;
+-
+ 	struct msm_dp_display_private *msm_dp_display;
+ 
+ 	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
+ 
+-	if (dp->is_edp)
+-		msm_dp_hpd_plug_handle(msm_dp_display, 0);
+-
+ 	mutex_lock(&msm_dp_display->event_mutex);
+ 
+ 	rc = msm_dp_display_prepare(msm_dp_display);
+ 	if (rc) {
+ 		DRM_ERROR("DP display prepare failed, rc=%d\n", rc);
+-		mutex_unlock(&msm_dp_display->event_mutex);
+-		return;
+ 	}
+ 
++	mutex_unlock(&msm_dp_display->event_mutex);
++}
++
++void msm_dp_display_atomic_enable(struct msm_dp *dp)
++{
++	int rc = 0;
++
++	struct msm_dp_display_private *msm_dp_display;
++
++	msm_dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
++
++	if (dp->is_edp)
++		msm_dp_hpd_plug_handle(msm_dp_display, 0);
++
++	mutex_lock(&msm_dp_display->event_mutex);
++
+ 	if (dp->prepared) {
+ 		rc = msm_dp_display_enable(msm_dp_display);
+ 		if (rc)
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.h b/drivers/gpu/drm/msm/dp/dp_display.h
+index 2a800164cd9c..46912a9855b5 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.h
++++ b/drivers/gpu/drm/msm/dp/dp_display.h
+@@ -44,6 +44,7 @@ void msm_dp_display_debugfs_init(struct msm_dp *msm_dp_display, struct dentry *d
+ void msm_dp_display_atomic_post_disable(struct msm_dp *dp_display);
+ void msm_dp_display_atomic_disable(struct msm_dp *dp_display);
+ void msm_dp_display_atomic_enable(struct msm_dp *dp_display);
++void msm_dp_display_atomic_prepare(struct msm_dp *dp);
+ void msm_dp_display_mode_set(struct msm_dp *dp,
+ 			     const struct drm_display_mode *mode,
+ 			     const struct drm_display_mode *adjusted_mode);
+diff --git a/drivers/gpu/drm/msm/dp/dp_drm.c b/drivers/gpu/drm/msm/dp/dp_drm.c
+index 4ef3f16a6889..920392b3c688 100644
+--- a/drivers/gpu/drm/msm/dp/dp_drm.c
++++ b/drivers/gpu/drm/msm/dp/dp_drm.c
+@@ -103,6 +103,7 @@ static void msm_dp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
+ 	struct msm_dp_bridge *dp_bridge = to_dp_bridge(drm_bridge);
+ 	struct msm_dp *dp = dp_bridge->msm_dp_display;
+ 
++	msm_dp_display_atomic_prepare(dp);
+ 	msm_dp_display_atomic_enable(dp);
+ }
+ 
+@@ -210,6 +211,7 @@ static void msm_edp_bridge_atomic_enable(struct drm_bridge *drm_bridge,
+ 		return;
+ 	}
+ 
++	msm_dp_display_atomic_prepare(dp);
+ 	msm_dp_display_atomic_enable(dp);
+ }
+ 
+-- 
+2.34.1
+

@@ -1,4 +1,6 @@
 #
+# Copyright OpenEmbedded Contributors
+#
 # SPDX-License-Identifier: MIT
 #
 
@@ -23,7 +25,7 @@ class TestExport(OESelftestTestCase):
         Author: Mariano Lopez <mariano.lopez@intel.com>
         """
 
-        features = 'INHERIT += "testexport"\n'
+        features = 'IMAGE_CLASSES += "testexport"\n'
         # These aren't the actual IP addresses but testexport class needs something defined
         features += 'TEST_SERVER_IP = "192.168.7.1"\n'
         features += 'TEST_TARGET_IP = "192.168.7.1"\n'
@@ -64,7 +66,7 @@ class TestExport(OESelftestTestCase):
         Author: Mariano Lopez <mariano.lopez@intel.com>
         """
 
-        features = 'INHERIT += "testexport"\n'
+        features = 'IMAGE_CLASSES += "testexport"\n'
         # These aren't the actual IP addresses but testexport class needs something defined
         features += 'TEST_SERVER_IP = "192.168.7.1"\n'
         features += 'TEST_TARGET_IP = "192.168.7.1"\n'
@@ -119,13 +121,29 @@ class TestImage(OESelftestTestCase):
         if get_bb_var('DISTRO') == 'poky-tiny':
             self.skipTest('core-image-full-cmdline not buildable for poky-tiny')
 
-        features = 'INHERIT += "testimage"\n'
+        features = 'IMAGE_CLASSES += "testimage"\n'
         features += 'IMAGE_INSTALL:append = " libssl"\n'
         features += 'TEST_SUITES = "ping ssh selftest"\n'
         self.write_config(features)
 
         bitbake('core-image-full-cmdline socat')
         bitbake('-c testimage core-image-full-cmdline')
+
+    def test_testimage_slirp(self):
+        """
+        Summary: Check basic testimage functionality with qemu and slirp networking.
+        """
+
+        features = '''
+IMAGE_CLASSES:append = " testimage"
+IMAGE_FEATURES:append = " ssh-server-dropbear"
+IMAGE_ROOTFS_EXTRA_SPACE:append = "${@bb.utils.contains("IMAGE_CLASSES", "testimage", " + 5120", "", d)}"
+TEST_RUNQEMUPARAMS += " slirp"
+'''
+        self.write_config(features)
+
+        bitbake('core-image-minimal')
+        bitbake('-c testimage core-image-minimal')
 
     def test_testimage_dnf(self):
         """
@@ -137,7 +155,7 @@ class TestImage(OESelftestTestCase):
         if get_bb_var('DISTRO') == 'poky-tiny':
             self.skipTest('core-image-full-cmdline not buildable for poky-tiny')
 
-        features = 'INHERIT += "testimage"\n'
+        features = 'IMAGE_CLASSES += "testimage"\n'
         features += 'TEST_SUITES = "ping ssh dnf_runtime dnf.DnfBasicTest.test_dnf_help"\n'
         # We don't yet know what the server ip and port will be - they will be patched
         # in at the start of the on-image test
@@ -172,7 +190,7 @@ class TestImage(OESelftestTestCase):
         if get_bb_var('DISTRO') == 'poky-tiny':
             self.skipTest('core-image-full-cmdline not buildable for poky-tiny')
 
-        features = 'INHERIT += "testimage"\n'
+        features = 'IMAGE_CLASSES += "testimage"\n'
         features += 'TEST_SUITES = "ping ssh apt.AptRepoTest.test_apt_install_from_repo"\n'
         # We don't yet know what the server ip and port will be - they will be patched
         # in at the start of the on-image test
@@ -221,12 +239,10 @@ class TestImage(OESelftestTestCase):
             self.skipTest('virgl isn\'t working with Centos 7')
         if distro and distro == 'opensuseleap-15.0':
             self.skipTest('virgl isn\'t working with Opensuse 15.0')
-        if distro and distro == 'ubuntu-18.04':
-            self.skipTest('virgl isn\'t working with Ubuntu 18.04')
 
         qemu_packageconfig = get_bb_var('PACKAGECONFIG', 'qemu-system-native')
         qemu_distrofeatures = get_bb_var('DISTRO_FEATURES', 'qemu-system-native')
-        features = 'INHERIT += "testimage"\n'
+        features = 'IMAGE_CLASSES += "testimage"\n'
         if 'gtk+' not in qemu_packageconfig:
             features += 'PACKAGECONFIG:append:pn-qemu-system-native = " gtk+"\n'
         if 'sdl' not in qemu_packageconfig:
@@ -236,11 +252,11 @@ class TestImage(OESelftestTestCase):
         features += 'TEST_SUITES = "ping ssh virgl"\n'
         features += 'IMAGE_FEATURES:append = " ssh-server-dropbear"\n'
         features += 'IMAGE_INSTALL:append = " kmscube"\n'
-        features_gtk = features + 'TEST_RUNQEMUPARAMS = "gtk gl"\n'
+        features_gtk = features + 'TEST_RUNQEMUPARAMS += " gtk gl"\n'
         self.write_config(features_gtk)
         bitbake('core-image-minimal')
         bitbake('-c testimage core-image-minimal')
-        features_sdl = features + 'TEST_RUNQEMUPARAMS = "sdl gl"\n'
+        features_sdl = features + 'TEST_RUNQEMUPARAMS += " sdl gl"\n'
         self.write_config(features_sdl)
         bitbake('core-image-minimal')
         bitbake('-c testimage core-image-minimal')
@@ -257,29 +273,18 @@ class TestImage(OESelftestTestCase):
         import subprocess, os
 
         distro = oe.lsb.distro_identifier()
-        if distro and (distro in ['debian-9', 'debian-10', 'centos-7', 'centos-8', 'ubuntu-16.04', 'ubuntu-18.04'] or
-            distro.startswith('almalinux') or distro.startswith('fedora') or distro.startswith('rocky')):
+        if distro and (distro in ['debian-9', 'debian-10', 'centos-7', 'centos-8', 'centos-9', 'ubuntu-16.04', 'ubuntu-18.04'] or
+            distro.startswith('almalinux') or distro.startswith('rocky')):
             self.skipTest('virgl headless cannot be tested with %s' %(distro))
 
-        render_hint = """If /dev/dri/renderD* is absent due to lack of suitable GPU, 'modprobe vgem' will create one suitable for mesa llvmpipe software renderer."""
-        try:
-            content = os.listdir("/dev/dri")
-            if len([i for i in content if i.startswith('render')]) == 0:
-                self.fail("No render nodes found in /dev/dri: %s. %s" %(content, render_hint))
-        except FileNotFoundError:
-            self.fail("/dev/dri directory does not exist; no render nodes available on this machine. %s" %(render_hint))
-        try:
-            dripath = subprocess.check_output("PATH=/bin:/usr/bin:$PATH pkg-config --variable=dridriverdir dri", shell=True)
-        except subprocess.CalledProcessError as e:
-            self.fail("Could not determine the path to dri drivers on the host via pkg-config.\nPlease install Mesa development files (particularly, dri.pc) on the host machine.")
         qemu_distrofeatures = get_bb_var('DISTRO_FEATURES', 'qemu-system-native')
-        features = 'INHERIT += "testimage"\n'
+        features = 'IMAGE_CLASSES += "testimage"\n'
         if 'opengl' not in qemu_distrofeatures:
             features += 'DISTRO_FEATURES:append = " opengl"\n'
         features += 'TEST_SUITES = "ping ssh virgl"\n'
         features += 'IMAGE_FEATURES:append = " ssh-server-dropbear"\n'
         features += 'IMAGE_INSTALL:append = " kmscube"\n'
-        features += 'TEST_RUNQEMUPARAMS = "egl-headless"\n'
+        features += 'TEST_RUNQEMUPARAMS += " egl-headless"\n'
         self.write_config(features)
         bitbake('core-image-minimal')
         bitbake('-c testimage core-image-minimal')
@@ -305,7 +310,7 @@ class Postinst(OESelftestTestCase):
                 features += 'IMAGE_FEATURES += "package-management empty-root-password"\n'
                 features += 'PACKAGE_CLASSES = "%s"\n' % classes
                 if init_manager == "systemd":
-                    features += 'DISTRO_FEATURES:append = " systemd"\n'
+                    features += 'DISTRO_FEATURES:append = " systemd usrmerge"\n'
                     features += 'VIRTUAL-RUNTIME_init_manager = "systemd"\n'
                     features += 'DISTRO_FEATURES_BACKFILL_CONSIDERED = "sysvinit"\n'
                     features += 'VIRTUAL-RUNTIME_initscripts = ""\n'

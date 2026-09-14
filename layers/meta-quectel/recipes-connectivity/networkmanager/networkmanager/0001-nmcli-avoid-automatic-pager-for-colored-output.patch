@@ -1,0 +1,13 @@
+diff --git a/src/nmcli/utils.c b/src/nmcli/utils.c
+--- a/src/nmcli/utils.c
++++ b/src/nmcli/utils.c
+@@ -1452,6 +1452,9 @@ nmc_terminal_spawn_pager(const NmcConfig *nmc_config)
+     int                errsv;
+     gs_strfreev char **ev = NULL;
+ 
++    if (nmc_config->use_colors)
++        return 0;
++
+     if (nmc_config->in_editor || nmc_config->print_output == NMC_PRINT_TERSE
+         || !nmc_config->use_colors || g_strcmp0(pager, "") == 0 || getauxval(AT_SECURE))
+         return 0;

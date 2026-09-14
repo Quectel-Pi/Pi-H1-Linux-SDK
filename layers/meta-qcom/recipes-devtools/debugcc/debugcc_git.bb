@@ -9,7 +9,7 @@ SRC_URI = "\
     git://github.com/andersson/debugcc.git;branch=master;protocol=https \
 "
 
-SRCREV = "c74b999277c2a18ee05fe6f28af582829039170d"
+SRCREV = "1f2d56984ec60e6ca0a18718c75c4e593542cefc"
 
 PV = "0.0+git${SRCPV}"
 

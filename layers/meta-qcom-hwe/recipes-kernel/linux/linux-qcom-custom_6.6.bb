@@ -4,28 +4,26 @@ SUMMARY = "Linux kernel for QCOM devices"
 DESCRIPTION = "Recipe to build Linux kernel"
 
 LICENSE = "GPLv2.0-with-linux-syscall-note"
-#LIC_FILES_CHKSUM = "file://COPYING;md5=6bc538ed5bd9a7fc9398086aedcd7e46"
-LIC_FILES_CHKSUM = "file://${WORKSPACE}/sources/quectel-src/kernel/qcom-6.6/COPYING;md5=6bc538ed5bd9a7fc9398086aedcd7e46"
+LIC_FILES_CHKSUM = "file://COPYING;md5=6bc538ed5bd9a7fc9398086aedcd7e46"
 
-inherit kernel sota
+inherit kernel
+inherit ${@bb.utils.contains('DISTRO_FEATURES', 'sota', 'sota', '', d)}
 
 COMPATIBLE_MACHINE = "(qcom)"
 
-#SRCPROJECT = "git://git.codelinaro.org/clo/la/kernel/qcom.git;protocol=https"
-#SRCBRANCH  = "kernel.qclinux.1.0.r1-rel"
-#SRCREV     = "d3ed32bf7ee64db22653833d4c3d9a80dd76896d"
-#
-#SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=kernel \
-#           ${@bb.utils.contains('DISTRO_FEATURES', 'selinux', ' file://selinux.cfg', '', d)} \
-#           ${@bb.utils.contains('DISTRO_FEATURES', 'selinux', ' file://selinux_debug.cfg', '', d)} \
-#           "
-FILESPATH =+ "${WORKSPACE}/sources/quectel-src/kernel:"
-SRC_URI = "file://qcom-6.6 \
+SRCPROJECT = "git://git.codelinaro.org/clo/la/kernel/qcom.git;protocol=https"
+SRCBRANCH  = "kernel.qclinux.1.0.r1-rel"
+SRCREV     = "de229c16e2aad78e054a222957219e8fda5bb335"
+
+SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=kernel \
            ${@bb.utils.contains('DISTRO_FEATURES', 'selinux', ' file://selinux.cfg', '', d)} \
            ${@bb.utils.contains('DISTRO_FEATURES', 'selinux', ' file://selinux_debug.cfg', '', d)} \
+           ${@bb.utils.contains('DISTRO_FEATURES', 'smack', ' file://smack.cfg', '', d)} \
+           ${@bb.utils.contains('DISTRO_FEATURES', 'smack', ' file://smack_debug.cfg', '', d)} \
+           file://0001-QCLINUX-Add-support-to-compile-msm_display.ko.patch \
            "
 
-S = "${WORKDIR}/qcom-6.6"
+S = "${WORKDIR}/kernel"
 
 KERNEL_CONFIG ??= "qcom_defconfig"
 
@@ -36,6 +34,10 @@ KERNEL_CONFIG_FRAGMENTS:append = " ${@oe.utils.vartrue('DEBUG_BUILD', '${S}/arch
 # Enable selinux support
 SELINUX_CFG = "${@oe.utils.vartrue('DEBUG_BUILD', 'selinux_debug.cfg', 'selinux.cfg', d)}"
 KERNEL_CONFIG_FRAGMENTS:append = " ${@bb.utils.contains('DISTRO_FEATURES', 'selinux', '${WORKDIR}/${SELINUX_CFG}', '', d)}"
+
+#Enable SMACK Support
+SMACK_CFG = "${@oe.utils.vartrue('DEBUG_BUILD', 'smack_debug.cfg', 'smack.cfg', d)}"
+KERNEL_CONFIG_FRAGMENTS:append = " ${@bb.utils.contains('DISTRO_FEATURES', 'smack', '${WORKDIR}/${SMACK_CFG}', '', d)}"
 
 # List of kernel modules that will be auto-loaded for Qualcomm platforms.
 
@@ -126,4 +128,23 @@ do_install:prepend() {
     ln -rs ${STAGING_KERNEL_DIR} ${D}${nonarch_base_libdir}/modules/${KERNEL_VERSION}/source
 }
 
-#do_package[nostamp] = "1"
+# Duplicate msm as msm_default after source unpacking. This is
+# needed to generate both msm.ko with GPU support and msm_display.ko
+# without GPU support. msm folder is patched to generate msm_display.ko.
+# Also blacklist msm module by default. If drm driver is required for
+# GPU, msm can be removed from blacklist and msm_display and msm_kgsl
+# can be added to blacklist.
+python copy_msm() {
+    import shutil
+    import os
+
+    src = os.path.join(d.getVar('S'), "drivers/gpu/drm/msm")
+    dst = os.path.join(d.getVar('S'), "drivers/gpu/drm/msm_default")
+
+    if not os.path.exists(dst):
+        shutil.copytree(src, dst)
+}
+do_unpack[postfuncs] += "copy_msm"
+
+KERNEL_MODULE_PROBECONF += "msm"
+module_conf_msm = "blacklist msm"

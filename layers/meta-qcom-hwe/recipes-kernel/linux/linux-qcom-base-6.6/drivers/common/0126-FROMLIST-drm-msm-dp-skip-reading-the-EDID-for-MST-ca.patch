@@ -1,0 +1,38 @@
+From 4bbd3060674aef954b542b16cf8a4dbaa5ee169d Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:32:00 -0800
+Subject: [PATCH 126/146] FROMLIST: drm/msm/dp: skip reading the EDID for MST
+ cases
+
+For MST cases, EDID is handled through AUX sideband messaging.
+Skip the EDID read during hotplug handle for MST cases.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-29-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index b1d83c15c434..7fa3c4bd7d8d 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -426,9 +426,11 @@ static int msm_dp_display_process_hpd_high(struct msm_dp_display_private *dp)
+ 	if (rc)
+ 		goto end;
+ 
+-	rc = msm_dp_panel_read_edid(dp->panel, connector);
+-	if (rc)
+-		goto end;
++	if (dp->max_stream <= DEFAULT_STREAM_COUNT || !msm_dp_panel_read_mst_cap(dp->panel)) {
++		rc = msm_dp_panel_read_edid(dp->panel, connector);
++		if (rc)
++			goto end;
++	}
+ 
+ 	msm_dp_link_process_request(dp->link);
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,39 @@
+From 4eed4066f346927e94506f097c56912521d5d294 Mon Sep 17 00:00:00 2001
+From: Johan Hovold <johan+linaro@kernel.org>
+Date: Wed, 13 Mar 2024 17:43:06 +0100
+Subject: [PATCH 075/146] UPSTREAM: drm/msm/dp: fix runtime PM leak on connect
+ failure
+
+Make sure to balance the runtime PM usage counter (and suspend) before
+returning on connect failures (e.g. DPCD read failures after a spurious
+connect event or if link training fails).
+
+Fixes: 5814b8bf086a ("drm/msm/dp: incorporate pm_runtime framework into DP driver")
+Cc: stable@vger.kernel.org      # 6.8
+Cc: Kuogee Hsieh <quic_khsieh@quicinc.com>
+Signed-off-by: Johan Hovold <johan+linaro@kernel.org>
+Reviewed-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Patchwork: https://patchwork.freedesktop.org/patch/582746/
+Link: https://lore.kernel.org/r/20240313164306.23133-3-johan+linaro@kernel.org
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git e86750b01a1560f198e4b3e21bb3f78bfd5bb2c3]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 38153399063b..5c5724bd8a6f 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -600,6 +600,7 @@ static int dp_hpd_plug_handle(struct dp_display_private *dp, u32 data)
+ 	ret = dp_display_usbpd_configure_cb(&pdev->dev);
+ 	if (ret) {	/* link train failed */
+ 		dp->hpd_state = ST_DISCONNECTED;
++		pm_runtime_put_sync(&pdev->dev);
+ 	} else {
+ 		dp->hpd_state = ST_MAINLINK_READY;
+ 	}
+-- 
+2.34.1
+

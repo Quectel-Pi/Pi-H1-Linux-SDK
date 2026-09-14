@@ -1,0 +1,96 @@
+From 7ab0e6ceeeb6d915ab4a5dd3977ddc392da1cd4b Mon Sep 17 00:00:00 2001
+From: Miaoqing Pan <quic_miaoqing@quicinc.com>
+Date: Tue, 25 Feb 2025 12:13:40 +0800
+Subject: [PATCH] FROMLIST: wifi: ath11k: fix HTC rx insufficient length
+
+A relatively unusual race condition occurs between host software
+and hardware, where the host sees the updated destination ring head
+pointer before the hardware updates the corresponding descriptor.
+When this situation occurs, the length of the descriptor returns 0.
+
+The current error handling method is to increment descriptor tail
+pointer by 1, but 'sw_index' is not updated, causing descriptor and
+skb to not correspond one-to-one, resulting in the following error:
+
+ath11k_pci 0006:01:00.0: HTC Rx: insufficient length, got 1488, expected 1492
+ath11k_pci 0006:01:00.0: HTC Rx: insufficient length, got 1460, expected 1484
+
+To address this problem and work around the broken hardware,
+temporarily skip processing the current descriptor and handle it
+again next time. Also, skip updating the length field of the
+descriptor when it is 0, because there's a racing update, may
+never see the updated length.
+
+Tested-on: QCA6698AQ hw2.1 PCI WLAN.HSP.1.1-04546-QCAHSPSWPL_V1_V2_SILICONZ_IOE-1
+
+Change-Id: Idee2fd254d0c9a7ac9289eb24053fd69e134f92a
+Reported-by: Johan Hovold <johan+linaro@kernel.org>
+Closes: https://bugzilla.kernel.org/show_bug.cgi?id=218623
+Signed-off-by: Miaoqing Pan <quic_miaoqing@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-wireless/20250317072036.2066518-3-quic_miaoqing@quicinc.com/]
+---
+ drivers/net/wireless/ath/ath11k/ce.c  | 16 ++++++++++++++--
+ drivers/net/wireless/ath/ath11k/hal.c |  7 ++++++-
+ 2 files changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/wireless/ath/ath11k/ce.c b/drivers/net/wireless/ath/ath11k/ce.c
+index 39d9aad33bc6..e586e6765452 100644
+--- a/drivers/net/wireless/ath/ath11k/ce.c
++++ b/drivers/net/wireless/ath/ath11k/ce.c
+@@ -1,7 +1,7 @@
+ // SPDX-License-Identifier: BSD-3-Clause-Clear
+ /*
+  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2021-2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ 
+ #include "dp_rx.h"
+@@ -387,13 +387,25 @@ static int ath11k_ce_completed_recv_next(struct ath11k_ce_pipe *pipe,
+ 
+ 	ath11k_hal_srng_access_begin(ab, srng);
+ 
+-	desc = ath11k_hal_srng_dst_get_next_entry(ab, srng);
++	desc = ath11k_hal_srng_dst_peek(ab, srng);
+ 	if (!desc) {
+ 		ret = -EIO;
+ 		goto err;
+ 	}
+ 
+ 	*nbytes = ath11k_hal_ce_dst_status_get_length(desc);
++	if (unlikely(*nbytes == 0)) {
++		/* A relatively unusual race condition occurs between host
++		 * software and hardware, where the host sees the updated
++		 * destination ring head pointer before the hardware updates
++		 * the corresponding descriptor. Temporarily skip processing
++		 * the current descriptor and handle it again next time.
++		 */
++		ret = -EIO;
++		goto err;
++	}
++
++	ath11k_hal_srng_dst_next(ab, srng);
+ 
+ 	*skb = pipe->dest_ring->skb[sw_index];
+ 	pipe->dest_ring->skb[sw_index] = NULL;
+diff --git a/drivers/net/wireless/ath/ath11k/hal.c b/drivers/net/wireless/ath/ath11k/hal.c
+index e8ed0b4e965a..483d6b4fef3e 100644
+--- a/drivers/net/wireless/ath/ath11k/hal.c
++++ b/drivers/net/wireless/ath/ath11k/hal.c
+@@ -602,7 +602,12 @@ u32 ath11k_hal_ce_dst_status_get_length(void *buf)
+ 	u32 len;
+ 
+ 	len = FIELD_GET(HAL_CE_DST_STATUS_DESC_FLAGS_LEN, READ_ONCE(desc->flags));
+-	desc->flags &= ~HAL_CE_DST_STATUS_DESC_FLAGS_LEN;
++	len = FIELD_GET(HAL_CE_DST_STATUS_DESC_FLAGS_LEN, desc->flags);
++	/* Skip updating the length field of the descriptor when it is 0,
++	 * because there's a racing update, may never see the updated length.
++	 */
++	if (likely(len))
++		desc->flags &= ~HAL_CE_DST_STATUS_DESC_FLAGS_LEN;
+ 
+ 	return len;
+ }
+-- 
+2.17.1
+

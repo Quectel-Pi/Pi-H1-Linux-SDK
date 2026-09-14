@@ -17,8 +17,8 @@ allow qcom_diag-router_t self:qipcrtr_socket create_socket_perms;
 allow qcom_diag-router_t self:unix_stream_socket { create_stream_socket_perms sendto accept listen };
 allow qcom_diag-router_t self:netlink_kobject_uevent_socket { read bind create setopt };
 fs_manage_configfs_files(qcom_diag-router_t)
-fs_list_functionfs_dirs(qcom_diag-router_t)
-fs_rw_functionfs_files(qcom_diag-router_t)
+fs_list_usbfs_dirs(qcom_diag-router_t)
+fs_rw_usbfs_files(qcom_diag-router_t)
 
 allow qcom_diag-router_t self:socket create_socket_perms;
 allow qcom_diag-router_t self:capability kill;

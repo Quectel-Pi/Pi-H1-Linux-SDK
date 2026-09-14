@@ -1,0 +1,38 @@
+From 2857f410e6eb89c4d1251514ede2d55f92ee1380 Mon Sep 17 00:00:00 2001
+From: Lijuan Gao <quic_lijuang@quicinc.com>
+Date: Mon, 24 Feb 2025 15:40:23 +0800
+Subject: [PATCH] FROMLIST: arm64: dts: qcom: qcs615: Add Command DB support
+
+Command DB is a database in the shared memory of QCOM SoCs, that
+provides a mapping between resource key and the resource address for a
+system resource managed by a remote processor. The data is stored in a
+shared memory region and is loaded by the remote processor. Therefore,
+enabling Command DB ensures that those resources function properly.
+
+Signed-off-by: Lijuan Gao <quic_lijuang@quicinc.com>
+Link: https://lore.kernel.org/all/20250221-add_command_db_support-v1-1-d60acbf913aa@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250221-add_command_db_support-v1-1-d60acbf913aa@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs615.dtsi | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs615.dtsi b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+index 36fdd32f1ce6..0ca366f43969 100644
+--- a/arch/arm64/boot/dts/qcom/qcs615.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+@@ -455,6 +455,12 @@ reserved-memory {
+ 		#size-cells = <2>;
+ 		ranges;
+ 
++		aop_cmd_db_mem: aop-cmd-db@85f20000 {
++			compatible = "qcom,cmd-db";
++			reg = <0x0 0x85f20000 0x0 0x20000>;
++			no-map;
++		};
++
+ 		smem_region: smem@86000000 {
+ 			compatible = "qcom,smem";
+ 			reg = <0x0 0x86000000 0x0 0x200000>;
+-- 
+2.46.0
+

@@ -1,0 +1,72 @@
+From 62164f5aa9dddb164fefda9c85c83a71a4fefd82 Mon Sep 17 00:00:00 2001
+From: Daniel Golle <daniel@makrotopia.org>
+Date: Tue, 28 Nov 2023 04:00:39 +0000
+Subject: [PATCH 39/39] UPSTREAM: docs: ABI: sysfs-class-led-trigger-netdev:
+ add new modes and entry
+
+Document newly introduced modes for the LED netdev trigger.
+
+Add documentation for new modes:
+- link_2500
+- link_5000
+- link_10000
+
+Signed-off-by: Daniel Golle <daniel@makrotopia.org>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 2ffb8d02a9b60d9190a871cb8466cd0721bc0a49]
+---
+ .../testing/sysfs-class-led-trigger-netdev    | 39 +++++++++++++++++++
+ 1 file changed, 39 insertions(+)
+
+diff --git a/Documentation/ABI/testing/sysfs-class-led-trigger-netdev b/Documentation/ABI/testing/sysfs-class-led-trigger-netdev
+index f6d9d72ce77b..a6c307c4befa 100644
+--- a/Documentation/ABI/testing/sysfs-class-led-trigger-netdev
++++ b/Documentation/ABI/testing/sysfs-class-led-trigger-netdev
+@@ -114,6 +114,45 @@ Description:
+ 		speed of 1000Mbps of the named network device.
+ 		Setting this value also immediately changes the LED state.
+ 
++What:		/sys/class/leds/<led>/link_2500
++Date:		Nov 2023
++KernelVersion:	6.8
++Contact:	linux-leds@vger.kernel.org
++Description:
++		Signal the link speed state of 2500Mbps of the named network device.
++
++		If set to 0 (default), the LED's normal state is off.
++
++		If set to 1, the LED's normal state reflects the link state
++		speed of 2500Mbps of the named network device.
++		Setting this value also immediately changes the LED state.
++
++What:		/sys/class/leds/<led>/link_5000
++Date:		Nov 2023
++KernelVersion:	6.8
++Contact:	linux-leds@vger.kernel.org
++Description:
++		Signal the link speed state of 5000Mbps of the named network device.
++
++		If set to 0 (default), the LED's normal state is off.
++
++		If set to 1, the LED's normal state reflects the link state
++		speed of 5000Mbps of the named network device.
++		Setting this value also immediately changes the LED state.
++
++What:		/sys/class/leds/<led>/link_10000
++Date:		Nov 2023
++KernelVersion:	6.8
++Contact:	linux-leds@vger.kernel.org
++Description:
++		Signal the link speed state of 10000Mbps of the named network device.
++
++		If set to 0 (default), the LED's normal state is off.
++
++		If set to 1, the LED's normal state reflects the link state
++		speed of 10000Mbps of the named network device.
++		Setting this value also immediately changes the LED state.
++
+ What:		/sys/class/leds/<led>/half_duplex
+ Date:		Jun 2023
+ KernelVersion:	6.5
+-- 
+2.34.1
+

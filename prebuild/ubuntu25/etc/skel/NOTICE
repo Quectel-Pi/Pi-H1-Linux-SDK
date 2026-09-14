@@ -1,0 +1,19 @@
+This device contains software components licensed under the GNU General
+Public License version 3 (GPLv3) and the GNU Lesser General Public License
+version 3 (LGPLv3). All such components are obtained from official upstream
+open-source projects in the Ubuntu distribution and have not been modified
+by our company.
+
+In accordance with the license terms, the complete corresponding source
+code for these components can be obtained from the official Ubuntu source
+repositories:
+
+    https://archive.ubuntu.com/ubuntu/
+
+You may retrieve any source package using:
+    apt-get source <package-name>
+
+The full text of the GPLv3 license is available at:
+    https://www.gnu.org/licenses/gpl-3.0.html
+
+Please contact us if you require assistance in obtaining the source code.

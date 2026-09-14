@@ -18,7 +18,11 @@ set_bda() {
     sleep 1
 
     # Pass the formatted serial number to btmgmt tool
-    btmgmt public-addr $BDA
+    # Start btmgmt and send commands
+    {
+        echo "public-addr $BDA"
+        sleep 1
+    } | btmgmt
 }
 
 

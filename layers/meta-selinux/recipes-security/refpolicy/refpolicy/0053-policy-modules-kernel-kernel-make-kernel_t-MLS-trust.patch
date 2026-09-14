@@ -1,0 +1,31 @@
+From 35351cd7cb07622b5e43254b95d7801a5669358d Mon Sep 17 00:00:00 2001
+From: Yi Zhao <yi.zhao@windriver.com>
+Date: Thu, 31 Oct 2019 17:35:59 +0800
+Subject: [PATCH] policy/modules/kernel/kernel: make kernel_t MLS trusted for
+ writing to keys at all levels.
+
+Fixes:
+systemd-udevd[216]: regulatory.0: Process '/usr/sbin/crda' failed with exit code 254.
+
+Upstream-Status: Inappropriate [embedded specific]
+
+Signed-off-by: Yi Zhao <yi.zhao@windriver.com>
+---
+ policy/modules/kernel/kernel.te | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/policy/modules/kernel/kernel.te b/policy/modules/kernel/kernel.te
+index b4b089823..5835d28b2 100644
+--- a/policy/modules/kernel/kernel.te
++++ b/policy/modules/kernel/kernel.te
+@@ -384,6 +384,7 @@ mls_socket_write_all_levels(kernel_t)
+ mls_fd_use_all_levels(kernel_t)
+ # https://bugzilla.redhat.com/show_bug.cgi?id=667370
+ mls_file_downgrade(kernel_t)
++mls_key_write_all_levels(kernel_t)
+ 
+ ifdef(`distro_redhat',`
+ 	# Bugzilla 222337
+-- 
+2.25.1
+

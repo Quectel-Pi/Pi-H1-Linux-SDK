@@ -1,0 +1,127 @@
+From 56bba77bcb31c852ea6af0ffa5e8c0292851b03c Mon Sep 17 00:00:00 2001
+From: Amisha Jain <quic_amisjain@quicinc.com>
+Date: Mon, 3 Mar 2025 20:21:29 +0530
+Subject: [PATCH] UPSTREAM:obex: Add messages_get_message() implementation for
+ MAP plugin
+
+GET Message() operation should be supported for passing below PTS
+testcases -
+
+1.MAP/MSE/MMB/BV-12-C
+  Verify that the MSE can return an email message to the MCE.
+2.MAP/MSE/MMB/BV-13-C
+  Verify that the MSE can return a a*n* SMS message in native format
+  to the MCE.
+3.MAP/MSE/MMB/BV-14-C
+  Verify that the MSE can return a SMS message with text trans-coded
+  to UTF-8 to the MCE.
+
+Currently get message operation is not implemented, hence above
+testcases are failing.
+Added code to send the complete bmessage in response to the get() request
+for the requested message handle.
+
+Upstream-Status: Backport https://github.com/bluez/bluez/commit/9a32b6144d8a9d7aedfa696e0aa8572c13c58480
+Signed-off-by: Amisha Jain <quic_amisjain@quicinc.com>
+---
+ obexd/plugins/mas.c            |  5 ++--
+ obexd/plugins/messages-dummy.c | 50 +++++++++++++++++++++++++++++++++-
+ 2 files changed, 52 insertions(+), 3 deletions(-)
+
+diff --git a/obexd/plugins/mas.c b/obexd/plugins/mas.c
+index 5d00bc5..2f711c3 100644
+--- a/obexd/plugins/mas.c
++++ b/obexd/plugins/mas.c
+@@ -408,6 +408,7 @@ static void get_message_cb(void *session, int err, gboolean fmore,
+ 	}
+ 
+ 	g_string_append(mas->buffer, chunk);
++	mas->finished = TRUE;
+ 
+ proceed:
+ 	if (err != -EAGAIN)
+@@ -612,11 +613,11 @@ static void *message_open(const char *name, int oflag, mode_t mode,
+ 		return NULL;
+ 	}
+ 
++	mas->buffer = g_string_new("");
++
+ 	*err = messages_get_message(mas->backend_data, name, 0,
+ 			get_message_cb, mas);
+ 
+-	mas->buffer = g_string_new("");
+-
+ 	if (*err < 0)
+ 		return NULL;
+ 	else
+diff --git a/obexd/plugins/messages-dummy.c b/obexd/plugins/messages-dummy.c
+index e37b52d..9d748b2 100644
+--- a/obexd/plugins/messages-dummy.c
++++ b/obexd/plugins/messages-dummy.c
+@@ -18,6 +18,8 @@
+ #include <errno.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <sys/stat.h>
++#include <sys/mman.h>
+ 
+ #include "obexd/src/log.h"
+ 
+@@ -506,7 +508,53 @@ int messages_get_message(void *session, const char *handle,
+ 					messages_get_message_cb callback,
+ 					void *user_data)
+ {
+-	return -ENOSYS;
++	struct session *s =  session;
++	FILE *fp;
++	char *path;
++	char *msg, *buffer;
++	int file_size, err = 0;
++	struct stat file_info;
++
++	DBG(" ");
++	path = g_build_filename(s->cwd_absolute, handle, NULL);
++	fp = fopen(path, "r");
++	if (!fp) {
++		DBG("fopen() failed");
++		err = -EBADR;
++		goto file_open_err;
++	}
++
++	if (fstat(fileno(fp), &file_info) < 0) {
++		DBG("Error getting file size");
++		err = -EBADR;
++		goto mmap_err;
++	}
++
++	file_size = file_info.st_size;
++
++	msg = mmap(0, file_size, PROT_READ, MAP_PRIVATE, fileno(fp), 0);
++	if (msg == MAP_FAILED) {
++		DBG("Error mapping file");
++		err = -EBADR;
++		goto mmap_err;
++	}
++
++	buffer = strndup(msg, file_size);
++
++	if (callback)
++		callback(session, 0, 0, buffer, user_data);
++
++	if (munmap(msg, file_size) == -1) {
++		DBG("Error unmapping");
++		err = -EBADR;
++	}
++
++	free(buffer);
++mmap_err:
++	fclose(fp);
++file_open_err:
++	g_free(path);
++	return err;
+ }
+ 
+ int messages_update_inbox(void *session, messages_status_cb callback,
+-- 
+2.34.1
+

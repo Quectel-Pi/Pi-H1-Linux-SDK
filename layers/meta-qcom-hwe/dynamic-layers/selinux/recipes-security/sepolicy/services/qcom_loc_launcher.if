@@ -318,3 +318,22 @@ interface(`qcom_loc_launcher_service_get_status',`
     ')
     allow $1 qcom_loc_launcher_exec_t:service status;
 ')
+
+########################################
+## <summary>
+##       read socket directories
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+
+interface(`qcom_read_loc_sock_dir',`
+    gen_require(`
+        type qcom_loc_sock_t;
+    ')
+
+    allow $1 qcom_loc_sock_t:dir read;
+')

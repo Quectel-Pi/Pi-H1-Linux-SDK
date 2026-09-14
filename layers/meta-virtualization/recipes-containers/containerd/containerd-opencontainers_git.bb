@@ -1,12 +1,12 @@
-HOMEPAGE = "https://github.com/docker/containerd"
+HOMEPAGE = "https://github.com/containerd/containerd"
 SUMMARY = "containerd is a daemon to control runC"
 DESCRIPTION = "containerd is a daemon to control runC, built for performance and density. \
                containerd leverages runC's advanced features such as seccomp and user namespace \
                support as well as checkpoint and restore for cloning and live migration of containers."
 
 
-SRCREV = "1e1ea6e986c6c86565bc33d52e34b81b3e2bc71f"
-SRC_URI = "git://github.com/containerd/containerd;branch=release/1.6;protocol=https;destsuffix=git/src/github.com/containerd/containerd \
+SRCREV = "fb4c30d4ede3531652d86197bf3fc9515e5276d9"
+SRC_URI = "git://github.com/containerd/containerd;branch=release/2.0;protocol=https;destsuffix=git/src/github.com/containerd/containerd/v2 \
            file://0001-Makefile-allow-GO_BUILD_FLAGS-to-be-externally-speci.patch \
            file://0001-build-don-t-use-gcflags-to-define-trimpath.patch \
           "
@@ -15,24 +15,22 @@ SRC_URI = "git://github.com/containerd/containerd;branch=release/1.6;protocol=ht
 LICENSE = "Apache-2.0"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=1269f40c0d099c21a871163984590d89"
 
-CONTAINERD_VERSION = "v1.6.19"
-CVE_VERSION = "1.6.19"
+CONTAINERD_VERSION = "v2.0.5"
+CVE_VERSION = "2.0.5"
 
 # EXTRA_OEMAKE += "GODEBUG=1"
 
 PROVIDES += "virtual/containerd"
 RPROVIDES:${PN} = "virtual-containerd"
 
-S = "${WORKDIR}/git/src/github.com/containerd/containerd"
+S = "${WORKDIR}/git/src/github.com/containerd/containerd/v2"
 
-PV = "${CONTAINERD_VERSION}+git${SRCPV}"
+PV = "${CONTAINERD_VERSION}"
 
 inherit go
 inherit goarch
 
 GO_IMPORT = "import"
-
-CONTAINERD_PKG="github.com/containerd/containerd"
 
 INSANE_SKIP:${PN} += "ldflags"
 
@@ -59,6 +57,7 @@ do_compile() {
     #        cannot open file : open : no such file or directory
     export GO_BUILD_FLAGS="-trimpath -a -pkgdir dontusecurrentpkgs"
     export GO111MODULE=off
+    export VERSION="${CONTAINERD_VERSION}"
 
     cd ${S}
 
@@ -73,13 +72,10 @@ do_install() {
 	mkdir -p ${D}/${bindir}
 
 	cp ${S}/bin/containerd ${D}/${bindir}/containerd
-	cp ${S}/bin/containerd-shim ${D}/${bindir}/containerd-shim
-	cp ${S}/bin/containerd-shim-runc-v1 ${D}/${bindir}/containerd-shim-runc-v1
 	cp ${S}/bin/containerd-shim-runc-v2 ${D}/${bindir}/containerd-shim-runc-v2
 	cp ${S}/bin/ctr ${D}/${bindir}/containerd-ctr
 
 	ln -sf containerd ${D}/${bindir}/docker-containerd
-	ln -sf containerd-shim ${D}/${bindir}/docker-containerd-shim
 	ln -sf containerd-ctr ${D}/${bindir}/docker-containerd-ctr
 
 	ln -sf containerd-ctr ${D}/${bindir}/ctr
@@ -98,6 +94,6 @@ INSANE_SKIP:${PN} += "ldflags already-stripped"
 
 COMPATIBLE_HOST = "^(?!(qemu)?mips).*"
 
-RDEPENDS:${BPN} += " virtual-runc"
+RDEPENDS:${PN} += " ${VIRTUAL-RUNTIME_container_runtime}"
 
 CVE_PRODUCT = "containerd"

@@ -1,0 +1,58 @@
+From 358476d00e01c4d18d1821858f3954526e49162b Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:32:08 -0800
+Subject: [PATCH 134/146] FROMLIST: drm/msm: add support for non-blocking
+ commits
+
+Hook up the mst framework APIs with atomic_commit_setup() and
+atomic_commit_tail() APIs to handle non-blocking commits.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-37-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/msm_atomic.c | 2 ++
+ drivers/gpu/drm/msm/msm_drv.c    | 1 +
+ drivers/gpu/drm/msm/msm_drv.h    | 1 +
+ 3 files changed, 4 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/msm_atomic.c b/drivers/gpu/drm/msm/msm_atomic.c
+index 9c45d641b521..801399419c3d 100644
+--- a/drivers/gpu/drm/msm/msm_atomic.c
++++ b/drivers/gpu/drm/msm/msm_atomic.c
+@@ -210,6 +210,8 @@ void msm_atomic_commit_tail(struct drm_atomic_state *state)
+ 
+ 	trace_msm_atomic_commit_tail_start(async, crtc_mask);
+ 
++	drm_dp_mst_atomic_wait_for_dependencies(state);
++
+ 	kms->funcs->enable_commit(kms);
+ 
+ 	/*
+diff --git a/drivers/gpu/drm/msm/msm_drv.c b/drivers/gpu/drm/msm/msm_drv.c
+index 002c50125f40..c4762dd9080e 100644
+--- a/drivers/gpu/drm/msm/msm_drv.c
++++ b/drivers/gpu/drm/msm/msm_drv.c
+@@ -64,6 +64,7 @@ static const struct drm_mode_config_funcs mode_config_funcs = {
+ 
+ static const struct drm_mode_config_helper_funcs mode_config_helper_funcs = {
+ 	.atomic_commit_tail = msm_atomic_commit_tail,
++	.atomic_commit_setup = drm_dp_mst_atomic_setup_commit,
+ };
+ 
+ static char *vram = "16m";
+diff --git a/drivers/gpu/drm/msm/msm_drv.h b/drivers/gpu/drm/msm/msm_drv.h
+index ec6a818e4544..541e7e3cf06b 100644
+--- a/drivers/gpu/drm/msm/msm_drv.h
++++ b/drivers/gpu/drm/msm/msm_drv.h
+@@ -30,6 +30,7 @@
+ #include <drm/drm_atomic_helper.h>
+ #include <drm/drm_probe_helper.h>
+ #include <drm/display/drm_dsc.h>
++#include <drm/display/drm_dp_mst_helper.h>
+ #include <drm/msm_drm.h>
+ #include <drm/drm_gem.h>
+ 
+-- 
+2.34.1
+

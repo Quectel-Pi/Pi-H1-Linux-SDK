@@ -1,0 +1,468 @@
+From 8e62e077b2e1bba71cfc1de03ed2ef13bb686d4c Mon Sep 17 00:00:00 2001
+From: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Date: Fri, 9 May 2025 14:09:09 +0530
+Subject: [PATCH 23/26] FROMLIST: media: iris: Add platform capabilities for
+ HEVC and VP9 decoders
+
+Add platform capabilities for HEVC and VP9 codecs in decoder driver
+with related hooks.
+
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Acked-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-HDK
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-HDK
+Signed-off-by: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-media/20250509-video-iris-hevc-vp9-v5-23-59b4ff7d331c@quicinc.com/]
+---
+ drivers/media/platform/qcom/iris/iris_ctrls.c |  28 +++-
+ .../qcom/iris/iris_hfi_gen2_command.c         |  28 +++-
+ .../qcom/iris/iris_hfi_gen2_defines.h         |   1 +
+ .../qcom/iris/iris_hfi_gen2_response.c        |  34 ++++-
+ .../platform/qcom/iris/iris_platform_common.h |   8 +-
+ .../platform/qcom/iris/iris_platform_gen2.c   |  80 ++++++++++-
+ .../qcom/iris/iris_platform_qcs8300.h         | 126 ++++++++++++++----
+ 7 files changed, 266 insertions(+), 39 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/iris/iris_ctrls.c b/drivers/media/platform/qcom/iris/iris_ctrls.c
+index 13f5cf0d0e8a..9136b723c0f2 100644
+--- a/drivers/media/platform/qcom/iris/iris_ctrls.c
++++ b/drivers/media/platform/qcom/iris/iris_ctrls.c
+@@ -18,9 +18,19 @@ static enum platform_inst_fw_cap_type iris_get_cap_id(u32 id)
+ {
+ 	switch (id) {
+ 	case V4L2_CID_MPEG_VIDEO_H264_PROFILE:
+-		return PROFILE;
++		return PROFILE_H264;
++	case V4L2_CID_MPEG_VIDEO_HEVC_PROFILE:
++		return PROFILE_HEVC;
++	case V4L2_CID_MPEG_VIDEO_VP9_PROFILE:
++		return PROFILE_VP9;
+ 	case V4L2_CID_MPEG_VIDEO_H264_LEVEL:
+-		return LEVEL;
++		return LEVEL_H264;
++	case V4L2_CID_MPEG_VIDEO_HEVC_LEVEL:
++		return LEVEL_HEVC;
++	case V4L2_CID_MPEG_VIDEO_VP9_LEVEL:
++		return LEVEL_VP9;
++	case V4L2_CID_MPEG_VIDEO_HEVC_TIER:
++		return TIER;
+ 	default:
+ 		return INST_FW_CAP_MAX;
+ 	}
+@@ -32,10 +42,20 @@ static u32 iris_get_v4l2_id(enum platform_inst_fw_cap_type cap_id)
+ 		return 0;
+ 
+ 	switch (cap_id) {
+-	case PROFILE:
++	case PROFILE_H264:
+ 		return V4L2_CID_MPEG_VIDEO_H264_PROFILE;
+-	case LEVEL:
++	case PROFILE_HEVC:
++		return V4L2_CID_MPEG_VIDEO_HEVC_PROFILE;
++	case PROFILE_VP9:
++		return V4L2_CID_MPEG_VIDEO_VP9_PROFILE;
++	case LEVEL_H264:
+ 		return V4L2_CID_MPEG_VIDEO_H264_LEVEL;
++	case LEVEL_HEVC:
++		return V4L2_CID_MPEG_VIDEO_HEVC_LEVEL;
++	case LEVEL_VP9:
++		return V4L2_CID_MPEG_VIDEO_VP9_LEVEL;
++	case TIER:
++		return V4L2_CID_MPEG_VIDEO_HEVC_TIER;
+ 	default:
+ 		return 0;
+ 	}
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen2_command.c b/drivers/media/platform/qcom/iris/iris_hfi_gen2_command.c
+index f23be2340658..8c91d336ff7e 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen2_command.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen2_command.c
+@@ -295,7 +295,19 @@ static int iris_hfi_gen2_set_profile(struct iris_inst *inst)
+ {
+ 	struct iris_inst_hfi_gen2 *inst_hfi_gen2 = to_iris_inst_hfi_gen2(inst);
+ 	u32 port = iris_hfi_gen2_get_port(V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+-	u32 profile = inst->fw_caps[PROFILE].value;
++	u32 profile = 0;
++
++	switch (inst->codec) {
++	case V4L2_PIX_FMT_HEVC:
++		profile = inst->fw_caps[PROFILE_HEVC].value;
++		break;
++	case V4L2_PIX_FMT_VP9:
++		profile = inst->fw_caps[PROFILE_VP9].value;
++		break;
++	case V4L2_PIX_FMT_H264:
++		profile = inst->fw_caps[PROFILE_H264].value;
++		break;
++	}
+ 
+ 	inst_hfi_gen2->src_subcr_params.profile = profile;
+ 
+@@ -312,7 +324,19 @@ static int iris_hfi_gen2_set_level(struct iris_inst *inst)
+ {
+ 	struct iris_inst_hfi_gen2 *inst_hfi_gen2 = to_iris_inst_hfi_gen2(inst);
+ 	u32 port = iris_hfi_gen2_get_port(V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE);
+-	u32 level = inst->fw_caps[LEVEL].value;
++	u32 level = 0;
++
++	switch (inst->codec) {
++	case V4L2_PIX_FMT_HEVC:
++		level = inst->fw_caps[LEVEL_HEVC].value;
++		break;
++	case V4L2_PIX_FMT_VP9:
++		level = inst->fw_caps[LEVEL_VP9].value;
++		break;
++	case V4L2_PIX_FMT_H264:
++		level = inst->fw_caps[LEVEL_H264].value;
++		break;
++	}
+ 
+ 	inst_hfi_gen2->src_subcr_params.level = level;
+ 
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h b/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h
+index 283d2f27e4c8..5f13dc11bea5 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen2_defines.h
+@@ -46,6 +46,7 @@
+ #define HFI_PROP_CROP_OFFSETS			0x03000105
+ #define HFI_PROP_PROFILE			0x03000107
+ #define HFI_PROP_LEVEL				0x03000108
++#define HFI_PROP_TIER				0x03000109
+ #define HFI_PROP_STAGE				0x0300010a
+ #define HFI_PROP_PIPE				0x0300010b
+ #define HFI_PROP_LUMA_CHROMA_BIT_DEPTH		0x0300010f
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen2_response.c b/drivers/media/platform/qcom/iris/iris_hfi_gen2_response.c
+index b6d0ff860d78..8e54962414ae 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen2_response.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen2_response.c
+@@ -571,8 +571,21 @@ static void iris_hfi_gen2_read_input_subcr_params(struct iris_inst *inst)
+ 	inst->crop.width = pixmp_ip->width -
+ 		((subsc_params.crop_offsets[1] >> 16) & 0xFFFF) - inst->crop.left;
+ 
+-	inst->fw_caps[PROFILE].value = subsc_params.profile;
+-	inst->fw_caps[LEVEL].value = subsc_params.level;
++	switch (inst->codec) {
++	case V4L2_PIX_FMT_HEVC:
++		inst->fw_caps[PROFILE_HEVC].value = subsc_params.profile;
++		inst->fw_caps[LEVEL_HEVC].value = subsc_params.level;
++		break;
++	case V4L2_PIX_FMT_VP9:
++		inst->fw_caps[PROFILE_VP9].value = subsc_params.profile;
++		inst->fw_caps[LEVEL_VP9].value = subsc_params.level;
++		break;
++	case V4L2_PIX_FMT_H264:
++		inst->fw_caps[PROFILE_H264].value = subsc_params.profile;
++		inst->fw_caps[LEVEL_H264].value = subsc_params.level;
++		break;
++	}
++
+ 	inst->fw_caps[POC].value = subsc_params.pic_order_cnt;
+ 
+ 	if (subsc_params.bit_depth != BIT_DEPTH_8 ||
+@@ -796,8 +809,21 @@ static void iris_hfi_gen2_init_src_change_param(struct iris_inst *inst)
+ 					     full_range, video_format,
+ 					     video_signal_type_present_flag);
+ 
+-	subsc_params->profile = inst->fw_caps[PROFILE].value;
+-	subsc_params->level = inst->fw_caps[LEVEL].value;
++	switch (inst->codec) {
++	case V4L2_PIX_FMT_HEVC:
++		subsc_params->profile = inst->fw_caps[PROFILE_HEVC].value;
++		subsc_params->level = inst->fw_caps[LEVEL_HEVC].value;
++		break;
++	case V4L2_PIX_FMT_VP9:
++		subsc_params->profile = inst->fw_caps[PROFILE_VP9].value;
++		subsc_params->level = inst->fw_caps[LEVEL_VP9].value;
++		break;
++	case V4L2_PIX_FMT_H264:
++		subsc_params->profile = inst->fw_caps[PROFILE_H264].value;
++		subsc_params->level = inst->fw_caps[LEVEL_H264].value;
++		break;
++	}
++
+ 	subsc_params->pic_order_cnt = inst->fw_caps[POC].value;
+ 	subsc_params->bit_depth = inst->fw_caps[BIT_DEPTH].value;
+ 	if (inst->fw_caps[CODED_FRAMES].value ==
+diff --git a/drivers/media/platform/qcom/iris/iris_platform_common.h b/drivers/media/platform/qcom/iris/iris_platform_common.h
+index 3e0ae87526a0..71d23214f224 100644
+--- a/drivers/media/platform/qcom/iris/iris_platform_common.h
++++ b/drivers/media/platform/qcom/iris/iris_platform_common.h
+@@ -81,8 +81,12 @@ struct platform_inst_caps {
+ };
+ 
+ enum platform_inst_fw_cap_type {
+-	PROFILE = 1,
+-	LEVEL,
++	PROFILE_H264 = 1,
++	PROFILE_HEVC,
++	PROFILE_VP9,
++	LEVEL_H264,
++	LEVEL_HEVC,
++	LEVEL_VP9,
+ 	INPUT_BUF_HOST_MAX_COUNT,
+ 	STAGE,
+ 	PIPE,
+diff --git a/drivers/media/platform/qcom/iris/iris_platform_gen2.c b/drivers/media/platform/qcom/iris/iris_platform_gen2.c
+index deb7037e8e86..c2cded2876b7 100644
+--- a/drivers/media/platform/qcom/iris/iris_platform_gen2.c
++++ b/drivers/media/platform/qcom/iris/iris_platform_gen2.c
+@@ -17,7 +17,7 @@
+ 
+ static struct platform_inst_fw_cap inst_fw_cap_sm8550[] = {
+ 	{
+-		.cap_id = PROFILE,
++		.cap_id = PROFILE_H264,
+ 		.min = V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE,
+ 		.max = V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_HIGH,
+ 		.step_or_mask = BIT(V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE) |
+@@ -31,7 +31,29 @@ static struct platform_inst_fw_cap inst_fw_cap_sm8550[] = {
+ 		.set = iris_set_u32_enum,
+ 	},
+ 	{
+-		.cap_id = LEVEL,
++		.cap_id = PROFILE_HEVC,
++		.min = V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN,
++		.max = V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_STILL_PICTURE,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_STILL_PICTURE),
++		.value = V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN,
++		.hfi_id = HFI_PROP_PROFILE,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
++	{
++		.cap_id = PROFILE_VP9,
++		.min = V4L2_MPEG_VIDEO_VP9_PROFILE_0,
++		.max = V4L2_MPEG_VIDEO_VP9_PROFILE_2,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_VP9_PROFILE_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_PROFILE_2),
++		.value = V4L2_MPEG_VIDEO_VP9_PROFILE_0,
++		.hfi_id = HFI_PROP_PROFILE,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
++	{
++		.cap_id = LEVEL_H264,
+ 		.min = V4L2_MPEG_VIDEO_H264_LEVEL_1_0,
+ 		.max = V4L2_MPEG_VIDEO_H264_LEVEL_6_2,
+ 		.step_or_mask = BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_0) |
+@@ -59,6 +81,60 @@ static struct platform_inst_fw_cap inst_fw_cap_sm8550[] = {
+ 		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
+ 		.set = iris_set_u32_enum,
+ 	},
++	{
++		.cap_id = LEVEL_HEVC,
++		.min = V4L2_MPEG_VIDEO_HEVC_LEVEL_1,
++		.max = V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_2) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_2_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_3) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_3_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_4) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_4_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_5) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_5_2) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_6) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_6_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2),
++		.value = V4L2_MPEG_VIDEO_HEVC_LEVEL_6_1,
++		.hfi_id = HFI_PROP_LEVEL,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
++	{
++		.cap_id = LEVEL_VP9,
++		.min = V4L2_MPEG_VIDEO_VP9_LEVEL_1_0,
++		.max = V4L2_MPEG_VIDEO_VP9_LEVEL_6_0,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_1_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_1_1) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_2_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_2_1) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_3_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_3_1) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_4_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_4_1) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_5_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_5_1) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_5_2) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_6_0),
++		.value = V4L2_MPEG_VIDEO_VP9_LEVEL_6_0,
++		.hfi_id = HFI_PROP_LEVEL,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
++	{
++		.cap_id = TIER,
++		.min = V4L2_MPEG_VIDEO_HEVC_TIER_MAIN,
++		.max = V4L2_MPEG_VIDEO_HEVC_TIER_HIGH,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_HEVC_TIER_MAIN) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_TIER_HIGH),
++		.value = V4L2_MPEG_VIDEO_HEVC_TIER_HIGH,
++		.hfi_id = HFI_PROP_TIER,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
+ 	{
+ 		.cap_id = INPUT_BUF_HOST_MAX_COUNT,
+ 		.min = DEFAULT_MAX_HOST_BUF_COUNT,
+diff --git a/drivers/media/platform/qcom/iris/iris_platform_qcs8300.h b/drivers/media/platform/qcom/iris/iris_platform_qcs8300.h
+index f82355d72fcf..a8d66ed388a3 100644
+--- a/drivers/media/platform/qcom/iris/iris_platform_qcs8300.h
++++ b/drivers/media/platform/qcom/iris/iris_platform_qcs8300.h
+@@ -5,48 +5,124 @@
+ 
+ static struct platform_inst_fw_cap inst_fw_cap_qcs8300[] = {
+ 	{
+-		.cap_id = PROFILE,
++		.cap_id = PROFILE_H264,
+ 		.min = V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE,
+ 		.max = V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_HIGH,
+ 		.step_or_mask = BIT(V4L2_MPEG_VIDEO_H264_PROFILE_BASELINE) |
+-			BIT(V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_HIGH) |
+-			BIT(V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_BASELINE) |
+-			BIT(V4L2_MPEG_VIDEO_H264_PROFILE_MAIN) |
+-			BIT(V4L2_MPEG_VIDEO_H264_PROFILE_HIGH),
++				BIT(V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_BASELINE) |
++				BIT(V4L2_MPEG_VIDEO_H264_PROFILE_MAIN) |
++				BIT(V4L2_MPEG_VIDEO_H264_PROFILE_HIGH) |
++				BIT(V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_HIGH),
+ 		.value = V4L2_MPEG_VIDEO_H264_PROFILE_HIGH,
+ 		.hfi_id = HFI_PROP_PROFILE,
+ 		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
+ 		.set = iris_set_u32_enum,
+ 	},
+ 	{
+-		.cap_id = LEVEL,
++		.cap_id = PROFILE_HEVC,
++		.min = V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN,
++		.max = V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_STILL_PICTURE,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN_STILL_PICTURE),
++		.value = V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN,
++		.hfi_id = HFI_PROP_PROFILE,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
++	{
++		.cap_id = PROFILE_VP9,
++		.min = V4L2_MPEG_VIDEO_VP9_PROFILE_0,
++		.max = V4L2_MPEG_VIDEO_VP9_PROFILE_2,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_VP9_PROFILE_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_PROFILE_2),
++		.value = V4L2_MPEG_VIDEO_VP9_PROFILE_0,
++		.hfi_id = HFI_PROP_PROFILE,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
++	{
++		.cap_id = LEVEL_H264,
+ 		.min = V4L2_MPEG_VIDEO_H264_LEVEL_1_0,
+ 		.max = V4L2_MPEG_VIDEO_H264_LEVEL_6_2,
+ 		.step_or_mask = BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_0) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1B)  |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_1) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_2) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_3) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_2_0) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_2_1) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_2_2) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_3_0) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_3_1) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_3_2) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_4_0) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_4_1) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_4_2) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_5_0) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_5_1) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_5_2) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_6_0) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_6_1) |
+-			BIT(V4L2_MPEG_VIDEO_H264_LEVEL_6_2),
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1B) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_1) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_2) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_1_3) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_2_0) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_2_1) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_2_2) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_3_0) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_3_1) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_3_2) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_4_0) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_4_1) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_4_2) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_5_0) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_5_1) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_5_2) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_6_0) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_6_1) |
++				BIT(V4L2_MPEG_VIDEO_H264_LEVEL_6_2),
+ 		.value = V4L2_MPEG_VIDEO_H264_LEVEL_6_1,
+ 		.hfi_id = HFI_PROP_LEVEL,
+ 		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
+ 		.set = iris_set_u32_enum,
+ 	},
++	{
++		.cap_id = LEVEL_HEVC,
++		.min = V4L2_MPEG_VIDEO_HEVC_LEVEL_1,
++		.max = V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_2) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_2_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_3) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_3_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_4) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_4_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_5) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_5_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_5_2) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_6) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_6_1) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_LEVEL_6_2),
++		.value = V4L2_MPEG_VIDEO_HEVC_LEVEL_6_1,
++		.hfi_id = HFI_PROP_LEVEL,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
++	{
++		.cap_id = LEVEL_VP9,
++		.min = V4L2_MPEG_VIDEO_VP9_LEVEL_1_0,
++		.max = V4L2_MPEG_VIDEO_VP9_LEVEL_6_0,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_1_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_1_1) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_2_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_2_1) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_3_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_3_1) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_4_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_4_1) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_5_0) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_5_1) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_5_2) |
++				BIT(V4L2_MPEG_VIDEO_VP9_LEVEL_6_0),
++		.value = V4L2_MPEG_VIDEO_VP9_LEVEL_6_0,
++		.hfi_id = HFI_PROP_LEVEL,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
++	{
++		.cap_id = TIER,
++		.min = V4L2_MPEG_VIDEO_HEVC_TIER_MAIN,
++		.max = V4L2_MPEG_VIDEO_HEVC_TIER_HIGH,
++		.step_or_mask = BIT(V4L2_MPEG_VIDEO_HEVC_TIER_MAIN) |
++				BIT(V4L2_MPEG_VIDEO_HEVC_TIER_HIGH),
++		.value = V4L2_MPEG_VIDEO_HEVC_TIER_HIGH,
++		.hfi_id = HFI_PROP_TIER,
++		.flags = CAP_FLAG_OUTPUT_PORT | CAP_FLAG_MENU,
++		.set = iris_set_u32_enum,
++	},
+ 	{
+ 		.cap_id = INPUT_BUF_HOST_MAX_COUNT,
+ 		.min = DEFAULT_MAX_HOST_BUF_COUNT,
+-- 
+2.34.1
+

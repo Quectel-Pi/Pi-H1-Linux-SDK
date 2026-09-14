@@ -1,0 +1,40 @@
+From 25a9b5800fcd7f2e4e365e4da786a70829fc4e73 Mon Sep 17 00:00:00 2001
+From: Amisha Jain <quic_amisjain@quicinc.com>
+Date: Fri, 20 Dec 2024 17:34:49 +0530
+Subject: [PATCH] UPSTREAM:obexctl: Implement support for message listing
+ format version 1.1 for MCE
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This change is corresponding to obexd changes done for implementing
+‘Messages-Listing Format Version 1.1’ .
+This change will emit the newly added properties values in obexctl
+which are sent by server.
+
+Upstream-Status: Backport https://github.com/bluez/bluez/commit/5e965f8d2ac763fef35a4281655f5dd8df5f9895
+Signed-off-by: Amisha Jain <quic_amisjain@quicinc.com>
+
+---
+ tools/obexctl.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/tools/obexctl.c b/tools/obexctl.c
+index 4b7bd71..71e6d1b 100644
+--- a/tools/obexctl.c
++++ b/tools/obexctl.c
+@@ -471,6 +471,11 @@ static void message_info(GDBusProxy *proxy, int argc, char *argv[])
+ 	print_property(proxy, "Deleted");
+ 	print_property(proxy, "Sent");
+ 	print_property(proxy, "Protected");
++	print_property(proxy, "DeliveryStatus");
++	print_property(proxy, "ConversationId");
++	print_property(proxy, "ConversationName");
++	print_property(proxy, "Direction");
++	print_property(proxy, "AttachmentMimeTypes");
+ }
+ 
+ static void cmd_info(int argc, char *argv[])
+-- 
+2.34.1
+

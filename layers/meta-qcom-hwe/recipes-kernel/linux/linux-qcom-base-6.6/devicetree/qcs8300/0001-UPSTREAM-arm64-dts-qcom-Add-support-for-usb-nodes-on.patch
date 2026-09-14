@@ -1,0 +1,35 @@
+From 17a3aa89d0f02ce39e35df84b81c4e454f9b4ce2 Mon Sep 17 00:00:00 2001
+From: Krishna Kurapati <krishna.kurapati@oss.qualcomm.com>
+Date: Tue, 11 Mar 2025 13:26:58 +0530
+Subject: [PATCH 1/1] UPSTREAM: arm64: dts: qcom: Add support for usb nodes on
+ QCS8300
+
+Add support for USB controllers on QCS8300. The second
+controller is only High Speed capable.
+
+Signed-off-by: Krishna Kurapati <krishna.kurapati@oss.qualcomm.com>
+Upstream-Status: submitted [https://lore.kernel.org/all/20241114055152.1562116-2-quic_kriskura@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index 998bc69ce4a1..b695c60f649b 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -7076,8 +7076,11 @@ usb_1_dwc3: usb@a600000 {
+ 				iommus = <&apps_smmu 0x80 0x0>;
+ 				phys = <&usb_1_hsphy>, <&usb_qmpphy>;
+ 				phy-names = "usb2-phy", "usb3-phy";
+-				snps,dis_u2_susphy_quirk;
+ 				snps,dis_enblslpm_quirk;
++				snps,dis-u1-entry-quirk;
++				snps,dis-u2-entry-quirk;
++				snps,dis_u2_susphy_quirk;
++				snps,dis_u3_susphy_quirk;
+ 			};
+ 		};
+ 
+-- 
+2.34.1
+

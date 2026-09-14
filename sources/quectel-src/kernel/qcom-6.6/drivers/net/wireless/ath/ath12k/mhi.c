@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: BSD-3-Clause-Clear
 /*
  * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/msi.h>
 #include <linux/pci.h>
+#include <linux/firmware.h>
 
 #include "core.h"
 #include "debug.h"
@@ -13,36 +14,11 @@
 #include "pci.h"
 
 #define MHI_TIMEOUT_DEFAULT_MS	90000
+#define OTP_INVALID_BOARD_ID	0xFFFF
+#define OTP_VALID_DUALMAC_BOARD_ID_MASK		0x1000
+#define MHI_CB_INVALID	0xff
 
 static const struct mhi_channel_config ath12k_mhi_channels_qcn9274[] = {
-	{
-		.num = 0,
-		.name = "LOOPBACK",
-		.num_elements = 32,
-		.event_ring = 1,
-		.dir = DMA_TO_DEVICE,
-		.ee_mask = 0x4,
-		.pollcfg = 0,
-		.doorbell = MHI_DB_BRST_DISABLE,
-		.lpm_notify = false,
-		.offload_channel = false,
-		.doorbell_mode_switch = false,
-		.auto_queue = false,
-	},
-	{
-		.num = 1,
-		.name = "LOOPBACK",
-		.num_elements = 32,
-		.event_ring = 1,
-		.dir = DMA_FROM_DEVICE,
-		.ee_mask = 0x4,
-		.pollcfg = 0,
-		.doorbell = MHI_DB_BRST_DISABLE,
-		.lpm_notify = false,
-		.offload_channel = false,
-		.doorbell_mode_switch = false,
-		.auto_queue = false,
-	},
 	{
 		.num = 20,
 		.name = "IPCR",
@@ -109,34 +85,6 @@ const struct mhi_controller_config ath12k_mhi_config_qcn9274 = {
 
 static const struct mhi_channel_config ath12k_mhi_channels_wcn7850[] = {
 	{
-		.num = 0,
-		.name = "LOOPBACK",
-		.num_elements = 32,
-		.event_ring = 0,
-		.dir = DMA_TO_DEVICE,
-		.ee_mask = 0x4,
-		.pollcfg = 0,
-		.doorbell = MHI_DB_BRST_DISABLE,
-		.lpm_notify = false,
-		.offload_channel = false,
-		.doorbell_mode_switch = false,
-		.auto_queue = false,
-	},
-	{
-		.num = 1,
-		.name = "LOOPBACK",
-		.num_elements = 32,
-		.event_ring = 0,
-		.dir = DMA_FROM_DEVICE,
-		.ee_mask = 0x4,
-		.pollcfg = 0,
-		.doorbell = MHI_DB_BRST_DISABLE,
-		.lpm_notify = false,
-		.offload_channel = false,
-		.doorbell_mode_switch = false,
-		.auto_queue = false,
-	},
-	{
 		.num = 20,
 		.name = "IPCR",
 		.num_elements = 64,
@@ -193,7 +141,7 @@ const struct mhi_controller_config ath12k_mhi_config_wcn7850 = {
 	.max_channels = 128,
 	.timeout_ms = 2000,
 	.use_bounce_buf = false,
-	.buf_len = 0,
+	.buf_len = 8192,
 	.num_channels = ARRAY_SIZE(ath12k_mhi_channels_wcn7850),
 	.ch_cfg = ath12k_mhi_channels_wcn7850,
 	.num_events = ARRAY_SIZE(ath12k_mhi_events_wcn7850),
@@ -251,6 +199,7 @@ static int ath12k_mhi_get_msi(struct ath12k_pci *ab_pci)
 	u32 user_base_data, base_vector;
 	int ret, num_vectors, i;
 	int *irq;
+	unsigned int msi_data;
 
 	ret = ath12k_pci_get_user_msi_assignment(ab,
 						 "MHI", &num_vectors,
@@ -265,9 +214,15 @@ static int ath12k_mhi_get_msi(struct ath12k_pci *ab_pci)
 	if (!irq)
 		return -ENOMEM;
 
-	for (i = 0; i < num_vectors; i++)
-		irq[i] = ath12k_pci_get_msi_irq(ab->dev,
-						base_vector + i);
+	msi_data = base_vector;
+	for (i = 0; i < num_vectors; i++) {
+		if (test_bit(ATH12K_PCI_FLAG_MULTI_MSI_VECTORS, &ab_pci->flags))
+			irq[i] = ath12k_pci_get_msi_irq(ab->dev,
+							msi_data++);
+		else
+			irq[i] = ath12k_pci_get_msi_irq(ab->dev,
+							msi_data);
+	}
 
 	ab_pci->mhi_ctrl->irq = irq;
 	ab_pci->mhi_ctrl->nr_irqs = num_vectors;
@@ -314,6 +269,7 @@ static void ath12k_mhi_op_status_cb(struct mhi_controller *mhi_cntrl,
 				    enum mhi_callback cb)
 {
 	struct ath12k_base *ab = dev_get_drvdata(mhi_cntrl->cntrl_dev);
+	struct ath12k_pci *ab_pci = ath12k_pci_priv(ab);
 
 	ath12k_dbg(ab, ATH12K_DBG_BOOT, "mhi notify status reason %s\n",
 		   ath12k_mhi_op_callback_to_str(cb));
@@ -323,12 +279,20 @@ static void ath12k_mhi_op_status_cb(struct mhi_controller *mhi_cntrl,
 		ath12k_warn(ab, "firmware crashed: MHI_CB_SYS_ERROR\n");
 		break;
 	case MHI_CB_EE_RDDM:
+		if (ab_pci->mhi_pre_cb == MHI_CB_EE_RDDM) {
+			ath12k_dbg(ab, ATH12K_DBG_BOOT,
+				   "do not queue again for consecutive RDDM event\n");
+			break;
+		}
+
 		if (!(test_bit(ATH12K_FLAG_UNREGISTERING, &ab->dev_flags)))
 			queue_work(ab->workqueue_aux, &ab->reset_work);
 		break;
 	default:
 		break;
 	}
+
+	ab_pci->mhi_pre_cb = cb;
 }
 
 static int ath12k_mhi_op_read_reg(struct mhi_controller *mhi_cntrl,
@@ -351,27 +315,68 @@ int ath12k_mhi_register(struct ath12k_pci *ab_pci)
 {
 	struct ath12k_base *ab = ab_pci->ab;
 	struct mhi_controller *mhi_ctrl;
+	unsigned int board_id;
 	int ret;
+	bool dualmac = false;
 
 	mhi_ctrl = mhi_alloc_controller();
 	if (!mhi_ctrl)
 		return -ENOMEM;
 
-	ath12k_core_create_firmware_path(ab, ATH12K_AMSS_FILE,
-					 ab_pci->amss_path,
-					 sizeof(ab_pci->amss_path));
-
+	ab_pci->mhi_pre_cb = MHI_CB_INVALID;
 	ab_pci->mhi_ctrl = mhi_ctrl;
 	mhi_ctrl->cntrl_dev = ab->dev;
-	mhi_ctrl->fw_image = ab_pci->amss_path;
 	mhi_ctrl->regs = ab->mem;
 	mhi_ctrl->reg_len = ab->mem_len;
+	mhi_ctrl->rddm_size = ab->hw_params->rddm_size;
+
+	if (ab->hw_params->otp_board_id_register) {
+		board_id =
+			ath12k_pci_read32(ab, ab->hw_params->otp_board_id_register);
+		board_id = u32_get_bits(board_id, OTP_BOARD_ID_MASK);
+
+		if (!board_id || (board_id == OTP_INVALID_BOARD_ID)) {
+			ath12k_dbg(ab, ATH12K_DBG_BOOT,
+				   "failed to read board id\n");
+		} else if (board_id & OTP_VALID_DUALMAC_BOARD_ID_MASK) {
+			dualmac = true;
+			ath12k_dbg(ab, ATH12K_DBG_BOOT,
+				   "dualmac fw selected for board id: %x\n", board_id);
+		}
+	}
+
+	if (dualmac) {
+		if (ab->fw.amss_dualmac_data && ab->fw.amss_dualmac_len > 0) {
+			/* use MHI firmware file from firmware-N.bin */
+			mhi_ctrl->fw_data = ab->fw.amss_dualmac_data;
+			mhi_ctrl->fw_sz = ab->fw.amss_dualmac_len;
+		} else {
+			ath12k_warn(ab, "dualmac firmware IE not present in firmware-N.bin\n");
+			ret = -ENOENT;
+			goto free_controller;
+		}
+	} else {
+		if (ab->fw.amss_data && ab->fw.amss_len > 0) {
+			/* use MHI firmware file from firmware-N.bin */
+			mhi_ctrl->fw_data = ab->fw.amss_data;
+			mhi_ctrl->fw_sz = ab->fw.amss_len;
+		} else {
+			/* use the old separate mhi.bin MHI firmware file */
+			ath12k_core_create_firmware_path(ab, ATH12K_AMSS_FILE,
+							 ab_pci->amss_path,
+							 sizeof(ab_pci->amss_path));
+			mhi_ctrl->fw_image = ab_pci->amss_path;
+		}
+	}
 
 	ret = ath12k_mhi_get_msi(ab_pci);
 	if (ret) {
 		ath12k_err(ab, "failed to get msi for mhi\n");
 		goto free_controller;
 	}
+
+	if (!test_bit(ATH12K_PCI_FLAG_MULTI_MSI_VECTORS, &ab_pci->flags))
+		mhi_ctrl->irq_flags = IRQF_SHARED | IRQF_NOBALANCING;
 
 	mhi_ctrl->iova_start = 0;
 	mhi_ctrl->iova_stop = 0xffffffff;
@@ -616,4 +621,9 @@ void ath12k_mhi_suspend(struct ath12k_pci *ab_pci)
 void ath12k_mhi_resume(struct ath12k_pci *ab_pci)
 {
 	ath12k_mhi_set_state(ab_pci, ATH12K_MHI_RESUME);
+}
+
+void ath12k_mhi_coredump(struct mhi_controller *mhi_ctrl, bool in_panic)
+{
+	mhi_download_rddm_image(mhi_ctrl, in_panic);
 }

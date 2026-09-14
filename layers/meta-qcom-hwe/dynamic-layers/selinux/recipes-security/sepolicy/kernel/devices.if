@@ -1,4 +1,4 @@
-# Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 #####################
@@ -43,6 +43,26 @@ interface(`qcom_allow_smcinvoke_rw',`
 
 #####################
 ## <summary>
+## Allow open/read from adsp device nodes
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed rw to adsp device
+##  to communicate with sscrpcd
+##  </summary>
+## </param>
+#
+
+interface(`qcom_allow_adsp_device_rw',`
+        gen_require(`
+                type qcom_adsp_device_t;
+        ')
+
+        allow $1 qcom_adsp_device_t:chr_file rw_chr_file_perms;
+')
+
+#####################
+## <summary>
 ## Allow open/read/write from ufs-bsg device
 ## </summary>
 ## <param name="domain">
@@ -58,6 +78,25 @@ interface(`qcom_allow_ufs_bsg_rw',`
        ')
 
        allow $1 qcom_ufs_bsg_dev_t:chr_file rw_chr_file_perms;
+')
+
+#####################
+## <summary>
+## Allow open/read/write from mmc rpmb device
+## </summary>
+## <param name="domain">
+##  <summary>
+##  Domain allowed rw to mmc rpmb device
+##  </summary>
+## </param>
+#
+
+interface(`qcom_allow_mmc_rpmb_rw',`
+       gen_require(`
+               type qcom_mmc_rpmb_dev_t;
+       ')
+
+       allow $1 qcom_mmc_rpmb_dev_t:chr_file rw_chr_file_perms;
 ')
 
 ########################################
@@ -161,24 +200,6 @@ interface(`qcom_read_pd_mapper',`
     allow $1 sysfs_t:lnk_file read;
 ')
 
-#####################
-## <summary>
-## Allow open/read/write uhid device
-## </summary>
-## <param name="domain">
-##  <summary>
-##  Domain allowed rw to uhid device
-##  to communicate with uhid input node
-##  </summary>
-## </param>
-#
-interface(`uhid_device_rw',`
-	gen_require(`
-		type uhid_device_t;
-	')
-        allow $1 uhid_device_t:chr_file rw_chr_file_perms ;
-')
-
 #######################################
 ## <summary>
 ##      Allow read/ioctl/open for cdsp secure device.
@@ -194,6 +215,24 @@ interface(`qcom_cdsp_secure_read_device',`
 		type device_t, qcom_cdsp_secure_device_t;
 	')
 	read_chr_files_pattern($1, device_t, qcom_cdsp_secure_device_t)
+')
+
+########################################
+## <summary>
+##      Allow read/ioctl/open for gdsp secure device.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+##
+
+interface(`qcom_gdsp_secure_read_device',`
+   gen_require(`
+       type device_t, qcom_gdsp_secure_device_t;
+   ')
+   read_chr_files_pattern($1, device_t, qcom_gdsp_secure_device_t)
 ')
 
 ########################################
@@ -417,6 +456,23 @@ interface(`qcom_cdsp_rw', `
      allow $1 qcom_cdsp_secure_device_t:chr_file { rw_chr_file_perms };
 ')
 
+####################################
+## <summary>
+##  Allow read/Write on gdsp device
+## </summary>
+## <param name="domain">
+##    <summary>
+##    Domain allowed access.
+##    </summary>
+## </param>
+#
+interface(`qcom_gdsp_rw', `
+    gen_require(`
+        type qcom_gdsp_secure_device_t;
+    ')
+     allow $1 qcom_gdsp_secure_device_t:chr_file { rw_chr_file_perms };
+')
+
 ########################################
 ## <summary>
 ##	Allow caller to modify coresight nodes.
@@ -508,4 +564,77 @@ interface(`qcom_weston_dev_write',`
                 type qcom_weston_socket_dev_t;
         ')
         allow $1 qcom_weston_socket_dev_t:sock_file write;
+')
+
+
+########################################
+## <summary>
+##      Search usbfs directories
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`fs_list_usbfs_dirs',`
+        gen_require(`
+                type usbfs_t;
+        ')
+
+        allow $1 usbfs_t:dir list_dir_perms;
+')
+
+########################################
+## <summary>
+##      Read and write usbfs files.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`fs_rw_usbfs_files',`
+        gen_require(`
+                type usbfs_t;
+        ')
+
+        rw_files_pattern($1, usbfs_t, usbfs_t)
+')
+
+########################################
+## <summary>
+##	Allow permissions for usb_fs mounting
+## </summary>
+## <param name="domain">
+##	<summary>
+##	Domain allowed to mount f_fs.
+##	</summary>
+## </param>
+#
+interface(`fs_mount_usbfs',`
+	gen_require(`
+		type usbfs_t;
+	')
+
+	allow $1 usbfs_t:filesystem {mount};
+')
+
+########################################
+## <summary>
+##      Mounton weston socket dev directory.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_weston_mounton_dev_dir',`
+    gen_require(`
+        type qcom_weston_socket_dev_t;
+    ')
+
+        allow $1 qcom_weston_socket_dev_t:dir mounton_dir_perms;
 ')

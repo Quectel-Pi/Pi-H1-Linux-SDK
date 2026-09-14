@@ -10,13 +10,11 @@ LIC_FILES_CHKSUM = "file://LICENSING;md5=c0a30e2b1502c55a7f37e412cd6c6a4b \
 inherit autotools pkgconfig
 
 SRC_URI = "git://github.com/besser82/libxcrypt.git;branch=${SRCBRANCH};protocol=https"
-SRCREV = "d7fe1ac04c326dba7e0440868889d1dccb41a175"
+SRCREV = "f531a36aa916a22ef2ce7d270ba381e264250cbf"
 SRCBRANCH ?= "master"
 
 SRC_URI += "file://fix_cflags_handling.patch \
-    file://0001-Make-BuildCommon.pm-compatible-with-latest-perl.patch \
-    file://0002-Remove-smartmatch-usage-from-gen-crypt-h.patch \
-"
+            file://configure-c99.patch"
 
 PROVIDES = "virtual/crypt"
 

@@ -1,0 +1,88 @@
+From 1a1c5df211055cf11c3ad80fa5f0b290210e9235 Mon Sep 17 00:00:00 2001
+From: Paloma Arellano <quic_parellan@quicinc.com>
+Date: Thu, 22 Feb 2024 11:39:52 -0800
+Subject: [PATCH 058/146] UPSTREAM: drm/msm/dp: store mode YUV420 information
+ to be used by rest of DP
+
+Wide bus is not supported when the mode is YUV420 in DP. In preparation
+for changing the DPU programming to reflect this, the value and
+assignment location of wide_bus_en for the DP submodules must be
+changed. Move it from boot time in dp_init_sub_modules() to run time in
+dp_display_mode_set.
+
+Signed-off-by: Paloma Arellano <quic_parellan@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/579614/
+Link: https://lore.kernel.org/r/20240222194025.25329-8-quic_parellan@quicinc.com
+Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 5b30d1cbd4fba2b3188e9a293df99a7ddf5d2100]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 17 +++++++++++++----
+ drivers/gpu/drm/msm/dp/dp_panel.h   |  1 +
+ 2 files changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index eed09ef7f2b7..a742ae3dd917 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -804,10 +804,6 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
+ 		goto error_ctrl;
+ 	}
+ 
+-	/* populate wide_bus_supported to different layers */
+-	dp->ctrl->wide_bus_en = dp->wide_bus_supported;
+-	dp->catalog->wide_bus_en = dp->wide_bus_supported;
+-
+ 	return rc;
+ 
+ error_ctrl:
+@@ -828,6 +824,7 @@ static int dp_display_set_mode(struct msm_dp *dp_display,
+ 	drm_mode_copy(&dp->panel->dp_mode.drm_mode, &mode->drm_mode);
+ 	dp->panel->dp_mode.bpp = mode->bpp;
+ 	dp->panel->dp_mode.capabilities = mode->capabilities;
++	dp->panel->dp_mode.out_fmt_is_yuv_420 = mode->out_fmt_is_yuv_420;
+ 	dp_panel_init_panel_info(dp->panel);
+ 	return 0;
+ }
+@@ -1440,6 +1437,9 @@ bool msm_dp_wide_bus_available(const struct msm_dp *dp_display)
+ 
+ 	dp = container_of(dp_display, struct dp_display_private, dp_display);
+ 
++	if (dp->dp_mode.out_fmt_is_yuv_420)
++		return false;
++
+ 	return dp->wide_bus_supported;
+ }
+ 
+@@ -1629,6 +1629,15 @@ void dp_bridge_mode_set(struct drm_bridge *drm_bridge,
+ 
+ 	dp_display->dp_mode.h_active_low =
+ 		!!(dp_display->dp_mode.drm_mode.flags & DRM_MODE_FLAG_NHSYNC);
++
++	dp_display->dp_mode.out_fmt_is_yuv_420 =
++		drm_mode_is_420_only(&dp->connector->display_info, adjusted_mode);
++
++	/* populate wide_bus_support to different layers */
++	dp_display->ctrl->wide_bus_en =
++		dp_display->dp_mode.out_fmt_is_yuv_420 ? false : dp_display->wide_bus_supported;
++	dp_display->catalog->wide_bus_en =
++		dp_display->dp_mode.out_fmt_is_yuv_420 ? false : dp_display->wide_bus_supported;
+ }
+ 
+ void dp_bridge_hpd_enable(struct drm_bridge *bridge)
+diff --git a/drivers/gpu/drm/msm/dp/dp_panel.h b/drivers/gpu/drm/msm/dp/dp_panel.h
+index a0dfc579c5f9..6ec68be9f236 100644
+--- a/drivers/gpu/drm/msm/dp/dp_panel.h
++++ b/drivers/gpu/drm/msm/dp/dp_panel.h
+@@ -19,6 +19,7 @@ struct dp_display_mode {
+ 	u32 bpp;
+ 	u32 h_active_low;
+ 	u32 v_active_low;
++	bool out_fmt_is_yuv_420;
+ };
+ 
+ struct dp_panel_in {
+-- 
+2.34.1
+

@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Migration notes for 3.4 (honister)
 ----------------------------------
 
@@ -22,7 +24,7 @@ syntax, so the following::
 
    SRC_URI_append = " file://somefile"
    SRC_URI_append_qemux86 = " file://somefile2"
-   SRC_URI_remove_qemux86-64 = " file://somefile3"
+   SRC_URI_remove_qemux86-64 = "file://somefile3"
    SRC_URI_prepend_qemuarm = "file://somefile4 "
    FILES_${PN}-ptest = "${bindir}/xyz"
    IMAGE_CMD_tar = "tar"
@@ -34,7 +36,7 @@ would now become::
 
    SRC_URI:append = " file://somefile"
    SRC_URI:append:qemux86 = " file://somefile2"
-   SRC_URI:remove:qemux86-64 = " file://somefile3"
+   SRC_URI:remove:qemux86-64 = "file://somefile3"
    SRC_URI:prepend:qemuarm = "file://somefile4 "
    FILES:${PN}-ptest = "${bindir}/xyz"
    IMAGE_CMD:tar = "tar"
@@ -43,7 +45,7 @@ would now become::
    BB_TASK_NICE_LEVEL:task-testimage = '0'
 
 This also applies to
-:ref:`variable queries to the datastore <bitbake:bitbake-user-manual/bitbake-user-manual-metadata:functions for accessing datastore variables>`,
+:ref:`variable queries to the datastore <bitbake-user-manual/bitbake-user-manual-metadata:functions for accessing datastore variables>`,
 for example using ``getVar`` and similar so ``d.getVar("RDEPENDS_${PN}")``
 becomes ``d.getVar("RDEPENDS:${PN}")``.
 
@@ -124,7 +126,7 @@ Removed classes
 - ``image-mklibs``: not actively tested and upstream mklibs still
   requires Python 2
 - ``meta``: no longer useful. Recipes that need to skip installing
-  packages should inherit ``nopackages`` instead.
+  packages should inherit :ref:`ref-classes-nopackages` instead.
 
 Prelinking disabled by default
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -195,7 +197,7 @@ Package/recipe splitting
   then you may now need to add it explicitly.
 
 - The ``rpm`` package no longer has ``rpm-build`` in its :term:`RRECOMMENDS`;
-  if by chance  you still need rpm package building functionality in
+  if by chance you still need rpm package building functionality in
   your image and you have not already done so then you should add
   ``rpm-build`` to your image explicitly.
 
@@ -206,7 +208,7 @@ Package/recipe splitting
 Image / SDK generation changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- Recursive dependencies on the ``do_build`` task are now disabled when
+- Recursive dependencies on the :ref:`ref-tasks-build` task are now disabled when
   building SDKs. These are generally not needed; in the unlikely event
   that you do encounter problems then it will probably be as a result of
   missing explicit dependencies that need to be added.
@@ -233,7 +235,7 @@ Image / SDK generation changes
 Miscellaneous
 ~~~~~~~~~~~~~
 
-- Certificates are now properly checked when bitbake fetches sources
+- Certificates are now properly checked when BitBake fetches sources
   over HTTPS. If you receive errors as a result for your custom recipes,
   you will need to use a mirror or address the issue with the operators
   of the server in question.
@@ -257,7 +259,7 @@ Miscellaneous
   instead.
 
 - The obsolete ``oe_machinstall`` function previously provided in the
-  :ref:`utils <ref-classes-utils>` class has been removed. For
+  :ref:`ref-classes-utils` class has been removed. For
   machine-specific installation it is recommended that you use the
   built-in override support in the fetcher or overrides in general
   instead.

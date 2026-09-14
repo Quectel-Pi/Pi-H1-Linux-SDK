@@ -149,7 +149,7 @@ SDK Development Model
 Fundamentally, the SDK fits into the development process as follows:
 
 .. image:: figures/sdk-environment.png
-   :align: center
+   :width: 100%
 
 The SDK is installed on any machine and can be used to develop applications,
 images, and kernels. An SDK can even be used by a QA Engineer or Release
@@ -164,16 +164,16 @@ image.
 
 You just need to follow these general steps:
 
-1. *Install the SDK for your target hardware:* For information on how to
+#. *Install the SDK for your target hardware:* For information on how to
    install the SDK, see the ":ref:`sdk-manual/using:installing the sdk`"
    section.
 
-2. *Download or Build the Target Image:* The Yocto Project supports
+#. *Download or Build the Target Image:* The Yocto Project supports
    several target architectures and has many pre-built kernel images and
    root filesystem images.
 
    If you are going to develop your application on hardware, go to the
-   :yocto_dl:`machines </releases/yocto/yocto-&DISTRO;/machines/>` download area and choose a
+   :yocto_dl:`machines </releases/yocto/&DISTRO_REL_LATEST_TAG;/machines/>` download area and choose a
    target machine area from which to download the kernel image and root
    filesystem. This download area could have several files in it that
    support development using actual hardware. For example, the area
@@ -183,7 +183,7 @@ You just need to follow these general steps:
 
    If you are going to develop your application and then run and test it
    using the QEMU emulator, go to the
-   :yocto_dl:`machines/qemu </releases/yocto/yocto-&DISTRO;/machines/qemu>` download area. From this
+   :yocto_dl:`machines/qemu </releases/yocto/&DISTRO_REL_LATEST_TAG;/machines/qemu>` download area. From this
    area, go down into the directory for your target architecture (e.g.
    ``qemux86_64`` for an Intel-based 64-bit architecture). Download the
    kernel, root filesystem, and any other files you need for your
@@ -195,7 +195,7 @@ You just need to follow these general steps:
       ":ref:`sdk-manual/appendix-obtain:extracting the root filesystem`"
       section for information on how to do this extraction.
 
-3. *Develop and Test your Application:* At this point, you have the
+#. *Develop and Test your Application:* At this point, you have the
    tools to develop your application. If you need to separately install
    and use the QEMU emulator, you can go to `QEMU Home
    Page <https://wiki.qemu.org/Main_Page>`__ to download and learn about

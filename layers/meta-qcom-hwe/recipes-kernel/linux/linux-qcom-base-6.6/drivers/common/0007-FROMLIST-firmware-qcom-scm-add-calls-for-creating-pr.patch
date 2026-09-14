@@ -1,0 +1,244 @@
+From dec5abb444403c804288030414242b8f022e55f0 Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <brgl@bgdev.pl>
+Date: Sun, 1 Dec 2024 21:46:15 +0530
+Subject: [PATCH 07/17] FROMLIST: firmware: qcom: scm: add calls for creating,
+ preparing and importing keys
+
+Storage encryption has two IOCTLs for creating, importing and preparing
+keys for encryption. For wrapped keys, these IOCTLs need to interface
+with Qualcomm's Trustzone. Add the following keys:
+
+generate_key:
+  This is used to generate and return a longterm wrapped key. Trustzone
+  achieves this by generating a key and then wrapping it using the
+  Hawrdware Key Manager (HWKM), returning a wrapped keyblob.
+
+import_key:
+  The functionality is similar to generate, but here: a raw key is
+  imported into the HWKM and a longterm wrapped keyblob is returned.
+
+prepare_key:
+  The longterm wrapped key from the import or generate calls is made
+  further secure by rewrapping it with a per-boot, ephemeral wrapped key
+  before installing it in the kernel for programming into ICE.
+
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org>
+Signed-off-by: Gaurav Kashyap <quic_gaurkash@quicinc.com>
+[Bartosz:
+  improve kerneldocs,
+  fix hex values coding style,
+  rewrite commit message]
+Co-developed-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241011-wrapped-keys-v7-7-e3f7a752059b@linaro.org/]
+---
+ drivers/firmware/qcom_scm.c            | 161 +++++++++++++++++++++++++
+ drivers/firmware/qcom_scm.h            |   3 +
+ include/linux/firmware/qcom/qcom_scm.h |   5 +
+ 3 files changed, 169 insertions(+)
+
+diff --git a/drivers/firmware/qcom_scm.c b/drivers/firmware/qcom_scm.c
+index d07c74d30383..d2fc784b75f8 100644
+--- a/drivers/firmware/qcom_scm.c
++++ b/drivers/firmware/qcom_scm.c
+@@ -1249,6 +1249,167 @@ int qcom_scm_derive_sw_secret(const u8 *wkey, size_t wkey_size,
+ }
+ EXPORT_SYMBOL_GPL(qcom_scm_derive_sw_secret);
+
++/**
++ * qcom_scm_generate_ice_key() - Generate a wrapped key for encryption.
++ * @lt_key: the wrapped key returned after key generation
++ * @lt_key_size: size of the wrapped key to be returned.
++ *
++ * Generate a key using the built-in HW module in the SoC. Wrap the key using
++ * the platform-specific Key Encryption Key and return to the caller.
++ *
++ * Return: 0 on success; -errno on failure.
++ */
++int qcom_scm_generate_ice_key(u8 *lt_key, size_t lt_key_size)
++{
++	struct qcom_scm_desc desc = {
++		.svc = QCOM_SCM_SVC_ES,
++		.cmd =  QCOM_SCM_ES_GENERATE_ICE_KEY,
++		.arginfo = QCOM_SCM_ARGS(2, QCOM_SCM_RW, QCOM_SCM_VAL),
++		.args[1] = lt_key_size,
++		.owner = ARM_SMCCC_OWNER_SIP,
++	};
++
++	int ret;
++
++	void *lt_key_buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							       lt_key_size,
++							       GFP_KERNEL);
++	if (!lt_key_buf)
++		return -ENOMEM;
++
++	desc.args[0] = qcom_tzmem_to_phys(lt_key_buf);
++
++	ret = qcom_scm_call(__scm->dev, &desc, NULL);
++	if (!ret)
++		memcpy(lt_key, lt_key_buf, lt_key_size);
++
++	memzero_explicit(lt_key_buf, lt_key_size);
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_generate_ice_key);
++
++/**
++ * qcom_scm_prepare_ice_key() - Get the per-boot ephemeral wrapped key
++ * @lt_key: the longterm wrapped key
++ * @lt_key_size: size of the wrapped key
++ * @eph_key: ephemeral wrapped key to be returned
++ * @eph_key_size: size of the ephemeral wrapped key
++ *
++ * Qualcomm wrapped keys (longterm keys) are rewrapped with a per-boot
++ * ephemeral key for added protection. These are ephemeral in nature as
++ * they are valid only for that boot.
++ *
++ * Retrieve the key wrapped with the per-boot ephemeral key and return it to
++ * the caller.
++ *
++ * Return: 0 on success; -errno on failure.
++ */
++int qcom_scm_prepare_ice_key(const u8 *lt_key, size_t lt_key_size,
++			     u8 *eph_key, size_t eph_key_size)
++{
++	struct qcom_scm_desc desc = {
++		.svc = QCOM_SCM_SVC_ES,
++		.cmd =  QCOM_SCM_ES_PREPARE_ICE_KEY,
++		.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RO,
++					 QCOM_SCM_VAL, QCOM_SCM_RW,
++					 QCOM_SCM_VAL),
++		.args[1] = lt_key_size,
++		.args[3] = eph_key_size,
++		.owner = ARM_SMCCC_OWNER_SIP,
++	};
++
++	int ret;
++
++	void *lt_key_buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							       lt_key_size,
++							       GFP_KERNEL);
++	if (!lt_key_buf)
++		return -ENOMEM;
++
++	void *eph_key_buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++								eph_key_size,
++								GFP_KERNEL);
++	if (!eph_key_buf) {
++		ret = -ENOMEM;
++		goto out_free_longterm;
++	}
++
++	memcpy(lt_key_buf, lt_key, lt_key_size);
++	desc.args[0] = qcom_tzmem_to_phys(lt_key_buf);
++	desc.args[2] = qcom_tzmem_to_phys(eph_key_buf);
++
++	ret = qcom_scm_call(__scm->dev, &desc, NULL);
++	if (!ret)
++		memcpy(eph_key, eph_key_buf, eph_key_size);
++
++	memzero_explicit(eph_key_buf, eph_key_size);
++
++out_free_longterm:
++	memzero_explicit(lt_key_buf, lt_key_size);
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_prepare_ice_key);
++
++/**
++ * qcom_scm_import_ice_key() - Import a wrapped key for encryption
++ * @imp_key: the raw key that is imported
++ * @imp_key_size: size of the key to be imported
++ * @lt_key: the wrapped key to be returned
++ * @lt_key_size: size of the wrapped key
++ *
++ * Import a raw key and return a long-term wrapped key to the caller.
++ *
++ * Return: 0 on success; -errno on failure.
++ */
++int qcom_scm_import_ice_key(const u8 *imp_key, size_t imp_key_size,
++			    u8 *lt_key, size_t lt_key_size)
++{
++	struct qcom_scm_desc desc = {
++		.svc = QCOM_SCM_SVC_ES,
++		.cmd =  QCOM_SCM_ES_IMPORT_ICE_KEY,
++		.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RO,
++					 QCOM_SCM_VAL, QCOM_SCM_RW,
++					 QCOM_SCM_VAL),
++		.args[1] = imp_key_size,
++		.args[3] = lt_key_size,
++		.owner = ARM_SMCCC_OWNER_SIP,
++	};
++
++	int ret;
++
++	void *imp_key_buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++								imp_key_size,
++								GFP_KERNEL);
++	if (!imp_key_buf)
++		return -ENOMEM;
++
++	void *lt_key_buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							       lt_key_size,
++							       GFP_KERNEL);
++	if (!lt_key_buf) {
++		ret = -ENOMEM;
++		goto out_free_longterm;
++	}
++
++	memcpy(imp_key_buf, imp_key, imp_key_size);
++	desc.args[0] = qcom_tzmem_to_phys(imp_key_buf);
++	desc.args[2] = qcom_tzmem_to_phys(lt_key_buf);
++
++	ret = qcom_scm_call(__scm->dev, &desc, NULL);
++	if (!ret)
++		memcpy(lt_key, lt_key_buf, lt_key_size);
++
++	memzero_explicit(lt_key_buf, lt_key_size);
++
++out_free_longterm:
++	memzero_explicit(imp_key_buf, imp_key_size);
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_import_ice_key);
++
+ /**
+  * qcom_scm_hdcp_available() - Check if secure environment supports HDCP.
+  *
+diff --git a/drivers/firmware/qcom_scm.h b/drivers/firmware/qcom_scm.h
+index 607cf604558a..0334f49d6655 100644
+--- a/drivers/firmware/qcom_scm.h
++++ b/drivers/firmware/qcom_scm.h
+@@ -128,6 +128,9 @@ struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
+ #define QCOM_SCM_ES_INVALIDATE_ICE_KEY	0x03
+ #define QCOM_SCM_ES_CONFIG_SET_ICE_KEY	0x04
+ #define QCOM_SCM_ES_DERIVE_SW_SECRET	0x07
++#define QCOM_SCM_ES_GENERATE_ICE_KEY	0x08
++#define QCOM_SCM_ES_PREPARE_ICE_KEY	0x09
++#define QCOM_SCM_ES_IMPORT_ICE_KEY	0x0a
+
+ #define QCOM_SCM_SVC_HDCP		0x11
+ #define QCOM_SCM_HDCP_INVOKE		0x01
+diff --git a/include/linux/firmware/qcom/qcom_scm.h b/include/linux/firmware/qcom/qcom_scm.h
+index d3462b0ccaa0..49e5e68b195e 100644
+--- a/include/linux/firmware/qcom/qcom_scm.h
++++ b/include/linux/firmware/qcom/qcom_scm.h
+@@ -111,6 +111,11 @@ extern int qcom_scm_ice_set_key(u32 index, const u8 *key, u32 key_size,
+ 				u32 data_unit_size);
+ int qcom_scm_derive_sw_secret(const u8 *wkey, size_t wkey_size,
+ 			      u8 *sw_secret, size_t sw_secret_size);
++int qcom_scm_generate_ice_key(u8 *lt_key, size_t lt_key_size);
++int qcom_scm_prepare_ice_key(const u8 *lt_key, size_t lt_key_size,
++			     u8 *eph_key, size_t eph_size);
++int qcom_scm_import_ice_key(const u8 *imp_key, size_t imp_size,
++			    u8 *lt_key, size_t lt_key_size);
+
+ extern bool qcom_scm_hdcp_available(void);
+ extern int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt,
+--
+2.34.1
+

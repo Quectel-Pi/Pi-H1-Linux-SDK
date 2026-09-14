@@ -1,6 +1,6 @@
 SUMMARY = "openbox Window Manager"
 SECTION = "x11/wm"
-DEPENDS = "glib-2.0 pango libxml2 virtual/libx11 libcroco librsvg gdk-pixbuf"
+DEPENDS = "glib-2.0 pango libxml2 virtual/libx11 librsvg gdk-pixbuf"
 LICENSE = "GPL-2.0-or-later"
 LIC_FILES_CHKSUM = "file://COPYING;md5=94d55d512a9ba36caa9b7df079bae19f"
 
@@ -8,6 +8,7 @@ SRC_URI = " \
     http://icculus.org/openbox/releases/openbox-${PV}.tar.gz \
     file://0001-Makefile.am-avoid-race-when-creating-autostart-direc.patch \
     file://0001-openbox-xdg-autostart-convert-to-python3.patch \
+    file://0001-Fix-list-traversal-issue-in-client_calc_layer.patch \
 "
 
 SRC_URI[md5sum] = "b72794996c6a3ad94634727b95f9d204"

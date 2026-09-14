@@ -1,0 +1,103 @@
+From 9325b005f824342b99acdbde83458eb4f5f5b5e0 Mon Sep 17 00:00:00 2001
+From: Amisha Jain <quic_amisjain@quicinc.com>
+Date: Fri, 28 Mar 2025 17:36:07 +0530
+Subject: [PATCH] UPSTREAM: obex: Add base implementation for get_mas_instance
+ info and set notification filter
+
+This change is required for passing below testcases-
+1. MAP/MSE/MMI/BV-02-C
+   Verify that the MCE can return user-readable information about the
+   MAS-instance to the MCE
+2. MAP/MSE/MMN/BV-06-C
+   Verify that the MSE correctly responds to a request
+   to filter notifications.
+
+We are adding the raw skeleton implementaton for PTS certification.
+Although the functionality can be added later as per requirement.
+
+Upstream-Status: Backport https://github.com/bluez/bluez/commit/1a9012fe57b69a14d6293edeb4466c431e91639d
+Signed-off-by: Amisha Jain <quic_amisjain@quicinc.com>
+---
+ obexd/plugins/mas.c | 52 +++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 52 insertions(+)
+
+diff --git a/obexd/plugins/mas.c b/obexd/plugins/mas.c
+index 2f711c3..17dbb35 100644
+--- a/obexd/plugins/mas.c
++++ b/obexd/plugins/mas.c
+@@ -782,6 +782,36 @@ static void *notification_registration_open(const char *name, int oflag,
+ 	return mas;
+ }
+ 
++static void *message_get_instance_open(const char *name, int oflag,
++					mode_t mode, void *driver_data,
++					size_t *size, int *err)
++{
++	struct mas_session *mas = driver_data;
++
++	DBG("");
++
++	mas->buffer = g_string_new("Mas Instance 0");
++	mas->finished = TRUE;
++	*err = 0;
++
++	return mas;
++}
++
++static void *message_notification_filter_open(const char *name, int oflag,
++					mode_t mode, void *driver_data,
++					size_t *size, int *err)
++{
++	struct mas_session *mas = driver_data;
++
++	DBG("");
++
++	/* TODO notifcation filter add */
++	mas->finished = TRUE;
++	*err = 0;
++
++	return mas;
++}
++
+ static struct obex_service_driver mas = {
+ 	.name = "Message Access server",
+ 	.service = OBEX_MAS,
+@@ -866,6 +896,26 @@ static struct obex_mime_type_driver mime_message_update = {
+ 	.write = any_write,
+ };
+ 
++static struct obex_mime_type_driver mime_message_instance = {
++	.target = MAS_TARGET,
++	.target_size = TARGET_SIZE,
++	.mimetype = "x-bt/MASInstanceInformation",
++	.open = message_get_instance_open,
++	.close = any_close,
++	.read = any_read,
++	.write = any_write,
++};
++
++static struct obex_mime_type_driver mime_message_notification_filter = {
++	.target = MAS_TARGET,
++	.target_size = TARGET_SIZE,
++	.mimetype = "x-bt/MAP-notification-filter",
++	.open = message_notification_filter_open,
++	.close = any_close,
++	.read = any_read,
++	.write = any_write,
++};
++
+ static struct obex_mime_type_driver *map_drivers[] = {
+ 	&mime_map,
+ 	&mime_message,
+@@ -874,6 +924,8 @@ static struct obex_mime_type_driver *map_drivers[] = {
+ 	&mime_notification_registration,
+ 	&mime_message_status,
+ 	&mime_message_update,
++	&mime_message_instance,
++	&mime_message_notification_filter,
+ 	NULL
+ };
+ 
+-- 
+2.34.1
+

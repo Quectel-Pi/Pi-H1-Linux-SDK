@@ -1,0 +1,49 @@
+From 094c0d592676c45cf1bc4c9dfa26dec6f0ed4de2 Mon Sep 17 00:00:00 2001
+From: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Date: Mon, 25 Sep 2023 16:47:03 +0100
+Subject: [PATCH 14/42] UPSTREAM: media: qcom: camss: Fix support for setting
+ CSIPHY clock name csiphyX
+
+Several of our upstream and soon-to-be upstream SoC CAMSS dtsi declare
+csiphyX as opposed to the older clock name csiX_phy.
+
+Right now the CAMSS code will fail to set the csiphyX clock even if we have
+declared it in our list of clocks. For sdm845 and sm8250 we appear to "get
+away" with this error, however on sc8280xp we don't.
+
+The right approach here is to set the clock when it is declared. If a SoC
+doesn't require or a SoC driver implementer doesn't think we need, then the
+clock ought to simply be omitted from the clock list.
+
+Include csiphyX in the set of permissible strings which will subsequently
+lead to the csiphyX clock being set during csiphy_set_clock_rates() phase.
+
+sdm845 and sm8250 will work with the code as-is so I've omitted this from a
+suggested Fixes list.
+
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Suresh Vankadara <quic_svankada@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 35a62432af1ee9041fde0e1afe1d019ca82516cc]
+---
+ drivers/media/platform/qcom/camss/camss-csiphy.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/media/platform/qcom/camss/camss-csiphy.c b/drivers/media/platform/qcom/camss/camss-csiphy.c
+index 20bb361e9ad0..edd573606a6a 100644
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.c
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.c
+@@ -677,6 +677,10 @@ int msm_csiphy_subdev_init(struct camss *camss,
+ 				if (csiphy->rate_set[i])
+ 					break;
+ 			}
++
++			csiphy->rate_set[i] = csiphy_match_clock_name(clock->name, "csiphy%d", k);
++			if (csiphy->rate_set[i])
++				break;
+ 		}
+ 	}
+ 
+-- 
+2.25.1
+

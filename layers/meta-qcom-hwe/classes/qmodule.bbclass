@@ -4,8 +4,7 @@
 python __anonymous () {
     if bb.data.inherits_class('module', d):
         bb.build.addtask("module_signing", "do_package_write_ipk", "do_package", d)
-        #下面这行内容导重复整编的时候速度变慢，注释掉来提高重复整编时的速度
-        #d.appendVarFlag('do_package', 'nostamp', '1')
+        d.appendVarFlag('do_package', 'nostamp', '1')
 }
 
 do_module_signing[depends] += "make-mod-scripts:do_compile virtual/kernel:do_compile"

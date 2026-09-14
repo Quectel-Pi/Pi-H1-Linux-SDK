@@ -1,4 +1,4 @@
-From f6e96a95212bc1fef57b9594a7dddc0c20639873 Mon Sep 17 00:00:00 2001
+From 2192588942c5bc3b5fa10fc6d7433923f42e9ba0 Mon Sep 17 00:00:00 2001
 From: Khem Raj <raj.khem@gmail.com>
 Date: Wed, 18 Mar 2015 00:31:06 +0000
 Subject: [PATCH] 'yes' within the path sets wrong config variables
@@ -29,10 +29,10 @@ Signed-off-by: Khem Raj <raj.khem@gmail.com>
  12 files changed, 28 insertions(+), 28 deletions(-)
 
 diff --git a/sysdeps/aarch64/configure b/sysdeps/aarch64/configure
-index 4c1fac49f3..597314f476 100644
+index ca57edce47..5e91fab023 100644
 --- a/sysdeps/aarch64/configure
 +++ b/sysdeps/aarch64/configure
-@@ -157,12 +157,12 @@ else
+@@ -165,12 +165,12 @@ else $as_nop
    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
  /* end confdefs.h.  */
  #ifdef __AARCH64EB__
@@ -42,16 +42,16 @@ index 4c1fac49f3..597314f476 100644
  
  _ACEOF
  if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
--  $EGREP "yes" >/dev/null 2>&1; then :
-+  $EGREP "is_aarch64_be" >/dev/null 2>&1; then :
+-  $EGREP "yes" >/dev/null 2>&1
++  $EGREP "is_aarch64_be" >/dev/null 2>&1
+ then :
    libc_cv_aarch64_be=yes
- else
-   libc_cv_aarch64_be=no
+ else $as_nop
 diff --git a/sysdeps/aarch64/configure.ac b/sysdeps/aarch64/configure.ac
-index 3347c13fa1..4af163c0b6 100644
+index 27874eceb4..8a708f2ef4 100644
 --- a/sysdeps/aarch64/configure.ac
 +++ b/sysdeps/aarch64/configure.ac
-@@ -17,8 +17,8 @@ AC_DEFINE(SUPPORT_STATIC_PIE)
+@@ -13,8 +13,8 @@ AC_DEFINE(SUPPORT_STATIC_PIE)
  # the dynamic linker via %ifdef.
  AC_CACHE_CHECK([for big endian],
    [libc_cv_aarch64_be],
@@ -63,10 +63,10 @@ index 3347c13fa1..4af163c0b6 100644
    ], libc_cv_aarch64_be=yes, libc_cv_aarch64_be=no)])
  if test $libc_cv_aarch64_be = yes; then
 diff --git a/sysdeps/arm/configure b/sysdeps/arm/configure
-index 431e843b2b..e152461138 100644
+index 35e2918922..94d7fbe8bb 100644
 --- a/sysdeps/arm/configure
 +++ b/sysdeps/arm/configure
-@@ -151,12 +151,12 @@ else
+@@ -161,12 +161,12 @@ else $as_nop
    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
  /* end confdefs.h.  */
  #ifdef __ARM_PCS_VFP
@@ -76,16 +76,16 @@ index 431e843b2b..e152461138 100644
  
  _ACEOF
  if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
--  $EGREP "yes" >/dev/null 2>&1; then :
-+  $EGREP "use_arm_pcs_vfp" >/dev/null 2>&1; then :
+-  $EGREP "yes" >/dev/null 2>&1
++  $EGREP "use_arm_pcs_vfp" >/dev/null 2>&1
+ then :
    libc_cv_arm_pcs_vfp=yes
- else
-   libc_cv_arm_pcs_vfp=no
+ else $as_nop
 diff --git a/sysdeps/arm/configure.ac b/sysdeps/arm/configure.ac
-index 90cdd69c75..05a262ba00 100644
+index 5172e30bbe..f06dedd7c5 100644
 --- a/sysdeps/arm/configure.ac
 +++ b/sysdeps/arm/configure.ac
-@@ -15,8 +15,8 @@ AC_DEFINE(PI_STATIC_AND_HIDDEN)
+@@ -10,8 +10,8 @@ GLIBC_PROVIDES dnl See aclocal.m4 in the top level source directory.
  # the dynamic linker via %ifdef.
  AC_CACHE_CHECK([whether the compiler is using the ARM hard-float ABI],
    [libc_cv_arm_pcs_vfp],
@@ -97,10 +97,10 @@ index 90cdd69c75..05a262ba00 100644
    ], libc_cv_arm_pcs_vfp=yes, libc_cv_arm_pcs_vfp=no)])
  if test $libc_cv_arm_pcs_vfp = yes; then
 diff --git a/sysdeps/mips/configure b/sysdeps/mips/configure
-index 4e13248c03..f14af952d0 100644
+index 1e8c6711e6..ae52ccd929 100644
 --- a/sysdeps/mips/configure
 +++ b/sysdeps/mips/configure
-@@ -143,11 +143,11 @@ else
+@@ -158,11 +158,11 @@ else $as_nop
  /* end confdefs.h.  */
  dnl
  #ifdef __mips_nan2008
@@ -109,17 +109,17 @@ index 4e13248c03..f14af952d0 100644
  #endif
  _ACEOF
  if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
--  $EGREP "yes" >/dev/null 2>&1; then :
-+  $EGREP "use_mips_nan2008" >/dev/null 2>&1; then :
+-  $EGREP "yes" >/dev/null 2>&1
++  $EGREP "use_mips_nan2008" >/dev/null 2>&1
+ then :
    libc_cv_mips_nan2008=yes
- else
-   libc_cv_mips_nan2008=no
+ else $as_nop
 diff --git a/sysdeps/mips/configure.ac b/sysdeps/mips/configure.ac
-index bcbdaffd9f..ad3057f4cc 100644
+index d3cd780d78..250223d206 100644
 --- a/sysdeps/mips/configure.ac
 +++ b/sysdeps/mips/configure.ac
 @@ -6,9 +6,9 @@ dnl position independent way.
- dnl AC_DEFINE(PI_STATIC_AND_HIDDEN)
+ AC_DEFINE(HIDDEN_VAR_NEEDS_DYNAMIC_RELOC)
  
  AC_CACHE_CHECK([whether the compiler is using the 2008 NaN encoding],
 -  libc_cv_mips_nan2008, [AC_EGREP_CPP(yes, [dnl
@@ -131,10 +131,10 @@ index bcbdaffd9f..ad3057f4cc 100644
  if test x$libc_cv_mips_nan2008 = xyes; then
    AC_DEFINE(HAVE_MIPS_NAN2008)
 diff --git a/sysdeps/nios2/configure b/sysdeps/nios2/configure
-index 14c8a3a014..dde3814ef2 100644
+index 2fb230cbaa..1959d0a444 100644
 --- a/sysdeps/nios2/configure
 +++ b/sysdeps/nios2/configure
-@@ -142,12 +142,12 @@ else
+@@ -155,12 +155,12 @@ else $as_nop
    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
  /* end confdefs.h.  */
  #ifdef __nios2_big_endian__
@@ -144,13 +144,13 @@ index 14c8a3a014..dde3814ef2 100644
  
  _ACEOF
  if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
--  $EGREP "yes" >/dev/null 2>&1; then :
-+  $EGREP "is_nios2_be" >/dev/null 2>&1; then :
+-  $EGREP "yes" >/dev/null 2>&1
++  $EGREP "is_nios2_be" >/dev/null 2>&1
+ then :
    libc_cv_nios2_be=yes
- else
-   libc_cv_nios2_be=no
+ else $as_nop
 diff --git a/sysdeps/nios2/configure.ac b/sysdeps/nios2/configure.ac
-index f05f43802b..dc8639902d 100644
+index f738e9a7ed..4085851cbc 100644
 --- a/sysdeps/nios2/configure.ac
 +++ b/sysdeps/nios2/configure.ac
 @@ -4,8 +4,8 @@ GLIBC_PROVIDES dnl See aclocal.m4 in the top level source directory.
@@ -165,10 +165,10 @@ index f05f43802b..dc8639902d 100644
    ], libc_cv_nios2_be=yes, libc_cv_nios2_be=no)])
  if test $libc_cv_nios2_be = yes; then
 diff --git a/sysdeps/unix/sysv/linux/mips/configure b/sysdeps/unix/sysv/linux/mips/configure
-index f25f2a3a65..1b7483e6c6 100644
+index a060901de4..0ac7019438 100644
 --- a/sysdeps/unix/sysv/linux/mips/configure
 +++ b/sysdeps/unix/sysv/linux/mips/configure
-@@ -414,11 +414,11 @@ else
+@@ -441,11 +441,11 @@ else $as_nop
  /* end confdefs.h.  */
  dnl
  #ifdef __mips_nan2008
@@ -177,11 +177,11 @@ index f25f2a3a65..1b7483e6c6 100644
  #endif
  _ACEOF
  if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
--  $EGREP "yes" >/dev/null 2>&1; then :
-+  $EGREP "use_mips_nan2008" >/dev/null 2>&1; then :
+-  $EGREP "yes" >/dev/null 2>&1
++  $EGREP "use_mips_nan2008" >/dev/null 2>&1
+ then :
    libc_cv_mips_nan2008=yes
- else
-   libc_cv_mips_nan2008=no
+ else $as_nop
 diff --git a/sysdeps/unix/sysv/linux/mips/configure.ac b/sysdeps/unix/sysv/linux/mips/configure.ac
 index 049a0f4bdf..005526d4e8 100644
 --- a/sysdeps/unix/sysv/linux/mips/configure.ac
@@ -199,10 +199,10 @@ index 049a0f4bdf..005526d4e8 100644
  
  libc_mips_nan=
 diff --git a/sysdeps/unix/sysv/linux/powerpc/powerpc64/configure b/sysdeps/unix/sysv/linux/powerpc/powerpc64/configure
-index ae7f254da4..874519000b 100644
+index cf1b70c745..0dccf6cd76 100644
 --- a/sysdeps/unix/sysv/linux/powerpc/powerpc64/configure
 +++ b/sysdeps/unix/sysv/linux/powerpc/powerpc64/configure
-@@ -155,12 +155,12 @@ else
+@@ -168,12 +168,12 @@ else $as_nop
    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
  /* end confdefs.h.  */
  #if _CALL_ELF == 2
@@ -212,12 +212,12 @@ index ae7f254da4..874519000b 100644
  
  _ACEOF
  if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
--  $EGREP "yes" >/dev/null 2>&1; then :
-+  $EGREP "use_ppc_elfv2_abi" >/dev/null 2>&1; then :
+-  $EGREP "yes" >/dev/null 2>&1
++  $EGREP "use_ppc_elfv2_abi" >/dev/null 2>&1
+ then :
    libc_cv_ppc64_elfv2_abi=yes
- else
-   libc_cv_ppc64_elfv2_abi=no
-@@ -188,12 +188,12 @@ else
+ else $as_nop
+@@ -203,12 +203,12 @@ else $as_nop
    cat confdefs.h - <<_ACEOF >conftest.$ac_ext
  /* end confdefs.h.  */
  #ifdef _CALL_ELF
@@ -227,11 +227,11 @@ index ae7f254da4..874519000b 100644
  
  _ACEOF
  if (eval "$ac_cpp conftest.$ac_ext") 2>&5 |
--  $EGREP "yes" >/dev/null 2>&1; then :
-+  $EGREP "is_def_call_elf" >/dev/null 2>&1; then :
+-  $EGREP "yes" >/dev/null 2>&1
++  $EGREP "is_def_call_elf" >/dev/null 2>&1
+ then :
    libc_cv_ppc64_def_call_elf=yes
- else
-   libc_cv_ppc64_def_call_elf=no
+ else $as_nop
 diff --git a/sysdeps/unix/sysv/linux/powerpc/powerpc64/configure.ac b/sysdeps/unix/sysv/linux/powerpc/powerpc64/configure.ac
 index f9cba6e15d..b21f72f1e4 100644
 --- a/sysdeps/unix/sysv/linux/powerpc/powerpc64/configure.ac

@@ -8,7 +8,8 @@ SECTION = "libs"
 
 DEPENDS = "openssl"
 
-SRC_URI = "git://github.com/libesmtp/libESMTP.git;branch=master;protocol=https"
+SRC_URI = "git://github.com/libesmtp/libESMTP.git;branch=master;protocol=https \
+           file://0001-Add-build-option-for-NTLM-support.patch"
 SRCREV = "1d0af244310a66943ab400be56b15a9087f181eb"
 
 S = "${WORKDIR}/git"
@@ -26,7 +27,14 @@ EXTRA_OEMESON = " \
     -Dbdat=true \
     -Detrn=true \
     -Dxusr=true \
+    -Dntlm=disabled \
 "
+
+CFLAGS += "-D_GNU_SOURCE"
+
+do_configure:prepend:libc-glibc() {
+    sed -i -e "s/conf.set('HAVE_WORKING_STRERROR_R', 0)/conf.set('HAVE_WORKING_STRERROR_R', 1)/g" ${S}/meson.build
+}
 
 FILES:${PN} = "${libdir}/lib*${SOLIBS} \
                ${libdir}/esmtp-plugins-6.2.0/*${SOLIBSDEV}"

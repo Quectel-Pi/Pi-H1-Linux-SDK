@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 /dts-v1/;
@@ -40,6 +42,18 @@
 		stdout-path = "serial0:115200n8";
 	};
 
+	dp-connector {
+		compatible = "dp-connector";
+		label = "DP";
+		type = "mini";
+
+		port {
+			dp_connector_in: endpoint {
+				remote-endpoint = <&mdss_edp_out>;
+			};
+		};
+	};
+
 	gpio-keys {
 		compatible = "gpio-keys";
 		label = "gpio-keys";
@@ -56,6 +70,25 @@
 			debounce-interval = <15>;
 			linux,can-disable;
 		};
+	};
+
+	hdmi-connector {
+		compatible = "hdmi-connector";
+		type = "a";
+
+		port {
+			hdmi_con: endpoint {
+				remote-endpoint = <&lt9611_out>;
+			};
+		};
+	};
+
+	lt9611_1v2: lt9611-vdd12-regulator {
+		compatible = "regulator-fixed";
+		regulator-name = "LT9611_1V2";
+
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <1200000>;
 	};
 
 	pmic-glink {
@@ -79,7 +112,7 @@
 					reg = <0>;
 
 					pmic_glink_hs_in: endpoint {
-						remote-endpoint = <&usb_1_dwc3_hs>;
+						remote-endpoint = <&eud_con>;
 					};
 				};
 
@@ -103,12 +136,12 @@
 	};
 
 	sound: sound {
-		compatible = "qcom,qcm6490-sndcard";
-		model = "qcm6490-rb3-snd-card";
+		compatible = "qcom,qcs6490-rb3gen2-sndcard";
+		model = "QCS6490-RB3Gen2";
 
 		audio-routing =
-			//"SpkrLeft IN", "WSA_SPK1 OUT",
-			//"SpkrRight IN", "WSA_SPK2 OUT",
+			"SpkrLeft IN", "WSA_SPK1 OUT",
+			"SpkrRight IN", "WSA_SPK2 OUT",
 			"VA DMIC0", "vdd-micb",
 			"VA DMIC1", "vdd-micb",
 			"VA DMIC2", "vdd-micb",
@@ -117,7 +150,30 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 
-		/*
+		dp-dai-link {
+			link-name = "DISPLAY_PORT-RX";
+
+			cpu {
+				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_0>;
+			};
+
+			codec {
+				sound-dai = <&mdss_dp>;
+			};
+		};
+
+		hdmi-dai-link {
+			link-name = "HDMI_PORT-RX";
+
+			cpu {
+				sound-dai = <&q6apmbedai DISPLAY_PORT_RX_1>;
+			};
+
+			codec {
+				sound-dai = <&lt9611_codec 0>;
+			};
+		};
+
 		wsa-dai-link {
 			link-name = "CODEC_DMA-LPAIF_WSA-RX-0";
 
@@ -130,7 +186,6 @@
 					    <&lpass_wsa_macro 0>;
 			};
 		};
-		*/
 
 		va-dai-link {
 			link-name = "CODEC_DMA-LPAIF_VA-TX-0";
@@ -141,18 +196,6 @@
 
 			codec {
 				sound-dai = <&lpass_va_macro 0>;
-			};
-		};
-
-		vi-feedback-dai-link {
-			link-name = "CODEC_DMA-LPAIF_WSA-TX-0";
-
-			cpu {
-				sound-dai = <&q6apmbedai WSA_CODEC_DMA_TX_0>;
-			};
-
-			codec {
-				sound-dai = <&swr2 6>, <&lpass_wsa_macro 2>;
 			};
 		};
 	};
@@ -212,11 +255,6 @@
 			regulator-max-microvolt = <2040000>;
 		};
 
-		vreg_s2b_0p876: smps2 {
-			regulator-min-microvolt = <570070>;
-			regulator-max-microvolt = <1050000>;
-		};
-
 		vreg_s7b_0p972: smps7 {
 			regulator-min-microvolt = <535000>;
 			regulator-max-microvolt = <1120000>;
@@ -241,24 +279,12 @@
 
 		vreg_l3b_0p504: ldo3 {
 			regulator-min-microvolt = <312000>;
-			regulator-max-microvolt = <910000>;
-			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
-		};
-
-		vreg_l4b_0p752: ldo4 {
-			regulator-min-microvolt = <752000>;
-			regulator-max-microvolt = <820000>;
-			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
-		};
-
-		vreg_l5b_0p752: ldo5 {
-			regulator-min-microvolt = <552000>;
-			regulator-max-microvolt = <832000>;
+			regulator-max-microvolt = <650000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
 		vreg_l6b_1p2: ldo6 {
-			regulator-min-microvolt = <1140000>;
+			regulator-min-microvolt = <1200000>;
 			regulator-max-microvolt = <1260000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
@@ -282,7 +308,7 @@
 		};
 
 		vreg_l11b_1p504: ldo11 {
-			regulator-min-microvolt = <1504000>;
+			regulator-min-microvolt = <1776000>;
 			regulator-max-microvolt = <2000000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
@@ -300,7 +326,7 @@
 		};
 
 		vreg_l14b_1p08: ldo14 {
-			regulator-min-microvolt = <1080000>;
+			regulator-min-microvolt = <1200000>;
 			regulator-max-microvolt = <1304000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
@@ -312,13 +338,13 @@
 		};
 
 		vreg_l16b_1p1: ldo16 {
-			regulator-min-microvolt = <1100000>;
+			regulator-min-microvolt = <1200000>;
 			regulator-max-microvolt = <1300000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
 		vreg_l17b_1p7: ldo17 {
-			regulator-min-microvolt = <1700000>;
+			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1900000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
@@ -341,33 +367,13 @@
 		qcom,pmic-id = "c";
 
 		vreg_s1c_2p19: smps1 {
-			regulator-min-microvolt = <2190000>;
-			regulator-max-microvolt = <2210000>;
-		};
-
-		vreg_s2c_0p752: smps2 {
-			regulator-min-microvolt = <750000>;
-			regulator-max-microvolt = <800000>;
-		};
-
-		vreg_s5c_0p752: smps5 {
-			regulator-min-microvolt = <465000>;
-			regulator-max-microvolt = <1050000>;
-		};
-
-		vreg_s7c_0p752: smps7 {
-			regulator-min-microvolt = <465000>;
-			regulator-max-microvolt = <800000>;
+			regulator-min-microvolt = <2200000>;
+			regulator-max-microvolt = <2208000>;
 		};
 
 		vreg_s9c_1p084: smps9 {
 			regulator-min-microvolt = <1010000>;
 			regulator-max-microvolt = <1170000>;
-		};
-
-		vreg_s10c_0p752:smps10 {
-			regulator-min-microvolt = <752000>;
-			regulator-max-microvolt = <800000>;
 		};
 
 		vreg_l1c_1p8: ldo1 {
@@ -413,7 +419,7 @@
 		};
 
 		vreg_l8c_1p62: ldo8 {
-			regulator-min-microvolt = <1620000>;
+			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <2000000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
@@ -437,7 +443,7 @@
 		};
 
 		vreg_l12c_1p65: ldo12 {
-			regulator-min-microvolt = <1650000>;
+			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <2000000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
@@ -455,6 +461,19 @@
 	};
 };
 
+&eud {
+	usb-role-switch;
+	status = "okay";
+};
+
+&eud_con {
+	remote-endpoint = <&pmic_glink_hs_in>;
+};
+
+&eud_ep {
+	remote-endpoint = <&usb_1_dwc3_hs>;
+};
+
 &gcc {
 	protected-clocks = <GCC_QSPI_CNOC_PERIPH_AHB_CLK>, <GCC_QSPI_CORE_CLK>,
 			<GCC_QSPI_CORE_CLK_SRC>, <GCC_CFG_NOC_LPASS_CLK>,
@@ -463,6 +482,63 @@
 			<GCC_MSS_Q6_MEMNOC_AXI_CLK>, <GCC_MSS_Q6SS_BOOT_CLK_SRC>,
 			<GCC_SEC_CTRL_CLK_SRC>, <GCC_WPSS_AHB_CLK>,
 			<GCC_WPSS_AHB_BDG_MST_CLK>, <GCC_WPSS_RSCP_CLK>;
+};
+
+&gpu {
+	status = "okay";
+};
+
+&gpu_zap_shader {
+	firmware-name = "qcom/qcs6490/a660_zap.mbn";
+};
+
+&gpi_dma0 {
+	status = "okay";
+};
+
+&gpi_dma1 {
+	status = "okay";
+};
+
+&i2c0 {
+	clock-frequency = <400000>;
+	status = "okay";
+
+	lt9611_codec: hdmi-bridge@2b {
+		compatible = "lontium,lt9611uxc";
+		reg = <0x2b>;
+		#sound-dai-cells = <1>;
+
+		interrupts-extended = <&tlmm 24 IRQ_TYPE_EDGE_FALLING>;
+		reset-gpios = <&pm7250b_gpios 2 GPIO_ACTIVE_HIGH>;
+
+		vdd-supply = <&lt9611_1v2>;
+		vcc-supply = <&vreg_l11c_2p8>;
+
+		pinctrl-names = "default";
+		pinctrl-0 = <&lt9611_irq_pin &lt9611_rst_pin>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				lt9611_a: endpoint {
+					remote-endpoint = <&mdss_dsi0_out>;
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+
+				lt9611_out: endpoint {
+					remote-endpoint = <&hdmi_con>;
+				};
+			};
+		};
+	};
 };
 
 &i2c1 {
@@ -492,7 +568,7 @@
 		};
 	};
 
-	typec-retimer@1c {
+	typec_retimer: typec-retimer@1c {
 		compatible = "onnn,nb7vpq904m";
 		reg = <0x1c>;
 
@@ -692,6 +768,49 @@
 	bias-bus-hold;
 };
 
+&mdss {
+	status = "okay";
+};
+
+&mdss_dp {
+	status = "okay";
+};
+
+&mdss_dp_out {
+	data-lanes = <0 1>;
+	remote-endpoint = <&usb_1_qmpphy_dp_in>;
+};
+
+&mdss_dsi {
+	vdda-supply = <&vreg_l6b_1p2>;
+	status = "okay";
+};
+
+&mdss_dsi0_out {
+	remote-endpoint = <&lt9611_a>;
+	data-lanes = <0 1 2 3>;
+};
+
+&mdss_dsi_phy {
+	vdds-supply = <&vreg_l10c_0p88>;
+	status = "okay";
+};
+
+&mdss_edp {
+	status = "okay";
+};
+
+&mdss_edp_out {
+	data-lanes = <0 1 2 3>;
+	link-frequencies = /bits/ 64 <1620000000 2700000000 5400000000 8100000000>;
+
+	remote-endpoint = <&dp_connector_in>;
+};
+
+&mdss_edp_phy {
+	status = "okay";
+};
+
 &pcie1 {
 	perst-gpios = <&tlmm 2 GPIO_ACTIVE_LOW>;
 
@@ -716,6 +835,21 @@
 	vdda-pll-supply = <&vreg_l6b_1p2>;
 
 	status = "okay";
+};
+
+&edp_hot_plug_det {
+	bias-disable;
+};
+
+&pm7250b_gpios {
+	lt9611_rst_pin: lt9611-rst-state {
+		pins = "gpio2";
+		function = "normal";
+
+		output-high;
+		input-disable;
+		power-source = <0>;
+	};
 };
 
 &qup_uart5_rx {
@@ -761,19 +895,13 @@
 	bias-disable;
 };
 
-&gpi_dma0 {
-	status = "okay";
-};
-
-&gpi_dma1 {
-	status = "okay";
-};
-
 &qupv3_id_0 {
+	firmware-name = "qcom/qcs6490/qupv3fw.elf";
 	status = "okay";
 };
 
 &qupv3_id_1 {
+	firmware-name = "qcom/qcs6490/qupv3fw.elf";
 	status = "okay";
 };
 
@@ -793,7 +921,7 @@
 };
 
 &remoteproc_wpss {
-	firmware-name = "qcom/qcs6490/wpss.mdt";
+	firmware-name = "qcom/qcs6490/wpss.mbn";
 	status = "okay";
 };
 
@@ -845,6 +973,13 @@
 		pins = "gpio85";
 		function = "gpio";
 		output-low;
+		bias-disable;
+	};
+
+	lt9611_irq_pin: lt9611-irq-state {
+		pins = "gpio24";
+		function = "gpio";
+		drive-strength = <2>;
 		bias-disable;
 	};
 
@@ -1024,7 +1159,7 @@
 };
 
 &usb_1_dwc3_hs {
-	remote-endpoint = <&pmic_glink_hs_in>;
+	remote-endpoint = <&eud_ep>;
 };
 
 &usb_1_hsphy {
@@ -1038,6 +1173,7 @@
 &usb_1_qmpphy {
 	vdda-phy-supply = <&vreg_l6b_1p2>;
 	vdda-pll-supply = <&vreg_l1b_0p912>;
+	vdda-aux-supply = <&vreg_l7c_3p0>;
 
 	orientation-switch;
 	status = "okay";
@@ -1045,6 +1181,10 @@
 
 &usb_1_qmpphy_out {
 	remote-endpoint = <&redriver_ss_in>;
+};
+
+&usb_1_qmpphy_dp_in {
+	remote-endpoint = <&mdss_dp_out>;
 };
 
 &vreg_l7b_2p952 {

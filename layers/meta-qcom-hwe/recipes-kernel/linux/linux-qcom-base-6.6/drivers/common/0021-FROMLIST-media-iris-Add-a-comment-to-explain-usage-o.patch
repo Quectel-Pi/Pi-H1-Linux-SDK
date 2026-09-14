@@ -1,0 +1,82 @@
+From 4980413593761a0c8eac639db0768e1e2b238d6f Mon Sep 17 00:00:00 2001
+From: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Date: Fri, 9 May 2025 14:09:07 +0530
+Subject: [PATCH 21/26] FROMLIST: media: iris: Add a comment to explain usage
+ of MBPS
+
+Add a comment to explain usage of MBPS and define a macro for 8K
+resolution for better readability
+
+Acked-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-HDK
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-HDK
+Signed-off-by: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-media/20250509-video-iris-hevc-vp9-v5-21-59b4ff7d331c@quicinc.com/]
+---
+ drivers/media/platform/qcom/iris/iris_platform_common.h | 2 ++
+ drivers/media/platform/qcom/iris/iris_platform_gen2.c   | 4 ++--
+ drivers/media/platform/qcom/iris/iris_platform_sm8250.c | 2 +-
+ 3 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/iris/iris_platform_common.h b/drivers/media/platform/qcom/iris/iris_platform_common.h
+index 1dab276431c7..3e0ae87526a0 100644
+--- a/drivers/media/platform/qcom/iris/iris_platform_common.h
++++ b/drivers/media/platform/qcom/iris/iris_platform_common.h
+@@ -21,6 +21,7 @@ struct iris_inst;
+ #define DEFAULT_MAX_HOST_BUF_COUNT		64
+ #define DEFAULT_MAX_HOST_BURST_BUF_COUNT	256
+ #define DEFAULT_FPS				30
++#define NUM_MBS_8K				((8192 * 4352) / 256)
+ 
+ enum stage_type {
+ 	STAGE_1 = 1,
+@@ -172,6 +173,7 @@ struct iris_platform_data {
+ 	struct ubwc_config_data *ubwc_config;
+ 	u32 num_vpp_pipe;
+ 	u32 max_session_count;
++	/* max number of macroblocks per frame supported */
+ 	u32 max_core_mbpf;
+ 	const u32 *input_config_params;
+ 	unsigned int input_config_params_size;
+diff --git a/drivers/media/platform/qcom/iris/iris_platform_gen2.c b/drivers/media/platform/qcom/iris/iris_platform_gen2.c
+index 1e69ba15db0f..deb7037e8e86 100644
+--- a/drivers/media/platform/qcom/iris/iris_platform_gen2.c
++++ b/drivers/media/platform/qcom/iris/iris_platform_gen2.c
+@@ -248,7 +248,7 @@ struct iris_platform_data sm8550_data = {
+ 	.ubwc_config = &ubwc_config_sm8550,
+ 	.num_vpp_pipe = 4,
+ 	.max_session_count = 16,
+-	.max_core_mbpf = ((8192 * 4352) / 256) * 2,
++	.max_core_mbpf = NUM_MBS_8K * 2,
+ 	.input_config_params =
+ 		sm8550_vdec_input_config_params,
+ 	.input_config_params_size =
+@@ -308,7 +308,7 @@ struct iris_platform_data sm8650_data = {
+ 	.ubwc_config = &ubwc_config_sm8550,
+ 	.num_vpp_pipe = 4,
+ 	.max_session_count = 16,
+-	.max_core_mbpf = ((8192 * 4352) / 256) * 2,
++	.max_core_mbpf = NUM_MBS_8K * 2,
+ 	.input_config_params =
+ 		sm8550_vdec_input_config_params,
+ 	.input_config_params_size =
+diff --git a/drivers/media/platform/qcom/iris/iris_platform_sm8250.c b/drivers/media/platform/qcom/iris/iris_platform_sm8250.c
+index 543fa2661539..8183e4e95fa4 100644
+--- a/drivers/media/platform/qcom/iris/iris_platform_sm8250.c
++++ b/drivers/media/platform/qcom/iris/iris_platform_sm8250.c
+@@ -127,7 +127,7 @@ struct iris_platform_data sm8250_data = {
+ 	.hw_response_timeout = HW_RESPONSE_TIMEOUT_VALUE,
+ 	.num_vpp_pipe = 4,
+ 	.max_session_count = 16,
+-	.max_core_mbpf = (8192 * 4352) / 256,
++	.max_core_mbpf = NUM_MBS_8K,
+ 	.input_config_params =
+ 		sm8250_vdec_input_config_param_default,
+ 	.input_config_params_size =
+-- 
+2.34.1
+

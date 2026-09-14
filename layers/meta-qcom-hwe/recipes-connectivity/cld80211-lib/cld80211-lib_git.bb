@@ -14,7 +14,7 @@ PACKAGE_ARCH = "${SOC_ARCH}"
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/hardware/qcom/wlan.git;protocol=https"
 SRCBRANCH  = "wlan-os-service.qclinux.1.1.r1-rel"
-SRCREV     = "a6d801edeb68336a2fb730c33e502c3a742327b3"
+SRCREV     = "e12275880fc58775de0b240a9f6c325b7a310ebe"
 
 SRC_URI = "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=hardware/qcom/wlan"
 

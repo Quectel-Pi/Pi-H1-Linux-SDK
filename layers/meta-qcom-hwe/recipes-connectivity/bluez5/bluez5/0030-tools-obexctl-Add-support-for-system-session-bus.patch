@@ -1,0 +1,104 @@
+From 6a6ca001607c0fc3142e3b8f522ffca5b60684ef Mon Sep 17 00:00:00 2001
+From: Damodar Reddy GangiReddy <quic_dgangire@quicinc.com>
+Date: Fri, 13 Dec 2024 12:36:28 +0530
+Subject: [PATCH BlueZ v1] tools/obexctl: Add support for system/session bus
+
+Currently obexctl only uses session bus.
+As obexd has been enabled support for both session and system bus.
+Configuring obexctl to use session/system bus during the runtime
+if the name is available over session or system bus.
+
+Signed-off-by: Damodar Reddy GangiReddy <quic_dgangire@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/bluetooth/bluez.git/commit/?id=40e5ebd0cb2cb3c3957fec710a18f29efe4b6e65]
+---
+ tools/obexctl.c | 49 ++++++++++++++++++++++++++++++++++++++++++-------
+ 1 file changed, 42 insertions(+), 7 deletions(-)
+
+diff --git a/tools/obexctl.c b/tools/obexctl.c
+index 56a76915c..bbabce5e9 100644
+--- a/tools/obexctl.c
++++ b/tools/obexctl.c
+@@ -44,8 +44,10 @@
+ #define OBEX_PBAP_INTERFACE "org.bluez.obex.PhonebookAccess1"
+ #define OBEX_MAP_INTERFACE "org.bluez.obex.MessageAccess1"
+ #define OBEX_MSG_INTERFACE "org.bluez.obex.Message1"
++#define OBEXD_SERVICE  "org.bluez.obex"
+ 
+-static DBusConnection *dbus_conn;
++static DBusConnection *dbus_session_conn;
++static DBusConnection *dbus_system_conn;
+ static GDBusProxy *default_session;
+ static GList *sessions = NULL;
+ static GList *opps = NULL;
+@@ -2145,19 +2147,47 @@ static void property_changed(GDBusProxy *proxy, const char *name,
+ 		session_property_changed(proxy, name, iter);
+ }
+ 
++static bool check_obexd_service(DBusConnection *conn)
++{
++	DBusError err;
++	bool has_owner;
++
++	dbus_error_init(&err);
++	has_owner = dbus_bus_name_has_owner(conn, OBEXD_SERVICE, &err);
++
++	if (dbus_error_is_set(&err))
++		dbus_error_free(&err);
++
++	return has_owner;
++}
++
+ int main(int argc, char *argv[])
+ {
+-	GDBusClient *client;
++	GDBusClient *client = NULL;
+ 	int status;
++	bool session_bus_active;
++	bool system_bus_active;
+ 
+ 	bt_shell_init(argc, argv, NULL);
+ 	bt_shell_set_menu(&main_menu);
+ 	bt_shell_set_prompt(PROMPT_OFF);
+ 
+-	dbus_conn = g_dbus_setup_bus(DBUS_BUS_SESSION, NULL, NULL);
++	session_bus_active = false;
++	system_bus_active = false;
++	dbus_session_conn = g_dbus_setup_bus(DBUS_BUS_SESSION, NULL, NULL);
++	if (dbus_session_conn)
++		session_bus_active = check_obexd_service(dbus_session_conn);
+ 
+-	client = g_dbus_client_new(dbus_conn, "org.bluez.obex",
+-							"/org/bluez/obex");
++	dbus_system_conn = g_dbus_setup_bus(DBUS_BUS_SYSTEM, NULL, NULL);
++	if (dbus_system_conn)
++		system_bus_active = check_obexd_service(dbus_system_conn);
++
++	if (session_bus_active)
++		client = g_dbus_client_new(dbus_session_conn, OBEXD_SERVICE,
++								"/org/bluez/obex");
++	else if (system_bus_active)
++		client = g_dbus_client_new(dbus_system_conn, OBEXD_SERVICE,
++								"/org/bluez/obex");
+ 
+ 	g_dbus_client_set_connect_watch(client, connect_handler, NULL);
+ 	g_dbus_client_set_disconnect_watch(client, disconnect_handler, NULL);
+@@ -2167,9 +2197,14 @@ int main(int argc, char *argv[])
+ 
+ 	status = bt_shell_run();
+ 
+-	g_dbus_client_unref(client);
++	if (client)
++		g_dbus_client_unref(client);
++
++	if (dbus_session_conn)
++		dbus_connection_unref(dbus_session_conn);
+ 
+-	dbus_connection_unref(dbus_conn);
++	if (dbus_system_conn)
++		dbus_connection_unref(dbus_system_conn);
+ 
+ 	return status;
+ }
+-- 
+2.34.1
+

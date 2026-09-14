@@ -1,0 +1,38 @@
+From 03ff3a3547ea31c27f6ef5581359bb7c86f09bff Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Mon, 16 May 2022 00:39:33 -0700
+Subject: [PATCH] CheckFeatureOrDie: use warning to avoid die
+
+Run 32-bit tensorflow on qemux86-64, it broke at CheckFeatureOrDie,
+use warning to workaround.
+
+Upstream-Status: Inappropriate [oe specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ tensorflow/core/platform/cpu_feature_guard.cc | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/tensorflow/core/platform/cpu_feature_guard.cc b/tensorflow/core/platform/cpu_feature_guard.cc
+index 748dc21090a..ecc9504864d 100644
+--- a/tensorflow/core/platform/cpu_feature_guard.cc
++++ b/tensorflow/core/platform/cpu_feature_guard.cc
+@@ -36,18 +36,11 @@ void CheckFeatureOrDie(CPUFeature feature, const std::string& feature_name) {
+     const auto error_msg =
+         "The TensorFlow library was compiled to use " + feature_name +
+         " instructions, but these aren't available on your machine.";
+-#ifdef __ANDROID__
+     // Some Android emulators seem to indicate they don't support SSE, so we
+     // only issue a warning to avoid crashes when testing. We use the logging
+     // framework here because std::cout and std::cerr made some Android targets
+     // crash.
+     LOG(WARNING) << error_msg;
+-#else
+-    // Avoiding use of the logging framework here as that might trigger a SIGILL
+-    // by itself.
+-    std::cerr << error_msg << std::endl;
+-    std::abort();
+-#endif
+   }
+ }
+ 

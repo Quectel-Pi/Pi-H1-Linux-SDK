@@ -1,0 +1,48 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/soc/qcom/qcom,nhlos-logs.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Qualcomm NHLOS log driver
+
+maintainers:
+  - Jai Kumar Gautam <jgautam@qti.qualcomm.com>
+
+description: |
+    This driver enables console access to logs from various Non HLOS subsystems
+    which contain information about the firmware configuration currently set
+    on the SoC. The logs are stored in predefined reserved memory regions.
+properties:
+  compatible:
+    items:
+      - enum:
+          - qcom,nhlos-logs-mem
+          - qcom,nhlos-logs-io
+      - const: qcom,nhlos-logs
+
+  memory-region:
+    maxItems: 1
+    description: Handle to reserved memory region.
+
+required:
+  - compatible
+  - memory-region
+
+additionalProperties: false
+
+examples:
+  - |
+        reserved-memory {
+            uefi_log_mem: uefi-log-mem@908b0000 {
+                reg = <0x0 0x908b0000 0x0 0x10000>;
+                no-map;
+            };
+        };
+
+        soc {
+            uefi_log {
+                compatible = "qcom,nhlos-logs-mem", "qcom,nhlos-logs";
+                memory-region = <&uefi_log_mem>;
+            };
+        };

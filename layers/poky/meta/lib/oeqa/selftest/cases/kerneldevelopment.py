@@ -1,3 +1,9 @@
+#
+# Copyright OpenEmbedded Contributors
+#
+# SPDX-License-Identifier: MIT
+#
+
 import os
 from oeqa.selftest.case import OESelftestTestCase
 from oeqa.utils.commands import runCmd, get_bb_var
@@ -58,6 +64,7 @@ class KernelDev(OESelftestTestCase):
         recipe_append = os.path.join(self.recipeskernel_dir, 'linux-yocto_%.bbappend')
         with open(recipe_append, 'w+') as fh:
             fh.write('SRC_URI += "file://%s"\n' % patch_name)
+            fh.write('ERROR_QA:remove:pn-linux-yocto = "patch-status"\n')
             fh.write('FILESEXTRAPATHS:prepend := "${THISDIR}/${PN}:"')
 
         runCmd('bitbake virtual/kernel -c clean')

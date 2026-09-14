@@ -7,7 +7,8 @@ DESCRIPTION = "Recipe to build Linux kernel from 6.6 LTS branch"
 LICENSE = "GPL-2.0-only"
 LIC_FILES_CHKSUM = "file://COPYING;md5=6bc538ed5bd9a7fc9398086aedcd7e46"
 
-inherit kernel sota
+inherit kernel
+inherit ${@bb.utils.contains('DISTRO_FEATURES', 'sota', 'sota', '', d)}
 
 COMPATIBLE_MACHINE = "(qcom)"
 
@@ -22,17 +23,27 @@ require ${BPN}-${PV}/devicetree.inc
 require ${BPN}-${PV}/drivers.inc
 require ${BPN}-${PV}/dt-bindings.inc
 require ${BPN}-${PV}/tools.inc
+require ${BPN}-${PV}/documentation.inc
 
 KERNEL_CONFIG_FRAGMENTS:append = " ${WORKDIR}/qcom.cfg"
 KERNEL_CONFIG_FRAGMENTS:append = " ${@oe.utils.vartrue('DEBUG_BUILD', '${WORKDIR}/qcom_debug.cfg', '', d)}"
 
 S = "${WORKDIR}/git"
 
-# 6.6.52
-SRCREV = "561bbd55f91a8e94576ca3fbf35a0c99ff70d4b2"
+# 6.6.116
+SRCREV = "0a805b6ea8cda0caa268b396a2e5117f3772d849"
 PV = "6.6+git${SRCPV}"
 
 KERNEL_CONFIG ??= "defconfig"
+
+# List of kernel modules that will be auto-loaded for Qualcomm platforms.
+
+# Coresight and stm modules for QDSS functions
+KERNEL_MODULE_AUTOLOAD += "coresight coresight-tmc coresight-funnel"
+KERNEL_MODULE_AUTOLOAD += "coresight-replicator coresight-etm4x coresight-stm"
+KERNEL_MODULE_AUTOLOAD += "coresight-cti coresight-tpdm coresight-tpda coresight-dummy"
+KERNEL_MODULE_AUTOLOAD += "coresight-remote-etm coresight-tgu"
+KERNEL_MODULE_AUTOLOAD += "stm_core stm_p_ost stm_p_basic stm_console stm_heartbeat stm_ftrace"
 
 kernel_conf_variable() {
     sed -e "/CONFIG_$1[ =]/d;" -i ${B}/.config

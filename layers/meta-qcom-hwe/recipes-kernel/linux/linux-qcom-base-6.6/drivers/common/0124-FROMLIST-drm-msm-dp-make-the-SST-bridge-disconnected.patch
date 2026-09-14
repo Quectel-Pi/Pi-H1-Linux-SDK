@@ -1,0 +1,31 @@
+From a355db48464b12fa53992542cf42c97921851e2c Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:31:58 -0800
+Subject: [PATCH 124/146] FROMLIST: drm/msm/dp: make the SST bridge
+ disconnected when mst is active
+
+In mst mode, we don't need to enable SST bridge, so just drop it.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-27-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_drm.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_drm.c b/drivers/gpu/drm/msm/dp/dp_drm.c
+index 920392b3c688..225858c62405 100644
+--- a/drivers/gpu/drm/msm/dp/dp_drm.c
++++ b/drivers/gpu/drm/msm/dp/dp_drm.c
+@@ -27,7 +27,7 @@ static enum drm_connector_status msm_dp_bridge_detect(struct drm_bridge *bridge)
+ 	drm_dbg_dp(dp->drm_dev, "link_ready = %s\n",
+ 		(dp->link_ready) ? "true" : "false");
+ 
+-	return (dp->link_ready) ? connector_status_connected :
++	return (dp->link_ready && !dp->mst_active) ? connector_status_connected :
+ 					connector_status_disconnected;
+ }
+ 
+-- 
+2.34.1
+

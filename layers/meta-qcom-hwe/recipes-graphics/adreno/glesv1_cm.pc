@@ -1,0 +1,8 @@
+Name: GLESv1
+Description: GLES 1.1 package
+Version:
+prefix=/usr
+includedir=
+libdir=
+Libs: -L${libdir} -lGLESv1_CM
+Cflags: -I${includedir}

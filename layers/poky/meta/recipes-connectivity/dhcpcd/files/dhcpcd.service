@@ -3,6 +3,7 @@ Description=A minimalistic network configuration daemon with DHCPv4, rdisc and D
 Wants=network.target
 Before=network.target
 Conflicts=connman.service
+ConditionPathExists=/var/persist/fct_done_flag
 
 [Service]
 ExecStart=/sbin/dhcpcd -q --nobackground

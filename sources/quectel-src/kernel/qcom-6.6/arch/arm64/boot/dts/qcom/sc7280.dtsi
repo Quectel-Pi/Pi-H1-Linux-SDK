@@ -3,7 +3,7 @@
  * sc7280 SoC device tree source
  *
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #include <dt-bindings/clock/qcom,camcc-sc7280.h>
 #include <dt-bindings/clock/qcom,dispcc-sc7280.h>
@@ -82,9 +82,18 @@
 
 		sleep_clk: sleep-clk {
 			compatible = "fixed-clock";
-			clock-frequency = <32000>;
+			clock-frequency = <32764>;
 			#clock-cells = <0>;
 		};
+	};
+
+	beeper: beeper {
+		compatible = "gpio-beeper";
+		pinctrl-names = "default";
+		pinctrl-0 = <&gpio_pwm_default>;
+		status = "disabled";
+		clocks = <&gcc GCC_GP3_CLK>;
+		clock-names = "gpio-pwm-clk";
 	};
 
 	reserved-memory {
@@ -150,6 +159,11 @@
 
 		ipa_fw_mem: memory@8b700000 {
 			reg = <0 0x8b700000 0 0x10000>;
+			no-map;
+		};
+
+		gpu_zap_mem: zap@8b71a000 {
+			reg = <0 0x8b71a000 0 0x2000>;
 			no-map;
 		};
 
@@ -1004,6 +1018,7 @@
 			power-domains = <&rpmhpd SC7280_CX>;
 			operating-points-v2 = <&sdhc1_opp_table>;
 
+			qcom,ice = <&ice_mmc>;
 			bus-width = <8>;
 			supports-cqe;
 			dma-coherent;
@@ -1033,6 +1048,29 @@
 					required-opps = <&rpmhpd_opp_nom>;
 					opp-peak-kBps = <5400000 1600000>;
 					opp-avg-kBps = <390000 0>;
+				};
+			};
+		};
+
+		ice_mmc: crypto@7c8000 {
+			compatible = "qcom,inline-crypto-engine";
+			reg = <0x0 0x7C8000 0x0 0x10000>;
+			qcom,ice-use-hwkm;
+			clocks = <&gcc GCC_SDCC1_ICE_CORE_CLK>;
+			operating-points-v2 = <&ice_mmc_opp_table>;
+			status = "okay";
+
+			ice_mmc_opp_table: opp-table {
+				compatible = "operating-points-v2";
+
+				opp-100000000 {
+					opp-hz = /bits/ 64 <100000000>;
+					required-opps = <&rpmhpd_opp_low_svs>;
+				};
+
+				opp-300000000 {
+					opp-hz = /bits/ 64 <300000000>;
+					required-opps = <&rpmhpd_opp_nom>;
 				};
 			};
 		};
@@ -2377,9 +2415,8 @@
 			ranges;
 			clocks = <&gcc GCC_PCIE_1_AUX_CLK>,
 				 <&gcc GCC_PCIE_1_CFG_AHB_CLK>,
-				 <&gcc GCC_PCIE_CLKREF_EN>,
 				 <&gcc GCC_PCIE1_PHY_RCHNG_CLK>;
-			clock-names = "aux", "cfg_ahb", "ref", "refgen";
+			clock-names = "aux", "cfg_ahb", "refgen";
 
 			resets = <&gcc GCC_PCIE_1_PHY_BCR>;
 			reset-names = "phy";
@@ -2879,6 +2916,26 @@
 				pins = "gpio11";
 				function = "wsa_swr_data";
 			};
+
+			mi2s5_data0: mi2s5-data0-state {
+				pins = "gpio12";
+				function = "i2s2_data";
+			};
+
+			mi2s5_data1: mi2s5-data1-state {
+				pins = "gpio13";
+				function = "i2s2_data";
+			};
+
+			mi2s5_sclk: mi2s5-sclk-state {
+				pins = "gpio10";
+				function = "i2s2_clk";
+			};
+
+			mi2s5_ws: mi2s5-ws-state {
+				pins = "gpio11";
+				function = "i2s2_ws";
+			};
 		};
 
 		gpu: gpu@3d00000 {
@@ -2901,6 +2958,12 @@
 			nvmem-cells = <&gpu_speed_bin>;
 			nvmem-cell-names = "speed_bin";
 
+			status = "disabled";
+
+			gpu_zap_shader: zap-shader {
+				memory-region = <&gpu_zap_mem>;
+			};
+
 			gpu_opp_table: opp-table {
 				compatible = "operating-points-v2";
 
@@ -2908,14 +2971,14 @@
 					opp-hz = /bits/ 64 <315000000>;
 					opp-level = <RPMH_REGULATOR_LEVEL_LOW_SVS>;
 					opp-peak-kBps = <1804000>;
-					opp-supported-hw = <0x03>;
+					opp-supported-hw = <0x07>;
 				};
 
 				opp-450000000 {
 					opp-hz = /bits/ 64 <450000000>;
 					opp-level = <RPMH_REGULATOR_LEVEL_SVS>;
 					opp-peak-kBps = <4068000>;
-					opp-supported-hw = <0x03>;
+					opp-supported-hw = <0x07>;
 				};
 
 				/* Only applicable for SKUs which has 550Mhz as Fmax */
@@ -2930,28 +2993,28 @@
 					opp-hz = /bits/ 64 <550000000>;
 					opp-level = <RPMH_REGULATOR_LEVEL_SVS_L1>;
 					opp-peak-kBps = <6832000>;
-					opp-supported-hw = <0x02>;
+					opp-supported-hw = <0x06>;
 				};
 
 				opp-608000000 {
 					opp-hz = /bits/ 64 <608000000>;
 					opp-level = <RPMH_REGULATOR_LEVEL_SVS_L2>;
 					opp-peak-kBps = <8368000>;
-					opp-supported-hw = <0x02>;
+					opp-supported-hw = <0x06>;
 				};
 
 				opp-700000000 {
 					opp-hz = /bits/ 64 <700000000>;
 					opp-level = <RPMH_REGULATOR_LEVEL_NOM>;
 					opp-peak-kBps = <8532000>;
-					opp-supported-hw = <0x02>;
+					opp-supported-hw = <0x06>;
 				};
 
 				opp-812000000 {
 					opp-hz = /bits/ 64 <812000000>;
 					opp-level = <RPMH_REGULATOR_LEVEL_NOM_L1>;
 					opp-peak-kBps = <8532000>;
-					opp-supported-hw = <0x02>;
+					opp-supported-hw = <0x06>;
 				};
 
 				opp-840000000 {
@@ -5192,6 +5255,22 @@
 			reg = <0x0 0x01d88000 0x0 0x10000>;
 			qcom,ice-use-hwkm;
 			clocks = <&gcc GCC_UFS_PHY_ICE_CORE_CLK>;
+			operating-points-v2 = <&ice_opp_table>;
+			status = "okay";
+
+			ice_opp_table: opp-table {
+				compatible = "operating-points-v2";
+
+				opp-75000000 {
+					opp-hz = /bits/ 64 <75000000>;
+					required-opps = <&rpmhpd_opp_low_svs>;
+				};
+
+				opp-300000000 {
+					opp-hz = /bits/ 64 <300000000>;
+					required-opps = <&rpmhpd_opp_nom>;
+				};
+			};
 		};
 
 		usb_1_hsphy: phy@88e3000 {
@@ -5318,13 +5397,6 @@
 				phys = <&usb_2_hsphy>;
 				phy-names = "usb2-phy";
 				maximum-speed = "high-speed";
-				usb-role-switch;
-
-				port {
-					usb2_role_switch: endpoint {
-						remote-endpoint = <&eud_ep>;
-					};
-				};
 			};
 		};
 
@@ -5502,11 +5574,13 @@
 		};
 
 		eud: eud@88e0000 {
-			compatible = "qcom,eud";
+			compatible = "qcom,secure-eud";
 			reg = <0 0x88e0000 0 0x2000>,
 			      <0 0x88e2000 0 0x1000>;
 			interrupts-extended = <&pdc 11 IRQ_TYPE_LEVEL_HIGH>;
 
+			phys = <&usb_1_hsphy>;
+			phy-names = "usb2-phy";
 			status = "disabled";
 
 			ports {
@@ -5516,7 +5590,12 @@
 				port@0 {
 					reg = <0>;
 					eud_ep: endpoint {
-						remote-endpoint = <&usb2_role_switch>;
+					};
+				};
+
+				port@1 {
+					reg = <1>;
+					eud_con: endpoint {
 					};
 				};
 			};
@@ -6075,6 +6154,11 @@
 						opp-hz = /bits/ 64 <506666667>;
 						required-opps = <&rpmhpd_opp_nom>;
 					};
+
+					opp-608000000 {
+						opp-hz = /bits/ 64 <608000000>;
+						required-opps = <&rpmhpd_opp_turbo>;
+					};
 				};
 			};
 
@@ -6439,16 +6523,29 @@
 			gpio-ranges = <&tlmm 0 0 175>;
 			wakeup-parent = <&pdc>;
 
+			gpio_pwm_default: gpio-pwm-default {
+				mux {
+					pins = "gpio78";
+					function = "gcc_gp3";
+				};
+
+				config {
+					pins = "gpio78";
+					bias-disable;
+					drive-strength = <8>;
+				};
+			};
+
 			cam2_default: cam2-default {
 				mclk {
-					pins = "gpio64";
+					pins = "gpio67";
 					function = "cam_mclk";
 					drive-strength = <2>;
 					bias-disable;
 				};
 
 				rst {
-					pins = "gpio20";
+					pins = "gpio78";
 					function = "gpio";
 					drive-strength = <2>;
 					bias-disable;
@@ -6457,14 +6554,14 @@
 
 			cam2_suspend: cam2-suspend {
 				mclk {
-					pins = "gpio64";
+					pins = "gpio67";
 					function = "cam_mclk";
 					drive-strength = <2>;
 					bias-pull-down;
 				};
 
 				rst {
-					pins = "gpio20";
+					pins = "gpio78";
 					function = "gpio";
 					drive-strength = <2>;
 					bias-pull-down;
@@ -7216,7 +7313,7 @@
 				pins = "gpio47";
 				function = "qup13";
 			};
-/*
+
 			qup_uart12_cts: qup-uart12-cts-state {
 				pins = "gpio48";
 				function = "qup14";
@@ -7226,7 +7323,7 @@
 				pins = "gpio49";
 				function = "qup14";
 			};
-*/
+
 			qup_uart12_tx: qup-uart12-tx-state {
 				pins = "gpio50";
 				function = "qup14";

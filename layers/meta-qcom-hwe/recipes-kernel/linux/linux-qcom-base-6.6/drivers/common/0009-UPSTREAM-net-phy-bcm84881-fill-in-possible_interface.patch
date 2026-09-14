@@ -1,0 +1,52 @@
+From 01236f7780cf015ab552315346d868f3dca22af8 Mon Sep 17 00:00:00 2001
+From: "Russell King (Oracle)" <rmk+kernel@armlinux.org.uk>
+Date: Fri, 24 Nov 2023 12:28:08 +0000
+Subject: [PATCH 09/39] UPSTREAM: net: phy: bcm84881: fill in
+ possible_interfaces
+
+Fill in the possible_interfaces member. This PHY driver only supports
+a single configuration found on SFPs.
+
+Reviewed-by: Florian Fainelli <florian.fainelli@broadcom.com>
+Signed-off-by: Russell King (Oracle) <rmk+kernel@armlinux.org.uk>
+Reviewed-by: Andrew Lunn <andrew@lunn.ch>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git a22583338e535ba2512283da4aee893163a4b78d]
+---
+ drivers/net/phy/bcm84881.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/drivers/net/phy/bcm84881.c b/drivers/net/phy/bcm84881.c
+index 9717a1626f3f..f1d47c264058 100644
+--- a/drivers/net/phy/bcm84881.c
++++ b/drivers/net/phy/bcm84881.c
+@@ -29,8 +29,19 @@ static int bcm84881_wait_init(struct phy_device *phydev)
+ 					 100000, 2000000, false);
+ }
+ 
++static void bcm84881_fill_possible_interfaces(struct phy_device *phydev)
++{
++	unsigned long *possible = phydev->possible_interfaces;
++
++	__set_bit(PHY_INTERFACE_MODE_SGMII, possible);
++	__set_bit(PHY_INTERFACE_MODE_2500BASEX, possible);
++	__set_bit(PHY_INTERFACE_MODE_10GBASER, possible);
++}
++
+ static int bcm84881_config_init(struct phy_device *phydev)
+ {
++	bcm84881_fill_possible_interfaces(phydev);
++
+ 	switch (phydev->interface) {
+ 	case PHY_INTERFACE_MODE_SGMII:
+ 	case PHY_INTERFACE_MODE_2500BASEX:
+@@ -39,6 +50,7 @@ static int bcm84881_config_init(struct phy_device *phydev)
+ 	default:
+ 		return -ENODEV;
+ 	}
++
+ 	return 0;
+ }
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,65 @@
+From 47175b6c700f31a90d49facac3b6df63846a07bb Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Mon, 18 Mar 2024 16:24:48 +0800
+Subject: [PATCH] disable avxvnni for x86
+
+If host gcc is too old to support option -mavxvnni, the compile failed
+...
+DEBUG:  | gcc: error: unrecognized command line option '-mavxvnni'; did you mean '-mavx512vnni'?
+...
+
+Disable avxvnni for x86, use android as workaround for native build
+
+Upstream-Status: Inappropriate [Yocto specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ tensorflow/workspace2.bzl              |  1 +
+ third_party/0001-disable-avxvnni.patch | 26 ++++++++++++++++++++++++++
+ 2 files changed, 27 insertions(+)
+ create mode 100644 third_party/0001-disable-avxvnni.patch
+
+diff --git a/tensorflow/workspace2.bzl b/tensorflow/workspace2.bzl
+index 3ef4a544f1a..e179f4c0f03 100644
+--- a/tensorflow/workspace2.bzl
++++ b/tensorflow/workspace2.bzl
+@@ -152,6 +152,7 @@ def _tf_repositories():
+         name = "XNNPACK",
+         sha256 = "434fe914cb52da3e66ba920082af969f527f23729fff182aecd87ac5324e9f90",
+         strip_prefix = "XNNPACK-dcbfffb80fb4f6fcfcfb5b3723854ec8797fa546",
++        patch_file = ["//third_party:0001-disable-avxvnni.patch"],
+         urls = tf_mirror_urls("https://github.com/google/XNNPACK/archive/dcbfffb80fb4f6fcfcfb5b3723854ec8797fa546.zip"),
+     )
+     # LINT.ThenChange(//tensorflow/lite/tools/cmake/modules/xnnpack.cmake)
+diff --git a/third_party/0001-disable-avxvnni.patch b/third_party/0001-disable-avxvnni.patch
+new file mode 100644
+index 00000000000..e07cd9bd930
+--- /dev/null
++++ b/third_party/0001-disable-avxvnni.patch
+@@ -0,0 +1,26 @@
++From f26a1a2447c01d7a69eea07164797332a7ea6ac3 Mon Sep 17 00:00:00 2001
++From: Hongxu Jia <hongxu.jia@windriver.com>
++Date: Mon, 18 Mar 2024 12:33:45 +0800
++Subject: [PATCH] disable avxvnni
++
++Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
++---
++ BUILD.bazel | 2 +-
++ 1 file changed, 1 insertion(+), 1 deletion(-)
++
++diff --git a/BUILD.bazel b/BUILD.bazel
++index 9448c6b..5ffe50c 100755
++--- a/BUILD.bazel
+++++ b/BUILD.bazel
++@@ -4132,7 +4132,7 @@ alias(
++ selects.config_setting_group(
++     name = "avxvnni_enabled_by_default",
++     match_any = [
++-        "//build_config:x86",
+++        "//build_config:android",
++     ],
++ )
++ 
++-- 
++2.27.0
++

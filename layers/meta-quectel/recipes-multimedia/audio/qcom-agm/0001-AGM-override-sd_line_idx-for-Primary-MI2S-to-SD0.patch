@@ -1,0 +1,36 @@
+From: QuecPi <dev@quectel.com>
+Subject: [PATCH] AGM: override sd_line_idx for Primary MI2S to SD0
+
+The QCM6490 ACDB topology specifies sd_line_idx=3 (I2S_SD2) for the
+MI2S-LPAIF-RX-PRIMARY endpoint, but QCS6490's Primary MI2S only
+supports SD0 and SD1. The Q6 DSP rejects SD2/SD3 with error -131.
+
+Override sd_line_idx to 1 (I2S_SD0) for Primary MI2S ports after
+reading the ACDB topology data, before sending to the Q6 DSP.
+
+Note: sd_line_idx is 1-based (SD0=1, SD1=2, SD2=3, SD3=4) as defined
+in audioreach.h (I2S_SD0..I2S_SD3).
+
+---
+ service/src/graph_module.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/service/src/graph_module.c b/service/src/graph_module.c
+--- a/service/src/graph_module.c
++++ b/service/src/graph_module.c
+@@ -419,6 +419,15 @@
+     i2s_config->lpaif_type = hw_ep_info.ep_config.cdc_dma_i2s_tdm_config.lpaif_type;
+     i2s_config->intf_idx = hw_ep_info.ep_config.cdc_dma_i2s_tdm_config.intf_idx;
+
++	/*
++	 * Override sd_line_idx for Primary MI2S (lpaif_type=0, intf_idx=0).
++	 * QCS6490 ACDB has sd_line_idx=3 (I2S_SD2) but the hardware only
++	 * supports SD0/SD1.  Force SD0 (sd_line_idx=1) for LT9611 HDMI audio.
++	 * sd_line_idx is 1-based: SD0=1, SD1=2, SD2=3, SD3=4.
++	 */
++	if (i2s_config->lpaif_type == 0 && i2s_config->intf_idx == 0)
++		i2s_config->sd_line_idx = 1;
++
+     AGM_LOGV("i2s intf cfg lpaif %d indx %d sd_ln_idx %x ws_src %d",
+               i2s_config->lpaif_type, i2s_config->intf_idx,
+               i2s_config->sd_line_idx, i2s_config->ws_src);

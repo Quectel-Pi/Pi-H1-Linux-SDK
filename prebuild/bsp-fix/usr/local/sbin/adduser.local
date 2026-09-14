@@ -1,0 +1,3 @@
+#!/bin/bash
+USER="$1"
+HOMEDIR="$2"

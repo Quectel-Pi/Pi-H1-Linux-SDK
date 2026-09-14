@@ -58,14 +58,14 @@ IMAGE_CMD:oci() {
     bbdebug 1 "OCI: configuring image"
     if [ -n "${OCI_IMAGE_LABELS}" ]; then
 	for l in ${OCI_IMAGE_LABELS}; do
-	    bbdebug 1 "OCI: umoci config --image $image_name:${OCI_IMAGE_TAG} --config.label $l"
-	    umoci config --image $image_name:${OCI_IMAGE_TAG} --config.label $l
+	    bbdebug 1 "OCI: umoci config --image $image_name:${OCI_IMAGE_TAG} --config.label \"$l\""
+	    umoci config --image $image_name:${OCI_IMAGE_TAG} --config.label "$l"
 	done
     fi
     if [ -n "${OCI_IMAGE_ENV_VARS}" ]; then
 	for l in ${OCI_IMAGE_ENV_VARS}; do
-	    bbdebug 1 "umoci config --image $image_name:${OCI_IMAGE_TAG} --config.env $l"
-	    umoci config --image $image_name:${OCI_IMAGE_TAG} --config.env $l
+	    bbdebug 1 "umoci config --image $image_name:${OCI_IMAGE_TAG} --config.env \"$l\""
+	    umoci config --image $image_name:${OCI_IMAGE_TAG} --config.env "$l"
 	done
     fi
     if [ -n "${OCI_IMAGE_PORTS}" ]; then
@@ -99,17 +99,37 @@ IMAGE_CMD:oci() {
 	bbnote "OCI: image subarch is set to: ${OCI_IMAGE_SUBARCH}, but umoci does not"
 	bbnote "     expose variants. use sloci instead if this is important"
     fi
-    umoci config --image $image_name:${OCI_IMAGE_TAG} --config.entrypoint ${OCI_IMAGE_ENTRYPOINT}
+    umoci config --image $image_name:${OCI_IMAGE_TAG} \
+	  ${@" ".join("--config.entrypoint %s" % s for s in d.getVar("OCI_IMAGE_ENTRYPOINT").split())}
     if [ -n "${OCI_IMAGE_ENTRYPOINT_ARGS}" ]; then
-	umoci config --image $image_name:${OCI_IMAGE_TAG} --config.cmd "${OCI_IMAGE_ENTRYPOINT_ARGS}"
+	umoci config --image $image_name:${OCI_IMAGE_TAG} ${@" ".join("--config.cmd %s" % s for s in d.getVar("OCI_IMAGE_ENTRYPOINT_ARGS").split())}
     fi
     umoci config --image $image_name:${OCI_IMAGE_TAG} --author ${OCI_IMAGE_AUTHOR_EMAIL}
 
+    # OCI_IMAGE_TAG may contain ":", but these are not allowed in OCI file
+    # names so replace them
+    image_tag="${@d.getVar("OCI_IMAGE_TAG").replace(":", "_")}"
+
     # make a tar version of the image direcotry
+    #  1) image_name.tar: compatible with oci tar format, blobs and rootfs
+    #     are at the top level. Can load directly from something like podman
+    #  2) image_name-dir.tar: original format from meta-virt, is just a tar'd
+    #     up oci image directory (compatible with skopeo :dir format)
     if [ -n "${OCI_IMAGE_TAR_OUTPUT}" ]; then
-	tar -cf "$image_name.tar" "$image_name"
+        (
+	    cd "$image_name"
+	    tar -cf ../"$image_name.tar" "."
+	)
+	tar -cf "$image_name-dir.tar" "$image_name"
+
+	# create a convenience symlink
+	ln -sf "$image_name.tar" "${IMAGE_BASENAME}-$image_tag-oci.tar"
+	ln -sf "$image_name-dir.tar" "${IMAGE_BASENAME}-$image_tag-oci-dir.tar"
     fi
 
     # We could make this optional, since the bundle is directly runnable via runc
     rm -rf $image_bundle_name
+
+    # This is the OCI image directory, which is technically the "image" as specified
+    ln -sf $image_name ${IMAGE_BASENAME}-$image_tag-oci
 }

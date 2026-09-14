@@ -96,3 +96,10 @@ corecmd_dontaudit_exec_all_executables(qcom_weston_t)
 
 qcom_cam_server_fd_use(qcom_weston_t)
 permissive qcom_weston_t;
+
+# Required for ssh shell
+systemd_read_logind_runtime_files(qcom_weston_t)
+systemd_read_logind_sessions_files(qcom_weston_t)
+files_search_home(qcom_weston_t)
+qcom_coredump_read_write(qcom_weston_t)
+fs_getattr_cgroup(qcom_weston_t)

@@ -396,6 +396,22 @@ static int audio_pkt_srvc_callback(struct gpr_resp_pkt *data, void *priv, int op
 }
 
 /**
+ * audio_pkt_devnode() - devnode callback to relax node permissions
+ *
+ * AGM/PAL audio stack opens /dev/aud_pasthru_adsp as a regular user
+ * (pipewire's libpipewire-module-pal). Default devtmpfs mode is 0600
+ * root:root, which makes AGM init fail (-131) and kills the whole
+ * pipewire context. Set 0666 here so the node is world-accessible from
+ * the moment it is created - no userspace chmod / udev race needed.
+ */
+static char *audio_pkt_devnode(const struct device *dev, umode_t *mode)
+{
+	if (mode)
+		*mode = 0666;
+	return NULL;
+}
+
+/**
  * audio_pkt_probe() - Probe a AUDIO packet device
  *
  * adev:	Pointer to gpr device.
@@ -434,6 +450,7 @@ static int audio_pkt_probe(gpr_device_t *adev)
 			      PTR_ERR(audpkt_dev->audio_pkt_class));
 		goto err_class;
 	}
+	audpkt_dev->audio_pkt_class->devnode = audio_pkt_devnode;
 
 	audpkt_dev->dev = device_create(audpkt_dev->audio_pkt_class, NULL,
 					audpkt_dev->audio_pkt_major, NULL,

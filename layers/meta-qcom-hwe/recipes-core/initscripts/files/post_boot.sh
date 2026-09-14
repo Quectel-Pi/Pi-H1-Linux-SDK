@@ -14,11 +14,5 @@ echo 100 > /proc/sys/vm/swappiness
 # huge pages is not as necessary.
 echo 0 > /proc/sys/vm/compaction_proactiveness
 
-. /etc/quecpi_config/quecpi_config.ini
-
-echo $led_red_trigger > /sys/class/leds/red/trigger
-echo $led_blue_trigger > /sys/class/leds/blue/trigger
-echo $led_green_trigger > /sys/class/leds/green/trigger
-echo $led_red_brightness > /sys/class/leds/red/brightness
-echo $led_blue_brightness > /sys/class/leds/blue/brightness
-echo $led_green_brightness > /sys/class/leds/green/brightness
+# Create camera cgroup
+mkdir -p /sys/fs/cgroup/camera-framework

@@ -1,0 +1,109 @@
+From f3bc39d213445ef62ec9117f7ae4c1a4b90882dc Mon Sep 17 00:00:00 2001
+From: Stephen Boyd <swboyd@chromium.org>
+Date: Tue, 29 Aug 2023 11:47:26 -0700
+Subject: [PATCH 001/146] UPSTREAM: drm/msm/dp: Replace open-coded
+ drm_dp_read_dpcd_caps()
+
+This function duplicates the common function drm_dp_read_dpcd_caps().
+The array of DPCD registers filled in is one size larger than the
+function takes, but from what I can tell that extra byte was never used.
+Resize the array and use the common function to reduce the code here.
+
+Cc: Vinod Polimera <quic_vpolimer@quicinc.com>
+Cc: Kuogee Hsieh <quic_khsieh@quicinc.com>
+Signed-off-by: Stephen Boyd <swboyd@chromium.org>
+Tested-by: Kuogee Hsieh <quic_khsieh@quicinc.com>
+Reviewed-by: Kuogee Hsieh <quic_khsieh@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/554981/
+Link: https://lore.kernel.org/r/20230829184735.2841739-2-swboyd@chromium.org
+Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 744077f94e431214c10a2802a189a26ed57dd264]
+---
+ drivers/gpu/drm/msm/dp/dp_panel.c | 42 ++++---------------------------
+ drivers/gpu/drm/msm/dp/dp_panel.h |  4 +--
+ 2 files changed, 6 insertions(+), 40 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_panel.c b/drivers/gpu/drm/msm/dp/dp_panel.c
+index d26589eb8b21..69a02c642ad1 100644
+--- a/drivers/gpu/drm/msm/dp/dp_panel.c
++++ b/drivers/gpu/drm/msm/dp/dp_panel.c
+@@ -48,47 +48,15 @@ static int dp_panel_read_dpcd(struct dp_panel *dp_panel)
+ 	ssize_t rlen;
+ 	struct dp_panel_private *panel;
+ 	struct dp_link_info *link_info;
+-	u8 *dpcd, major = 0, minor = 0, temp;
+-	u32 offset = DP_DPCD_REV;
++	u8 *dpcd, major, minor;
+ 
++	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+ 	dpcd = dp_panel->dpcd;
++	rc = drm_dp_read_dpcd_caps(panel->aux, dpcd);
++	if (rc)
++		return rc;
+ 
+-	panel = container_of(dp_panel, struct dp_panel_private, dp_panel);
+ 	link_info = &dp_panel->link_info;
+-
+-	rlen = drm_dp_dpcd_read(panel->aux, offset,
+-			dpcd, (DP_RECEIVER_CAP_SIZE + 1));
+-	if (rlen < (DP_RECEIVER_CAP_SIZE + 1)) {
+-		DRM_ERROR("dpcd read failed, rlen=%zd\n", rlen);
+-		if (rlen == -ETIMEDOUT)
+-			rc = rlen;
+-		else
+-			rc = -EINVAL;
+-
+-		goto end;
+-	}
+-
+-	temp = dpcd[DP_TRAINING_AUX_RD_INTERVAL];
+-
+-	/* check for EXTENDED_RECEIVER_CAPABILITY_FIELD_PRESENT */
+-	if (temp & BIT(7)) {
+-		drm_dbg_dp(panel->drm_dev,
+-				"using EXTENDED_RECEIVER_CAPABILITY_FIELD\n");
+-		offset = DPRX_EXTENDED_DPCD_FIELD;
+-	}
+-
+-	rlen = drm_dp_dpcd_read(panel->aux, offset,
+-		dpcd, (DP_RECEIVER_CAP_SIZE + 1));
+-	if (rlen < (DP_RECEIVER_CAP_SIZE + 1)) {
+-		DRM_ERROR("dpcd read failed, rlen=%zd\n", rlen);
+-		if (rlen == -ETIMEDOUT)
+-			rc = rlen;
+-		else
+-			rc = -EINVAL;
+-
+-		goto end;
+-	}
+-
+ 	link_info->revision = dpcd[DP_DPCD_REV];
+ 	major = (link_info->revision >> 4) & 0x0f;
+ 	minor = link_info->revision & 0x0f;
+diff --git a/drivers/gpu/drm/msm/dp/dp_panel.h b/drivers/gpu/drm/msm/dp/dp_panel.h
+index 03e42d1f1daf..0adaae08eee3 100644
+--- a/drivers/gpu/drm/msm/dp/dp_panel.h
++++ b/drivers/gpu/drm/msm/dp/dp_panel.h
+@@ -13,8 +13,6 @@
+ 
+ struct edid;
+ 
+-#define DPRX_EXTENDED_DPCD_FIELD	0x2200
+-
+ #define DP_DOWNSTREAM_PORTS		4
+ #define DP_DOWNSTREAM_CAP_SIZE		4
+ 
+@@ -40,7 +38,7 @@ struct dp_panel_psr {
+ 
+ struct dp_panel {
+ 	/* dpcd raw data */
+-	u8 dpcd[DP_RECEIVER_CAP_SIZE + 1];
++	u8 dpcd[DP_RECEIVER_CAP_SIZE];
+ 	u8 ds_cap_info[DP_DOWNSTREAM_PORTS * DP_DOWNSTREAM_CAP_SIZE];
+ 	u32 ds_port_cnt;
+ 	u32 dfp_present;
+-- 
+2.34.1
+

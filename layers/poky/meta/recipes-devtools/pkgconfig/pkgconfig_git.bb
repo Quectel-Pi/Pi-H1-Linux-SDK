@@ -9,14 +9,13 @@ LICENSE = "GPL-2.0-or-later"
 LIC_FILES_CHKSUM = "file://COPYING;md5=b234ee4d69f5fce4486a80fdaf4a4263"
 
 SRCREV = "d97db4fae4c1cd099b506970b285dc2afd818ea2"
-PV = "0.29.2+git${SRCPV}"
+PV = "0.29.2+git"
 
 SRC_URI = "git://gitlab.freedesktop.org/pkg-config/pkg-config.git;branch=master;protocol=https \
            file://pkg-config-esdk.in \
            file://pkg-config-native.in \
            file://0001-glib-gettext.m4-Update-AM_GLIB_GNU_GETTEXT-to-match-.patch \
-           file://0001-autotools-remove-support-for-the-__int64-type.-See-1.patch \
-           file://0001-autotools-use-C99-printf-format-specifiers-on-Window.patch \
+           file://0001-Do-not-use-bool-as-a-field-name.patch \
            "
 
 S = "${WORKDIR}/git"
@@ -30,7 +29,6 @@ EXTRA_OECONF += "--disable-indirect-deps"
 
 PACKAGECONFIG ??= "glib"
 PACKAGECONFIG:class-native = ""
-PACKAGECONFIG:class-nativesdk = ""
 
 PACKAGECONFIG[glib] = "--without-internal-glib,--with-internal-glib,glib-2.0 pkgconfig-native"
 

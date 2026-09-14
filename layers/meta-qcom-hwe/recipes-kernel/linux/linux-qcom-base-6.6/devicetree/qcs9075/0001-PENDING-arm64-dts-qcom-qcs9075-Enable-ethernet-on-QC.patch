@@ -1,0 +1,161 @@
+From 7f56ea58f71e14ae2322ed6e85dab476d8c5b1d8 Mon Sep 17 00:00:00 2001
+From: Vishal Kumar Pal <quic_vispal@quicinc.com>
+Date: Mon, 10 Mar 2025 15:46:39 +0530
+Subject: [PATCH 1/1] PENDING: arm64: dts: qcom: qcs9075: Enable ethernet on
+ QCS9075 RB8
+
+Enable the 2.5G Ethernet port on the QCS9075 RB8 board.
+
+Change-Id: I238e24a9db7d0ccaaa725215d12b6bd4b3723dc3
+Signed-off-by: Vishal Kumar Pal <quic_vispal@quicinc.com>
+Signed-off-by: Mohd Ayaan Anwar <quic_mohdayaa@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/qcs9075-rb8.dts | 110 +++++++++++++++++++++++
+ 1 file changed, 110 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts b/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
+index 81641d54ba09..99c1a586f147 100644
+--- a/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
++++ b/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
+@@ -21,6 +21,7 @@ / {
+ 	qcom,board-id = <0x10020 0>, <0x10019 0>;
+ 
+ 	aliases {
++		ethernet0 = &ethernet0;
+ 		serial0 = &uart10;
+ 		ufshc1 = &ufs_mem_hc;
+ 	};
+@@ -261,6 +262,94 @@ vreg_l8e: ldo8 {
+ 	};
+ };
+ 
++&ethernet0 {
++	phy-handle = <&sgmii_phy0>;
++	phy-mode = "sgmii";
++
++	pinctrl-0 = <&ethernet0_default>;
++	pinctrl-names = "default";
++
++	snps,mtl-rx-config = <&mtl_rx_setup>;
++	snps,mtl-tx-config = <&mtl_tx_setup>;
++	snps,ps-speed = <1000>;
++
++	status = "okay";
++
++	mdio {
++		compatible = "snps,dwmac-mdio";
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		sgmii_phy0: phy@1c {
++			compatible = "ethernet-phy-id004d.d101";
++			reg = <0x1c>;
++			device_type = "ethernet-phy";
++			reset-gpios = <&pmm8654au_2_gpios 8 GPIO_ACTIVE_LOW>;
++			reset-assert-us = <11000>;
++			reset-deassert-us = <70000>;
++		};
++	};
++
++	mtl_rx_setup: rx-queues-config {
++		snps,rx-queues-to-use = <4>;
++		snps,rx-sched-sp;
++
++		queue0 {
++			snps,dcb-algorithm;
++			snps,map-to-dma-channel = <0x0>;
++			snps,route-up;
++			snps,priority = <0x1>;
++		};
++
++		queue1 {
++			snps,dcb-algorithm;
++			snps,map-to-dma-channel = <0x1>;
++			snps,route-ptp;
++		};
++
++		queue2 {
++			snps,avb-algorithm;
++			snps,map-to-dma-channel = <0x2>;
++			snps,route-avcp;
++		};
++
++		queue3 {
++			snps,avb-algorithm;
++			snps,map-to-dma-channel = <0x3>;
++			snps,priority = <0xc>;
++		};
++	};
++
++	mtl_tx_setup: tx-queues-config {
++		snps,tx-queues-to-use = <4>;
++		snps,tx-sched-sp;
++
++		queue0 {
++			snps,dcb-algorithm;
++		};
++
++		queue1 {
++			snps,dcb-algorithm;
++		};
++
++		queue2 {
++			snps,avb-algorithm;
++			snps,send_slope = <0x1000>;
++			snps,idle_slope = <0x1000>;
++			snps,high_credit = <0x3e800>;
++			snps,low_credit = <0xffc18000>;
++		};
++
++		queue3 {
++			snps,avb-algorithm;
++			snps,send_slope = <0x1000>;
++			snps,idle_slope = <0x1000>;
++			snps,high_credit = <0x3e800>;
++			snps,low_credit = <0xffc18000>;
++		};
++	};
++};
++
+ &i2c0 {
+ 	qcom,load-firmware;
+ 	qcom,xfer-mode = <1>;
+@@ -529,6 +618,11 @@ &remoteproc_gpdsp1 {
+ 	status = "okay";
+ };
+ 
++&serdes0 {
++	phy-supply = <&vreg_l5a>;
++	status = "okay";
++};
++
+ &sleep_clk {
+ 	clock-frequency = <32768>;
+ };
+@@ -647,6 +741,22 @@ &spi19 {
+ };
+ 
+ &tlmm {
++	ethernet0_default: ethernet0-default-state {
++		ethernet0_mdc: ethernet0-mdc-pins {
++			pins = "gpio8";
++			function = "emac0_mdc";
++			drive-strength = <16>;
++			bias-pull-up;
++		};
++
++		ethernet0_mdio: ethernet0-mdio-pins {
++			pins = "gpio9";
++			function = "emac0_mdio";
++			drive-strength = <16>;
++			bias-pull-up;
++		};
++	};
++
+ 	qup_uart10_default: qup-uart10-state {
+ 		pins = "gpio46", "gpio47";
+ 		function = "qup1_se3";
+-- 
+2.34.1
+

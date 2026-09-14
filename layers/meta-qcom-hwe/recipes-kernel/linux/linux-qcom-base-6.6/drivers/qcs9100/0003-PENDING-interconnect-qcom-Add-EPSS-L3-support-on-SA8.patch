@@ -1,0 +1,82 @@
+From bba5d8206df0c58aaf3cc50de166ead6b9ed3b36 Mon Sep 17 00:00:00 2001
+From: Raviteja Laggyshetty <quic_rlaggysh@quicinc.com>
+Date: Thu, 25 Apr 2024 22:06:47 +0530
+Subject: [PATCH 3/4] PENDING: interconnect: qcom: Add EPSS L3 support on
+ SA8775P
+
+Add Epoch Subsystem (EPSS) L3 interconnect provider support on
+SA8775P SoCs.
+
+Change-Id: I204735879df58d6159e5eb426aed1704d5f855aa
+Signed-off-by: Raviteja Laggyshetty <quic_rlaggysh@quicinc.com>
+Upstream-Status: Pending
+---
+ drivers/interconnect/qcom/osm-l3.c | 24 ++++++++++++++++++++++++
+ 1 file changed, 24 insertions(+)
+
+diff --git a/drivers/interconnect/qcom/osm-l3.c b/drivers/interconnect/qcom/osm-l3.c
+index e97478bbc282..a709e996f0df 100644
+--- a/drivers/interconnect/qcom/osm-l3.c
++++ b/drivers/interconnect/qcom/osm-l3.c
+@@ -1,6 +1,7 @@
+ // SPDX-License-Identifier: GPL-2.0
+ /*
+  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ 
+ #include <linux/args.h>
+@@ -74,6 +75,11 @@ enum {
+ 	OSM_L3_SLAVE_NODE,
+ };
+ 
++enum {
++	EPSS_L3_CL1_MASTER_NODE = 20000,
++	EPSS_L3_CL1_SLAVE_NODE,
++};
++
+ #define DEFINE_QNODE(_name, _id, _buswidth, ...)			\
+ 	static const struct qcom_osm_l3_node _name = {			\
+ 		.name = #_name,						\
+@@ -99,6 +105,14 @@ static const struct qcom_osm_l3_node * const epss_l3_nodes[] = {
+ 	[SLAVE_EPSS_L3_SHARED] = &epss_l3_slave,
+ };
+ 
++DEFINE_QNODE(epss_l3_cl1_master, EPSS_L3_CL1_MASTER_NODE, 32, EPSS_L3_CL1_SLAVE_NODE);
++DEFINE_QNODE(epss_l3_cl1_slave, EPSS_L3_CL1_SLAVE_NODE, 32);
++
++static const struct qcom_osm_l3_node * const epss_l3_cl1_nodes[] = {
++	[MASTER_EPSS_L3_APPS] = &epss_l3_cl1_master,
++	[SLAVE_EPSS_L3_SHARED] = &epss_l3_cl1_slave,
++};
++
+ static const struct qcom_osm_l3_desc osm_l3 = {
+ 	.nodes = osm_l3_nodes,
+ 	.num_nodes = ARRAY_SIZE(osm_l3_nodes),
+@@ -115,6 +129,14 @@ static const struct qcom_osm_l3_desc epss_l3_perf_state = {
+ 	.reg_perf_state = EPSS_REG_PERF_STATE,
+ };
+ 
++static const struct qcom_osm_l3_desc epss_l3_cl1_perf_state = {
++	.nodes = epss_l3_cl1_nodes,
++	.num_nodes = ARRAY_SIZE(epss_l3_cl1_nodes),
++	.lut_row_size = EPSS_LUT_ROW_SIZE,
++	.reg_freq_lut = EPSS_REG_FREQ_LUT,
++	.reg_perf_state = EPSS_REG_PERF_STATE,
++};
++
+ static const struct qcom_osm_l3_desc epss_l3_l3_vote = {
+ 	.nodes = epss_l3_nodes,
+ 	.num_nodes = ARRAY_SIZE(epss_l3_nodes),
+@@ -286,6 +308,8 @@ static const struct of_device_id osm_l3_of_match[] = {
+ 	{ .compatible = "qcom,sm8150-osm-l3", .data = &osm_l3 },
+ 	{ .compatible = "qcom,sc8180x-osm-l3", .data = &osm_l3 },
+ 	{ .compatible = "qcom,sm8250-epss-l3", .data = &epss_l3_perf_state },
++	{ .compatible = "qcom,sa8775p-epss-l3-cl0", .data = &epss_l3_perf_state },
++	{ .compatible = "qcom,sa8775p-epss-l3-cl1", .data = &epss_l3_cl1_perf_state },
+ 	{ }
+ };
+ MODULE_DEVICE_TABLE(of, osm_l3_of_match);
+-- 
+2.17.1
+

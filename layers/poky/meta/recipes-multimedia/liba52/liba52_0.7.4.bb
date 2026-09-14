@@ -7,11 +7,10 @@ LICENSE = "GPL-2.0-or-later"
 LIC_FILES_CHKSUM = "file://COPYING;md5=0636e73ff0215e8d672dc4c32c317bb3 \
 			file://include/a52.h;beginline=1;endline=12;md5=81152ceb3562bf20a60d1b6018175dd1"
 SECTION = "libs"
-PR = "r4"
 
 inherit autotools
 
-SRC_URI = "http://liba52.sourceforge.net/files/a52dec-${PV}.tar.gz \
+SRC_URI = "https://downloads.yoctoproject.org/mirror/sources/a52dec-${PV}.tar.gz \
            file://buildcleanup.patch"
 
 SRC_URI[md5sum] = "caa9f5bc44232dc8aeea773fea56be80"

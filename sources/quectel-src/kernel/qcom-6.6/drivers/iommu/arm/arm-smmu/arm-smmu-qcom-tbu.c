@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 #include <linux/interconnect.h>
@@ -351,6 +352,8 @@ irqreturn_t qcom_smmu_context_fault(int irq, void *dev)
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
 	u32 fsr, fsynr, cbfrsynra, resume = 0;
 	int idx = smmu_domain->cfg.cbndx;
+	struct iommu_group *group;
+	struct device *fault_dev = NULL;
 	phys_addr_t phys_soft;
 	unsigned long iova;
 	int ret, tmp;
@@ -369,7 +372,11 @@ irqreturn_t qcom_smmu_context_fault(int irq, void *dev)
 
 	phys_soft = ops->iova_to_phys(ops, iova);
 
-	tmp = report_iommu_fault(domain, NULL, iova,
+	group = arm_smmu_find_group_by_cbndx(smmu, idx);
+	if (group)
+		iommu_group_for_each_dev(group, &fault_dev, arm_smmu_get_first_dev);
+
+	tmp = report_iommu_fault(domain, fault_dev, iova,
 				 fsynr & ARM_SMMU_FSYNR0_WNR ?
 				 IOMMU_FAULT_WRITE : IOMMU_FAULT_READ);
 	if (!tmp || tmp == -EBUSY) {

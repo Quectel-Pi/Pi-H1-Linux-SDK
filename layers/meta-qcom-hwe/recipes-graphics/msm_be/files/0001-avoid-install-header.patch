@@ -1,0 +1,61 @@
+#This patch file is from Qualcomm Innovation Center, Inc. and is provided under the following license:
+#
+#Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+#SPDX-License-Identifier: BSD-3-Clause-Clear
+
+From b50e512551ca2742696cad4edf49dbff163f9b88 Mon Sep 17 00:00:00 2001
+From: Devanshi Bansal <quic_devanshi@quicinc.com>
+Date: Fri, 14 Feb 2025 11:38:30 +0530
+Subject: [PATCH] avoid install header.
+
+Signed-off-by: Devanshi Bansal <quic_devanshi@quicinc.com>
+Upstream-Status: Inappropriate [Downstream]
+---
+ include/meson.build  | 2 +-
+ meson.build          | 3 ++-
+ src/util/meson.build | 2 +-
+ 3 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/include/meson.build b/include/meson.build
+index a955ac7..d5cb317 100644
+--- a/include/meson.build
++++ b/include/meson.build
+@@ -99,7 +99,7 @@ if with_osmesa
+   install_headers('GL/osmesa.h', subdir : 'GL')
+ endif
+ 
+-if with_dri
++if not get_option('standalone_gbm') and with_dri
+   install_headers('GL/internal/dri_interface.h', subdir : 'GL/internal')
+ endif
+ 
+diff --git a/meson.build b/meson.build
+index c6ae137..e4c20d8 100644
+--- a/meson.build
++++ b/meson.build
+@@ -434,7 +434,8 @@ if not (with_dri or with_gallium or with_glx != 'disabled')
+   with_shared_glapi = false
+ endif
+ 
+-if get_option('standalone_gbm')
++standalone_gbm = get_option('standalone_gbm')
++if standalone_gbm
+   with_dri = true
+ endif
+ 
+diff --git a/src/util/meson.build b/src/util/meson.build
+index eb88f23..00a9a92 100644
+--- a/src/util/meson.build
++++ b/src/util/meson.build
+@@ -298,7 +298,7 @@ idep_mesautil = declare_dependency(
+ )
+ 
+ # Only install the drirc file if we build with support for parsing drirc files
+-if use_xmlconfig
++if not standalone_gbm and use_xmlconfig
+    install_data(files_drirc, install_dir : join_paths(get_option('datadir'), 'drirc.d'), install_tag : 'runtime')
+ endif
+ 
+-- 
+2.34.1
+

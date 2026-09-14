@@ -1,5 +1,4 @@
 SUMMARY = "A native Python implementation of the DBus protocol for Twisted applications."
-AUTHOR = "Tom Cocagne"
 HOMEPAGE = "https://pypi.org/project/txdbus/"
 SECTION = "devel/python"
 LICENSE = "MIT"
@@ -10,4 +9,4 @@ SRC_URI[sha256sum] = "8375a5fb68a12054f0def91af800c821fb2232949337756ed975f88d8e
 
 inherit pypi setuptools3
 
-RDEPENDS:${PN} += "python3-six python3-twisted"
+RDEPENDS:${PN} += "python3-twisted-core"

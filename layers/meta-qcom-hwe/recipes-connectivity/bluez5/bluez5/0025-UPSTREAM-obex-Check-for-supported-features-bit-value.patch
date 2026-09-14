@@ -1,0 +1,50 @@
+From 353c8745f671e51cd773cb929eb31aa6b01ed5ae Mon Sep 17 00:00:00 2001
+From: Amisha Jain <quic_amisjain@quicinc.com>
+Date: Mon, 11 Nov 2024 16:53:59 +0530
+Subject: [PATCH] UPSTREAM: obex Check for supported features bit value for
+ legacy server
+
+This fix is required for below PTS testcase:
+
+1. PBAP/PCE/SSM/BV-10-C
+Description - Verify that the PCE does not share its
+PbapSupportedFeatures bits with a legacy server.
+
+Incase of legacy server, check for 'supported features bit'
+uint_32_t value instead of directly checking the pointer
+holding the attribute.
+As pointer 'data' won't be null as PbapSupportedFeatures
+attribute is present in SDP record but it's value is zero.
+
+Upstream-Status: Backport https://github.com/bluez/bluez/commit/486aeafd87bc23bb7969671b06ceaafc124dea84
+Signed-off-by: Amisha Jain <quic_amisjain@quicinc.com>
+---
+ obexd/client/pbap.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/obexd/client/pbap.c b/obexd/client/pbap.c
+index d3821b8..c20ce49 100644
+--- a/obexd/client/pbap.c
++++ b/obexd/client/pbap.c
+@@ -1218,6 +1218,7 @@ static void *pbap_supported_features(struct obc_session *session)
+ {
+ 	const void *data;
+ 	uint16_t version;
++	uint32_t features;
+ 
+ 	/* Version */
+ 	data = obc_session_get_attribute(session, SDP_ATTR_PFILE_DESC_LIST);
+@@ -1232,7 +1233,9 @@ static void *pbap_supported_features(struct obc_session *session)
+ 	/* Supported Feature Bits */
+ 	data = obc_session_get_attribute(session,
+ 					SDP_ATTR_PBAP_SUPPORTED_FEATURES);
+-	if (!data)
++
++	features = *(uint32_t *) data;
++	if (!features)
+ 		return NULL;
+ 
+ 	return g_obex_apparam_set_uint32(NULL, SUPPORTED_FEATURES_TAG,
+-- 
+2.34.1
+

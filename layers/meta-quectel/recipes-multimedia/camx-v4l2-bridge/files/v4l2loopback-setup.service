@@ -1,0 +1,11 @@
+[Unit]
+Description=Load v4l2loopback module for camx bridge
+Before=camx-v4l2-bridge@.service
+
+[Service]
+Type=oneshot
+ExecStart=/sbin/modprobe v4l2loopback video_nr=10 exclusive_caps=1 card_label="CamxBridge"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

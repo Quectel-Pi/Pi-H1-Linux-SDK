@@ -69,6 +69,9 @@
 /* Enable MAC address for PTP Frame Filtering */
 #define	PTP_TCR_TSENMACADDR	BIT(18)
 
+/* Enable External System Time Input. */
+#define	PTP_TCR_ESTI	BIT(20)
+
 /* SSIR defines */
 #define	PTP_SSIR_SSINC_MAX		0xff
 #define	GMAC4_PTP_SSIR_SSINC_SHIFT	16

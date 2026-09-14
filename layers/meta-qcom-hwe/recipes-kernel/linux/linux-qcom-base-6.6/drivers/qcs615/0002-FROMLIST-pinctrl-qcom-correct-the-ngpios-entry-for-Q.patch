@@ -1,0 +1,35 @@
+From 3a6b4a7b0cf5246f7b19a387e2195fc7fdd8fdb0 Mon Sep 17 00:00:00 2001
+From: Lijuan Gao <quic_lijuang@quicinc.com>
+Date: Wed, 15 Jan 2025 16:27:43 +0800
+Subject: [PATCH 2/3] FROMLIST: pinctrl: qcom: correct the ngpios entry for
+ QCS615
+
+Correct the ngpios entry to account for the UFS_RESET pin being exported
+as a GPIO in addition to the real GPIOs, allowing the UFS driver to toggle
+it.
+
+Fixes: b698f36a9d40 ("pinctrl: qcom: add the tlmm driver for QCS615 platform")
+Signed-off-by: Lijuan Gao <quic_lijuang@quicinc.com>
+Reviewed-by: Konrad Dybcio <konrad.dybcio@oss.qualcomm.com>
+Link: https://lore.kernel.org/all/20241219-correct_gpio_ranges-v2-3-19af8588dbd0@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241219-correct_gpio_ranges-v2-3-19af8588dbd0@quicinc.com/]
+---
+ drivers/pinctrl/qcom/pinctrl-qcs615.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/pinctrl/qcom/pinctrl-qcs615.c b/drivers/pinctrl/qcom/pinctrl-qcs615.c
+index 23015b055f6a..17ca743c2210 100644
+--- a/drivers/pinctrl/qcom/pinctrl-qcs615.c
++++ b/drivers/pinctrl/qcom/pinctrl-qcs615.c
+@@ -1062,7 +1062,7 @@ static const struct msm_pinctrl_soc_data qcs615_tlmm = {
+ 	.nfunctions = ARRAY_SIZE(qcs615_functions),
+ 	.groups = qcs615_groups,
+ 	.ngroups = ARRAY_SIZE(qcs615_groups),
+-	.ngpios = 123,
++	.ngpios = 124,
+ 	.tiles = qcs615_tiles,
+ 	.ntiles = ARRAY_SIZE(qcs615_tiles),
+ 	.wakeirq_map = qcs615_pdc_map,
+-- 
+2.46.0
+

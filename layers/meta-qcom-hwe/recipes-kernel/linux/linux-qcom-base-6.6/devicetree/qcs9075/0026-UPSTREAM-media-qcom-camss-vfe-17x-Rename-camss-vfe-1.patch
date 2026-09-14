@@ -1,0 +1,43 @@
+From fe1329749135cc5a8647d14c9f4873765887ec61 Mon Sep 17 00:00:00 2001
+From: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Date: Thu, 22 Feb 2024 17:17:04 +0000
+Subject: [PATCH 26/42] UPSTREAM: media: qcom: camss: vfe-17x: Rename
+ camss-vfe-170 to camss-vfe-17x
+
+vfe-170 and vfe-175 can be supported in the same file with some minimal
+indirection to differentiate between the silicon versions.
+
+sdm845 uses vfe-170, sc8280xp uses vfe-175-200. Lets rename the file to
+capture its wider scope than vfe-170 only.
+
+Acked-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Signed-off-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 682f4968084a3d3eed08718b23fe9b6777dd6c2a]
+---
+ drivers/media/platform/qcom/camss/Makefile                      | 2 +-
+ .../platform/qcom/camss/{camss-vfe-170.c => camss-vfe-17x.c}    | 0
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+ rename drivers/media/platform/qcom/camss/{camss-vfe-170.c => camss-vfe-17x.c} (100%)
+
+diff --git a/drivers/media/platform/qcom/camss/Makefile b/drivers/media/platform/qcom/camss/Makefile
+index b04079703ba6..e636968a1126 100644
+--- a/drivers/media/platform/qcom/camss/Makefile
++++ b/drivers/media/platform/qcom/camss/Makefile
+@@ -14,7 +14,7 @@ qcom-camss-objs += \
+ 		camss-vfe-4-1.o \
+ 		camss-vfe-4-7.o \
+ 		camss-vfe-4-8.o \
+-		camss-vfe-170.o \
++		camss-vfe-17x.o \
+ 		camss-vfe-480.o \
+ 		camss-vfe-gen1.o \
+ 		camss-vfe.o \
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe-170.c b/drivers/media/platform/qcom/camss/camss-vfe-17x.c
+similarity index 100%
+rename from drivers/media/platform/qcom/camss/camss-vfe-170.c
+rename to drivers/media/platform/qcom/camss/camss-vfe-17x.c
+-- 
+2.25.1
+

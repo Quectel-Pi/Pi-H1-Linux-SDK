@@ -1,0 +1,66 @@
+From 2e21063f3988bd65d4768906e22249e7219fceec Mon Sep 17 00:00:00 2001
+From: Kuogee Hsieh <quic_khsieh@quicinc.com>
+Date: Fri, 1 Dec 2023 15:19:45 -0800
+Subject: [PATCH 023/146] UPSTREAM: drm/msm/dp: use drm_bridge_hpd_notify() to
+ report HPD status changes
+
+Currently DP driver use drm_helper_hpd_irq_event(), bypassing drm bridge
+framework, to report HPD status changes to user space frame work.
+Replace it with drm_bridge_hpd_notify() since DP driver is part of drm
+bridge.
+
+Signed-off-by: Kuogee Hsieh <quic_khsieh@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/570067/
+Link: https://lore.kernel.org/r/1701472789-25951-4-git-send-email-quic_khsieh@quicinc.com
+Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git e467e0bde881a667ccde9c7963f1042c01818059]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 20 ++------------------
+ 1 file changed, 2 insertions(+), 18 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 3d8799f70d36..4141eb6e3d99 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -358,26 +358,10 @@ static const struct component_ops dp_display_comp_ops = {
+ 	.unbind = dp_display_unbind,
+ };
+ 
+-static void dp_display_send_hpd_event(struct msm_dp *dp_display)
+-{
+-	struct dp_display_private *dp;
+-	struct drm_connector *connector;
+-
+-	dp = container_of(dp_display, struct dp_display_private, dp_display);
+-
+-	connector = dp->dp_display.connector;
+-	drm_helper_hpd_irq_event(connector->dev);
+-}
+-
+ static int dp_display_send_hpd_notification(struct dp_display_private *dp,
+ 					    bool hpd)
+ {
+-	if ((hpd && dp->dp_display.link_ready) ||
+-			(!hpd && !dp->dp_display.link_ready)) {
+-		drm_dbg_dp(dp->drm_dev, "HPD already %s\n",
+-				(hpd ? "on" : "off"));
+-		return 0;
+-	}
++	struct drm_bridge *bridge = dp->dp_display.bridge;
+ 
+ 	/* reset video pattern flag on disconnect */
+ 	if (!hpd) {
+@@ -393,7 +377,7 @@ static int dp_display_send_hpd_notification(struct dp_display_private *dp,
+ 
+ 	drm_dbg_dp(dp->drm_dev, "type=%d hpd=%d\n",
+ 			dp->dp_display.connector_type, hpd);
+-	dp_display_send_hpd_event(&dp->dp_display);
++	drm_bridge_hpd_notify(bridge, dp->dp_display.link_ready);
+ 
+ 	return 0;
+ }
+-- 
+2.34.1
+

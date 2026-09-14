@@ -1,7 +1,7 @@
-# master status on 2022-04-05
-SRCREV ?= "14dd241aad8af447680ac73e8579990e2c09c1e7"
+# master status on 2023-11-24
+SRCREV ?= "03cf7ca23e0e876075954c558485b267b7d02406"
 
-XEN_REL ?= "4.17"
+XEN_REL ?= "4.19"
 XEN_BRANCH ?= "master"
 
 SRC_URI = " \
@@ -9,9 +9,9 @@ SRC_URI = " \
     file://0001-menuconfig-mconf-cfg-Allow-specification-of-ncurses-location.patch \
     "
 
-LIC_FILES_CHKSUM ?= "file://COPYING;md5=419739e325a50f3d7b4501338e44a4e5"
+LIC_FILES_CHKSUM ?= "file://COPYING;md5=d1a1e216f80b6d8da95fec897d0dbec9"
 
-PV = "${XEN_REL}+git${SRCPV}"
+PV = "${XEN_REL}+git"
 
 S = "${WORKDIR}/git"
 

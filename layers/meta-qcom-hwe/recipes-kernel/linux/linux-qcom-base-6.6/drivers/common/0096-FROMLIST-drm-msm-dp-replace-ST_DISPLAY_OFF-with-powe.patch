@@ -1,0 +1,36 @@
+From e69e29763fb61744fa0cfd59adb09008f895c49b Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Mon, 2 Dec 2024 16:39:02 -0800
+Subject: [PATCH 096/146] FROMLIST: drm/msm/dp: replace ST_DISPLAY_OFF with
+ power_on in msm_dp_hpd_unplug_handle()
+
+msm_dp_hpd_unplug_handle() checks if the display was already disabled and if
+so does not transition to ST_DISCONNECT_PENDING state and goes directly to
+ST_DISCONNECTED. The same result can be achieved with the !power_on check.
+
+Replace ST_DISPLAY_OFF with !power_on to achieve the same outcome.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241202-hpd_display_off-v1-3-8d0551847753@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index d964b32e635b..542ce836449d 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -661,7 +661,7 @@ static int msm_dp_hpd_unplug_handle(struct msm_dp_display_private *dp, u32 data)
+ 	 */
+ 	msm_dp_display_notify_disconnect(&dp->msm_dp_display.pdev->dev);
+ 
+-	if (state == ST_DISPLAY_OFF) {
++	if (!dp->msm_dp_display.power_on) {
+ 		dp->hpd_state = ST_DISCONNECTED;
+ 	} else {
+ 		dp->hpd_state = ST_DISCONNECT_PENDING;
+-- 
+2.34.1
+

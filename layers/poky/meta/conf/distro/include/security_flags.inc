@@ -61,6 +61,7 @@ TARGET_LDFLAGS:append:class-cross-canadian = " ${SECURITY_LDFLAGS}"
 SECURITY_STACK_PROTECTOR:pn-gcc-runtime = ""
 SECURITY_STACK_PROTECTOR:pn-glibc = ""
 SECURITY_STACK_PROTECTOR:pn-glibc-testsuite = ""
+SECURITY_STACK_PROTECTOR:pn-ltp = ""
 # All xorg module drivers need to be linked this way as well and are
 # handled in recipes-graphics/xorg-driver/xorg-driver-common.inc
 SECURITY_LDFLAGS:pn-xserver-xorg = "${SECURITY_X_LDFLAGS}"
@@ -68,4 +69,3 @@ SECURITY_LDFLAGS:pn-xserver-xorg = "${SECURITY_X_LDFLAGS}"
 TARGET_CC_ARCH:append:pn-binutils = " ${SELECTED_OPTIMIZATION}"
 TARGET_CC_ARCH:append:pn-gcc = " ${SELECTED_OPTIMIZATION}"
 TARGET_CC_ARCH:append:pn-gdb = " ${SELECTED_OPTIMIZATION}"
-TARGET_CC_ARCH:append:pn-perf = " ${SELECTED_OPTIMIZATION}"

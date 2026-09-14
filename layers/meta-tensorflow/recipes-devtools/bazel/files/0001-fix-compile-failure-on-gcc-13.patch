@@ -1,0 +1,71 @@
+From 02fcd86787da1ebb2afad1909cb70839cdac24dc Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Wed, 13 Sep 2023 10:56:02 +0800
+Subject: [PATCH] fix compile failure on gcc 13
+
+external/com_google_absl/absl/strings/internal/str_format/extension.h:34:33: error: found ':' in nested-name-specifier, expected '::'
+   34 | enum class FormatConversionChar : uint8_t;
+
+Upstream-Status: Pending
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ distdir_deps.bzl                              |  4 +++
+ .../0001-fix-compile-failure-on-gcc-13.patch  | 30 +++++++++++++++++++
+ 2 files changed, 34 insertions(+)
+ create mode 100644 third_party/com_google_absl/0001-fix-compile-failure-on-gcc-13.patch
+
+diff --git a/distdir_deps.bzl b/distdir_deps.bzl
+index 2ca988e..c460025 100755
+--- a/distdir_deps.bzl
++++ b/distdir_deps.bzl
+@@ -163,6 +163,10 @@ DIST_DEPS = {
+     },
+     "com_google_absl": {
+         "archive": "20211102.0.tar.gz",
++        "patch_args": ["-p1"],
++        "patches": [
++            "//third_party:com_google_absl/0001-fix-compile-failure-on-gcc-13.patch",
++        ],
+         "sha256": "dcf71b9cba8dc0ca9940c4b316a0c796be8fab42b070bb6b7cab62b48f0e66c4",
+         "urls": [
+             "https://mirror.bazel.build/github.com/abseil/abseil-cpp/archive/refs/tags/20211102.0.tar.gz",
+diff --git a/third_party/com_google_absl/0001-fix-compile-failure-on-gcc-13.patch b/third_party/com_google_absl/0001-fix-compile-failure-on-gcc-13.patch
+new file mode 100644
+index 0000000..257e887
+--- /dev/null
++++ b/third_party/com_google_absl/0001-fix-compile-failure-on-gcc-13.patch
+@@ -0,0 +1,30 @@
++From 4cb33b2e98fd0b2f201e765a5a0d9c1d4277041e Mon Sep 17 00:00:00 2001
++From: Hongxu Jia <hongxu.jia@windriver.com>
++Date: Wed, 13 Sep 2023 11:17:34 +0800
++Subject: [PATCH] fix compile failure on gcc 13
++
++external/com_google_absl/absl/strings/internal/str_format/extension.h:34:33: error: found ':' in nested-name-specifier, expected '::'
++   34 | enum class FormatConversionChar : uint8_t;
++
++Upstream-Status: Pending
++
++Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
++---
++ absl/strings/internal/str_format/extension.h | 1 +
++ 1 file changed, 1 insertion(+)
++
++diff --git a/absl/strings/internal/str_format/extension.h b/absl/strings/internal/str_format/extension.h
++index 55cbb56..67d4cc8 100644
++--- a/absl/strings/internal/str_format/extension.h
+++++ b/absl/strings/internal/str_format/extension.h
++@@ -21,6 +21,7 @@
++ #include <cstddef>
++ #include <cstring>
++ #include <ostream>
+++#include <cstdint>
++ 
++ #include "absl/base/config.h"
++ #include "absl/base/port.h"
++-- 
++2.17.1
++
+-- 
+2.27.0
+

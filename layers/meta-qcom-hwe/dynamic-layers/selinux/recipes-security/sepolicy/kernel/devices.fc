@@ -10,6 +10,7 @@
 /dev/dma_heap/qcom,qseecom-ta -c gen_context(system_u:object_r:qcom_qseecom_heap_dev_t,s0)
 /dev/bsg/ufs-bsg0             -c gen_context(system_u:object_r:qcom_ufs_bsg_dev_t,s0)
 /dev/bsg/0:0:0:49476          -c gen_context(system_u:object_r:qcom_ufs_bsg_dev_t,s0)
+/dev/mmcblk0rpmb          -c gen_context(system_u:object_r:qcom_mmc_rpmb_dev_t,s0)
 
 #qcom_smcinvoke will have:
 #label: system_u:object_r:qcom_smcinvoke_dev_t:s0
@@ -21,13 +22,18 @@
 /dev/fastrpc-adsp-secure  -c    gen_context(system_u:object_r:qcom_adsp_secure_device_t,s0)
 /dev/fastrpc-cdsp-secure  -c    gen_context(system_u:object_r:qcom_cdsp_secure_device_t,s0)
 /dev/fastrpc-cdsp1-secure  -c    gen_context(system_u:object_r:qcom_cdsp_secure_device_t,s0)
+/dev/fastrpc-gdsp0-secure  -c    gen_context(system_u:object_r:qcom_gdsp_secure_device_t,s0)
+/dev/fastrpc-gdsp1-secure  -c    gen_context(system_u:object_r:qcom_gdsp_secure_device_t,s0)
 /dev/fastrpc-adsp  -c           gen_context(system_u:object_r:qcom_adsp_device_t,s0)
 /dev/fastrpc-cdsp  -c           gen_context(system_u:object_r:qcom_cdsp_device_t,s0)
 /dev/fastrpc-cdsp1  -c           gen_context(system_u:object_r:qcom_cdsp_device_t,s0)
+/dev/fastrpc-gdsp0  -c           gen_context(system_u:object_r:qcom_gdsp_device_t,s0)
+/dev/fastrpc-gdsp1  -c           gen_context(system_u:object_r:qcom_gdsp_device_t,s0)
 
 /dev/byte-cntr    -c            gen_context(system_u:object_r:qcom_coresight_device_t,s0)
 /dev/byte-cntr1    -c            gen_context(system_u:object_r:qcom_coresight_device_t,s0)
 /dev/tmc_etf0    -c            gen_context(system_u:object_r:qcom_coresight_device_t,s0)
+/dev/tmc_etf1    -c            gen_context(system_u:object_r:qcom_coresight_device_t,s0)
 /dev/tmc_etr0    -c            gen_context(system_u:object_r:qcom_coresight_device_t,s0)
 /dev/tmc_etr1    -c            gen_context(system_u:object_r:qcom_coresight_device_t,s0)
 /dev/stm0    -c            gen_context(system_u:object_r:qcom_coresight_device_t,s0)

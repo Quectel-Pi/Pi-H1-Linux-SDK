@@ -92,4 +92,5 @@ interface(`qcom_sfs_config_trans_qtee_supplicant_data',`
        ')
 
        filetrans_pattern($1, tmp_t, qcom_qtee_supplicant_data_t, { file dir })
+       filetrans_pattern($1, var_t, qcom_qtee_supplicant_data_t, { file dir })
 ')

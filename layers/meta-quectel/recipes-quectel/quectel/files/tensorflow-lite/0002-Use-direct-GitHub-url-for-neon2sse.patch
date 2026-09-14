@@ -1,0 +1,24 @@
+From: Igni <igni@example.com>
+Subject: [PATCH] Use direct GitHub URL for neon2sse instead of mirror
+
+Replace the mirror.tensorflow.org URL with direct GitHub URL for
+downloading ARM_NEON_2_x86_SSE.
+
+Signed-off-by: Igni <igni@example.com>
+---
+ tensorflow/lite/tools/cmake/modules/neon2sse.cmake | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tensorflow/lite/tools/cmake/modules/neon2sse.cmake b/tensorflow/lite/tools/cmake/modules/neon2sse.cmake
+index 77bcf1acba3..a442f03b345 100644
+--- a/tensorflow/lite/tools/cmake/modules/neon2sse.cmake
++++ b/tensorflow/lite/tools/cmake/modules/neon2sse.cmake
+@@ -20,7 +20,7 @@ if(TARGET neon2sse OR neon2sse_POPULATED)
+ endif()
+
+ set(NEON2SSE_URL
+-  https://storage.googleapis.com/mirror.tensorflow.org/github.com/intel/ARM_NEON_2_x86_SSE/archive/a15b489e1222b2087007546b4912e21293ea86ff.tar.gz
++  https://github.com/intel/ARM_NEON_2_x86_SSE/archive/a15b489e1222b2087007546b4912e21293ea86ff.tar.gz
+ )
+ OverridableFetchContent_Declare(
+   neon2sse

@@ -1,0 +1,219 @@
+From 4e529d454604b9d5bbf48c8cac87ecf2026e95b8 Mon Sep 17 00:00:00 2001
+From: Konrad Dybcio <konrad.dybcio@linaro.org>
+Date: Wed, 28 Aug 2024 17:06:59 +0200
+Subject: [PATCH 1/2] BACKPORT: drm/msm/a6xx: Add A621 support
+
+A621 is a clear A662 derivative (same lineage as A650), no explosions
+or sick features, other than a NoC bug which can stall the GPU..
+
+Add support for it.
+
+Signed-off-by: Konrad Dybcio <konrad.dybcio@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/611100/
+Signed-off-by: Rob Clark <robdclark@chromium.org>
+Link: https://lore.kernel.org/lkml/20240828-topic-a621-v2-6-1882c6b57432@kernel.org/
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git  dbfbb376b50c770f91263d8310e81573f9ad41db]
+---
+ drivers/gpu/drm/msm/adreno/a6xx_gmu.c      | 18 +++++++
+ drivers/gpu/drm/msm/adreno/a6xx_gpu.c      | 62 +++++++++++++++++++++-
+ drivers/gpu/drm/msm/adreno/adreno_device.c | 21 ++++++++
+ drivers/gpu/drm/msm/adreno/adreno_gpu.h    |  7 ++-
+ 4 files changed, 105 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/adreno/a6xx_gmu.c b/drivers/gpu/drm/msm/adreno/a6xx_gmu.c
+index c9edaa6d7636..91b1eaaf9038 100644
+--- a/drivers/gpu/drm/msm/adreno/a6xx_gmu.c
++++ b/drivers/gpu/drm/msm/adreno/a6xx_gmu.c
+@@ -417,6 +417,20 @@ static int a6xx_gmu_gfx_rail_on(struct a6xx_gmu *gmu)
+ 	return a6xx_gmu_set_oob(gmu, GMU_OOB_BOOT_SLUMBER);
+ }
+ 
++static void a6xx_gemnoc_workaround(struct a6xx_gmu *gmu)
++{
++	struct a6xx_gpu *a6xx_gpu = container_of(gmu, struct a6xx_gpu, gmu);
++	struct adreno_gpu *adreno_gpu = &a6xx_gpu->base;
++
++	/*
++	 * GEMNoC can power collapse whilst the GPU is being powered down, resulting
++	 * in the power down sequence not being fully executed. That in turn can
++	 * prevent CX_GDSC from collapsing. Assert Qactive to avoid this.
++	 */
++	if (adreno_is_a621(adreno_gpu) || adreno_is_7c3(adreno_gpu))
++		gmu_write(gmu, REG_A6XX_GMU_AO_AHB_FENCE_CTRL, BIT(0));
++}
++
+ /* Let the GMU know that we are about to go into slumber */
+ static int a6xx_gmu_notify_slumber(struct a6xx_gmu *gmu)
+ {
+@@ -450,6 +464,8 @@ static int a6xx_gmu_notify_slumber(struct a6xx_gmu *gmu)
+ 	}
+ 
+ out:
++	a6xx_gemnoc_workaround(gmu);
++
+ 	/* Put fence into allow mode */
+ 	gmu_write(gmu, REG_A6XX_GMU_AO_AHB_FENCE_CTRL, 0);
+ 	return ret;
+@@ -892,6 +908,8 @@ static void a6xx_gmu_force_off(struct a6xx_gmu *gmu)
+ 	/* Force off SPTP in case the GMU is managing it */
+ 	a6xx_sptprac_disable(gmu);
+ 
++	a6xx_gemnoc_workaround(gmu);
++
+ 	/* Make sure there are no outstanding RPMh votes */
+ 	a6xx_gmu_rpmh_off(gmu);
+ 
+diff --git a/drivers/gpu/drm/msm/adreno/a6xx_gpu.c b/drivers/gpu/drm/msm/adreno/a6xx_gpu.c
+index 60a6cc4c894d..e9256e0647fb 100644
+--- a/drivers/gpu/drm/msm/adreno/a6xx_gpu.c
++++ b/drivers/gpu/drm/msm/adreno/a6xx_gpu.c
+@@ -374,6 +374,59 @@ const struct adreno_reglist a615_hwcg[] = {
+ 	{},
+ };
+ 
++const struct adreno_reglist a620_hwcg[] = {
++	{REG_A6XX_RBBM_CLOCK_CNTL_SP0, 0x02222222},
++	{REG_A6XX_RBBM_CLOCK_CNTL2_SP0, 0x02222220},
++	{REG_A6XX_RBBM_CLOCK_DELAY_SP0, 0x00000080},
++	{REG_A6XX_RBBM_CLOCK_HYST_SP0, 0x0000f3cf},
++	{REG_A6XX_RBBM_CLOCK_CNTL_TP0, 0x02222222},
++	{REG_A6XX_RBBM_CLOCK_CNTL2_TP0, 0x22222222},
++	{REG_A6XX_RBBM_CLOCK_CNTL3_TP0, 0x22222222},
++	{REG_A6XX_RBBM_CLOCK_CNTL4_TP0, 0x00022222},
++	{REG_A6XX_RBBM_CLOCK_DELAY_TP0, 0x11111111},
++	{REG_A6XX_RBBM_CLOCK_DELAY2_TP0, 0x11111111},
++	{REG_A6XX_RBBM_CLOCK_DELAY3_TP0, 0x11111111},
++	{REG_A6XX_RBBM_CLOCK_DELAY4_TP0, 0x00011111},
++	{REG_A6XX_RBBM_CLOCK_HYST_TP0, 0x77777777},
++	{REG_A6XX_RBBM_CLOCK_HYST2_TP0, 0x77777777},
++	{REG_A6XX_RBBM_CLOCK_HYST3_TP0, 0x77777777},
++	{REG_A6XX_RBBM_CLOCK_HYST4_TP0, 0x00077777},
++	{REG_A6XX_RBBM_CLOCK_CNTL_RB0, 0x22222222},
++	{REG_A6XX_RBBM_CLOCK_CNTL2_RB0, 0x01002222},
++	{REG_A6XX_RBBM_CLOCK_CNTL_CCU0, 0x00002220},
++	{REG_A6XX_RBBM_CLOCK_HYST_RB_CCU0, 0x00040f00},
++	{REG_A6XX_RBBM_CLOCK_CNTL_RAC, 0x25222022},
++	{REG_A6XX_RBBM_CLOCK_CNTL2_RAC, 0x00005555},
++	{REG_A6XX_RBBM_CLOCK_DELAY_RAC, 0x00000011},
++	{REG_A6XX_RBBM_CLOCK_HYST_RAC, 0x00445044},
++	{REG_A6XX_RBBM_CLOCK_CNTL_TSE_RAS_RBBM, 0x04222222},
++	{REG_A6XX_RBBM_CLOCK_MODE_VFD, 0x00002222},
++	{REG_A6XX_RBBM_CLOCK_MODE_GPC, 0x00222222},
++	{REG_A6XX_RBBM_CLOCK_DELAY_HLSQ_2, 0x00000002},
++	{REG_A6XX_RBBM_CLOCK_MODE_HLSQ, 0x00002222},
++	{REG_A6XX_RBBM_CLOCK_DELAY_TSE_RAS_RBBM, 0x00004000},
++	{REG_A6XX_RBBM_CLOCK_DELAY_VFD, 0x00002222},
++	{REG_A6XX_RBBM_CLOCK_DELAY_GPC, 0x00000200},
++	{REG_A6XX_RBBM_CLOCK_DELAY_HLSQ, 0x00000000},
++	{REG_A6XX_RBBM_CLOCK_HYST_TSE_RAS_RBBM, 0x00000000},
++	{REG_A6XX_RBBM_CLOCK_HYST_VFD, 0x00000000},
++	{REG_A6XX_RBBM_CLOCK_HYST_GPC, 0x04104004},
++	{REG_A6XX_RBBM_CLOCK_HYST_HLSQ, 0x00000000},
++	{REG_A6XX_RBBM_CLOCK_CNTL_TEX_FCHE, 0x00000222},
++	{REG_A6XX_RBBM_CLOCK_DELAY_TEX_FCHE, 0x00000111},
++	{REG_A6XX_RBBM_CLOCK_HYST_TEX_FCHE, 0x00000777},
++	{REG_A6XX_RBBM_CLOCK_CNTL_UCHE, 0x22222222},
++	{REG_A6XX_RBBM_CLOCK_HYST_UCHE, 0x00000004},
++	{REG_A6XX_RBBM_CLOCK_DELAY_UCHE, 0x00000002},
++	{REG_A6XX_RBBM_ISDB_CNT, 0x00000182},
++	{REG_A6XX_RBBM_RAC_THRESHOLD_CNT, 0x00000000},
++	{REG_A6XX_RBBM_SP_HYST_CNT, 0x00000000},
++	{REG_A6XX_RBBM_CLOCK_CNTL_GMU_GX, 0x00000222},
++	{REG_A6XX_RBBM_CLOCK_DELAY_GMU_GX, 0x00000111},
++	{REG_A6XX_RBBM_CLOCK_HYST_GMU_GX, 0x00000555},
++        {},
++};
++
+ const struct adreno_reglist a630_hwcg[] = {
+ 	{REG_A6XX_RBBM_CLOCK_CNTL_SP0, 0x22222222},
+ 	{REG_A6XX_RBBM_CLOCK_CNTL_SP1, 0x22222222},
+@@ -782,7 +835,6 @@ static const u32 a6xx_protect[] = {
+ 	A6XX_PROTECT_NORDWR(0x11c00, 0x0000), /* note: infinite range */
+ };
+ 
+-/* These are for a620 and a650 */
+ static const u32 a650_protect[] = {
+ 	A6XX_PROTECT_RDONLY(0x00000, 0x04ff),
+ 	A6XX_PROTECT_RDONLY(0x00501, 0x0005),
+@@ -915,7 +967,7 @@ static void a6xx_set_cp_protect(struct msm_gpu *gpu)
+ 	const u32 *regs = a6xx_protect;
+ 	unsigned i, count, count_max;
+ 
+-	if (adreno_is_a650(adreno_gpu)) {
++	if (adreno_is_a650(adreno_gpu) || adreno_is_a621(adreno_gpu)) {
+ 		regs = a650_protect;
+ 		count = ARRAY_SIZE(a650_protect);
+ 		count_max = 48;
+@@ -1003,6 +1055,12 @@ static void a6xx_set_ubwc_config(struct msm_gpu *gpu)
+ 	if (adreno_is_a619_holi(adreno_gpu))
+ 		hbb_lo = 0;
+ 
++	if (adreno_is_a621(adreno_gpu)) {
++		hbb_lo = 0;
++		amsbc = 1;
++		uavflagprd_inv = 2;
++	}
++
+ 	if (adreno_is_a640_family(adreno_gpu))
+ 		amsbc = 1;
+ 
+diff --git a/drivers/gpu/drm/msm/adreno/adreno_device.c b/drivers/gpu/drm/msm/adreno/adreno_device.c
+index 3c4a6d770cf3..e9fb36dcc0b6 100644
+--- a/drivers/gpu/drm/msm/adreno/adreno_device.c
++++ b/drivers/gpu/drm/msm/adreno/adreno_device.c
+@@ -453,6 +453,27 @@ static const struct adreno_info gpulist[] = {
+ 		.zapfw = "a660_zap.mdt",
+ 		.hwcg = a660_hwcg,
+ 		.address_space_size = SZ_16G,
++	}, {
++		.chip_ids = ADRENO_CHIP_IDS(0x06020100),
++		.family = ADRENO_6XX_GEN3,
++		.fw = {
++			[ADRENO_FW_SQE] = "a650_sqe.fw",
++			[ADRENO_FW_GMU] = "a621_gmu.bin",
++		},
++		.gmem = SZ_512K,
++		.inactive_period = DRM_MSM_INACTIVE_PERIOD,
++		.quirks = ADRENO_QUIRK_HAS_CACHED_COHERENT |
++			  ADRENO_QUIRK_HAS_HW_APRIV,
++		.init = a6xx_gpu_init,
++		.zapfw = "a620_zap.mbn",
++		.hwcg = a620_hwcg,
++		//.protect = &a650_protect,
++		//.prim_fifo_threshold = 0x00010000,
++		.address_space_size = SZ_16G,
++		.speedbins = ADRENO_SPEEDBINS(
++			{ 0, 0 },
++			{ 137, 1 },
++		),
+ 	}, {
+ 		.chip_ids = ADRENO_CHIP_IDS(0x06060300),
+ 		.family = ADRENO_6XX_GEN4,
+diff --git a/drivers/gpu/drm/msm/adreno/adreno_gpu.h b/drivers/gpu/drm/msm/adreno/adreno_gpu.h
+index 4bb9a0865329..9f0227743e95 100644
+--- a/drivers/gpu/drm/msm/adreno/adreno_gpu.h
++++ b/drivers/gpu/drm/msm/adreno/adreno_gpu.h
+@@ -74,7 +74,7 @@ struct adreno_reglist {
+ 	u32 value;
+ };
+ 
+-extern const struct adreno_reglist a612_hwcg[], a615_hwcg[], a630_hwcg[], a640_hwcg[], a650_hwcg[];
++extern const struct adreno_reglist a612_hwcg[], a615_hwcg[], a620_hwcg[], a630_hwcg[], a640_hwcg[], a650_hwcg[];
+ extern const struct adreno_reglist a660_hwcg[], a690_hwcg[];
+ 
+ struct adreno_speedbin {
+@@ -341,6 +341,11 @@ static inline int adreno_is_a619_holi(const struct adreno_gpu *gpu)
+ 	return adreno_is_a619(gpu) && adreno_has_gmu_wrapper(gpu);
+ }
+ 
++static inline int adreno_is_a621(const struct adreno_gpu *gpu)
++{
++	return gpu->info->chip_ids[0] == 0x06020100;
++}
++
+ static inline int adreno_is_a630(const struct adreno_gpu *gpu)
+ {
+ 	return adreno_is_revn(gpu, 630);
+-- 
+2.34.1
+

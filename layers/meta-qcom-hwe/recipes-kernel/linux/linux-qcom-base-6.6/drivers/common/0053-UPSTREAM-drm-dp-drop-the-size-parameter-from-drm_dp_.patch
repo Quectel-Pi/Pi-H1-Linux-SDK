@@ -1,0 +1,79 @@
+From 69caf550b6eb68895fc064c892ec54c20a31984d Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Tue, 20 Feb 2024 11:53:47 -0800
+Subject: [PATCH 053/146] UPSTREAM: drm/dp: drop the size parameter from
+ drm_dp_vsc_sdp_pack()
+
+Currently the size parameter of drm_dp_vsc_sdp_pack() is always
+the size of struct dp_sdp. Hence lets drop this parameter and
+use sizeof() directly.
+
+Suggested-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Acked-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Acked-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Reviewed-by: Rodrigo Vivi <rodrigo.vivi@intel.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git b55b88d86fec1d3edf60489b25ed998a3f0848cb]
+---
+ drivers/gpu/drm/display/drm_dp_helper.c | 8 ++------
+ drivers/gpu/drm/i915/display/intel_dp.c | 3 +--
+ include/drm/display/drm_dp_helper.h     | 3 +--
+ 3 files changed, 4 insertions(+), 10 deletions(-)
+
+diff --git a/drivers/gpu/drm/display/drm_dp_helper.c b/drivers/gpu/drm/display/drm_dp_helper.c
+index 718d606c1e04..7e036ee71fa3 100644
+--- a/drivers/gpu/drm/display/drm_dp_helper.c
++++ b/drivers/gpu/drm/display/drm_dp_helper.c
+@@ -2921,19 +2921,15 @@ EXPORT_SYMBOL(drm_dp_vsc_sdp_log);
+  * @vsc: vsc sdp initialized according to its purpose as defined in
+  *       table 2-118 - table 2-120 in DP 1.4a specification
+  * @sdp: valid handle to the generic dp_sdp which will be packed
+- * @size: valid size of the passed sdp handle
+  *
+  * Returns length of sdp on success and error code on failure
+  */
+ ssize_t drm_dp_vsc_sdp_pack(const struct drm_dp_vsc_sdp *vsc,
+-			    struct dp_sdp *sdp, size_t size)
++			    struct dp_sdp *sdp)
+ {
+ 	size_t length = sizeof(struct dp_sdp);
+ 
+-	if (size < length)
+-		return -ENOSPC;
+-
+-	memset(sdp, 0, size);
++	memset(sdp, 0, sizeof(struct dp_sdp));
+ 
+ 	/*
+ 	 * Prepare VSC Header for SU as per DP 1.4a spec, Table 2-119
+diff --git a/drivers/gpu/drm/i915/display/intel_dp.c b/drivers/gpu/drm/i915/display/intel_dp.c
+index ba2e39fd9645..7bb5b00f8ef1 100644
+--- a/drivers/gpu/drm/i915/display/intel_dp.c
++++ b/drivers/gpu/drm/i915/display/intel_dp.c
+@@ -3442,8 +3442,7 @@ static void intel_write_dp_sdp(struct intel_encoder *encoder,
+ 
+ 	switch (type) {
+ 	case DP_SDP_VSC:
+-		len = drm_dp_vsc_sdp_pack(&crtc_state->infoframes.vsc, &sdp,
+-					  sizeof(sdp));
++		len = drm_dp_vsc_sdp_pack(&crtc_state->infoframes.vsc, &sdp);
+ 		break;
+ 	case HDMI_PACKET_TYPE_GAMUT_METADATA:
+ 		len = intel_dp_hdr_metadata_infoframe_sdp_pack(dev_priv,
+diff --git a/include/drm/display/drm_dp_helper.h b/include/drm/display/drm_dp_helper.h
+index 820a3073d909..7ea6156d3330 100644
+--- a/include/drm/display/drm_dp_helper.h
++++ b/include/drm/display/drm_dp_helper.h
+@@ -783,7 +783,6 @@ bool drm_dp_downstream_rgb_to_ycbcr_conversion(const u8 dpcd[DP_RECEIVER_CAP_SIZ
+ 					       const u8 port_cap[4], u8 color_spc);
+ int drm_dp_pcon_convert_rgb_to_ycbcr(struct drm_dp_aux *aux, u8 color_spc);
+ 
+-ssize_t drm_dp_vsc_sdp_pack(const struct drm_dp_vsc_sdp *vsc,
+-			    struct dp_sdp *sdp, size_t size);
++ssize_t drm_dp_vsc_sdp_pack(const struct drm_dp_vsc_sdp *vsc, struct dp_sdp *sdp);
+ 
+ #endif /* _DRM_DP_HELPER_H_ */
+-- 
+2.34.1
+

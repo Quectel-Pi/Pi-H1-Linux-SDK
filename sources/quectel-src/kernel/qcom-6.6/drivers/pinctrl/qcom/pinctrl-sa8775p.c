@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2022,2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022,2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  * Copyright (c) 2023, Linaro Limited
  */
 
@@ -266,10 +267,11 @@ static const struct pinctrl_pin_desc sa8775p_pins[] = {
 	PINCTRL_PIN(147, "GPIO_147"),
 	PINCTRL_PIN(148, "GPIO_148"),
 	PINCTRL_PIN(149, "UFS_RESET"),
-	PINCTRL_PIN(150, "SDC1_RCLK"),
-	PINCTRL_PIN(151, "SDC1_CLK"),
-	PINCTRL_PIN(152, "SDC1_CMD"),
-	PINCTRL_PIN(153, "SDC1_DATA"),
+	PINCTRL_PIN(150, "UFS1_RESET"),
+	PINCTRL_PIN(151, "SDC1_RCLK"),
+	PINCTRL_PIN(152, "SDC1_CLK"),
+	PINCTRL_PIN(153, "SDC1_CMD"),
+	PINCTRL_PIN(154, "SDC1_DATA"),
 };
 
 #define DECLARE_MSM_GPIO_PINS(pin) \
@@ -425,10 +427,11 @@ DECLARE_MSM_GPIO_PINS(147);
 DECLARE_MSM_GPIO_PINS(148);
 
 static const unsigned int ufs_reset_pins[] = { 149 };
-static const unsigned int sdc1_rclk_pins[] = { 150 };
-static const unsigned int sdc1_clk_pins[] = { 151 };
-static const unsigned int sdc1_cmd_pins[] = { 152 };
-static const unsigned int sdc1_data_pins[] = { 153 };
+static const unsigned int ufs1_reset_pins[] = { 150 };
+static const unsigned int sdc1_rclk_pins[] = { 151 };
+static const unsigned int sdc1_clk_pins[] = { 152 };
+static const unsigned int sdc1_cmd_pins[] = { 153 };
+static const unsigned int sdc1_data_pins[] = { 154 };
 
 enum sa8775p_functions {
 	msm_mux_gpio,
@@ -1579,10 +1582,11 @@ static const struct msm_pingroup sa8775p_groups[] = {
 	[147] = PINGROUP(147, _, _, _, _, _, _, _, _, egpio),
 	[148] = PINGROUP(148, _, _, _, _, _, _, _, _, egpio),
 	[149] = UFS_RESET(ufs_reset, 0x1a2000),
-	[150] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x199000, 15, 0),
-	[151] = SDC_QDSD_PINGROUP(sdc1_clk, 0x199000, 13, 6),
-	[152] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x199000, 11, 3),
-	[153] = SDC_QDSD_PINGROUP(sdc1_data, 0x199000, 9, 0),
+	[150] = UFS_RESET(ufs1_reset, 0x1a4000),
+	[151] = SDC_QDSD_PINGROUP(sdc1_rclk, 0x199000, 15, 0),
+	[152] = SDC_QDSD_PINGROUP(sdc1_clk, 0x199000, 13, 6),
+	[153] = SDC_QDSD_PINGROUP(sdc1_cmd, 0x199000, 11, 3),
+	[154] = SDC_QDSD_PINGROUP(sdc1_data, 0x199000, 9, 0),
 };
 
 static const struct msm_gpio_wakeirq_map sa8775p_pdc_map[] = {
@@ -1609,7 +1613,7 @@ static const struct msm_pinctrl_soc_data sa8775p_pinctrl = {
 	.nfunctions = ARRAY_SIZE(sa8775p_functions),
 	.groups = sa8775p_groups,
 	.ngroups = ARRAY_SIZE(sa8775p_groups),
-	.ngpios = 150,
+	.ngpios = 151,
 	.wakeirq_map = sa8775p_pdc_map,
 	.nwakeirq_map = ARRAY_SIZE(sa8775p_pdc_map),
 	.egpio_func = 9,
@@ -1630,6 +1634,7 @@ MODULE_DEVICE_TABLE(of, sa8775p_pinctrl_of_match);
 static struct platform_driver sa8775p_pinctrl_driver = {
 	.driver = {
 		.name = "sa8775p-tlmm",
+		.pm = &msm_pinctrl_dev_pm_ops,
 		.of_match_table = sa8775p_pinctrl_of_match,
 	},
 	.probe = sa8775p_pinctrl_probe,

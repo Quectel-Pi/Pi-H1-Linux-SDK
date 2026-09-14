@@ -1,0 +1,91 @@
+From c6fc38ad37576ff6bc47f36deca7f6660437ec16 Mon Sep 17 00:00:00 2001
+From: Tingguo Cheng <quic_tingguoc@quicinc.com>
+Date: Wed, 8 Jan 2025 19:00:18 +0800
+Subject: [PATCH 2/3] FROMLIST: arm64: dts: qcom: qcs8300-ride: Enable PMIC
+ peripherals
+
+Enable PMIC and PMIC peripherals for qcs8300-ride board. The qcs8
+300-ride uses 2 pmics(pmm8620au:0,pmm8650au:1) on the board, which
+are variants of pmm8654au used on sa8775p/qcs9100 -ride(4x pmics).
+
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Tingguo Cheng <quic_tingguoc@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250108-adds-spmi-pmic-peripherals-for-qcs8300-v3-2-ee94642279ff@quicinc.com]
+---
+ arch/arm64/boot/dts/qcom/qcs8300-pmics.dtsi | 51 +++++++++++++++++++++
+ arch/arm64/boot/dts/qcom/qcs8300-ride.dts   |  1 +
+ 2 files changed, 52 insertions(+)
+ create mode 100644 arch/arm64/boot/dts/qcom/qcs8300-pmics.dtsi
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300-pmics.dtsi b/arch/arm64/boot/dts/qcom/qcs8300-pmics.dtsi
+new file mode 100644
+index 000000000000..a94b0bfa98dc
+--- /dev/null
++++ b/arch/arm64/boot/dts/qcom/qcs8300-pmics.dtsi
+@@ -0,0 +1,51 @@
++// SPDX-License-Identifier: BSD-3-Clause
++/*
++ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++
++#include <dt-bindings/input/input.h>
++#include <dt-bindings/spmi/spmi.h>
++
++&spmi_bus {
++	pmm8620au_0: pmic@0 {
++		compatible = "qcom,pmm8654au", "qcom,spmi-pmic";
++		reg = <0x0 SPMI_USID>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		pmm8620au_0_rtc: rtc@6100 {
++			compatible = "qcom,pmk8350-rtc";
++			reg = <0x6100>, <0x6200>;
++			reg-names = "rtc", "alarm";
++			interrupts = <0x0 0x62 0x1 IRQ_TYPE_EDGE_RISING>;
++			allow-set-time;
++		};
++
++		pmm8620au_0_gpios: gpio@8800 {
++			compatible = "qcom,pmm8654au-gpio", "qcom,spmi-gpio";
++			reg = <0x8800>;
++			gpio-controller;
++			gpio-ranges = <&pmm8620au_0_gpios 0 0 12>;
++			#gpio-cells = <2>;
++			interrupt-controller;
++			#interrupt-cells = <2>;
++		};
++	};
++
++	pmm8650au_1: pmic@2 {
++		compatible = "qcom,pmm8654au", "qcom,spmi-pmic";
++		reg = <0x2 SPMI_USID>;
++		#address-cells = <1>;
++		#size-cells = <0>;
++
++		pmm8650au_1_gpios: gpio@8800 {
++			compatible = "qcom,pmm8654au-gpio", "qcom,spmi-gpio";
++			reg = <0x8800>;
++			gpio-controller;
++			gpio-ranges = <&pmm8650au_1_gpios 0 0 12>;
++			#gpio-cells = <2>;
++			interrupt-controller;
++			#interrupt-cells = <2>;
++		};
++	};
++};
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+index cf2fe52d02d5..9641811b928e 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
++++ b/arch/arm64/boot/dts/qcom/qcs8300-ride.dts
+@@ -9,6 +9,7 @@
+ #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+ 
+ #include "qcs8300.dtsi"
++#include "qcs8300-pmics.dtsi"
+ / {
+ 	model = "Qualcomm Technologies, Inc. QCS8300 Ride";
+ 	compatible = "qcom,qcs8300-ride", "qcom,qcs8300";
+-- 
+2.34.1
+

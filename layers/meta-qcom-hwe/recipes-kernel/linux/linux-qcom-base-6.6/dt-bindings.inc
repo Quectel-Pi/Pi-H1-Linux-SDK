@@ -15,7 +15,6 @@ SRC_URI:append = " \
     file://qcs9100/0001-FROMLIST-dt-bindings-clock-qcom-Add-SA8775P-video-cl.patch \
     file://qcs9100/0002-FROMLIST-dt-bindings-clock-qcom-Add-SA8775P-camera-clock-cont.patch \
     file://qcs9100/0003-FROMLIST-dt-bindings-clock-qcom-Add-SA8775P-display-clock-con.patch \
-    file://common/0001-FROMLIST-dt-bindings-media-Add-video-support-for-QCO.patch \
     file://qcs9100/0005-QCLINUX-Revert-FROMLIST-dt-bindings-mailbox-qcom-ipc.patch \
     file://qcs9100/0001-UPSTREAM-dt-bindings-misc-qcom-fastrpc-increase-the-.patch \
     file://qcs9100/0002-UPSTREAM-dt-bindings-mailbox-qcom-ipcc-Add-GPDSP0-an.patch \
@@ -102,6 +101,67 @@ SRC_URI:append = " \
     file://qcs6490/0002-UPSTREAM-dt-bindings-remoteproc-qcom-sc7180-pas-Add-.patch \
     file://qcs6490/0003-UPSTREAM-dt-bindings-remoteproc-qcom-sc7180-pas-Fix-.patch \
     file://qcs6490/0006-UPSTREAM-dt-bindings-remoteproc-qcom-sc7180-pas-Add-.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-phy-qcom-sc8280xp-qmp-pcie-phy-.patch \
+    file://qcs615/0003-FROMLIST-dt-bindings-PCI-qcom-Document-the-QCS615-PC.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-display-msm-Add-SM6150-DSI-phy.patch \
+    file://qcs615/0002-FROMLIST-dt-bindings-display-msm-dsi-controller-main.patch \
+    file://qcs615/0003-FROMLIST-dt-bindings-display-msm-Add-SM6150-MDSS-DPU.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-qcom-qcs615-venus-add-support-f.patch \
+    file://common/0004-UPSTREAM-dt-bindings-Document-Marvell-Aquantia-PHY.patch \
+    file://common/0031-UPSTREAM-dt-bindings-net-phy-Make-LED-active-low-pro.patch \
+    file://common/0032-UPSTREAM-dt-bindings-net-phy-Document-LED-inactive-h.patch \
+    file://common/0034-UPSTREAM-dt-bindings-net-Document-QCA808x-PHYs.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-net-qcom-ethqos-revise-descript.patch \
+    file://qcs615/0002-FROMLIST-dt-bindings-net-snps-dwmac-add-description-.patch \
     file://qcs8300/0001-FROMLIST-dt-bindings-crypto-qcom-prng-document-QCS83.patch \
     file://qcs8300/0001-FROMLIST-dt-bindings-crypto-qcom-qce-document-the-QC.patch \
+    file://qcs8300/0001-FROMLIST-dt-bindings-dma-qcom-gpi-Add-QCS8300-compat.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-display-msm-Document-DP-on-QCS6.patch \
+    file://qcs615/0002-FROMLIST-dt-bindings-phy-qcom-msm8998-qmp-usb3-phy-A.patch \
+    file://qcs9100/0001-dt-bindings-arm-qcom-ids-add-SoC-ID-for-QCS9075.patch \
+    file://qcs9100/0003-dt-bindings-arm-qcom-Document-rb8-ride-ride-r3-on.patch \
+    file://qcs615/0001-FROMGIT-dt-bindings-arm-smmu-document-QCS615-GPU-SMMU.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-interconnect-qcom-bwmon-Documen.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-display-msm-gpu-Document-A612-G.patch \
+    file://qcs615/0002-FROMLIST-dt-bindings-display-msm-gmu-Document-RGMU.patch \
+    file://qcs8300/0001-FROMLIST-dt-bindings-clock-qcom-Add-GPU-clocks-for-Q.patch \
+    file://qcs8300/0003-FROMLIST-dt-bindings-clock-qcom-Add-CAMCC-clocks-for.patch \
+    file://qcs8300/0005-FROMLIST-dt-bindings-clock-qcom-Add-QCS8300-video-cl.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-net-stmmac-Tune-rx-sampling-occ.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-pinctrl-qcom-correct-gpio-range.patch \
+    file://qcs8300/0001-FROMLIST-dt-bindings-crypto-ice-document-the-qcs8300.patch \
+    file://qcs8300/0001-FROMLIST-dt-bindings-display-msm-Document-the-DPU-fo.patch \
+    file://qcs8300/0002-FROMLIST-dt-bindings-display-msm-Document-the-dp-con.patch \
+    file://qcs8300/0003-FROMLIST-dt-bindings-display-msm-Document-MDSS-on-QC.patch \
+    file://qcs8300/0005-FROMLIST-dt-bindings-phy-Add-eDP-PHY-compatible-for-.patch \
+    file://qcs9100/0004-PENDING-dt-bindings-iio-adc-Add-support-for-QCOM-PMI.patch \
+    file://qcs9100/0005-PENDING-dt-bindings-iio-Add-ADC5-GEN3-Channel-macros.patch \
+    file://qcs9100/0006-PENDING-thermal-Add-bindings-support-for-mbg-tm.patch \
+    file://qcs8300/0001-dt-bindings-phy-qcom-sc8280xp-qmp-pcie-phy-Document-.patch \
+    file://qcs8300/0003-dt-bindings-PCI-qcom-pcie-sa8775p-document-qcs8300.patch \
+    file://qcs9100/0001-FROMLIST-dt-bindings-i2c-qcom-i2c-geni-Document-DT-p.patch \
+    file://qcs9100/0002-FROMLIST-spi-dt-bindings-Document-DT-properties-for-.patch \
+    file://qcs9100/0003-FROMLIST-dt-bindings-serial-Document-DT-properties-f.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-crypto-qcom-prng-document-QCS615.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-crypto-qcom-qce-document-the-QC615.patch \
+    file://qcs8300/0003-FROMLIST-dt-bindings-display-msm-gmu-Add-Adreno-623-.patch \
+    file://qcs9100/0001-PENDING-dt-bindings-interconnect-Add-EPSS-L3-DT-bind.patch \
+    file://common/0001-FROMLIST-dt-bindings-remoteproc-qcom-pas-common-Intr.patch \
+    file://qcs9100/0001-FROMLIST-dt-bindings-pinctrl-qcom-Add-egpio-function.patch \
+    file://qcs9075/0001-PENDING-dt-bindings-arm-qcom-Rename-qcs9075-rb8-to-q.patch \
+    file://qcs9100/0003-PENDING-ASoC-dt-bindings-qcom-Document-soundcard-com.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-thermal-tsens-Add-QCS615-compat.patch \
+    file://qcs615/0001-FROMLIST-dt-bindings-remoteproc-qcom-sm8150-pas-Docu.patch \
+    file://qcs615/0002-FROMLIST-dt-bindings-soc-qcom-add-qcom-qcs615-imem-c.patch \
+    file://common/0001-UPSTREAM-dt-bindings-media-Add-video-support-for-QCO.patch \
+    file://qcs9100/0001-FROMGIT-dt-bindings-media-qcom-sm8550-iris-document-.patch \
+    file://common/0002-FROMGIT-dt-bindings-media-qcom-sm8550-iris-document-.patch \
+    file://qcs8300/0003-FROMGIT-dt-bindings-media-qcom-sm8550-iris-document-.patch \
+    file://common/0001-FROMLIST-dt-bindings-qcom-se-common-Add-QUP-Peripher.patch \
+    file://qcs9100/0001-UPSTREAM-dt-bindings-display-msm-dsi-phy-7nm-document-the-SA8775P-DSI-PHY.patch \
+    file://qcs9100/0002-UPSTREAM-dt-bindings-msm-dsi-controller-main-document-the-SA8.patch \
+    file://qcs9100/0003-UPSTREAM-dt-bindings-display-msm-document-DSI-controller-and-phy-on-SA8775P.patch \
+    file://qcs9100/0004-UPSTREAM-dt-bindings-display-msm-dsi-phy-Add-header-with-exposed-clock-IDs.patch \
+    file://common/0006-Revert-QCLINUX-FROMLIST-dt-bindings-remoteproc-qcom-.patch \
+    file://common/0008-FROMLIST-dt-bindings-remoteproc-qcom-pas-Add-iommus-.patch \
     "

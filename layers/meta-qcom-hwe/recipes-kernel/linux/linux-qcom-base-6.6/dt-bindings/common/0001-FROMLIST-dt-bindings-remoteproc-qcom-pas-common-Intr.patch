@@ -1,0 +1,124 @@
+From 4acc6b7875ba9ab0bfbc4bbe93d74567eb8c1555 Mon Sep 17 00:00:00 2001
+From: Shiraz Hashim <quic_shashim@quicinc.com>
+Date: Sun, 1 Sep 2024 09:05:03 +0530
+Subject: [PATCH 1/6] FROMLIST: dt-bindings: remoteproc: qcom,pas-common:
+ Introduce iommus and qcom,devmem property
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Qualcomm’s PAS implementation for remote processors only supports a
+single stage of IOMMU translation and is presently managed by the
+Qualcomm EL2 hypervisor (QHEE) if it is present. In the absence of QHEE,
+such as with a KVM hypervisor, IOMMU translations need to be set up by
+the KVM host. Remoteproc needs carveout memory region and its resource
+(device memory) permissions to be set before it comes up, and this
+information is presently available statically with QHEE.
+
+In the absence of QHEE, the boot firmware needs to overlay this
+information based on SoCs running with either QHEE or a KVM hypervisor
+(CPUs booted in EL2).
+
+The qcom,devmem property provides IOMMU devmem translation information
+intended for non-QHEE based systems.
+
+Signed-off-by: Shiraz Hashim <quic_shashim@quicinc.com>
+Co-developed-by: Mukesh Ojha <quic_mojha@quicinc.com>
+Signed-off-by: Mukesh Ojha <quic_mojha@quicinc.com>
+Signed-off-by: Mukesh Ojha <mukesh.ojha@oss.qualcomm.com>
+[mukesh.ojha: s/Co-Developed-by/Co-developed-by to make checkpatch.pl]
+Upstream-Status: Submitted [https://lore.kernel.org/lkml/20241004212359.2263502-2-quic_mojha@quicinc.com/]
+
+Change-Id: Iadb70d9e717617dcff26a6dc258f92ce338d7859
+---
+ .../bindings/remoteproc/qcom,pas-common.yaml  | 42 +++++++++++++++++++
+ .../bindings/remoteproc/qcom,sa8775p-pas.yaml | 20 +++++++++
+ 2 files changed, 62 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/remoteproc/qcom,pas-common.yaml b/Documentation/devicetree/bindings/remoteproc/qcom,pas-common.yaml
+index 63a82e7a8bf8..068e177ad934 100644
+--- a/Documentation/devicetree/bindings/remoteproc/qcom,pas-common.yaml
++++ b/Documentation/devicetree/bindings/remoteproc/qcom,pas-common.yaml
+@@ -52,6 +52,48 @@ properties:
+     minItems: 1
+     maxItems: 3
+ 
++  iommus:
++    maxItems: 1
++
++  qcom,devmem:
++    $ref: /schemas/types.yaml#/definitions/uint32-matrix
++    description:
++      Qualcomm’s PAS implementation for remote processors only supports a
++      single stage of IOMMU translation and is presently managed by the
++      Qualcomm EL2 hypervisor (QHEE) if it is present. In the absence of QHEE,
++      such as with a KVM hypervisor, IOMMU translations need to be set up by
++      the KVM host. Remoteproc might need some device resources and related
++      access permissions to be set before it comes up, and this information is
++      presently available statically with QHEE.
++
++      In the absence of QHEE, the boot firmware needs to overlay this
++      information based on SoCs running with either QHEE or a KVM hypervisor
++      (CPUs booted in EL2).
++
++      The qcom,devmem property provides IOMMU devmem translation information
++      intended for non-QHEE based systems. It is an array of u32 values
++      describing the device memory regions for which IOMMU translations need to
++      be set up before bringing up Remoteproc. This array consists of 4-tuples
++      defining the device address, physical address, size, and attribute flags
++      with which it has to be mapped.
++
++      remoteproc@3000000 {
++          ...
++
++          qcom,devmem = <0x82000 0x82000 0x2000 0x3>,
++                        <0x92000 0x92000 0x1000 0x1>;
++      }
++
++    items:
++      items:
++        - description: device address
++        - description: physical address
++        - description: size of mapping
++        - description: |
++            iommu attributes - IOMMU_READ, IOMMU_WRITE, IOMMU_CACHE, IOMMU_NOEXEC, IOMMU_MMIO
++          enum: [ 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24,
++                  25, 26, 27, 28, 29, 30, 31 ]
++
+   qcom,smem-states:
+     $ref: /schemas/types.yaml#/definitions/phandle-array
+     description: States used by the AP to signal the Hexagon core
+diff --git a/Documentation/devicetree/bindings/remoteproc/qcom,sa8775p-pas.yaml b/Documentation/devicetree/bindings/remoteproc/qcom,sa8775p-pas.yaml
+index a66007951d58..ae55c4da26af 100644
+--- a/Documentation/devicetree/bindings/remoteproc/qcom,sa8775p-pas.yaml
++++ b/Documentation/devicetree/bindings/remoteproc/qcom,sa8775p-pas.yaml
+@@ -155,6 +155,26 @@ examples:
+         power-domains = <&rpmhpd RPMHPD_LCX>, <&rpmhpd RPMHPD_LMX>;
+         power-domain-names = "lcx", "lmx";
+ 
++        iommus = <&apps_smmu 0x3000 0x0>;
++        qcom,devmem = <0x00110000 0x00110000 0x4000 0x1>,
++                      <0x00123000 0x00123000 0x1000 0x3>,
++                      <0x00124000 0x00124000 0x3000 0x3>,
++                      <0x00127000 0x00127000 0x2000 0x3>,
++                      <0x0012a000 0x0012a000 0x3000 0x3>,
++                      <0x0012e000 0x0012e000 0x1000 0x3>,
++                      <0x0012f000 0x0012f000 0x1000 0x1>,
++                      <0x00144000 0x00144000 0x1000 0x1>,
++                      <0x00148000 0x00148000 0x1000 0x1>,
++                      <0x00149000 0x00149000 0xe000 0x3>,
++                      <0x00157000 0x00157000 0x1000 0x3>,
++                      <0x00158000 0x00158000 0xd000 0x3>,
++                      <0x00165000 0x00165000 0x1000 0x3>,
++                      <0x00172000 0x00172000 0x1000 0x3>,
++                      <0x00173000 0x00173000 0x8000 0x3>,
++                      <0x0017b000 0x0017b000 0x2000 0x3>,
++                      <0x0017f000 0x0017f000 0x1000 0x3>,
++                      <0x00184000 0x00184000 0x1000 0x1>;
++
+         interconnects = <&lpass_ag_noc MASTER_LPASS_PROC 0 &mc_virt SLAVE_EBI1 0>;
+ 
+         memory-region = <&pil_adsp_mem>;
+-- 
+2.34.1
+

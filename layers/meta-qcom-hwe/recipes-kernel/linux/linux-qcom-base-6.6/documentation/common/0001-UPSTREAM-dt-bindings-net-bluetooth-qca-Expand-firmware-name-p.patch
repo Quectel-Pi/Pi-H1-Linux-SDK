@@ -1,0 +1,56 @@
+From 0c6a1718a43affb6c7de4a2bf91d8c399ba7b172 Mon Sep 17 00:00:00 2001
+From: Cheng Jiang <quic_chejiang@quicinc.com>
+Date: Thu, 6 Feb 2025 18:00:46 +0800
+Subject: [PATCH 1/4] dt-bindings: net: bluetooth: qca: Expand firmware-name
+ property
+
+Expand the firmware-name property to specify the names of NVM and
+rampatch firmware to load. This update will support loading specific
+firmware (nvm and rampatch) for certain chips, like the QCA6698
+Bluetooth chip, which shares the same IP core as the WCN6855 but has
+different RF components and RAM sizes, requiring new firmware files.
+
+We might use different connectivity boards on the same platform. For
+example, QCA6698-based boards can support either a two-antenna or
+three-antenna solution, both of which work on the sa8775p-ride platform.
+Due to differences in connectivity boards and variations in RF
+performance from different foundries, different NVM configurations are
+used based on the board ID.
+
+So In firmware-name, if the NVM file has an extension, the NVM file will
+be used. Otherwise, the system will first try the .bNN (board ID) file,
+and if that fails, it will fall back to the .bin file.
+
+Possible configurations:
+firmware-name = "QCA6698/hpnv21.bin", "QCA6698/hpbtfw21.tlv";
+firmware-name = "QCA6698/hpnv21", "QCA6698/hpbtfw21.tlv";
+firmware-name = "QCA6698/hpnv21.bin";
+
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 86029c6025292920bc32210ee556acb8cacffcc8].
+
+Acked-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Signed-off-by: Cheng Jiang <quic_chejiang@quicinc.com>
+Signed-off-by: Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+---
+ .../bindings/net/bluetooth/qualcomm-bluetooth.yaml           | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/Documentation/devicetree/bindings/net/bluetooth/qualcomm-bluetooth.yaml b/Documentation/devicetree/bindings/net/bluetooth/qualcomm-bluetooth.yaml
+index eba2f3026ab0..68832cf3cceb 100644
+--- a/Documentation/devicetree/bindings/net/bluetooth/qualcomm-bluetooth.yaml
++++ b/Documentation/devicetree/bindings/net/bluetooth/qualcomm-bluetooth.yaml
+@@ -90,7 +90,10 @@ properties:
+     description: see Documentation/devicetree/bindings/serial/serial.yaml
+ 
+   firmware-name:
+-    description: specify the name of nvm firmware to load
++    minItems: 1
++    items:
++      - description: specify the name of nvm firmware to load
++      - description: specify the name of rampatch firmware to load
+ 
+   local-bd-address: true
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,95 @@
+From 58dcc8ea9afa242dcff171b1b47fdf5280d871ee Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:32:10 -0800
+Subject: [PATCH 136/146] FROMLIST: drm/msm/dp: initialize dp_mst module for
+ each DP MST controller
+
+For each MST capable DP controller, initialize a dp_mst module to
+manage its DP MST operations. The DP MST module for each controller
+is the central entity to manage its topology related operations as
+well as interfacing with the rest of the DP driver.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-39-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c |  6 ++++++
+ drivers/gpu/drm/msm/dp/dp_display.c     | 12 ++++++++++++
+ drivers/gpu/drm/msm/msm_drv.h           |  7 +++++++
+ 3 files changed, 25 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c
+index 2a6aef12521d..3a17db9dd00c 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c
+@@ -595,6 +595,12 @@ static int _dpu_kms_initialize_displayport(struct drm_device *dev,
+ 		stream_cnt = msm_dp_get_mst_max_stream(priv->dp[i]);
+ 
+ 		if (stream_cnt > 1) {
++			rc = msm_dp_mst_register(priv->dp[i]);
++			if (rc) {
++				DPU_ERROR("dp_mst_init failed for DP, rc = %d\n", rc);
++				return rc;
++			}
++
+ 			for (stream_id = 0; stream_id < stream_cnt; stream_id++) {
+ 				info.stream_id = stream_id;
+ 				encoder = dpu_encoder_init(dev, DRM_MODE_ENCODER_DPMST, &info);
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 8804ae3d31af..8bc16c9d78eb 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -69,6 +69,8 @@ enum {
+ 
+ #define WAIT_FOR_RESUME_TIMEOUT_JIFFIES (HZ / 2)
+ 
++#define MAX_DPCD_TRANSACTION_BYTES 16
++
+ struct msm_dp_event {
+ 	u32 event_id;
+ 	u32 data;
+@@ -1695,6 +1697,16 @@ int msm_dp_modeset_init(struct msm_dp *msm_dp_display, struct drm_device *dev,
+ 	return 0;
+ }
+ 
++int msm_dp_mst_register(struct msm_dp *dp)
++{
++	struct msm_dp_display_private *dp_display;
++
++	dp_display = container_of(dp, struct msm_dp_display_private, msm_dp_display);
++
++	return msm_dp_mst_init(dp, dp_display->max_stream,
++			   MAX_DPCD_TRANSACTION_BYTES, dp_display->aux);
++}
++
+ void msm_dp_display_atomic_prepare(struct msm_dp *dp)
+ {
+ 	int rc = 0;
+diff --git a/drivers/gpu/drm/msm/msm_drv.h b/drivers/gpu/drm/msm/msm_drv.h
+index 4bab970b8be2..9d0085f84c07 100644
+--- a/drivers/gpu/drm/msm/msm_drv.h
++++ b/drivers/gpu/drm/msm/msm_drv.h
+@@ -391,6 +391,8 @@ int msm_dp_get_mst_max_stream(const struct msm_dp *dp_display);
+ 
+ int msm_dp_mst_bridge_init(struct msm_dp *dp_display, struct drm_encoder *encoder);
+ 
++int msm_dp_mst_register(struct msm_dp *dp_display);
++
+ #else
+ static inline int __init msm_dp_register(void)
+ {
+@@ -412,6 +414,11 @@ static inline int msm_dp_get_mst_max_stream(struct msm_dp *dp_display)
+ 	return -EINVAL;
+ }
+ 
++static inline int msm_dp_mst_register(struct msm_dp *dp_display)
++{
++	return -EINVAL;
++}
++
+ static inline int msm_dp_mst_bridge_init(struct msm_dp *dp_display, struct drm_encoder *encoder)
+ {
+ 	return -EINVAL;
+-- 
+2.34.1
+

@@ -4,7 +4,6 @@
 
 SUMMARY = "Self-hosting"
 DESCRIPTION = "Packages required to run the build system"
-PR = "r13"
 
 PACKAGE_ARCH = "${TUNE_PKGARCH}"
 
@@ -41,7 +40,7 @@ RDEPENDS:packagegroup-self-hosted-host-tools = "\
     iptables \
     lsb-release \
     mc \
-    mc-fish \
+    mc-shell \
     mc-helpers \
     mc-helpers-perl \
     parted \
@@ -127,12 +126,10 @@ RDEPENDS:packagegroup-self-hosted-extended = "\
     grep \
     groff \
     gzip \
-    settings-daemon \
     libaio \
     libusb1 \
     libxml2 \
     lsof \
-    lzo \
     man \
     man-pages \
     mdadm \
@@ -161,6 +158,7 @@ RDEPENDS:packagegroup-self-hosted-extended = "\
     readline \
     rpm \
     setserial \
+    settings-daemon \
     socat \
     subversion \
     sudo \
@@ -174,22 +172,23 @@ RDEPENDS:packagegroup-self-hosted-extended = "\
     wget \
     which \
     xinetd \
+    xz \
     zip \
     zlib \
-    xz \
+    zstd \
     "
 
 
 RDEPENDS:packagegroup-self-hosted-graphics = "\
+    adwaita-icon-theme \
     builder \
+    l3afpad \
     libgl \
     libgl-dev \
     libglu \
     libglu-dev \
     libx11-dev \
-    adwaita-icon-theme \
-    xdg-utils \
-    l3afpad \
     pcmanfm \
     vte \
+    xdg-utils \
     "

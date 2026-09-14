@@ -10,9 +10,9 @@ PACKAGES = "\
     packagegroup-security-utils \
     packagegroup-security-scanners \
     packagegroup-security-audit \
-    packagegroup-security-hardening \
     packagegroup-security-ids  \
     packagegroup-security-mac  \
+    packagegroup-security-compliance  \
     ${@bb.utils.contains("DISTRO_FEATURES", "ptest", "packagegroup-meta-security-ptest-packages", "", d)} \
     "
 
@@ -20,38 +20,46 @@ RDEPENDS:packagegroup-core-security = "\
     packagegroup-security-utils \
     packagegroup-security-scanners \
     packagegroup-security-audit \
-    packagegroup-security-hardening \
     packagegroup-security-ids  \
     packagegroup-security-mac  \
+    packagegroup-security-compliance  \
     ${@bb.utils.contains("DISTRO_FEATURES", "ptest", "packagegroup-meta-security-ptest-packages", "", d)} \
     "
 
 SUMMARY:packagegroup-security-utils = "Security utilities"
 RDEPENDS:packagegroup-security-utils = "\
+    bubblewrap \
     checksec \
+    cryptmount \
     ding-libs \
     ecryptfs-utils \
     fscryptctl \
+    glome \
     keyutils \
     nmap \
     pinentry \
-    python3-privacyidea \
-    python3-fail2ban \
     softhsm \
     sshguard \
     ${@bb.utils.contains_any("TUNE_FEATURES", "riscv32 ", "", " libseccomp",d)} \
-    ${@bb.utils.contains("DISTRO_FEATURES", "pam", "sssd google-authenticator-libpam", "",d)} \
+    ${@bb.utils.contains("DISTRO_FEATURES", "pam", "google-authenticator-libpam", "",d)} \
     ${@bb.utils.contains("DISTRO_FEATURES", "pax", "pax-utils packctl", "",d)} \
     "
 
+have_krill =  "${@bb.utils.contains("DISTRO_FEATURES", "pam", "krill", "",d)}"
+RDEPENDS:packagegroup-security-utils:append:x86 = " chipsec ${have_krill}"
+RDEPENDS:packagegroup-security-utils:append:x86-64 = " firejail chipsec ${have_krill}"
+RDEPENDS:packagegroup-security-utils:append:aarch64 = " firejail ${have_krill}"
+RDEPENDS:packagegroup-security-utils:remove:libc-musl = "krill"
+
 SUMMARY:packagegroup-security-scanners = "Security scanners"
 RDEPENDS:packagegroup-security-scanners = "\
+    ${@bb.utils.contains_any("TUNE_FEATURES", "riscv32 riscv64", "", " arpwatch",d)} \
+    chkrootkit \
     isic \
-    nikto \
-    checksecurity \
     ${@bb.utils.contains_any("TUNE_FEATURES", "riscv32 riscv64", "", " clamav clamav-daemon clamav-freshclam",d)} \
     "
 RDEPENDS:packagegroup-security-scanners:remove:libc-musl = "clamav clamav-daemon clamav-freshclam"
+RDEPENDS:packagegroup-security-scanners:remove:libc-musl = "arpwatch"
 
 SUMMARY:packagegroup-security-audit = "Security Audit tools "
 RDEPENDS:packagegroup-security-audit = " \
@@ -59,15 +67,10 @@ RDEPENDS:packagegroup-security-audit = " \
     redhat-security \
     "
 
-SUMMARY:packagegroup-security-hardening = "Security Hardening tools"
-RDEPENDS:packagegroup-security-hardening = " \
-    bastille \
-    "
-
 SUMMARY:packagegroup-security-ids = "Security Intrusion Detection systems"
 RDEPENDS:packagegroup-security-ids = " \
     samhain-standalone \
-    ${@bb.utils.contains("BBLAYERS", "meta-rust", "suricata","", d)} \
+    suricata \
     ossec-hids \
     aide \
     "
@@ -88,11 +91,20 @@ RDEPENDS:packagegroup-security-mac = " \
 
 RDEPENDS:packagegroup-security-mac:remove:mipsarch = "apparmor"
 
+SUMMARY:packagegroup-security-compliance = "Security Compliance applications"
+RDEPENDS:packagegroup-security-compliance = " \
+    lynis \
+    openscap \
+    scap-security-guide \
+    os-release \
+    "
+
+RDEPENDS:packagegroup-security-compliance:remove:libc-musl = "openscap scap-security-guide"
+
 RDEPENDS:packagegroup-meta-security-ptest-packages = "\
     ptest-runner \
     samhain-standalone-ptest \
     ${@bb.utils.contains("BBLAYERS", "meta-rust", "suricata-ptest","", d)} \
-    python3-fail2ban-ptest \
     ${@bb.utils.contains("DISTRO_FEATURES", "smack", "smack-ptest", "",d)} \
 "
 

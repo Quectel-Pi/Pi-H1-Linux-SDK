@@ -13,7 +13,7 @@ BINCONFIG = "${bindir}/ncurses5-config ${bindir}/ncursesw5-config \
 inherit autotools binconfig-disabled multilib_header pkgconfig
 
 # Upstream has useful patches at times at ftp://invisible-island.net/ncurses/
-SRC_URI = "git://salsa.debian.org/debian/ncurses.git;protocol=https;branch=master"
+SRC_URI = "git://github.com/ThomasDickey/ncurses-snapshots.git;protocol=https;branch=master"
 
 EXTRA_AUTORECONF = "-I m4"
 
@@ -27,10 +27,12 @@ EXTRASITECONFIG = "CFLAGS='${CFLAGS} -I${SYSROOT_DESTDIR}${includedir}'"
 # TODO: remove this variable when widec is supported in every setup?
 ENABLE_WIDEC ?= "true"
 
-# _GNU_SOURCE is required for widec stuff and is detected automatically
-# for target objects.  But it must be set manually for native and sdk
-# builds.
-BUILD_CPPFLAGS += "-D_GNU_SOURCE"
+# _GNU_SOURCE is required for widec stuff and is not detected automatically
+CPPFLAGS += "-D_GNU_SOURCE"
+
+# Check if we still need it when next release (6.6) happens
+CFLAGS += "-std=gnu17"
+BUILD_CFLAGS += "-std=gnu17"
 
 # natives don't generally look in base_libdir
 base_libdir:class-native = "${libdir}"

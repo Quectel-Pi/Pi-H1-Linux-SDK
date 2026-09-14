@@ -1,0 +1,27 @@
+[Unit]
+Description=Camx V4L2 Bridge for camera %i
+After=cam-server.service v4l2loopback-setup.service
+Requires=cam-server.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStartPre=/bin/sleep 8
+ExecStart=/usr/bin/camx-v4l2-bridge -c %i -d /dev/video1%i -w 1280 -h 720 -f 30
+# After the bridge has written its initial black frame, device_caps flips from
+# idle M2M (capture+output) to pure capture. PipeWire's spa-v4l2 may have
+# probed the device earlier (losing the boot race) and cached the wrong caps,
+# which blocks format negotiation and breaks gnome-snapshot. The kicker waits
+# for pure-capture caps, then restarts the active user's wireplumber so
+# spa-v4l2 re-probes and caches the correct caps. Idempotent on every restart.
+# `+` runs it with full privileges even if the unit is later constrained.
+ExecStartPost=+/usr/bin/camx-v4l2-pwkick.sh
+Restart=on-failure
+RestartSec=5
+RestartPreventExitStatus=2
+TimeoutStopSec=10
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

@@ -9,6 +9,9 @@
 #include <linux/ctype.h>
 #include <linux/etherdevice.h>
 #include <linux/random.h>
+#include <linux/path.h>
+#include <linux/namei.h>
+#include <linux/errno.h>
 
 #include "fuxi-os.h"
 #include "fuxi-gmac.h"
@@ -482,11 +485,35 @@ enable_msi_interrupt:
 #endif
 }
 
+static bool dir_exists(const char *path_str)
+{
+    struct path path;
+    int ret;
+
+    ret = kern_path(path_str, LOOKUP_FOLLOW, &path);
+    if (ret)
+        return false;
+
+
+    if (!S_ISDIR(d_inode(path.dentry)->i_mode)) {
+        path_put(&path);
+        return false;
+    }
+
+    path_put(&path);
+    return true;
+}
+
 int fxgmac_drv_probe(struct device *dev, struct fxgmac_resources *res)
 {
 	struct fxgmac_pdata *pdata;
 	struct net_device *netdev;
 	int ret;
+
+	if (!dir_exists("/var/persist")){
+		DPRINTK("file system is not mount try later\n");
+    	return -EPROBE_DEFER; 
+	}
 
 	netdev = alloc_etherdev_mq(sizeof(struct fxgmac_pdata),
 				   FXGMAC_MAX_DMA_CHANNELS);

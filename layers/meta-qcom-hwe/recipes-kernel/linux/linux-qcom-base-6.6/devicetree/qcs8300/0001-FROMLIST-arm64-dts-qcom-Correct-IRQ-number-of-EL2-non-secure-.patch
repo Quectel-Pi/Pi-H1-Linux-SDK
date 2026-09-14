@@ -1,0 +1,45 @@
+From 41b36ac3066e3ce421e24a15889fb3037ed77282 Mon Sep 17 00:00:00 2001
+From: Cong Zhang <quic_congzhan@quicinc.com>
+Date: Wed, 27 Nov 2024 17:32:20 +0800
+Subject: [PATCH] FROMLIST: arm64: dts: qcom: Correct IRQ number of EL2 non-secure
+ physical timer
+
+The INTID of EL2 non-secure physical timer is 26. In linux, the IRQ
+number has a fixed 16 offset for PPIs. Therefore, the linux IRQ number
+of EL2 non-secure physical timer should be 10 (26 - 16).
+
+Signed-off-by: Cong Zhang <quic_congzhan@quicinc.com>
+Link: https://lore.kernel.org/lkml/20241127-correct_timer_irq-v1-1-ce4309b655bd@quicinc.com/
+Upstream-Status: Submitted[https://lore.kernel.org/lkml/20241127-correct_timer_irq-v1-1-ce4309b655bd@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 2 +-
+ arch/arm64/boot/dts/qcom/sdx75.dtsi   | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index dc631ec06b28..238ff22b1d21 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -3791,6 +3791,6 @@ arch_timer: timer {
+ 		interrupts = <GIC_PPI 13 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+ 			     <GIC_PPI 14 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+ 			     <GIC_PPI 11 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+-			     <GIC_PPI 12 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
++			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
+ 	};
+ };
+diff --git a/arch/arm64/boot/dts/qcom/sdx75.dtsi b/arch/arm64/boot/dts/qcom/sdx75.dtsi
+index e180aa4023ec..1a52fed47016 100644
+--- a/arch/arm64/boot/dts/qcom/sdx75.dtsi
++++ b/arch/arm64/boot/dts/qcom/sdx75.dtsi
+@@ -740,6 +740,6 @@ timer {
+ 		interrupts = <GIC_PPI 13 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+ 			     <GIC_PPI 14 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+ 			     <GIC_PPI 11 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>,
+-			     <GIC_PPI 12 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
++			     <GIC_PPI 10 (GIC_CPU_MASK_SIMPLE(8) | IRQ_TYPE_LEVEL_LOW)>;
+ 	};
+ };
+-- 
+2.25.1
+

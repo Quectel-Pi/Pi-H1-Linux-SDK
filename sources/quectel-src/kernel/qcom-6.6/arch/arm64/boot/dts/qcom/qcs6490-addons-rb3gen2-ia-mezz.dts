@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 /*
- * Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 
 /dts-v1/;
@@ -36,6 +37,79 @@
 		#sound-dai-cells = <1>;
 	};
 
+	dp1-connector {
+		compatible = "dp-connector";
+		label = "DP";
+		type = "full-size";
+		hpd-gpios = <&tlmm 104 GPIO_ACTIVE_LOW>;
+
+		ports {
+			port@0 {
+				dp1_connector_in: endpoint {
+					remote-endpoint = <&mdss_dp_out>;
+				};
+			};
+
+			port@1 {
+				redriver_dp_in: endpoint {
+					remote-endpoint = <&redriver_ss_out>;
+				};
+			};
+		};
+	};
+
+	hdmi-connector {
+		status = "disabled";
+	};
+
+	panel_lvds: panel-lvds@0 {
+		compatible = "panel-lvds";
+
+		data-mapping = "vesa-24";
+
+		width-mm = <476>;
+		height-mm = <268>;
+
+		status = "okay";
+
+		panel-timing {
+			clock-frequency = <148500000>;
+			hactive = <1920>;
+			vactive = <1080>;
+			hfront-porch = <88>;
+			hback-porch = <148>;
+			hsync-len = <44>;
+			vfront-porch = <4>;
+			vback-porch = <36>;
+			vsync-len = <5>;
+			de-active = <1>;
+		};
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				dual-lvds-odd-pixels;
+				panel_in_lvds_odd: endpoint {
+					remote-endpoint = <&lt9211c_out_odd>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				dual-lvds-even-pixels;
+				panel_in_lvds_even: endpoint {
+					remote-endpoint = <&lt9211c_out_even>;
+				};
+
+			};
+		};
+	};
+
 	qps615_rc0_resx_vreg: qps615-rc0-resx-vreg {
 		compatible = "regulator-fixed";
 		regulator-name = "qps615_rc0_resx_vreg";
@@ -56,6 +130,12 @@
 		enable-active-high;
 		regulator-enable-ramp-delay = <10000>;
 	};
+};
+
+&dp_hot_plug_det {
+	pins = "gpio104";
+	function = "gpio";
+	bias-disable;
 };
 
 &i2c1 {
@@ -119,6 +199,44 @@
 			#address-cells = <1>;
 			#size-cells = <0>;
 			reg = <7>;
+		};
+	};
+
+	lt9211c_codec: lvds-bridge@29 {
+		compatible = "lontium,lt9211c";
+		reg = <0x29>;
+		status = "okay";
+
+		reset-gpios = <&tlmm 117 GPIO_ACTIVE_HIGH>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				lt9211c_in: endpoint {
+					data-lanes = <0 1 2 3>;
+					remote-endpoint = <&mdss_dsi0_out>;
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+
+				lt9211c_out_odd: endpoint {
+					remote-endpoint = <&panel_in_lvds_odd>;
+				};
+			};
+
+			port@3 {
+				reg = <3>;
+
+				lt9211c_out_even: endpoint {
+					remote-endpoint = <&panel_in_lvds_even>;
+				};
+			};
 		};
 	};
 
@@ -201,6 +319,31 @@
 	bias-bus-hold;
 };
 
+&lt9611_codec {
+	status = "disabled";
+};
+
+&mdss_dp {
+	pinctrl-names = "default";
+	pinctrl-0 = <&dp_hot_plug_det>;
+};
+
+&mdss_dp_out {
+	lane-mapping = <1 0 3 2>;
+	remote-endpoint = <&dp1_connector_in>;
+};
+
+&mdss_dsi {
+	ports {
+		port@1 {
+			reg = <1>;
+			mdss_dsi0_out: endpoint {
+				data-lanes = <0 1 2 3>;
+				remote-endpoint = <&lt9211c_in>;
+			};
+		};
+	};
+};
 
 &pcie0 {
 	bus-range = <0x80 0xff>;
@@ -246,12 +389,16 @@
 				pcie0_qps615_eth0,pcie0_qps615_eth0@pcie0_rp {
 					reg = <0x0 0x0 0x0 0x0 0x0>;
 					pinctrl-names = "default";
-					pinctrl-0 = <&aqr_rc0_intn_wol_sig>;
+					pinctrl-0 = <&rtl_rc0_intn_wol_sig>;
 					phy-rst-som-gpios = <&tlmm 90 GPIO_ACTIVE_HIGH>;
 					interrupts-extended = <&tlmm 136 IRQ_TYPE_EDGE_FALLING>;
+					qcom,phy-port-interface = <4>;
+					qcom,mdc-clk = <0x8>;
+					qcom,c45-state = <0>;
+					qcom,link-down-macrst = <0>;
 					interrupt-names = "wol_irq";
 					qcom,always-on-supply;
-					qcom,phy-rst-delay-us = <221000>;
+					qcom,phy-rst-delay-us = <75000>;
 					#address-cells = <1>;
 					#size-cells = <1>;
 				};
@@ -339,19 +486,6 @@
 			reg = <0x0 0x0 0x0 0x0 0x0>;
 		};
 
-		pcie1_qps615_eth2,pcie1_qps615_eth2@pcie1_rp {
-			reg = <0x100 0x0 0x0 0x0 0x0>;
-			pinctrl-names = "default";
-			pinctrl-0 = <&napa_rc1_intn_wol_sig>;
-			phy-rst-som-gpios = <&tlmm 120 GPIO_ACTIVE_HIGH>;
-			interrupts-extended = <&tlmm 6 IRQ_TYPE_EDGE_FALLING>;
-			interrupt-names = "wol_irq";
-			qcom,always-on-supply;
-			qcom,phy-rst-delay-us = <20000>;
-			#address-cells = <1>;
-			#size-cells = <1>;
-		};
-
 		/* BDF 7.0.1 */
 		pcie1_bus7_dev0_fn1: pcie1-bus7-dev0-fn1 {
 			reg = <0x100 0x0 0x0 0x0 0x0>;
@@ -373,6 +507,14 @@
 	};
 };
 
+&pmic_glink {
+	status = "disabled";
+};
+
+&pmic_glink_ss_in {
+	/delete-property/ remote-endpoint;
+};
+
 &qps615_rsex_vreg {
 	vin-supply = <&qps615_rc1_resx_vreg>;
 };
@@ -381,9 +523,18 @@
 	status = "okay";
 };
 
+&redriver_ss_in {
+	data-lanes = <0 1 2 3>;
+	remote-endpoint = <&usb_1_qmpphy_out>;
+};
+
+&redriver_ss_out {
+	remote-endpoint = <&redriver_dp_in>;
+};
+
 &sound {
 	compatible = "qcom,qcs6490-rb3gen2-ia-sndcard";
-	model = "qcm6490-rb3-ia-snd-card";
+	model = "qcs6490-rb3gen2-ia-snd-card";
 	audio-routing =
 		"SpkrLeft IN", "WSA_SPK1 OUT",
 		"SpkrRight IN", "WSA_SPK2 OUT",
@@ -421,6 +572,9 @@
 			sound-dai = <&wcd9375 1>, <&swr1 0>, <&lpass_tx_macro 0>;
 		};
 	};
+
+	/delete-node/ hdmi-dai-link;
+
 };
 
 &spi11 {
@@ -535,7 +689,7 @@
 
 			map4 {
 				trip = <&b_bcl_lvl0>;
-				cooling-device = <&cdsp_sw 2 2>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 			};
 
 			map5 {
@@ -571,7 +725,7 @@
 
 			map1 {
 				trip = <&b_bcl_lvl1>;
-				cooling-device = <&cdsp_sw 4 4>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 			};
 
 			map2 {
@@ -597,7 +751,7 @@
 		cooling-maps {
 			map0 {
 				trip = <&b_bcl_lvl2>;
-				cooling-device = <&cdsp_sw 5 5>;
+				cooling-device = <&cdsp_sw THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
 			};
 		};
 	};
@@ -605,7 +759,7 @@
 
 &tlmm {
 	qps615_rc0_intn_wol {
-		aqr_rc0_intn_wol_sig: aqr-rc0-intn-wol-sig {
+		rtl_rc0_intn_wol_sig: rtl-rc0-intn-wol-sig {
 			pins = "gpio136";
 			function = "gpio";
 			input-enable;
@@ -619,16 +773,6 @@
 			bias-disable;
 		};
 	};
-
-	qps615_rc1_intn_wol {
-		napa_rc1_intn_wol_sig: napa-rc1-intn-wol-sig {
-			pins = "gpio6";
-			function = "gpio";
-			input-enable;
-			bias-disable;
-		};
-	};
-
 
 	wcd_reset_n: wcd-reset-n-state {
 		pins = "gpio83";
@@ -645,8 +789,20 @@
 	};
 };
 
+&typec_retimer {
+	default-dp-mode;
+};
+
 &uart4 {
 	status = "okay";
+};
+
+&uart7 {
+	status = "disabled";
+};
+
+&usb_1_qmpphy_dp_in {
+	/delete-property/ remote-endpoint;
 };
 
 &soc {

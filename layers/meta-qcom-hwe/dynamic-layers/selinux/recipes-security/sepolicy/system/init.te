@@ -29,6 +29,9 @@ qcom_qwes_service_get_status(initrc_t)
 #allow initrc_t to launch diag applications
 qcom_diag_domtrans(initrc_t);
 
+#allow initrc_t to launch ims applications
+qcom_imsd_start_service(initrc_t);
+
 #allow initrc_t to communicate with kernel keyring
 mls_key_write_all_levels(initrc_t)
 kernel_view_key(initrc_t)

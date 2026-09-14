@@ -1,0 +1,51 @@
+From 9391dd7d67d85cc146ae407f2198b59729d2d6bd Mon Sep 17 00:00:00 2001
+From: Komal Bajaj <quic_kbajaj@quicinc.com>
+Date: Mon, 24 Feb 2025 16:13:28 +0530
+Subject: [PATCH 2/2] PENDING: arm64: dts: qcom: Rename qcs9075-rb8 to
+ qcs9075-iq-9075-evk
+
+Rename qcs9075-rb8.dts to qcs9075-iq-9075-evk.dts to align with
+product name.
+
+Change-Id: I9e529d9071bf467b2ababd4d53dca75fe13793b6
+Signed-off-by: Komal Bajaj <quic_kbajaj@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/Makefile                             | 2 +-
+ .../dts/qcom/{qcs9075-rb8.dts => qcs9075-iq-9075-evk.dts}     | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+ rename arch/arm64/boot/dts/qcom/{qcs9075-rb8.dts => qcs9075-iq-9075-evk.dts} (99%)
+
+diff --git a/arch/arm64/boot/dts/qcom/Makefile b/arch/arm64/boot/dts/qcom/Makefile
+index 0c835c4e8ad0..b26933cc2a1e 100644
+--- a/arch/arm64/boot/dts/qcom/Makefile
++++ b/arch/arm64/boot/dts/qcom/Makefile
+@@ -242,6 +242,6 @@ dtb-$(CONFIG_ARCH_QCOM) += qcs9100-ride-r3.dtb
+ qcs9100-ride-r3-el2-dtbs:= qcs9100-ride-r3.dtb sa8775p-el2.dtbo
+ 
+ dtb-$(CONFIG_ARCH_QCOM)	+= qcs9100-ride-r3-el2.dtb
+-dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-rb8.dtb
++dtb-$(CONFIG_ARCH_QCOM)	+= qcs9075-iq-9075-evk.dtb
+ dtb-$(CONFIG_ARCH_QCOM) += qcs9075-ride.dtb
+ dtb-$(CONFIG_ARCH_QCOM) += qcs9075-ride-r3.dtb
+diff --git a/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts b/arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts
+similarity index 99%
+rename from arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
+rename to arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts
+index 81641d54ba09..1d7b21e11a07 100644
+--- a/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
++++ b/arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts
+@@ -15,8 +15,8 @@
+ /delete-node/ &usb_1_dwc3;
+ 
+ / {
+-	model = "Qualcomm Technologies, Inc. Robotics RB8";
+-	compatible = "qcom,qcs9075-rb8", "qcom,qcs9075", "qcom,sa8775p";
++	model = "Qualcomm Technologies, Inc. IQ 9075 EVK";
++	compatible = "qcom,qcs9075-iq-9075-evk", "qcom,qcs9075", "qcom,sa8775p";
+ 	qcom,msm-id = <676 0x20000>;
+ 	qcom,board-id = <0x10020 0>, <0x10019 0>;
+ 
+-- 
+2.48.1
+

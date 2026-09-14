@@ -28,14 +28,13 @@
 # Changes from Qualcomm Innovation Center are provided under the following
 # license:
 #
-# Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright (c) 2023, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 [Unit]
 Description=Init-display Service
 SourcePath=/etc/initscripts/init_qti_display
-Requires=property-vault.service
-After=property-vault.service sysinit.target local-fs.target
+After=sysinit.target local-fs.target
 [Service]
 User=root
 Group=root
@@ -43,12 +42,11 @@ Restart=no
 Type=simple
 RemainAfterExit=yes
 ExecStartPre=/bin/mkdir -p /dev/socket/weston
-ExecStartPre=+/sbin/restorecon -F /dev/socket/weston
-ExecStartPre=+/bin/chmod 0700 /dev/socket/weston
+ExecStartPre=+/bin/sh -c 'if selinuxenabled && command -v restorecon >/dev/null 2>&1; then /sbin/restorecon -F /dev/socket/weston; fi'
+ExecStartPre=+/bin/chmod 0771 /dev/socket/weston
 # Create /dev/dri only if not present
 ExecStartPre=+/bin/mkdir -p /dev/dri
 ExecStartPre=+/bin/chmod 0755 /dev/dri
-ExecStartPre=+/usr/share/weston-start/xwayland
 ExecStart=/etc/initscripts/init_qti_display start
 ExecStop=/etc/initscripts/init_qti_display stop
 

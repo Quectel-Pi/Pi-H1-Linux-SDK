@@ -15,32 +15,14 @@ import hashlib
 
 from glob import glob
 from shutil import rmtree, copy
-from functools import wraps, lru_cache
 from tempfile import NamedTemporaryFile
+from tempfile import TemporaryDirectory
 
 from oeqa.selftest.case import OESelftestTestCase
 from oeqa.core.decorator import OETestTag
+from oeqa.core.decorator.data import skipIfNotArch
 from oeqa.utils.commands import runCmd, bitbake, get_bb_var, get_bb_vars, runqemu
 
-
-@lru_cache()
-def get_host_arch():
-    return get_bb_var('HOST_ARCH')
-
-
-def only_for_arch(archs):
-    """Decorator for wrapping test cases that can be run only for specific target
-    architectures. A list of compatible architectures is passed in `archs`.
-    """
-    def wrapper(func):
-        @wraps(func)
-        def wrapped_f(*args, **kwargs):
-            arch = get_host_arch()
-            if archs and arch not in archs:
-                raise unittest.SkipTest("Testcase arch dependency not met: %s" % arch)
-            return func(*args, **kwargs)
-        return wrapped_f
-    return wrapper
 
 def extract_files(debugfs_output):
     """
@@ -165,20 +147,87 @@ class CLITests(OESelftestTestCase):
         self.assertEqual(1, runCmd('wic', ignore_status=True).status)
 
 class Wic(WicTestCase):
+    def test_skip_kernel_install(self):
+        """Test the functionality of not installing the kernel in the boot directory using the wic plugin"""
+        # create a temporary file for the WKS content
+        with NamedTemporaryFile("w", suffix=".wks") as wks:
+            wks.write(
+                'part --source bootimg-efi '
+                '--sourceparams="loader=grub-efi,install-kernel-into-boot-dir=false" '
+                '--label boot --active\n'
+            )
+            wks.flush()
+            # create a temporary directory to extract the disk image to
+            with TemporaryDirectory() as tmpdir:
+                img = 'core-image-minimal'
+                # build the image using the WKS file
+                cmd = "wic create %s -e %s -o %s" % (
+                    wks.name, img, self.resultdir)
+                runCmd(cmd)
+                wksname = os.path.splitext(os.path.basename(wks.name))[0]
+                out = glob(os.path.join(
+                    self.resultdir, "%s-*.direct" % wksname))
+                self.assertEqual(1, len(out))
+                sysroot = get_bb_var('RECIPE_SYSROOT_NATIVE', 'wic-tools')
+                # extract the content of the disk image to the temporary directory
+                cmd = "wic cp %s:1 %s -n %s" % (out[0], tmpdir, sysroot)
+                runCmd(cmd)
+                # check if the kernel is installed or not
+                kimgtype = get_bb_var('KERNEL_IMAGETYPE', img)
+                for file in os.listdir(tmpdir):
+                    if file == kimgtype:
+                        raise AssertionError(
+                            "The kernel image '{}' was found in the partition".format(kimgtype)
+                        )
+
+    def test_kernel_install(self):
+        """Test the installation of the kernel to the boot directory in the wic plugin"""
+        # create a temporary file for the WKS content
+        with NamedTemporaryFile("w", suffix=".wks") as wks:
+            wks.write(
+                'part --source bootimg-efi '
+                '--sourceparams="loader=grub-efi,install-kernel-into-boot-dir=true" '
+                '--label boot --active\n'
+            )
+            wks.flush()
+            # create a temporary directory to extract the disk image to
+            with TemporaryDirectory() as tmpdir:
+                img = 'core-image-minimal'
+                # build the image using the WKS file
+                cmd = "wic create %s -e %s -o %s" % (wks.name, img, self.resultdir)
+                runCmd(cmd)
+                wksname = os.path.splitext(os.path.basename(wks.name))[0]
+                out = glob(os.path.join(self.resultdir, "%s-*.direct" % wksname))
+                self.assertEqual(1, len(out))
+                sysroot = get_bb_var('RECIPE_SYSROOT_NATIVE', 'wic-tools')
+                # extract the content of the disk image to the temporary directory
+                cmd = "wic cp %s:1 %s -n %s" % (out[0], tmpdir, sysroot)
+                runCmd(cmd)
+                # check if the kernel is installed or not
+                kimgtype = get_bb_var('KERNEL_IMAGETYPE', img)
+                found = False
+                for file in os.listdir(tmpdir):
+                    if file == kimgtype:
+                        found = True
+                        break
+                self.assertTrue(
+                    found, "The kernel image '{}' was not found in the boot partition".format(kimgtype)
+                )
+
     def test_build_image_name(self):
         """Test wic create wictestdisk --image-name=core-image-minimal"""
         cmd = "wic create wictestdisk --image-name=core-image-minimal -o %s" % self.resultdir
         runCmd(cmd)
         self.assertEqual(1, len(glob(os.path.join (self.resultdir, "wictestdisk-*.direct"))))
 
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     def test_gpt_image(self):
         """Test creation of core-image-minimal with gpt table and UUID boot"""
         cmd = "wic create directdisk-gpt --image-name core-image-minimal -o %s" % self.resultdir
         runCmd(cmd)
         self.assertEqual(1, len(glob(os.path.join(self.resultdir, "directdisk-*.direct"))))
 
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     def test_iso_image(self):
         """Test creation of hybrid iso image with legacy and EFI boot"""
         config = 'INITRAMFS_IMAGE = "core-image-minimal-initramfs"\n'\
@@ -192,21 +241,21 @@ class Wic(WicTestCase):
         self.assertEqual(1, len(glob(os.path.join(self.resultdir, "HYBRID_ISO_IMG-*.direct"))))
         self.assertEqual(1, len(glob(os.path.join (self.resultdir, "HYBRID_ISO_IMG-*.iso"))))
 
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     def test_qemux86_directdisk(self):
         """Test creation of qemux-86-directdisk image"""
         cmd = "wic create qemux86-directdisk -e core-image-minimal -o %s" % self.resultdir
         runCmd(cmd)
         self.assertEqual(1, len(glob(os.path.join(self.resultdir, "qemux86-directdisk-*direct"))))
 
-    @only_for_arch(['i586', 'i686', 'x86_64', 'aarch64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64', 'aarch64'])
     def test_mkefidisk(self):
         """Test creation of mkefidisk image"""
         cmd = "wic create mkefidisk -e core-image-minimal -o %s" % self.resultdir
         runCmd(cmd)
         self.assertEqual(1, len(glob(os.path.join(self.resultdir, "mkefidisk-*direct"))))
 
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     def test_bootloader_config(self):
         """Test creation of directdisk-bootloader-config image"""
         config = 'DEPENDS:pn-core-image-minimal += "syslinux"\n'
@@ -217,7 +266,7 @@ class Wic(WicTestCase):
         runCmd(cmd)
         self.assertEqual(1, len(glob(os.path.join(self.resultdir, "directdisk-bootloader-config-*direct"))))
 
-    @only_for_arch(['i586', 'i686', 'x86_64', 'aarch64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64', 'aarch64'])
     def test_systemd_bootdisk(self):
         """Test creation of systemd-bootdisk image"""
         config = 'MACHINE_FEATURES:append = " efi"\n'
@@ -248,7 +297,7 @@ class Wic(WicTestCase):
         self.assertEqual(1, len(glob(os.path.join(self.resultdir, "sdimage-bootpart-*direct"))))
 
     # TODO this doesn't have to be x86-specific
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     def test_default_output_dir(self):
         """Test default output location"""
         for fname in glob("directdisk-*.direct"):
@@ -261,7 +310,7 @@ class Wic(WicTestCase):
         runCmd(cmd)
         self.assertEqual(1, len(glob("directdisk-*.direct")))
 
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     def test_build_artifacts(self):
         """Test wic create directdisk providing all artifacts."""
         bb_vars = get_bb_vars(['STAGING_DATADIR', 'RECIPE_SYSROOT_NATIVE'],
@@ -353,7 +402,7 @@ class Wic(WicTestCase):
         self.assertEqual(1, len(glob(os.path.join(self.resultdir, "wictestdisk-*.direct"))))
 
     # TODO this doesn't have to be x86-specific
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     def test_rootfs_indirect_recipes(self):
         """Test usage of rootfs plugin with rootfs recipes"""
         runCmd("wic create directdisk-multi-rootfs "
@@ -364,7 +413,7 @@ class Wic(WicTestCase):
         self.assertEqual(1, len(glob(os.path.join(self.resultdir, "directdisk-multi-rootfs*.direct"))))
 
     # TODO this doesn't have to be x86-specific
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     def test_rootfs_artifacts(self):
         """Test usage of rootfs plugin with rootfs paths"""
         bb_vars = get_bb_vars(['STAGING_DATADIR', 'RECIPE_SYSROOT_NATIVE'],
@@ -748,7 +797,48 @@ part /etc --source rootfs --fstype=ext4 --change-directory=etc
         wicout = glob(os.path.join(self.resultdir, "wictestdisk-*.direct"))
         self.assertEqual(1, len(wicout))
         size = os.path.getsize(wicout[0])
-        self.assertTrue(size > extraspace)
+        self.assertTrue(size > extraspace, msg="Extra space not present (%s vs %s)" % (size, extraspace))
+
+    def test_no_table(self):
+        """Test --no-table wks option."""
+        wks_file = 'temp.wks'
+
+        # Absolute argument.
+        with open(wks_file, 'w') as wks:
+            wks.write("part testspace --no-table --fixed-size 16k --offset 4080k")
+        runCmd("wic create %s --image-name core-image-minimal -o %s" % (wks_file, self.resultdir))
+
+        wicout = glob(os.path.join(self.resultdir, "*.*"))
+
+        self.assertEqual(1, len(wicout))
+        size = os.path.getsize(wicout[0])
+        self.assertEqual(size, 4 * 1024 * 1024)
+
+        os.remove(wks_file)
+
+    def test_partition_hidden_attributes(self):
+        """Test --hidden wks option."""
+        wks_file = 'temp.wks'
+        sysroot = get_bb_var('RECIPE_SYSROOT_NATIVE', 'wic-tools')
+        try:
+            with open(wks_file, 'w') as wks:
+                wks.write("""
+part / --source rootfs --fstype=ext4
+part / --source rootfs --fstype=ext4 --hidden
+bootloader --ptable gpt""")
+
+            runCmd("wic create %s -e core-image-minimal -o %s" \
+                                       % (wks_file, self.resultdir))
+            wicout = os.path.join(self.resultdir, "*.direct")
+
+            result = runCmd("%s/usr/sbin/sfdisk --part-attrs %s 1" % (sysroot, wicout))
+            self.assertEqual('', result.output)
+            result = runCmd("%s/usr/sbin/sfdisk --part-attrs %s 2" % (sysroot, wicout))
+            self.assertEqual('RequiredPartition', result.output)
+
+        finally:
+            os.remove(wks_file)
+
 
 class Wic2(WicTestCase):
 
@@ -775,7 +865,7 @@ class Wic2(WicTestCase):
         basename = bb_vars['IMAGE_BASENAME']
         self.assertEqual(basename, image)
         path = os.path.join(imgdatadir, basename) + '.env'
-        self.assertTrue(os.path.isfile(path))
+        self.assertTrue(os.path.isfile(path), msg="File %s wasn't generated as expected" % path)
 
         wicvars = set(bb_vars['WICVARS'].split())
         # filter out optional variables
@@ -788,7 +878,7 @@ class Wic2(WicTestCase):
             # test if variables used by wic present in the .env file
             for var in wicvars:
                 self.assertTrue(var in content, "%s is not in .env file" % var)
-                self.assertTrue(content[var])
+                self.assertTrue(content[var], "%s doesn't have a value (%s)" % (var, content[var]))
 
     def test_image_vars_dir_short(self):
         """Test image vars directory selection -v option"""
@@ -817,27 +907,29 @@ class Wic2(WicTestCase):
                                       self.resultdir))
         self.assertEqual(1, len(glob(os.path.join(self.resultdir, "wictestdisk-*direct"))))
 
-    @only_for_arch(['i586', 'i686', 'x86_64', 'aarch64'])
+    # TODO this test could also work on aarch64
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     def test_wic_image_type(self):
         """Test building wic images by bitbake"""
         config = 'IMAGE_FSTYPES += "wic"\nWKS_FILE = "wic-image-minimal"\n'\
                  'MACHINE_FEATURES:append = " efi"\n'
         self.append_config(config)
-        bitbake('wic-image-minimal')
+        image = 'wic-image-minimal'
+        bitbake(image)
         self.remove_config(config)
 
-        deploy_dir = get_bb_var('DEPLOY_DIR_IMAGE')
-        machine = self.td['MACHINE']
-        prefix = os.path.join(deploy_dir, 'wic-image-minimal-%s.' % machine)
+        bb_vars = get_bb_vars(['DEPLOY_DIR_IMAGE', 'IMAGE_LINK_NAME'], image)
+        prefix = os.path.join(bb_vars['DEPLOY_DIR_IMAGE'], '%s.' % bb_vars['IMAGE_LINK_NAME'])
+
         # check if we have result image and manifests symlinks
         # pointing to existing files
         for suffix in ('wic', 'manifest'):
             path = prefix + suffix
-            self.assertTrue(os.path.islink(path))
-            self.assertTrue(os.path.isfile(os.path.realpath(path)))
+            self.assertTrue(os.path.islink(path), msg="Link %s wasn't generated as expected" % path)
+            self.assertTrue(os.path.isfile(os.path.realpath(path)), msg="File linked to by %s wasn't generated as expected" % path)
 
     # TODO this should work on aarch64
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     @OETestTag("runqemu")
     def test_qemu(self):
         """Test wic-image-minimal under qemu"""
@@ -853,12 +945,12 @@ class Wic2(WicTestCase):
             status, output = qemu.run_serial(cmd)
             self.assertEqual(1, status, 'Failed to run command "%s": %s' % (cmd, output))
             self.assertEqual(output, '4')
-            cmd = "grep UUID= /etc/fstab"
+            cmd = "grep UUID=2c71ef06-a81d-4735-9d3a-379b69c6bdba /etc/fstab"
             status, output = qemu.run_serial(cmd)
             self.assertEqual(1, status, 'Failed to run command "%s": %s' % (cmd, output))
             self.assertEqual(output, 'UUID=2c71ef06-a81d-4735-9d3a-379b69c6bdba\t/media\text4\tdefaults\t0\t0')
 
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     @OETestTag("runqemu")
     def test_qemu_efi(self):
         """Test core-image-minimal efi image under qemu"""
@@ -1042,7 +1134,8 @@ class Wic2(WicTestCase):
             size = int(size[:-3])
             self.assertGreaterEqual(size, 204800)
 
-    @only_for_arch(['i586', 'i686', 'x86_64', 'aarch64'])
+    # TODO this test could also work on aarch64
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     @OETestTag("runqemu")
     def test_rawcopy_plugin_qemu(self):
         """Test rawcopy plugin in qemu"""
@@ -1050,9 +1143,13 @@ class Wic2(WicTestCase):
         config = 'IMAGE_FSTYPES = "ext4"\n'
         self.append_config(config)
         bitbake('core-image-minimal')
+        image_link_name = get_bb_var('IMAGE_LINK_NAME', 'core-image-minimal')
         self.remove_config(config)
 
-        config = 'IMAGE_FSTYPES = "wic"\nWKS_FILE = "test_rawcopy_plugin.wks.in"\n'
+        config = 'IMAGE_FSTYPES = "wic"\n' \
+                 'IMAGE_LINK_NAME_CORE_IMAGE_MINIMAL = "%s"\n'\
+                 'WKS_FILE = "test_rawcopy_plugin.wks.in"\n'\
+                 % image_link_name
         self.append_config(config)
         bitbake('core-image-minimal-mtdutils')
         self.remove_config(config)
@@ -1066,14 +1163,14 @@ class Wic2(WicTestCase):
 
     def _rawcopy_plugin(self, fstype):
         """Test rawcopy plugin"""
-        img = 'core-image-minimal'
-        machine = self.td["MACHINE"]
+        image = 'core-image-minimal'
+        bb_vars = get_bb_vars(['DEPLOY_DIR_IMAGE', 'IMAGE_LINK_NAME'], image)
         params = ',unpack' if fstype.endswith('.gz') else ''
         with NamedTemporaryFile("w", suffix=".wks") as wks:
-            wks.write('part / --source rawcopy --sourceparams="file=%s-%s.%s%s"\n'\
-                      % (img, machine, fstype, params))
+            wks.write('part / --source rawcopy --sourceparams="file=%s.%s%s"\n'\
+                      % (bb_vars['IMAGE_LINK_NAME'], fstype, params))
             wks.flush()
-            cmd = "wic create %s -e %s -o %s" % (wks.name, img, self.resultdir)
+            cmd = "wic create %s -e %s -o %s" % (wks.name, image, self.resultdir)
             runCmd(cmd)
             wksname = os.path.splitext(os.path.basename(wks.name))[0]
             out = glob(os.path.join(self.resultdir, "%s-*direct" % wksname))
@@ -1094,13 +1191,12 @@ class Wic2(WicTestCase):
         """Test empty plugin"""
         config = 'IMAGE_FSTYPES = "wic"\nWKS_FILE = "test_empty_plugin.wks"\n'
         self.append_config(config)
-        bitbake('core-image-minimal')
+        image = 'core-image-minimal'
+        bitbake(image)
         self.remove_config(config)
-        deploy_dir = get_bb_var('DEPLOY_DIR_IMAGE')
-        machine = self.td['MACHINE']
-
-        image_path = os.path.join(deploy_dir, 'core-image-minimal-%s.wic' % machine)
-        self.assertTrue(os.path.exists(image_path))
+        bb_vars = get_bb_vars(['DEPLOY_DIR_IMAGE', 'IMAGE_LINK_NAME'], image)
+        image_path = os.path.join(bb_vars['DEPLOY_DIR_IMAGE'], '%s.wic' % bb_vars['IMAGE_LINK_NAME'])
+        self.assertTrue(os.path.exists(image_path), msg="Image file %s wasn't generated as expected" % image_path)
 
         sysroot = get_bb_var('RECIPE_SYSROOT_NATIVE', 'wic-tools')
 
@@ -1109,7 +1205,7 @@ class Wic2(WicTestCase):
         result = runCmd("wic ls %s -n %s | awk -F ' ' '{print $1 \" \" $5}' | grep '^2' | wc -w" % (image_path, sysroot))
         self.assertEqual('1', result.output)
 
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     @OETestTag("runqemu")
     def test_biosplusefi_plugin_qemu(self):
         """Test biosplusefi plugin in qemu"""
@@ -1142,7 +1238,7 @@ class Wic2(WicTestCase):
             self.assertEqual(1, status, 'Failed to run command "%s": %s' % (cmd, output))
             self.assertEqual(output, '*')
 
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     def test_biosplusefi_plugin(self):
         """Test biosplusefi plugin"""
         # Wic generation below may fail depending on the order of the unittests
@@ -1168,8 +1264,28 @@ class Wic2(WicTestCase):
             out = glob(os.path.join(self.resultdir, "%s-*.direct" % wksname))
             self.assertEqual(1, len(out))
 
+    @skipIfNotArch(['i586', 'i686', 'x86_64', 'aarch64'])
+    def test_uefi_kernel(self):
+        """ Test uefi-kernel in wic """
+        config = 'IMAGE_EFI_BOOT_FILES="/etc/fstab;testfile"\nIMAGE_FSTYPES = "wic"\nWKS_FILE = "test_uefikernel.wks"\nMACHINE_FEATURES:append = " efi"\n'
+        self.append_config(config)
+        bitbake('core-image-minimal')
+        self.remove_config(config)
+
+        img = 'core-image-minimal'
+        with NamedTemporaryFile("w", suffix=".wks") as wks:
+            wks.writelines(['part /boot --source bootimg-efi --sourceparams="loader=uefi-kernel"\n'
+                            'part / --source rootfs --fstype=ext4 --align 1024 --use-uuid\n'\
+                            'bootloader --timeout=0 --append="console=ttyS0,115200n8"\n'])
+            wks.flush()
+            cmd = "wic create %s -e %s -o %s" % (wks.name, img, self.resultdir)
+            runCmd(cmd)
+            wksname = os.path.splitext(os.path.basename(wks.name))[0]
+            out = glob(os.path.join(self.resultdir, "%s-*.direct" % wksname))
+            self.assertEqual(1, len(out))
+
     # TODO this test could also work on aarch64
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     @OETestTag("runqemu")
     def test_efi_plugin_unified_kernel_image_qemu(self):
         """Test efi plugin's Unified Kernel Image feature in qemu"""
@@ -1287,19 +1403,19 @@ class Wic2(WicTestCase):
             out = glob(os.path.join(self.resultdir, "%s-*direct" % wksname))
             self.assertEqual(1, len(out))
 
-    @only_for_arch(['i586', 'i686', 'x86_64'])
+    @skipIfNotArch(['i586', 'i686', 'x86_64'])
     @OETestTag("runqemu")
     def test_expand_mbr_image(self):
         """Test wic write --expand command for mbr image"""
         # build an image
         config = 'IMAGE_FSTYPES = "wic"\nWKS_FILE = "directdisk.wks"\n'
         self.append_config(config)
-        bitbake('core-image-minimal')
+        image = 'core-image-minimal'
+        bitbake(image)
 
         # get path to the image
-        deploy_dir = get_bb_var('DEPLOY_DIR_IMAGE')
-        machine = self.td['MACHINE']
-        image_path = os.path.join(deploy_dir, 'core-image-minimal-%s.wic' % machine)
+        bb_vars = get_bb_vars(['DEPLOY_DIR_IMAGE', 'IMAGE_LINK_NAME'], image)
+        image_path = os.path.join(bb_vars['DEPLOY_DIR_IMAGE'], '%s.wic' % bb_vars['IMAGE_LINK_NAME'])
 
         self.remove_config(config)
 
@@ -1307,7 +1423,7 @@ class Wic2(WicTestCase):
             # expand image to 1G
             new_image_path = None
             with NamedTemporaryFile(mode='wb', suffix='.wic.exp',
-                                    dir=deploy_dir, delete=False) as sparse:
+                                    dir=bb_vars['DEPLOY_DIR_IMAGE'], delete=False) as sparse:
                 sparse.truncate(1024 ** 3)
                 new_image_path = sparse.name
 
@@ -1321,11 +1437,11 @@ class Wic2(WicTestCase):
             orig_sizes = [int(line.split()[3]) for line in orig.output.split('\n')[1:]]
             exp_sizes = [int(line.split()[3]) for line in exp.output.split('\n')[1:]]
             self.assertEqual(orig_sizes[0], exp_sizes[0]) # first partition is not resized
-            self.assertTrue(orig_sizes[1] < exp_sizes[1])
+            self.assertTrue(orig_sizes[1] < exp_sizes[1], msg="Parition size wasn't enlarged (%s vs %s)" % (orig_sizes[1], exp_sizes[1]))
 
             # Check if all free space is partitioned
             result = runCmd("%s/usr/sbin/sfdisk -F %s" % (sysroot, new_image_path))
-            self.assertTrue("0 B, 0 bytes, 0 sectors" in result.output)
+            self.assertIn("0 B, 0 bytes, 0 sectors", result.output)
 
             os.rename(image_path, image_path + '.bak')
             os.rename(new_image_path, image_path)
@@ -1340,6 +1456,68 @@ class Wic2(WicTestCase):
                 os.unlink(new_image_path)
             if os.path.exists(image_path + '.bak'):
                 os.rename(image_path + '.bak', image_path)
+
+    def test_gpt_partition_name(self):
+        """Test --part-name argument to set partition name in GPT table"""
+        config = 'IMAGE_FSTYPES += "wic"\nWKS_FILE = "test_gpt_partition_name.wks"\n'
+        self.append_config(config)
+        image = 'core-image-minimal'
+        bitbake(image)
+        self.remove_config(config)
+        deploy_dir = get_bb_var('DEPLOY_DIR_IMAGE')
+        bb_vars = get_bb_vars(['DEPLOY_DIR_IMAGE', 'IMAGE_LINK_NAME'], image)
+        image_path = os.path.join(bb_vars['DEPLOY_DIR_IMAGE'], '%s.wic' % bb_vars['IMAGE_LINK_NAME'])
+
+        sysroot = get_bb_var('RECIPE_SYSROOT_NATIVE', 'wic-tools')
+
+        # Image is created
+        self.assertTrue(os.path.exists(image_path), "image file %s doesn't exist" % image_path)
+
+        # Check the names of the three partitions
+        # as listed in test_gpt_partition_name.wks
+        result = runCmd("%s/usr/sbin/sfdisk --part-label %s 1" % (sysroot, image_path))
+        self.assertEqual('boot-A', result.output)
+        result = runCmd("%s/usr/sbin/sfdisk --part-label %s 2" % (sysroot, image_path))
+        self.assertEqual('root-A', result.output)
+        # When the --part-name is not defined, the partition name is equal to the --label
+        result = runCmd("%s/usr/sbin/sfdisk --part-label %s 3" % (sysroot, image_path))
+        self.assertEqual('ext-space', result.output)
+
+    def test_empty_zeroize_plugin(self):
+        img = 'core-image-minimal'
+        expected_size = [ 1024*1024,    # 1M
+                          512*1024,     # 512K
+                          2*1024*1024]  # 2M
+        # Check combination of sourceparams
+        with NamedTemporaryFile("w", suffix=".wks") as wks:
+            wks.writelines(
+                ['part empty --source empty --sourceparams="fill" --ondisk sda --fixed-size 1M\n',
+                 'part empty --source empty --sourceparams="size=512K" --ondisk sda --size 1M --align 1024\n',
+                 'part empty --source empty --sourceparams="size=2048k,bs=512K" --ondisk sda --size 4M --align 1024\n'
+                 ])
+            wks.flush()
+            cmd = "wic create %s -e %s -o %s" % (wks.name, img, self.resultdir)
+            runCmd(cmd)
+            wksname = os.path.splitext(os.path.basename(wks.name))[0]
+            wicout = glob(os.path.join(self.resultdir, "%s-*direct" % wksname))
+            # Skip the complete image and just look at the single partitions
+            for idx, value in enumerate(wicout[1:]):
+                self.logger.info(wicout[idx])
+                # Check if partitions are actually zeroized
+                with open(wicout[idx], mode="rb") as fd:
+                    ba = bytearray(fd.read())
+                    for b in ba:
+                        self.assertEqual(b, 0)
+                self.assertEqual(expected_size[idx], os.path.getsize(wicout[idx]))
+
+        # Check inconsistancy check between "fill" and "--size" parameter
+        with NamedTemporaryFile("w", suffix=".wks") as wks:
+            wks.writelines(['part empty --source empty --sourceparams="fill" --ondisk sda --size 1M\n'])
+            wks.flush()
+            cmd = "wic create %s -e %s -o %s" % (wks.name, img, self.resultdir)
+            result = runCmd(cmd, ignore_status=True)
+            self.assertIn("Source parameter 'fill' only works with the '--fixed-size' option, exiting.", result.output)
+            self.assertNotEqual(0, result.status)
 
 class ModifyTests(WicTestCase):
     def test_wic_ls(self):
@@ -1383,7 +1561,7 @@ class ModifyTests(WicTestCase):
             # check if file is there
             result = runCmd("wic ls %s:1/ -n %s" % (images[0], sysroot))
             self.assertEqual(7, len(result.output.split('\n')))
-            self.assertTrue(os.path.basename(testfile.name) in result.output)
+            self.assertIn(os.path.basename(testfile.name), result.output)
 
             # prepare directory
             testdir = os.path.join(self.resultdir, 'wic-test-cp-dir')
@@ -1397,13 +1575,13 @@ class ModifyTests(WicTestCase):
             # check if directory is there
             result = runCmd("wic ls %s:1/ -n %s" % (images[0], sysroot))
             self.assertEqual(8, len(result.output.split('\n')))
-            self.assertTrue(os.path.basename(testdir) in result.output)
+            self.assertIn(os.path.basename(testdir), result.output)
 
             # copy the file from the partition and check if it success
             dest = '%s-cp' % testfile.name
             runCmd("wic cp %s:1/%s %s -n %s" % (images[0],
                     os.path.basename(testfile.name), dest, sysroot))
-            self.assertTrue(os.path.exists(dest))
+            self.assertTrue(os.path.exists(dest), msg="File %s wasn't generated as expected" % dest)
 
 
     def test_wic_rm(self):
@@ -1447,7 +1625,7 @@ class ModifyTests(WicTestCase):
         # list directory content of the second ext4 partition
         result = runCmd("wic ls %s:2/ -n %s" % (images[0], sysroot))
         self.assertTrue(set(['bin', 'home', 'proc', 'usr', 'var', 'dev', 'lib', 'sbin']).issubset(
-                            set(line.split()[-1] for line in result.output.split('\n') if line)))
+                            set(line.split()[-1] for line in result.output.split('\n') if line)), msg="Expected directories not present %s" % result.output)
 
     def test_wic_cp_ext(self):
         """Test copy files and directories to the ext partition."""
@@ -1462,7 +1640,7 @@ class ModifyTests(WicTestCase):
         # list directory content of the ext4 partition
         result = runCmd("wic ls %s:2/ -n %s" % (images[0], sysroot))
         dirs = set(line.split()[-1] for line in result.output.split('\n') if line)
-        self.assertTrue(set(['bin', 'home', 'proc', 'usr', 'var', 'dev', 'lib', 'sbin']).issubset(dirs))
+        self.assertTrue(set(['bin', 'home', 'proc', 'usr', 'var', 'dev', 'lib', 'sbin']).issubset(dirs), msg="Expected directories not present %s" % dirs)
 
         with NamedTemporaryFile("w", suffix=".wic-cp") as testfile:
             testfile.write("test")
@@ -1477,12 +1655,12 @@ class ModifyTests(WicTestCase):
 
             # check if the file to copy is in the partition
             result = runCmd("wic ls %s:2/etc/ -n %s" % (images[0], sysroot))
-            self.assertTrue('fstab' in [line.split()[-1] for line in result.output.split('\n') if line])
+            self.assertIn('fstab', [line.split()[-1] for line in result.output.split('\n') if line])
 
             # copy file from the partition, replace the temporary file content with it and
             # check for the file size to validate the copy
             runCmd("wic cp %s:2/etc/fstab %s -n %s" % (images[0], testfile.name, sysroot))
-            self.assertTrue(os.stat(testfile.name).st_size > 0)
+            self.assertTrue(os.stat(testfile.name).st_size > 0, msg="Filesize not as expected %s" % os.stat(testfile.name).st_size)
 
 
     def test_wic_rm_ext(self):
@@ -1497,18 +1675,18 @@ class ModifyTests(WicTestCase):
 
         # list directory content of the /etc directory on ext4 partition
         result = runCmd("wic ls %s:2/etc/ -n %s" % (images[0], sysroot))
-        self.assertTrue('fstab' in [line.split()[-1] for line in result.output.split('\n') if line])
+        self.assertIn('fstab', [line.split()[-1] for line in result.output.split('\n') if line])
 
         # remove file
         runCmd("wic rm %s:2/etc/fstab -n %s" % (images[0], sysroot))
 
         # check if it's removed
         result = runCmd("wic ls %s:2/etc/ -n %s" % (images[0], sysroot))
-        self.assertTrue('fstab' not in [line.split()[-1] for line in result.output.split('\n') if line])
+        self.assertNotIn('fstab', [line.split()[-1] for line in result.output.split('\n') if line])
 
         # remove non-empty directory
         runCmd("wic rm -r %s:2/etc/ -n %s" % (images[0], sysroot))
 
         # check if it's removed
         result = runCmd("wic ls %s:2/ -n %s" % (images[0], sysroot))
-        self.assertTrue('etc' not in [line.split()[-1] for line in result.output.split('\n') if line])
+        self.assertNotIn('etc', [line.split()[-1] for line in result.output.split('\n') if line])

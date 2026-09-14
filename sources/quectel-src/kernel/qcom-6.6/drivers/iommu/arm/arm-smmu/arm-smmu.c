@@ -388,6 +388,24 @@ static const struct iommu_flush_ops arm_smmu_s2_tlb_ops_v1 = {
 	.tlb_add_page	= arm_smmu_tlb_add_page_s2_v1,
 };
 
+int arm_smmu_get_first_dev(struct device *dev, void *data)
+{
+	struct device **fault_dev = data;
+	*fault_dev = dev;
+
+	return 1;
+}
+
+struct iommu_group *arm_smmu_find_group_by_cbndx(struct arm_smmu_device *smmu, int cbndx)
+{
+	for (int i = 0; i < smmu->num_mapping_groups; i++) {
+		if (smmu->s2crs[i].cbndx == cbndx)
+			return smmu->s2crs[i].group;
+	}
+
+	return NULL;
+}
+
 static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 {
 	u32 fsr, fsynr, cbfrsynra;
@@ -396,11 +414,32 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 	struct arm_smmu_domain *smmu_domain = to_smmu_domain(domain);
 	struct arm_smmu_device *smmu = smmu_domain->smmu;
 	int idx = smmu_domain->cfg.cbndx;
+	struct iommu_group *group;
+	struct device *fault_dev = NULL;
 	int ret;
+	bool rpm_held = false;
+	bool in_atomic;
 
-	ret = arm_smmu_rpm_get(smmu);
-	if (ret < 0)
-		return IRQ_NONE;
+	/*
+	 * Debug: same atomic-context guard as global_fault. The spurious
+	 * IRQ poller can re-enter this shared IRQ handler in softirq context
+	 * where rpm_get() -> schedule() is illegal.
+	 */
+	in_atomic = !preemptible() || irqs_disabled();
+	dev_dbg(smmu->dev,
+		"context_fault: irq=%d cb=%d preempt_cnt=0x%x in_atomic=%d pm_enabled=%d\n",
+		irq, idx, preempt_count(), in_atomic, pm_runtime_enabled(smmu->dev));
+
+	if (!in_atomic) {
+		ret = arm_smmu_rpm_get(smmu);
+		if (ret < 0)
+			return IRQ_NONE;
+		rpm_held = true;
+	} else {
+		dev_dbg_ratelimited(smmu->dev,
+			"context_fault: atomic ctx, skipping rpm_resume (cb=%d preempt_cnt=0x%x)\n",
+			idx, preempt_count());
+	}
 
 	if (smmu->impl && smmu->impl->context_fault) {
 		ret = smmu->impl->context_fault(irq, dev);
@@ -408,26 +447,33 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 	}
 
 	fsr = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_FSR);
-	if (!(fsr & ARM_SMMU_FSR_FAULT))
-		return IRQ_NONE;
+	if (!(fsr & ARM_SMMU_FSR_FAULT)) {
+		ret = IRQ_NONE;
+		goto out_power_off;
+	}
 
 	fsynr = arm_smmu_cb_read(smmu, idx, ARM_SMMU_CB_FSYNR0);
 	iova = arm_smmu_cb_readq(smmu, idx, ARM_SMMU_CB_FAR);
 	cbfrsynra = arm_smmu_gr1_read(smmu, ARM_SMMU_GR1_CBFRSYNRA(idx));
 
-	ret = report_iommu_fault(domain, NULL, iova,
+	group = arm_smmu_find_group_by_cbndx(smmu, idx);
+	if (group)
+		iommu_group_for_each_dev(group, &fault_dev, arm_smmu_get_first_dev);
+
+	ret = report_iommu_fault(domain, fault_dev, iova,
 		fsynr & ARM_SMMU_FSYNR0_WNR ? IOMMU_FAULT_WRITE : IOMMU_FAULT_READ);
 
 	if (ret == -ENOSYS)
 		dev_err_ratelimited(smmu->dev,
-		"Unhandled context fault: fsr=0x%x, iova=0x%08lx, fsynr=0x%x, cbfrsynra=0x%x, cb=%d\n",
-			    fsr, iova, fsynr, cbfrsynra, idx);
+	"Unhandled context fault: fsr=0x%x, iova=0x%08lx, fsynr=0x%x, cbfrsynra=0x%x, cb=%d\n",
+		    fsr, iova, fsynr, cbfrsynra, idx);
 
 	arm_smmu_cb_write(smmu, idx, ARM_SMMU_CB_FSR, fsr);
-
 	ret = IRQ_HANDLED;
+
 out_power_off:
-	arm_smmu_rpm_put(smmu);
+	if (rpm_held)
+		arm_smmu_rpm_put(smmu);
 	return ret;
 }
 
@@ -438,18 +484,51 @@ static irqreturn_t arm_smmu_global_fault(int irq, void *dev)
 	static DEFINE_RATELIMIT_STATE(rs, DEFAULT_RATELIMIT_INTERVAL,
 				      DEFAULT_RATELIMIT_BURST);
 	int ret;
+	bool rpm_held = false;
+	bool in_atomic;
 
-	ret = arm_smmu_rpm_get(smmu);
-	if (ret < 0)
-		return IRQ_NONE;
+	/*
+	 * Debug: capture entry context. spurious.c poll_spurious_irqs() runs
+	 * in a timer softirq (atomic) and re-invokes shared IRQ handlers;
+	 * rpm_get() below calls pm_runtime_resume_and_get() -> rpm_resume()
+	 * -> schedule(), which is forbidden in atomic context and was the
+	 * root cause of the "scheduling while atomic" panic.
+	 */
+	in_atomic = !preemptible() || irqs_disabled();
+	dev_dbg(smmu->dev,
+		"global_fault: irq=%d preempt_cnt=0x%x in_atomic=%d pm_enabled=%d\n",
+		irq, preempt_count(), in_atomic, pm_runtime_enabled(smmu->dev));
+
+	/*
+	 * Only do the runtime-PM resume dance when we are allowed to sleep.
+	 * In atomic context (real IRQ or spurious IRQ poll) skip resume and
+	 * read registers directly; the SMMU clock is expected to be on while
+	 * a fault IRQ is pending. This avoids calling schedule() from an
+	 * IRQ handler, which previously triggered:
+	 *   BUG: scheduling while atomic: swapper/1/0/0x00000102
+	 *   -> rpm_resume -> schedule -> __schedule_bug
+	 *   -> pc=0x0 (NULL callback) -> IABT -> Kernel panic
+	 */
+	if (!in_atomic) {
+		ret = arm_smmu_rpm_get(smmu);
+		if (ret < 0)
+			return IRQ_NONE;
+		rpm_held = true;
+	} else {
+		dev_dbg_ratelimited(smmu->dev,
+			"global_fault: atomic ctx, skipping rpm_resume (preempt_cnt=0x%x)\n",
+			preempt_count());
+	}
 
 	gfsr = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_sGFSR);
 	gfsynr0 = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_sGFSYNR0);
 	gfsynr1 = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_sGFSYNR1);
 	gfsynr2 = arm_smmu_gr0_read(smmu, ARM_SMMU_GR0_sGFSYNR2);
 
-	if (!gfsr)
-		return IRQ_NONE;
+	if (!gfsr) {
+		ret = IRQ_NONE;
+		goto out_power_off;
+	}
 
 	if (__ratelimit(&rs)) {
 		if (IS_ENABLED(CONFIG_ARM_SMMU_DISABLE_BYPASS_BY_DEFAULT) &&
@@ -461,13 +540,17 @@ static irqreturn_t arm_smmu_global_fault(int irq, void *dev)
 			dev_err(smmu->dev,
 				"Unexpected global fault, this could be serious\n");
 		dev_err(smmu->dev,
-			"\tGFSR 0x%08x, GFSYNR0 0x%08x, GFSYNR1 0x%08x, GFSYNR2 0x%08x\n",
+			"	GFSR 0x%08x, GFSYNR0 0x%08x, GFSYNR1 0x%08x, GFSYNR2 0x%08x\n",
 			gfsr, gfsynr0, gfsynr1, gfsynr2);
 	}
 
 	arm_smmu_gr0_write(smmu, ARM_SMMU_GR0_sGFSR, gfsr);
-	arm_smmu_rpm_put(smmu);
-	return IRQ_HANDLED;
+	ret = IRQ_HANDLED;
+
+out_power_off:
+	if (rpm_held)
+		arm_smmu_rpm_put(smmu);
+	return ret;
 }
 
 static void arm_smmu_init_context_bank(struct arm_smmu_domain *smmu_domain,

@@ -44,6 +44,7 @@ class OETestResult(_TestResult):
         self.endtime = {}
         self.progressinfo = {}
         self.extraresults = {}
+        self.shownmsg = []
 
         # Inject into tc so that TestDepends decorator can see results
         tc.results = self
@@ -74,6 +75,7 @@ class OETestResult(_TestResult):
             for (scase, msg) in getattr(self, t):
                 if test.id() == scase.id():
                     self.tc.logger.info(str(msg))
+                    self.shownmsg.append(test.id())
                     break
 
     def logSummary(self, component, context_msg=''):
@@ -169,7 +171,6 @@ class OETestResult(_TestResult):
 
     def logDetails(self, json_file_dir=None, configuration=None, result_id=None,
             dump_streams=False):
-        self.tc.logger.info("RESULTS:")
 
         result = self.extraresults
         logs = {}
@@ -193,6 +194,10 @@ class OETestResult(_TestResult):
             report = {'status': status}
             if log:
                 report['log'] = log
+                # Class setup failures wouldn't enter stopTest so would never display
+                if case.id() not in self.shownmsg:
+                    self.tc.logger.info("Failure (%s) for %s:\n" % (status, case.id()) + log)
+
             if duration:
                 report['duration'] = duration
 
@@ -215,6 +220,7 @@ class OETestResult(_TestResult):
                 report['stderr'] = stderr
             result[case.id()] = report
 
+        self.tc.logger.info("RESULTS:")
         for i in ['PASSED', 'SKIPPED', 'EXPECTEDFAIL', 'ERROR', 'FAILED', 'UNKNOWN']:
             if i not in logs:
                 continue
@@ -228,6 +234,10 @@ class OETestResult(_TestResult):
     def wasSuccessful(self):
         # Override as we unexpected successes aren't failures for us
         return (len(self.failures) == len(self.errors) == 0)
+
+    def hasAnyFailingTest(self):
+        # Account for expected failures
+        return not self.wasSuccessful() or len(self.expectedFailures)
 
 class OEListTestsResult(object):
     def wasSuccessful(self):
@@ -347,7 +357,7 @@ class OETestResultJSONHelper(object):
             os.makedirs(write_dir, exist_ok=True)
         test_results = self._get_existing_testresults_if_available(write_dir)
         test_results[result_id] = {'configuration': configuration, 'result': test_result}
-        json_testresults = json.dumps(test_results, sort_keys=True, indent=4)
+        json_testresults = json.dumps(test_results, sort_keys=True, indent=1)
         self._write_file(write_dir, self.testresult_filename, json_testresults)
         if has_bb:
             bb.utils.unlockfile(lf)

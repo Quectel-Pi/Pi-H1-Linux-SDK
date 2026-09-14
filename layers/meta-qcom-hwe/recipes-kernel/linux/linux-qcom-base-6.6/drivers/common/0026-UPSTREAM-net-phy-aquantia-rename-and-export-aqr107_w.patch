@@ -1,0 +1,62 @@
+From 4e75d09eff4818e1a6109a41a84a3e1cd965b68e Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Date: Mon, 8 Jul 2024 09:50:20 +0200
+Subject: [PATCH 26/39] UPSTREAM: net: phy: aquantia: rename and export
+ aqr107_wait_reset_complete()
+
+This function is quite generic in this driver and not limited to aqr107.
+We will use it outside its current compilation unit soon so rename it
+and declare it in the header.
+
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 663117327a39d1ad8be79d3c6451173c37e97c56]
+---
+ drivers/net/phy/aquantia/aquantia.h      | 2 ++
+ drivers/net/phy/aquantia/aquantia_main.c | 6 +++---
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/phy/aquantia/aquantia.h b/drivers/net/phy/aquantia/aquantia.h
+index 0bca28ec3332..2465345081f8 100644
+--- a/drivers/net/phy/aquantia/aquantia.h
++++ b/drivers/net/phy/aquantia/aquantia.h
+@@ -201,4 +201,6 @@ int aqr_phy_led_hw_control_set(struct phy_device *phydev, u8 index,
+ int aqr_phy_led_active_low_set(struct phy_device *phydev, int index, bool enable);
+ int aqr_phy_led_polarity_set(struct phy_device *phydev, int index,
+ 			     unsigned long modes);
++int aqr_wait_reset_complete(struct phy_device *phydev);
++
+ #endif /* AQUANTIA_H */
+diff --git a/drivers/net/phy/aquantia/aquantia_main.c b/drivers/net/phy/aquantia/aquantia_main.c
+index 6c14355744b7..974795bd0860 100644
+--- a/drivers/net/phy/aquantia/aquantia_main.c
++++ b/drivers/net/phy/aquantia/aquantia_main.c
+@@ -441,7 +441,7 @@ static int aqr107_set_tunable(struct phy_device *phydev,
+  * The chip also provides a "reset completed" bit, but it's cleared after
+  * read. Therefore function would time out if called again.
+  */
+-static int aqr107_wait_reset_complete(struct phy_device *phydev)
++int aqr_wait_reset_complete(struct phy_device *phydev)
+ {
+ 	int val;
+ 
+@@ -494,7 +494,7 @@ static int aqr107_config_init(struct phy_device *phydev)
+ 	WARN(phydev->interface == PHY_INTERFACE_MODE_XGMII,
+ 	     "Your devicetree is out of date, please update it. The AQR107 family doesn't support XGMII, maybe you mean USXGMII.\n");
+ 
+-	ret = aqr107_wait_reset_complete(phydev);
++	ret = aqr_wait_reset_complete(phydev);
+ 	if (!ret)
+ 		aqr107_chip_info(phydev);
+ 
+@@ -522,7 +522,7 @@ static int aqcs109_config_init(struct phy_device *phydev)
+ 	    phydev->interface != PHY_INTERFACE_MODE_2500BASEX)
+ 		return -ENODEV;
+ 
+-	ret = aqr107_wait_reset_complete(phydev);
++	ret = aqr_wait_reset_complete(phydev);
+ 	if (!ret)
+ 		aqr107_chip_info(phydev);
+ 
+-- 
+2.34.1
+

@@ -1,0 +1,88 @@
+From 0d7249addc24abd868ee9850ef2f4077ccd84c18 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@eng.windriver.com>
+Date: Thu, 1 Dec 2022 23:10:37 +0800
+Subject: [PATCH] hardcode go SDKS
+
+If sdks was unspecified, download a full list of files.
+Even if version was specified, we need to download the file list
+to find the SHA-256 sum. If we don't have it, Bazel won't cache
+the downloaded archive.
+
+But for Yocto, in order to support offline build ,we need to cache
+downloaded archive, so hardcode go SDKS list files rather than
+fetch from internet
+
+Upstream-Status: Inappropriate [Yocto specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@eng.windriver.com>
+---
+ tensorflow/workspace2.bzl               |  1 +
+ third_party/0001-hardcode-go-SDKS.patch | 47 +++++++++++++++++++++++++
+ 2 files changed, 48 insertions(+)
+ create mode 100644 third_party/0001-hardcode-go-SDKS.patch
+
+diff --git a/tensorflow/workspace2.bzl b/tensorflow/workspace2.bzl
+index 9e15c75c183..3ef4a544f1a 100644
+--- a/tensorflow/workspace2.bzl
++++ b/tensorflow/workspace2.bzl
+@@ -805,6 +805,7 @@ def _tf_repositories():
+     #   - patch upb so that it's compatible with Bazel 6.0, the latest version of upb doesn't work with the old grpc version.
+     tf_http_archive(
+         name = "io_bazel_rules_go",
++        patch_file = ["//third_party:0001-hardcode-go-SDKS.patch"],
+         sha256 = "16e9fca53ed6bd4ff4ad76facc9b7b651a89db1689a2877d6fd7b82aa824e366",
+         urls = tf_mirror_urls("https://github.com/bazelbuild/rules_go/releases/download/v0.34.0/rules_go-v0.34.0.zip"),
+     )
+diff --git a/third_party/0001-hardcode-go-SDKS.patch b/third_party/0001-hardcode-go-SDKS.patch
+new file mode 100644
+index 00000000000..b66926be35d
+--- /dev/null
++++ b/third_party/0001-hardcode-go-SDKS.patch
+@@ -0,0 +1,47 @@
++From 34242e73f76eff09ee33152c58c3be650331b7ff Mon Sep 17 00:00:00 2001
++From: Hongxu Jia <hongxu.jia@eng.windriver.com>
++Date: Thu, 1 Dec 2022 15:07:10 +0000
++Subject: [PATCH] hardcode go SDKS
++
++If sdks was unspecified, download a full list of files.
++Even if version was specified, we need to download the file list
++to find the SHA-256 sum. If we don't have it, Bazel won't cache
++the downloaded archive.
++
++But for Yocto, in order to support offline build ,we need to cache
++downloaded archive, so hardcode go SDKS list files rather than
++fetch from internet
++
++Signed-off-by: Hongxu Jia <hongxu.jia@eng.windriver.com>
++---
++ go/private/sdk.bzl | 7 +++++++
++ 1 file changed, 7 insertions(+)
++
++diff --git a/go/private/sdk.bzl b/go/private/sdk.bzl
++index ee53cb0..3cb57ac 100755
++--- a/go/private/sdk.bzl
+++++ b/go/private/sdk.bzl
++@@ -43,6 +43,12 @@ def go_host_sdk(name, register_toolchains = True, **kwargs):
++     if register_toolchains:
++         _register_toolchains(name)
++ 
+++GO_SDKS = {
+++ "linux_amd64": ("go1.18.4.linux-amd64.tar.gz", "c9b099b68d93f5c5c8a8844a89f8db07eaa58270e3a1e01804f17f4cf8df02f5"),
+++ "linux_arm64": ("go1.18.4.linux-arm64.tar.gz", "35014d92b50d97da41dade965df7ebeb9a715da600206aa59ce1b2d05527421f"),
+++ "linux_armv6l": ("go1.18.4.linux-armv6l.tar.gz", "7dfeab572e49638b0f3d9901457f0622c27b73301c2b99db9f5e9568ff40460c")
+++}
+++
++ def _go_download_sdk_impl(ctx):
++     if not ctx.attr.goos and not ctx.attr.goarch:
++         goos, goarch = _detect_host_platform(ctx)
++@@ -431,6 +437,7 @@ def go_register_toolchains(version = None, nogo = None, go_version = None):
++             go_download_sdk(
++                 name = "go_sdk",
++                 version = version,
+++                sdks = GO_SDKS,
++             )
++ 
++     if nogo:
++-- 
++2.32.0
++

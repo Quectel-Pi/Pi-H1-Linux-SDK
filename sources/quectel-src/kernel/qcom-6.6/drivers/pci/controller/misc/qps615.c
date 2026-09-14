@@ -1,15 +1,12 @@
 // SPDX-License-Identifier: GPL-2.0-only
 
 /* Copyright (c) 2023-2024 Qualcomm Innovation Center, Inc. All rights reserved. */
+/* Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries. */
 
 #include <linux/firmware.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/pci.h>
-#if 1 //Add by Quectel
-#include <linux/delay.h>
-#include <linux/debugfs.h>
-#endif
 
 #define DRV_NAME		"qps615-switch-i2c"
 
@@ -19,36 +16,11 @@ struct pcie_switch_i2c_setting {
 	u32 val;
 };
 
-#if 1 //Add by Quectel
-struct pcie_i2c_reg_update {
-	u32 offset;
-	u32 val;
-};
-#endif
-
 struct qps615_switch_i2c {
 	struct i2c_client *client;
 	struct regulator *vdda;
-
-#if 1 //Add by Quectel
-	struct regulator_bulk_data supplies[2];
-
-	/* client specific register info */
-	u32 gpio_config_reg;
-	u32 ep_reset_reg;
-	u32 ep_reset_gpio_mask;
-	u32 ep_reset_ms;
-	u32 *dump_regs;
-	u32 dump_reg_count;
-	struct pcie_i2c_reg_update *reg_update;
-	u32 reg_update_count;
-
-	/* client specific callbacks */
-	int (*client_i2c_read)(struct i2c_client *client, u32 reg_addr,
-			       u32 *val);
-	int (*client_i2c_write)(struct i2c_client *client, u32 reg_addr,
-				u32 val);
-#endif
+	u8 *fw_data;
+	size_t size;
 };
 
 static const struct of_device_id qps615_switch_of_match[] = {
@@ -119,153 +91,37 @@ static int qps615_switch_i2c_read(struct i2c_client *client, u32 slv_addr, u32 r
 	return 0;
 }
 
-#if 1 //Add by Quectel
-/* write 32-bit value to 24 bit register */
-static int ntn3_i2c_write(struct i2c_client *client, u32 reg_addr, u32 reg_val)
-{
-	int ret;
-
-	ret = qps615_switch_i2c_write(client, 0x77, reg_addr, reg_val);
-	if (ret) {
-		dev_err(&client->dev,
-			"qps615 I2c write failed for slv addr:%x at addr:%x with val %x ret %d\n",
-			client->addr, reg_addr, reg_val, ret);
-	}
-	return ret;
-}
-
-/* read 32 bit value from 24 bit reg addr */
-static int ntn3_i2c_read(struct i2c_client *client, u32 reg_addr, u32 *reg_val)
-{
-	int ret;
-
-	ret = qps615_switch_i2c_read(client, 0x77, reg_addr, reg_val);
-	if (ret) {
-		dev_err(&client->dev,
-			"qps615 I2c read failed for slv addr:%x at addr:%x with val %x ret %d\n",
-			client->addr, reg_addr, *reg_val, ret);
-	}
-	return ret;
-}
-
-static int ntn3_dump_regs(struct seq_file *s, void *data)
-{
-	struct qps615_switch_i2c *i2c_ctrl = (struct qps615_switch_i2c *)dev_get_drvdata(s->private);
-	int i, val;
-
-	if (!i2c_ctrl->client_i2c_read || !i2c_ctrl->dump_reg_count)
-		return 0;
-
-	for (i = 0; i < i2c_ctrl->dump_reg_count; i++) {
-		if (i2c_ctrl->client_i2c_read(i2c_ctrl->client,
-					  i2c_ctrl->dump_regs[i], &val))
-			break;
-		seq_printf(s, "%08x %08x\n", i2c_ctrl->dump_regs[i], val);
-	}
-
-	return 0;
-}
-
-static int qps615_gpio_set_value(struct i2c_client *client, int gpio_mask, int value) {
-	int ret, rd_val, wr_val;
-	struct qps615_switch_i2c *i2c_ctrl = i2c_get_clientdata(client);
-
-	/* set NTN3 GPIO as output */
-	ret = i2c_ctrl->client_i2c_read(client, i2c_ctrl->gpio_config_reg, &rd_val);
-	if (ret) {
-		return ret;
-	}
-
-	wr_val = rd_val & ~gpio_mask;
-	if (wr_val != rd_val) {
-		i2c_ctrl->client_i2c_write(client, i2c_ctrl->gpio_config_reg, wr_val);
-
-		/* read back to flush write - config gpio */
-		ret = i2c_ctrl->client_i2c_read(client, i2c_ctrl->gpio_config_reg, &rd_val);
-		if (ret) {
-			return ret;
-		}
-	}
-
-	ret = i2c_ctrl->client_i2c_read(client, i2c_ctrl->ep_reset_reg, &rd_val);
-	if (ret) {
-		return ret;
-	}
-
-	if (value)
-		wr_val = rd_val | gpio_mask;
-	else
-		wr_val = rd_val & ~gpio_mask;
-	if (wr_val != rd_val) {
-		ret = i2c_ctrl->client_i2c_write(client, i2c_ctrl->ep_reset_reg, wr_val);
-
-		/* read back to flush write - reset gpio */
-		ret = i2c_ctrl->client_i2c_read(client, i2c_ctrl->ep_reset_reg, &rd_val);
-	}
-
-	return ret;
-}
-
-int qps615_switch_init_from_pcie(struct i2c_client *client) {
-	int i, val, ret;
-	struct qps615_switch_i2c *i2c_ctrl = i2c_get_clientdata(client);
-
-	for (i = 0; i < i2c_ctrl->reg_update_count; i++) {
-		val = i2c_ctrl->reg_update[i].val;
-		if (i2c_ctrl->client_i2c_write(client, i2c_ctrl->reg_update[i].offset, val))
-			break;
-		/*Read to make sure writes are completed*/
-		if (i2c_ctrl->client_i2c_read(client, i2c_ctrl->reg_update[i].offset, &val))
-			break;
-	}
-
-	qps615_gpio_set_value(client, i2c_ctrl->ep_reset_gpio_mask, 0);
-
-	ret = regulator_bulk_enable(ARRAY_SIZE(i2c_ctrl->supplies), i2c_ctrl->supplies);
-	if (ret < 0) {
-		dev_err(&client->dev, "cannot enable regulators\n");
-		return ret;
-	}
-	msleep(i2c_ctrl->ep_reset_ms);
-
-	qps615_gpio_set_value(client, i2c_ctrl->ep_reset_gpio_mask, 1);
-
-	return ret;
-}
-#endif
-
 /*
  * QPS615 switch uses i2c interface to configure its internal registers.
  * The sequence of register writes though i2c is requested through
  * request_firmware API. This firmware bin is parsed and i2c writes
  * are performed to initialize the QPS615 switch.
  */
-int qps615_switch_init(struct i2c_client *client)
+int qps615_switch_init(struct i2c_client *client, struct qps615_switch_i2c *qps615)
 {
-	const struct firmware *fw;
 	struct pcie_switch_i2c_setting *set;
-	int ret;
-	u32 val;
 	const u8 *pos, *eof;
+	int ret = 0;
+	u32 val;
 
-	if (!client)
+	if (!client || !qps615)
+		return -EINVAL;
+
+	if (qps615->size % sizeof(struct pcie_switch_i2c_setting) != 0) {
+		dev_err(&client->dev, "Invalid firmware format: size %zu is not a multiple of %zu\n",
+			qps615->size, sizeof(struct pcie_switch_i2c_setting));
+		return -EINVAL;
+	}
+
+	if (qps615->fw_data && qps615->size) {
+		pos = qps615->fw_data;
+		eof = qps615->fw_data + qps615->size;
+	} else {
+		dev_err(&client->dev, "No FW data found, continue without I2C configs\n");
 		return 0;
-
-	ret = request_firmware(&fw, "qcom/qps615.bin", &client->dev);
-	if (ret < 0) {
-		dev_err(&client->dev, "firmware loading failed with ret %d\n", ret);
-		return ret;
 	}
 
-	if (!fw) {
-		ret = -EINVAL;
-		goto err;
-	}
-
-	pos = fw->data;
-	eof = fw->data + fw->size;
-
-	while (pos < (fw->data + fw->size)) {
+	while (pos < (qps615->fw_data + qps615->size)) {
 		set = (struct pcie_switch_i2c_setting *)pos;
 
 		ret = qps615_switch_i2c_write(client, set->slv_addr, set->reg_addr, set->val);
@@ -293,7 +149,6 @@ int qps615_switch_init(struct i2c_client *client)
 	}
 
 err:
-	release_firmware(fw);
 
 	return ret;
 }
@@ -303,27 +158,21 @@ static void qps615_power_on(struct i2c_client *client)
 	struct qps615_switch_i2c *qps615 = i2c_get_clientdata(client);
 	int ret;
 
-#if 1 //Add by Quectel
-	if (!qps615->vdda)
-		return;
-#endif
-
 	ret = regulator_enable(qps615->vdda);
-	if (ret)
+	if (ret) {
 		dev_err(&client->dev, "cannot enable vdda regulator\n");
+		return;
+	}
 
-	qps615_switch_init(client);
+	ret = qps615_switch_init(client, qps615);
+	if (ret)
+		dev_err(&client->dev, "switch initialization failed: %d\n", ret);
 }
 
 static int qps615_suspend_noirq(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct qps615_switch_i2c *qps615 = i2c_get_clientdata(client);
-
-#if 1 //Add by Quectel
-	if (!qps615->vdda)
-		return 0;
-#endif
 
 	/* disable power of qps615 switch */
 	regulator_disable(qps615->vdda);
@@ -341,10 +190,8 @@ static int qps615_resume_noirq(struct device *dev)
 static int qps615_switch_probe(struct i2c_client *client)
 {
 	struct qps615_switch_i2c *qps615;
+	const struct firmware *fw;
 	int ret;
-#if 1 //Add by Quectel
-	int size;
-#endif
 
 	qps615 = devm_kzalloc(&client->dev, sizeof(*qps615), GFP_KERNEL);
 	if (!qps615)
@@ -354,68 +201,42 @@ static int qps615_switch_probe(struct i2c_client *client)
 
 	i2c_set_clientdata(client, qps615);
 
-#if 1 //Add by Quectel
-	qps615->supplies[0].supply = "vddpe0";
-	qps615->supplies[1].supply = "vddpe1";
-	ret = devm_regulator_bulk_get(&client->dev, ARRAY_SIZE(qps615->supplies),
-				      qps615->supplies);
+	qps615->vdda = devm_regulator_get(&client->dev, "vdda");
+	if (IS_ERR(qps615->vdda)) {
+		dev_err(&client->dev, "Failed to get vdda regulator\n");
+		return PTR_ERR(qps615->vdda);
+	}
+
+	ret = regulator_enable(qps615->vdda);
 	if (ret) {
-		dev_err(&client->dev, "cannot get  vddpe regulator\n");
+		dev_err(&client->dev, "cannot enable vdda regulator\n");
 		return ret;
 	}
 
-	of_property_read_u32(client->dev.of_node, "gpio-config-reg",
-			     &qps615->gpio_config_reg);
-	of_property_read_u32(client->dev.of_node, "ep-reset-reg",
-			     &qps615->ep_reset_reg);
-	of_property_read_u32(client->dev.of_node, "ep-reset-gpio-mask",
-			     &qps615->ep_reset_gpio_mask);
-	of_property_read_u32(client->dev.of_node, "ep-reset-ms",
-			     &qps615->ep_reset_ms);
-	if (of_get_property(client->dev.of_node, "dump-regs", &size)) {
-		qps615->dump_regs = devm_kzalloc(&client->dev, size, GFP_KERNEL);
-		if (!qps615->dump_regs)
-			return -ENOMEM;
-
-		qps615->dump_reg_count = size / sizeof(*qps615->dump_regs);
-
-		ret = of_property_read_u32_array(client->dev.of_node, "dump-regs",
-						 qps615->dump_regs,
-						 qps615->dump_reg_count);
-		if (ret)
-			qps615->dump_reg_count = 0;
-	}
-	if (of_get_property(client->dev.of_node, "reg_update", &size)) {
-		qps615->reg_update = devm_kzalloc(&client->dev, size, GFP_KERNEL);
-		if (!qps615->reg_update)
-			return -ENOMEM;
-
-		qps615->reg_update_count = size / sizeof(*qps615->reg_update);
-
-		ret = of_property_read_u32_array(client->dev.of_node,
-						"reg_update",
-						(unsigned int *)qps615->reg_update,
-						size/sizeof(qps615->reg_update->offset));
-		if (ret)
-			qps615->reg_update_count = 0;
-	}
-	qps615->client_i2c_read = ntn3_i2c_read;
-	qps615->client_i2c_write = ntn3_i2c_write;
-	if (qps615->dump_reg_count) {
-		debugfs_create_devm_seqfile(&client->dev, "qps615_reg_dump", NULL, ntn3_dump_regs);
+	ret = request_firmware(&fw, "qcom/qps615.bin", &client->dev);
+	if (ret < 0) {
+		dev_err(&client->dev, "firmware loading failed with ret %d, continue without it\n",
+			ret);
+		goto skip_firmware;
 	}
 
-	if (!of_get_child_by_name(client->dev.of_node, "vdda-supply"))
-		return 0;
-#endif
+	qps615->fw_data = devm_kzalloc(&client->dev, fw->size, GFP_KERNEL);
+	if (!qps615->fw_data) {
+		release_firmware(fw);
+		return -ENOMEM;
+	}
 
-	qps615->vdda = devm_regulator_get(&client->dev, "vdda");
+	memcpy(qps615->fw_data, fw->data, fw->size);
+	qps615->size = fw->size;
 
-	ret = regulator_enable(qps615->vdda);
-	if (ret)
-		dev_err(&client->dev, "cannot enable vdda regulator\n");
+	release_firmware(fw);
 
-	qps615_switch_init(client);
+	/*
+	 * Do not fail the probe if qps615_switch_init() fails.
+	 * The switch remains functional even without I2C writes.
+	 */
+	qps615_switch_init(client, qps615);
+skip_firmware:
 	return 0;
 }
 

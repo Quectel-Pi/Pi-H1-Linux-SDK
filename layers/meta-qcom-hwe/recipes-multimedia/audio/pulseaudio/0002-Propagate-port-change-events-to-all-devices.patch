@@ -16,7 +16,7 @@ Subject: [PATCH 2/6] Propagate port change events to all devices
 * Poll through the sink/source list, identify and propagate the
   port change to all the required sink/source.
 
-Change-Id: Id9ef8318dc8c432d1e6f750c072c090ef306f208
+Upstream-Status: Pending
 Signed-off-by: Raveendranath Kondrakunta <quic_rkondrak@quicinc.com>
 Signed-off-by: Puneeth Prabhu <quic_pprabh@quicinc.com>
 ---

@@ -35,6 +35,26 @@ class BootimgEFIPlugin(SourcePlugin):
     name = 'bootimg-efi'
 
     @classmethod
+    def _copy_additional_files(cls, hdddir, initrd, dtb):
+        bootimg_dir = get_bitbake_var("DEPLOY_DIR_IMAGE")
+        if not bootimg_dir:
+            raise WicError("Couldn't find DEPLOY_DIR_IMAGE, exiting")
+
+        if initrd:
+            initrds = initrd.split(';')
+            for rd in initrds:
+                cp_cmd = "cp %s/%s %s" % (bootimg_dir, rd, hdddir)
+                exec_cmd(cp_cmd, True)
+        else:
+            logger.debug("Ignoring missing initrd")
+
+        if dtb:
+            if ';' in dtb:
+                raise WicError("Only one DTB supported, exiting")
+            cp_cmd = "cp %s/%s %s" % (bootimg_dir, dtb, hdddir)
+            exec_cmd(cp_cmd, True)
+
+    @classmethod
     def do_configure_grubefi(cls, hdddir, creator, cr_workdir, source_params):
         """
         Create loader-specific (grub-efi) config
@@ -53,18 +73,9 @@ class BootimgEFIPlugin(SourcePlugin):
                                "get it from %s." % configfile)
 
         initrd = source_params.get('initrd')
+        dtb = source_params.get('dtb')
 
-        if initrd:
-            bootimg_dir = get_bitbake_var("DEPLOY_DIR_IMAGE")
-            if not bootimg_dir:
-                raise WicError("Couldn't find DEPLOY_DIR_IMAGE, exiting")
-
-            initrds = initrd.split(';')
-            for rd in initrds:
-                cp_cmd = "cp %s/%s %s" % (bootimg_dir, rd, hdddir)
-                exec_cmd(cp_cmd, True)
-        else:
-            logger.debug("Ignoring missing initrd")
+        cls._copy_additional_files(hdddir, initrd, dtb)
 
         if not custom_cfg:
             # Create grub configuration using parameters from wks file
@@ -98,6 +109,9 @@ class BootimgEFIPlugin(SourcePlugin):
                     grubefi_conf += " /%s" % rd
                 grubefi_conf += "\n"
 
+            if dtb:
+                grubefi_conf += "devicetree /%s\n" % dtb
+
             grubefi_conf += "}\n"
 
         logger.debug("Writing grubefi config %s/hdd/boot/EFI/BOOT/grub.cfg",
@@ -119,25 +133,18 @@ class BootimgEFIPlugin(SourcePlugin):
 
         bootloader = creator.ks.bootloader
 
+        unified_image = source_params.get('create-unified-kernel-image') == "true"
+
         loader_conf = ""
-        if source_params.get('create-unified-kernel-image') != "true":
+        if not unified_image:
             loader_conf += "default boot\n"
         loader_conf += "timeout %d\n" % bootloader.timeout
 
         initrd = source_params.get('initrd')
+        dtb = source_params.get('dtb')
 
-        if initrd and source_params.get('create-unified-kernel-image') != "true":
-            # obviously we need to have a common common deploy var
-            bootimg_dir = get_bitbake_var("DEPLOY_DIR_IMAGE")
-            if not bootimg_dir:
-                raise WicError("Couldn't find DEPLOY_DIR_IMAGE, exiting")
-
-            initrds = initrd.split(';')
-            for rd in initrds:
-                cp_cmd = "cp %s/%s %s" % (bootimg_dir, rd, hdddir)
-                exec_cmd(cp_cmd, True)
-        else:
-            logger.debug("Ignoring missing initrd")
+        if not unified_image:
+            cls._copy_additional_files(hdddir, initrd, dtb)
 
         logger.debug("Writing systemd-boot config "
                      "%s/hdd/boot/loader/loader.conf", cr_workdir)
@@ -185,7 +192,10 @@ class BootimgEFIPlugin(SourcePlugin):
                 for rd in initrds:
                     boot_conf += "initrd /%s\n" % rd
 
-        if source_params.get('create-unified-kernel-image') != "true":
+            if dtb:
+                boot_conf += "devicetree /%s\n" % dtb
+
+        if not unified_image:
             logger.debug("Writing systemd-boot config "
                          "%s/hdd/boot/loader/entries/boot.conf", cr_workdir)
             cfg = open("%s/hdd/boot/loader/entries/boot.conf" % cr_workdir, "w")
@@ -210,6 +220,8 @@ class BootimgEFIPlugin(SourcePlugin):
                 cls.do_configure_grubefi(hdddir, creator, cr_workdir, source_params)
             elif source_params['loader'] == 'systemd-boot':
                 cls.do_configure_systemdboot(hdddir, creator, cr_workdir, source_params)
+            elif source_params['loader'] == 'uefi-kernel':
+                pass
             else:
                 raise WicError("unrecognized bootimg-efi loader: %s" % source_params['loader'])
         except KeyError:
@@ -233,7 +245,7 @@ class BootimgEFIPlugin(SourcePlugin):
 
             # list of tuples (src_name, dst_name)
             deploy_files = []
-            for src_entry in re.findall(r'[\w;\-\./\*]+', boot_files):
+            for src_entry in re.findall(r'[\w;\-\.\+/\*]+', boot_files):
                 if ';' in src_entry:
                     dst_entry = tuple(src_entry.split(';'))
                     if not dst_entry[0] or not dst_entry[1]:
@@ -328,24 +340,70 @@ class BootimgEFIPlugin(SourcePlugin):
                 staging_dir_host = get_bitbake_var("STAGING_DIR_HOST")
                 target_sys = get_bitbake_var("TARGET_SYS")
 
+                objdump_cmd = "%s-objdump" % target_sys
+                objdump_cmd += " -p %s" % efi_stub
+                objdump_cmd += " | awk '{ if ($1 == \"SectionAlignment\"){print $2} }'"
+
+                ret, align_str = exec_native_cmd(objdump_cmd, native_sysroot)
+                align = int(align_str, 16)
+
+                objdump_cmd = "%s-objdump" % target_sys
+                objdump_cmd += " -h %s | tail -2" % efi_stub
+                ret, output = exec_native_cmd(objdump_cmd, native_sysroot)
+
+                offset = int(output.split()[2], 16) + int(output.split()[3], 16)
+
+                osrel_off = offset + align - offset % align
+                osrel_path = "%s/usr/lib/os-release" % staging_dir_host
+                osrel_sz = os.stat(osrel_path).st_size
+
+                cmdline_off = osrel_off + osrel_sz
+                cmdline_off = cmdline_off + align - cmdline_off % align
+                cmdline_sz = os.stat(cmdline.name).st_size
+
+                dtb_off = cmdline_off + cmdline_sz
+                dtb_off = dtb_off + align - dtb_off % align
+
+                dtb = source_params.get('dtb')
+                if dtb:
+                    if ';' in dtb:
+                        raise WicError("Only one DTB supported, exiting")
+                    dtb_path = "%s/%s" % (deploy_dir, dtb)
+                    dtb_params = '--add-section .dtb=%s --change-section-vma .dtb=0x%x' % \
+                            (dtb_path, dtb_off)
+                    linux_off = dtb_off + os.stat(dtb_path).st_size
+                    linux_off = linux_off + align - linux_off % align
+                else:
+                    dtb_params = ''
+                    linux_off = dtb_off
+
+                linux_path = "%s/%s" % (staging_kernel_dir, kernel)
+                linux_sz = os.stat(linux_path).st_size
+
+                initrd_off = linux_off + linux_sz
+                initrd_off = initrd_off + align - initrd_off % align
+
                 # https://www.freedesktop.org/software/systemd/man/systemd-stub.html
                 objcopy_cmd = "%s-objcopy" % target_sys
                 objcopy_cmd += " --enable-deterministic-archives"
                 objcopy_cmd += " --preserve-dates"
-                objcopy_cmd += " --add-section .osrel=%s/usr/lib/os-release" % staging_dir_host
-                objcopy_cmd += " --change-section-vma .osrel=0x20000"
+                objcopy_cmd += " --add-section .osrel=%s" % osrel_path
+                objcopy_cmd += " --change-section-vma .osrel=0x%x" % osrel_off
                 objcopy_cmd += " --add-section .cmdline=%s" % cmdline.name
-                objcopy_cmd += " --change-section-vma .cmdline=0x30000"
-                objcopy_cmd += " --add-section .linux=%s/%s" % (staging_kernel_dir, kernel)
-                objcopy_cmd += " --change-section-vma .linux=0x2000000"
+                objcopy_cmd += " --change-section-vma .cmdline=0x%x" % cmdline_off
+                objcopy_cmd += dtb_params
+                objcopy_cmd += " --add-section .linux=%s" % linux_path
+                objcopy_cmd += " --change-section-vma .linux=0x%x" % linux_off
                 objcopy_cmd += " --add-section .initrd=%s" % initrd.name
-                objcopy_cmd += " --change-section-vma .initrd=0x3000000"
+                objcopy_cmd += " --change-section-vma .initrd=0x%x" % initrd_off
                 objcopy_cmd += " %s %s/EFI/Linux/linux.efi" % (efi_stub, hdddir)
+
                 exec_native_cmd(objcopy_cmd, native_sysroot)
         else:
-            install_cmd = "install -m 0644 %s/%s %s/%s" % \
-                (staging_kernel_dir, kernel, hdddir, kernel)
-            exec_cmd(install_cmd)
+            if source_params.get('install-kernel-into-boot-dir') != 'false':
+                install_cmd = "install -m 0644 %s/%s %s/%s" % \
+                    (staging_kernel_dir, kernel, hdddir, kernel)
+                exec_cmd(install_cmd)
 
         if get_bitbake_var("IMAGE_EFI_BOOT_FILES"):
             for src_path, dst_path in cls.install_task:
@@ -367,6 +425,28 @@ class BootimgEFIPlugin(SourcePlugin):
                 for mod in [x for x in os.listdir(kernel_dir) if x.startswith("systemd-")]:
                     cp_cmd = "cp %s/%s %s/EFI/BOOT/%s" % (kernel_dir, mod, hdddir, mod[8:])
                     exec_cmd(cp_cmd, True)
+            elif source_params['loader'] == 'uefi-kernel':
+                kernel = get_bitbake_var("KERNEL_IMAGETYPE")
+                if not kernel:
+                    raise WicError("Empty KERNEL_IMAGETYPE")
+                target = get_bitbake_var("TARGET_SYS")
+                if not target:
+                    raise WicError("Empty TARGET_SYS")
+
+                if re.match("x86_64", target):
+                    kernel_efi_image = "bootx64.efi"
+                elif re.match('i.86', target):
+                    kernel_efi_image = "bootia32.efi"
+                elif re.match('aarch64', target):
+                    kernel_efi_image = "bootaa64.efi"
+                elif re.match('arm', target):
+                    kernel_efi_image = "bootarm.efi"
+                else:
+                    raise WicError("UEFI stub kernel is incompatible with target %s" % target)
+
+                for mod in [x for x in os.listdir(kernel_dir) if x.startswith(kernel)]:
+                    cp_cmd = "cp %s/%s %s/EFI/BOOT/%s" % (kernel_dir, mod, hdddir, kernel_efi_image)
+                    exec_cmd(cp_cmd, True)
             else:
                 raise WicError("unrecognized bootimg-efi loader: %s" %
                                source_params['loader'])
@@ -377,6 +457,11 @@ class BootimgEFIPlugin(SourcePlugin):
         if os.path.exists(startup):
             cp_cmd = "cp %s %s/" % (startup, hdddir)
             exec_cmd(cp_cmd, True)
+
+        for paths in part.include_path or []:
+            for path in paths:
+                cp_cmd = "cp -r %s %s/" % (path, hdddir)
+                exec_cmd(cp_cmd, True)
 
         du_cmd = "du -bks %s" % hdddir
         out = exec_cmd(du_cmd)

@@ -1,13 +1,17 @@
-From 2b8aa1ea4a4d1836164c934b1ab2556a32cb5af7 Mon Sep 17 00:00:00 2001
-From: =?UTF-8?q?Andreas=20M=C3=BCller?= <schnitzeltony@gmail.com>
+From 29221ae42e424c6100b8c313d2b61801430c872d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Andreas=20M=C3=BCller=20installed=5Ftests=20is=20false?=
+ <schnitzeltony@gmail.com>
 Date: Wed, 27 Oct 2021 20:04:02 +0200
 Subject: [PATCH] meson.build: Do not add dir installed-tests when
- installed_tests is false
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
-Upstream-Status: Submitted[https://gitlab.gnome.org/GNOME/gjs/-/merge_requests/690]
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Upstream-Status: Submitted [https://gitlab.gnome.org/GNOME/gjs/-/merge_requests/690]
 
 Signed-off-by: Andreas Müller <schnitzeltony@gmail.com>
 ---
@@ -15,12 +19,12 @@ Signed-off-by: Andreas Müller <schnitzeltony@gmail.com>
  1 file changed, 3 insertions(+), 1 deletion(-)
 
 diff --git a/meson.build b/meson.build
-index f5b91e0..3110530 100644
+index 3058e8c..06cf8da 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -680,7 +680,9 @@ if not get_option('skip_gtk_tests')
-     have_gtk4 = dependency('gtk4', required: false).found()
- endif
+@@ -688,7 +688,9 @@ endif
+ 
+ ### Tests and test setups ######################################################
  
 -subdir('installed-tests')
 +if get_option('installed_tests')

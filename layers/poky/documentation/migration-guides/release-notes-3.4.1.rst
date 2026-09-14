@@ -1,3 +1,5 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Release notes for 3.4.1 (honister)
 ----------------------------------
 
@@ -9,14 +11,14 @@ Known Issues in 3.4.1
 Security Fixes in 3.4.1
 ~~~~~~~~~~~~~~~~~~~~~~~
 
--  glibc: Backport fix for :cve:`2021-43396`
--  vim: add patch number to :cve:`2021-3778` patch
--  vim: fix :cve:`2021-3796`, :cve:`2021-3872`, and :cve:`2021-3875`
--  squashfs-tools: follow-up fix for :cve:`2021-41072`
+-  glibc: Backport fix for :cve_nist:`2021-43396`
+-  vim: add patch number to :cve_nist:`2021-3778` patch
+-  vim: fix :cve_nist:`2021-3796`, :cve_nist:`2021-3872`, and :cve_nist:`2021-3875`
+-  squashfs-tools: follow-up fix for :cve_nist:`2021-41072`
 -  avahi: update CVE id fixed by local-ping.patch
--  squashfs-tools: fix :cve:`2021-41072`
--  ffmpeg: fix :cve:`2021-38114`
--  curl: fix :cve:`2021-22945`, :cve:`2021-22946` and :cve:`2021-22947`
+-  squashfs-tools: fix :cve_nist:`2021-41072`
+-  ffmpeg: fix :cve_nist:`2021-38114`
+-  curl: fix :cve_nist:`2021-22945`, :cve_nist:`2021-22946` and :cve_nist:`2021-22947`
 
 Fixes in 3.4.1
 ~~~~~~~~~~~~~~
@@ -46,16 +48,16 @@ Fixes in 3.4.1
 -  bitbake: tests/fetch: Update pcre.org address after github changes
 -  bitbake: tests/runqueue: Ensure hashserv exits before deleting files
 -  bitbake: utils: Handle lockfile filenames that are too long for filesystems
--  bootchart2: Don't compile python modules
+-  bootchart2: Don't compile Python modules
 -  build-appliance-image: Update to honister head revision
 -  buildhistory: Fix package output files for SDKs
 -  busybox: 1.34.0 -> 1.34.1
 -  ca-certificates: update 20210119 -> 20211016
 -  classes/populate_sdk_base: Add setscene tasks
 -  conf: update for release 3.4
--  convert-srcuri.py: use regex to check space in SRC_URI
+-  convert-srcuri.py: use regex to check space in :term:`SRC_URI`
 -  create-spdx: Fix key errors in do_create_runtime_spdx
--  create-spdx: Protect against None from LICENSE_PATH
+-  create-spdx: Protect against None from :term:`LICENSE_PATH`
 -  create-spdx: Set the Organization field via a variable
 -  create-spdx: add create_annotation function
 -  create-spdx: cross recipes are native also
@@ -82,18 +84,18 @@ Fixes in 3.4.1
 -  insane.bbclass: Add a check for directories that are expected to be empty
 -  kernel-devsrc: Add vdso.lds and other build files for riscv64 as well
 -  libnewt: Use python3targetconfig to fix reproducibility issue
--  libpcre/libpcre2: correct SRC_URI
--  libx11-compose-data: Update LICENSE to better reflect reality
--  libx11: Update LICENSE to better reflect reality
+-  libpcre/libpcre2: correct :term:`SRC_URI`
+-  libx11-compose-data: Update :term:`LICENSE` to better reflect reality
+-  libx11: Update :term:`LICENSE` to better reflect reality
 -  libxml2: Use python3targetconfig to fix reproducibility issue
 -  linunistring: Add missing gperf-native dependency
 -  linux-firmware: upgrade to 20211027
--  linux-yocto-dev: Ensure DEPENDS matches recent 5.14 kernel changes
+-  linux-yocto-dev: Ensure :term:`DEPENDS` matches recent 5.14 kernel changes
 -  linux-yocto-rt/5.10: update to -rt54
 -  linux-yocto/5.10: update to v5.10.78
 -  linux-yocto/5.14: common-pc: enable CONFIG_ATA_PIIX as built-in
 -  linux-yocto/5.14: update to v5.14.17
--  linux-yocto: add libmpc-native to DEPENDS
+-  linux-yocto: add libmpc-native to :term:`DEPENDS`
 -  lttng-tools: replace ad hoc ptest fixup with upstream fixes
 -  manuals: releases.rst: move gatesgarth to outdated releases section
 -  mesa: Enable svga for x86 only
@@ -126,13 +128,13 @@ Fixes in 3.4.1
 -  qemu.inc: Remove empty egg-info directories before running meson
 -  recipes: Update github.com urls to use https
 -  ref-manual: Update how to set a useradd password
--  ref-manual: document "reproducible_build" class and SOURCE_DATE_EPOCH
+-  ref-manual: document "reproducible_build" class and :term:`SOURCE_DATE_EPOCH`
 -  ref-manual: document BUILD_REPRODUCIBLE_BINARIES
--  ref-manual: document TOOLCHAIN_HOST_TASK_ESDK
+-  ref-manual: document :term:`TOOLCHAIN_HOST_TASK_ESDK`
 -  ref-manual: remove meta class
 -  ref-manual: update system requirements
 -  releases.rst: fix release number for 3.3.3
--  scripts/convert-srcuri: Update SRC_URI conversion script to handle github url changes
+-  scripts/convert-srcuri: Update :term:`SRC_URI` conversion script to handle github url changes
 -  scripts/lib/wic/help.py: Update Fedora Kickstart URLs
 -  scripts/oe-package-browser: Fix after overrides change
 -  scripts/oe-package-browser: Handle no packages being built
@@ -153,7 +155,7 @@ Fixes in 3.4.1
 -  waffle: convert to git, website is down
 -  wayland: Fix wayland-tools packaging
 -  wireless-regdb: upgrade 2021.07.14 -> 2021.08.28
--  wpa-supplicant: Match package override to PACKAGES for pkg_postinst
+-  wpa-supplicant: Match package override to :term:`PACKAGES` for pkg_postinst
 
 Contributors to 3.4.1
 ~~~~~~~~~~~~~~~~~~~~~
@@ -198,7 +200,7 @@ Repositories / Downloads for 3.4.1
 
 poky
 
--  Repository Location: https://git.yoctoproject.org/poky/
+-  Repository Location: :yocto_git:`/poky`
 -  Branch: :yocto_git:`honister </poky/log/?h=honister>`
 -  Tag: :yocto_git:`yocto-3.4.1 </poky/tag/?h=yocto-3.4.1>`
 -  Git Revision: :yocto_git:`b53230c08d9f02ecaf35b4f0b70512abbf10ae11 </poky/commit/?id=b53230c08d9f02ecaf35b4f0b70512abbf10ae11>`
@@ -210,7 +212,7 @@ poky
 
 meta-mingw
 
--  Repository Location: https://git.yoctoproject.org/meta-mingw
+-  Repository Location: :yocto_git:`/meta-mingw`
 -  Branch: :yocto_git:`honister </meta-mingw/log/?h=honister>`
 -  Tag: :yocto_git:`yocto-3.4.1 </meta-mingw/tag/?h=yocto-3.4.1>`
 -  Git Revision: :yocto_git:`f5d761cbd5c957e4405c5d40b0c236d263c916a8 </meta-mingw/commit/?id=f5d761cbd5c957e4405c5d40b0c236d263c916a8>`
@@ -222,7 +224,7 @@ meta-mingw
 
 meta-gplv2
 
--  Repository Location: https://git.yoctoproject.org/meta-gplv2
+-  Repository Location: :yocto_git:`/meta-gplv2`
 -  Branch: :yocto_git:`honister </meta-gplv2/log/?h=honister>`
 -  Tag: :yocto_git:`yocto-3.4.1 </meta-gplv2/tag/?h=yocto-3.4.1>`
 -  Git Revision: :yocto_git:`f04e4369bf9dd3385165281b9fa2ed1043b0e400 </meta-gplv2/commit/?id=f04e4369bf9dd3385165281b9fa2ed1043b0e400>`
@@ -246,7 +248,7 @@ bitbake
 
 yocto-docs
 
--  Repository Location: https://git.yoctoproject.org/yocto-docs
+-  Repository Location: :yocto_git:`/yocto-docs`
 -  Branch: :yocto_git:`honister </yocto-docs/log/?h=honister>`
 -  Tag: :yocto_git:`yocto-3.4.1 </yocto-docs/tag/?h=yocto-3.4.1>`
 -  Git Revision: :yocto_git:`b250eda5a0beba8acc9641c55a5b0e30594b5178 </yocto-docs/commit/?b250eda5a0beba8acc9641c55a5b0e30594b5178>`

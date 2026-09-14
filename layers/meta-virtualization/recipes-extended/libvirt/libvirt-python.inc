@@ -15,9 +15,12 @@ FILES:${PN}-python-dev += "${PYTHON_SITEPACKAGES_DIR}/*.la"
 FILES:${PN}-python-dbg += "${PYTHON_SITEPACKAGES_DIR}/.debug/"
 FILES:${PN}-python = "${bindir}/* ${libdir}/* ${libdir}/${PYTHON_DIR}/*"
 
+# Currently the libvirt-python debug libraries contain buildpaths
+INSANE_SKIP:${PN}-dbg += "buildpaths"
+
 SRC_URI += "http://libvirt.org/sources/python/libvirt-python-${PV}.tar.gz;name=libvirt_python"
 
-SRC_URI[libvirt_python.sha256sum] = "a21ecfab6d29ac1bdd1bfd4aa3ef58447f9f70919aefecd03774613f65914e43"
+SRC_URI[libvirt_python.sha256sum] = "a82588f0e7db53eda7b7dbcbc448b0ec43e00a8c77cac69644495299b410c20d"
 
 export LIBVIRT_API_PATH = "${S}/docs/libvirt-api.xml"
 export LIBVIRT_CFLAGS = "-I${S}/include"

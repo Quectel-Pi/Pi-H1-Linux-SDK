@@ -1,0 +1,54 @@
+From 030ce4a0c70dcb68d6e26eabe75cea0c82660e91 Mon Sep 17 00:00:00 2001
+From: Stephen Boyd <swboyd@chromium.org>
+Date: Wed, 6 Sep 2023 11:12:25 -0700
+Subject: [PATCH 008/146] UPSTREAM: drm/msm/dp: Inline
+ dp_display_is_sink_count_zero()
+
+This function is basically a one-liner when you ignore the debug
+logging. Just inline the function and drop the log to simplify the code.
+
+Suggested-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Cc: Vinod Polimera <quic_vpolimer@quicinc.com>
+Cc: Kuogee Hsieh <quic_khsieh@quicinc.com>
+Signed-off-by: Stephen Boyd <swboyd@chromium.org>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/556066/
+Link: https://lore.kernel.org/r/20230906181226.2198441-2-swboyd@chromium.org
+Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git cc2e49235d87bf21055743b448f47193421f3ac0]
+---
+ drivers/gpu/drm/msm/dp/dp_display.c | 10 +---------
+ 1 file changed, 1 insertion(+), 9 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_display.c b/drivers/gpu/drm/msm/dp/dp_display.c
+index 7fd053afc1e5..dd8d7cbf2791 100644
+--- a/drivers/gpu/drm/msm/dp/dp_display.c
++++ b/drivers/gpu/drm/msm/dp/dp_display.c
+@@ -359,14 +359,6 @@ static const struct component_ops dp_display_comp_ops = {
+ 	.unbind = dp_display_unbind,
+ };
+ 
+-static bool dp_display_is_sink_count_zero(struct dp_display_private *dp)
+-{
+-	drm_dbg_dp(dp->drm_dev, "present=%#x sink_count=%d\n",
+-			dp->panel->dpcd[DP_DOWNSTREAMPORT_PRESENT],
+-		dp->link->sink_count);
+-	return drm_dp_is_branch(dp->panel->dpcd) && dp->link->sink_count == 0;
+-}
+-
+ static void dp_display_send_hpd_event(struct msm_dp *dp_display)
+ {
+ 	struct dp_display_private *dp;
+@@ -526,7 +518,7 @@ static int dp_display_handle_port_ststus_changed(struct dp_display_private *dp)
+ {
+ 	int rc = 0;
+ 
+-	if (dp_display_is_sink_count_zero(dp)) {
++	if (drm_dp_is_branch(dp->panel->dpcd) && dp->link->sink_count == 0) {
+ 		drm_dbg_dp(dp->drm_dev, "sink count is zero, nothing to do\n");
+ 		if (dp->hpd_state != ST_DISCONNECTED) {
+ 			dp->hpd_state = ST_DISCONNECT_PENDING;
+-- 
+2.34.1
+

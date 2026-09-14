@@ -1,0 +1,69 @@
+From 7fb0ebbd644235ce9f29e4ba9d99dd2b46fba019 Mon Sep 17 00:00:00 2001
+From: Pratyush Brahma <quic_pbrahma@quicinc.com>
+Date: Sat, 15 Feb 2025 14:55:09 +0530
+Subject: [PATCH] FROMLIST: arm64: dts: qcom: qcs8300: Add device node for
+ gfx_smmu
+
+Add the device node for gfx smmu that is required for gpu
+specific address translations.
+
+Signed-off-by: Pratyush Brahma <quic_pbrahma@quicinc.com>
+Link: https://lore.kernel.org/lkml/20250211-b4-branch-gfx-smmu-v5-2-ff0bcb6a3c51@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/lkml/20250211-b4-branch-gfx-smmu-v5-2-ff0bcb6a3c51@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs8300.dtsi | 39 +++++++++++++++++++++++++++
+ 1 file changed, 39 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs8300.dtsi b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+index f037a399f98f..782bca224497 100644
+--- a/arch/arm64/boot/dts/qcom/qcs8300.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs8300.dtsi
+@@ -2179,6 +2179,45 @@ gpucc: clock-controller@3d90000 {
+ 			#power-domain-cells = <1>;
+ 		};
+ 
++		adreno_smmu: iommu@3da0000 {
++			compatible = "qcom,qcs8300-smmu-500", "qcom,adreno-smmu",
++				     "qcom,smmu-500", "arm,mmu-500";
++			reg = <0x0 0x3da0000 0x0 0x20000>;
++			#iommu-cells = <2>;
++			#global-interrupts = <2>;
++
++			interrupts = <GIC_SPI 672 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 673 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 678 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 679 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 680 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 681 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 682 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 683 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 684 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 685 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 686 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 687 IRQ_TYPE_LEVEL_HIGH>;
++
++			clocks = <&gpucc GPU_CC_CX_GMU_CLK>,
++				 <&gpucc GPU_CC_HUB_CX_INT_CLK>,
++				 <&gpucc GPU_CC_HLOS1_VOTE_GPU_SMMU_CLK>,
++				 <&gcc GCC_GPU_MEMNOC_GFX_CLK>,
++				 <&gcc GCC_GPU_SNOC_DVM_GFX_CLK>,
++				 <&gpucc GPU_CC_AHB_CLK>,
++				 <&gpucc GPU_CC_HUB_AON_CLK>;
++
++			clock-names = "gpu_cc_cx_gmu_clk",
++				      "gpu_cc_hub_cx_int_clk",
++				      "gpu_cc_hlos1_vote_gpu_smmu_clk",
++				      "gcc_gpu_memnoc_gfx_clk",
++				      "gcc_gpu_snoc_dvm_gfx_clk",
++				      "gpu_cc_ahb_clk",
++				      "gpu_cc_hub_aon_clk";
++			power-domains = <&gpucc GPU_CC_CX_GDSC>;
++			dma-coherent;
++		};
++
+ 		serdes0: phy@8909000 {
+ 			compatible = "qcom,qcs8300-dwmac-sgmii-phy", "qcom,sa8775p-dwmac-sgmii-phy";
+ 			reg = <0x0 0x08909000 0x0 0x00000e10>;
+-- 
+2.34.1
+

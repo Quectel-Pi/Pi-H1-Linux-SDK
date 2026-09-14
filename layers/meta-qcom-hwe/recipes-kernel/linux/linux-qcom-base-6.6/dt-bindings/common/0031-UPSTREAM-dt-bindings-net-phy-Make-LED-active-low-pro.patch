@@ -1,0 +1,121 @@
+From cfa371693d9b755376073d53515ddd3500ef34b4 Mon Sep 17 00:00:00 2001
+From: Christian Marangi <ansuelsmth@gmail.com>
+Date: Thu, 25 Jan 2024 21:36:57 +0100
+Subject: [PATCH 31/39] UPSTREAM: dt-bindings: net: phy: Make LED active-low
+ property common
+
+Move LED active-low property to common.yaml. This property is currently
+defined multiple times by bcm LEDs. This property will now be supported
+in a generic way for PHY LEDs with the use of a generic function.
+
+With active-low bool property not defined, active-high is always
+assumed.
+
+Signed-off-by: Christian Marangi <ansuelsmth@gmail.com>
+Reviewed-by: Andrew Lunn <andrew@lunn.ch>
+Acked-by: Lee Jones <lee@kernel.org>
+Reviewed-by: Rob Herring <robh@kernel.org>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git c94d1783136eb66f2a464a6891a32eeb55eaeacc]
+---
+ Documentation/devicetree/bindings/leds/common.yaml          | 6 ++++++
+ Documentation/devicetree/bindings/leds/leds-bcm63138.yaml   | 4 ----
+ Documentation/devicetree/bindings/leds/leds-bcm6328.yaml    | 4 ----
+ Documentation/devicetree/bindings/leds/leds-bcm6358.txt     | 2 --
+ .../devicetree/bindings/leds/leds-pwm-multicolor.yaml       | 4 ----
+ Documentation/devicetree/bindings/leds/leds-pwm.yaml        | 5 -----
+ 6 files changed, 6 insertions(+), 19 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/leds/common.yaml b/Documentation/devicetree/bindings/leds/common.yaml
+index 5fb7007f3618..d0d121aafc9e 100644
+--- a/Documentation/devicetree/bindings/leds/common.yaml
++++ b/Documentation/devicetree/bindings/leds/common.yaml
+@@ -198,6 +198,12 @@ properties:
+       #trigger-source-cells property in the source node.
+     $ref: /schemas/types.yaml#/definitions/phandle-array
+ 
++  active-low:
++    type: boolean
++    description:
++      Makes LED active low. To turn the LED ON, line needs to be
++      set to low voltage instead of high.
++
+   # Required properties for flash LED child nodes:
+   flash-max-microamp:
+     description:
+diff --git a/Documentation/devicetree/bindings/leds/leds-bcm63138.yaml b/Documentation/devicetree/bindings/leds/leds-bcm63138.yaml
+index 52252fb6bb32..bb20394fca5c 100644
+--- a/Documentation/devicetree/bindings/leds/leds-bcm63138.yaml
++++ b/Documentation/devicetree/bindings/leds/leds-bcm63138.yaml
+@@ -52,10 +52,6 @@ patternProperties:
+         maxItems: 1
+         description: LED pin number
+ 
+-      active-low:
+-        type: boolean
+-        description: Makes LED active low
+-
+     required:
+       - reg
+ 
+diff --git a/Documentation/devicetree/bindings/leds/leds-bcm6328.yaml b/Documentation/devicetree/bindings/leds/leds-bcm6328.yaml
+index 51cc0d82c12e..f3a3ef992929 100644
+--- a/Documentation/devicetree/bindings/leds/leds-bcm6328.yaml
++++ b/Documentation/devicetree/bindings/leds/leds-bcm6328.yaml
+@@ -78,10 +78,6 @@ patternProperties:
+           - maximum: 23
+         description: LED pin number (only LEDs 0 to 23 are valid).
+ 
+-      active-low:
+-        type: boolean
+-        description: Makes LED active low.
+-
+       brcm,hardware-controlled:
+         type: boolean
+         description: Makes this LED hardware controlled.
+diff --git a/Documentation/devicetree/bindings/leds/leds-bcm6358.txt b/Documentation/devicetree/bindings/leds/leds-bcm6358.txt
+index 6e51c6b91ee5..211ffc3c4a20 100644
+--- a/Documentation/devicetree/bindings/leds/leds-bcm6358.txt
++++ b/Documentation/devicetree/bindings/leds/leds-bcm6358.txt
+@@ -25,8 +25,6 @@ LED sub-node required properties:
+ 
+ LED sub-node optional properties:
+   - label : see Documentation/devicetree/bindings/leds/common.txt
+-  - active-low : Boolean, makes LED active low.
+-    Default : false
+   - default-state : see
+     Documentation/devicetree/bindings/leds/common.txt
+   - linux,default-trigger : see
+diff --git a/Documentation/devicetree/bindings/leds/leds-pwm-multicolor.yaml b/Documentation/devicetree/bindings/leds/leds-pwm-multicolor.yaml
+index bd6ec04a8727..5edfbe347341 100644
+--- a/Documentation/devicetree/bindings/leds/leds-pwm-multicolor.yaml
++++ b/Documentation/devicetree/bindings/leds/leds-pwm-multicolor.yaml
+@@ -41,10 +41,6 @@ properties:
+ 
+           pwm-names: true
+ 
+-          active-low:
+-            description: For PWMs where the LED is wired to supply rather than ground.
+-            type: boolean
+-
+           color: true
+ 
+         required:
+diff --git a/Documentation/devicetree/bindings/leds/leds-pwm.yaml b/Documentation/devicetree/bindings/leds/leds-pwm.yaml
+index 7de6da58be3c..113b7c218303 100644
+--- a/Documentation/devicetree/bindings/leds/leds-pwm.yaml
++++ b/Documentation/devicetree/bindings/leds/leds-pwm.yaml
+@@ -34,11 +34,6 @@ patternProperties:
+           Maximum brightness possible for the LED
+         $ref: /schemas/types.yaml#/definitions/uint32
+ 
+-      active-low:
+-        description:
+-          For PWMs where the LED is wired to supply rather than ground.
+-        type: boolean
+-
+     required:
+       - pwms
+       - max-brightness
+-- 
+2.34.1
+

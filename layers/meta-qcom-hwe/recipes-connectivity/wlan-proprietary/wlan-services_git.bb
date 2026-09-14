@@ -5,7 +5,7 @@ DESCRIPTION = "WLAN Services required for QCACLD"
 LICENSE          = "Qualcomm-Technologies-Inc.-Proprietary"
 LIC_FILES_CHKSUM = "file://${QCOM_COMMON_LICENSE_DIR}${LICENSE};md5=58d50a3d36f27f1a1e6089308a49b403"
 
-QCACLD = "qca1023-wlan"
+QCACLD = "qcacld-wlan"
 
 DEPENDS += "data ${QCACLD}"
 

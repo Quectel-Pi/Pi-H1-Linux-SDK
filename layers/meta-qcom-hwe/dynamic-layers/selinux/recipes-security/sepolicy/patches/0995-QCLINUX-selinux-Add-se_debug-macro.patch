@@ -1,0 +1,49 @@
+From 6aef61d7c1bb6b83a0c4f6574d191e353ddab045 Mon Sep 17 00:00:00 2001
+From: Abhilasha Manna <quic_amanna@quicinc.com>
+Date: Wed, 5 Feb 2025 15:13:37 +0530
+Subject: [PATCH] PENDING: selinux: Add userdebug_or_eng macro.
+
+Add support for userdebug_or_eng macro.
+
+Signed-off-by: Abhilasha Manna <quic_amanna@quicinc.com>
+Upstream-Status: Inappropriate [internal requirement]
+---
+ Makefile                       | 5 +++++
+ policy/support/misc_macros.spt | 8 ++++++++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/Makefile b/Makefile
+index 24e2ed448..8e354ebdc 100644
+--- a/Makefile
++++ b/Makefile
+@@ -264,6 +264,11 @@ endif
+ 
+ CTAGS ?= ctags
+ 
++# SE_DEBUG build status
++ifeq ($(SE_DEBUG),y)
++    M4PARAM += -D SE_DEBUG
++endif
++
+ m4support := $(m4divert) $(wildcard $(poldir)/support/*.spt)
+ ifdef LOCAL_ROOT
+ m4support += $(wildcard $(local_poldir)/support/*.spt)
+diff --git a/policy/support/misc_macros.spt b/policy/support/misc_macros.spt
+index 348f16f82..f5571cfee 100644
+--- a/policy/support/misc_macros.spt
++++ b/policy/support/misc_macros.spt
+@@ -69,3 +69,11 @@ define(`gen_context',`$1`'ifdef(`enable_mls',`:$2')`'ifdef(`enable_mcs',`:s0`'if
+ define(`gen_bool',`
+ 	bool $1 dflt_or_overr(`$1'_conf,$2);
+ ')
++
++########################################
++#
++# se_debug(expr)
++#
++
++define(`se_debug',`ifdef(`SE_DEBUG', `$1')')
++
+-- 
+2.17.1
+

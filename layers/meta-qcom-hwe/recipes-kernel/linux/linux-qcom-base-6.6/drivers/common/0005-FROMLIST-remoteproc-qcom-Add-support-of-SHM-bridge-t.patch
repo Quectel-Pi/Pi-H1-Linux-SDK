@@ -1,0 +1,335 @@
+From 2f17ed6bc32d1501db4a9d55d2e74902f2861f09 Mon Sep 17 00:00:00 2001
+From: Mukesh Ojha <quic_mojha@quicinc.com>
+Date: Wed, 2 Oct 2024 18:14:58 +0530
+Subject: [PATCH 5/6] FROMLIST: remoteproc: qcom: Add support of SHM bridge to
+ enable memory protection
+
+Qualcomm SoCs running with the Qualcomm EL2 hypervisor(QHEE) have been
+utilizing the Peripheral Authentication Service (PAS) from its TrustZone
+(TZ) firmware to securely authenticate and reset via sequence of SMC
+calls like qcom_scm_pas_init_image(), qcom_scm_pas_mem_setup(), and
+qcom_scm_pas_auth_and_reset().
+
+Memory protection need to be enabled for both meta data memory region and
+remoteproc carveout memory region.
+
+For memory passed to Qualcomm TrustZone, the memory should be part of
+SHM bridge memory. However, when QHEE is present, PAS SMC calls are
+getting trapped in QHEE, which create or gets memory from SHM bridge for
+both meta data memory and for remoteproc carve out regions before it get
+passed to TZ.  However, in absence of QHEE hypervisor, Linux need to
+create SHM bridge for both meta data in qcom_scm_pas_init_image() and
+for remoteproc memory before the call being made to
+qcom_scm_pas_auth_and_reset().
+
+For qcom_scm_pas_init_image() call, metadata content need to be copied
+to the buffer allocated from SHM bridge before making the SMC call.
+
+For qcom_scm_pas_auth_and_reset(), remoteproc memory region need to be
+protected and for that SHM bridge need to be created. Make
+qcom_tzmem_init_area() and qcom_tzmem_cleanup_area() exported symbol so
+that it could be used to create SHM bridge for remoteproc region.
+
+Change-Id: I1cbd7432bda666465f5a9b9463946b07334477ca
+Signed-off-by: Mukesh Ojha <quic_mojha@quicinc.com>
+Signed-off-by: Mukesh Ojha <mukesh.ojha@oss.qualcomm.com>
+Upstream-Status: Submitted [https://lore.kernel.org/lkml/20241004212359.2263502-6-quic_mojha@quicinc.com/]
+---
+ drivers/firmware/qcom/qcom_tzmem.c       | 24 ++---------
+ drivers/firmware/qcom_scm.c              | 51 ++++++++++++++++--------
+ drivers/remoteproc/qcom_q6v5_pas.c       | 44 ++++++++++++++++++++
+ include/linux/firmware/qcom/qcom_scm.h   |  1 +
+ include/linux/firmware/qcom/qcom_tzmem.h | 23 +++++++++++
+ 5 files changed, 107 insertions(+), 36 deletions(-)
+
+diff --git a/drivers/firmware/qcom/qcom_tzmem.c b/drivers/firmware/qcom/qcom_tzmem.c
+index ab156ab3a6b4..5a1dbf8553b8 100644
+--- a/drivers/firmware/qcom/qcom_tzmem.c
++++ b/drivers/firmware/qcom/qcom_tzmem.c
+@@ -22,14 +22,6 @@
+ 
+ #include "qcom_tzmem.h"
+ 
+-struct qcom_tzmem_area {
+-	struct list_head list;
+-	void *vaddr;
+-	dma_addr_t paddr;
+-	size_t size;
+-	void *priv;
+-};
+-
+ struct qcom_tzmem_pool {
+ 	struct gen_pool *genpool;
+ 	struct list_head areas;
+@@ -56,16 +48,6 @@ static int qcom_tzmem_init(void)
+ 	return 0;
+ }
+ 
+-static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
+-{
+-	return 0;
+-}
+-
+-static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
+-{
+-
+-}
+-
+ #elif IS_ENABLED(CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE)
+ 
+ #include <linux/firmware/qcom/qcom_scm.h>
+@@ -105,7 +87,7 @@ static int qcom_tzmem_init(void)
+ 	return 0;
+ }
+ 
+-static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
++int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
+ {
+ 	u64 pfn_and_ns_perm, ipfn_and_s_perm, size_and_flags;
+ 	int ret;
+@@ -131,8 +113,9 @@ static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
+ 
+ 	return 0;
+ }
++EXPORT_SYMBOL_GPL(qcom_tzmem_init_area);
+ 
+-static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
++void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
+ {
+ 	u64 *handle = area->priv;
+ 
+@@ -142,6 +125,7 @@ static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
+ 	qcom_scm_shm_bridge_delete(qcom_tzmem_dev, *handle);
+ 	kfree(handle);
+ }
++EXPORT_SYMBOL_GPL(qcom_tzmem_cleanup_area);
+ 
+ #endif /* CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE */
+ 
+diff --git a/drivers/firmware/qcom_scm.c b/drivers/firmware/qcom_scm.c
+index 09e93186839b..e44e30f4f38d 100644
+--- a/drivers/firmware/qcom_scm.c
++++ b/drivers/firmware/qcom_scm.c
+@@ -522,19 +522,22 @@ int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
+ 	 * data blob, so make sure it's physically contiguous, 4K aligned and
+ 	 * non-cachable to avoid XPU violations.
+ 	 *
+-	 * For PIL calls the hypervisor creates SHM Bridges for the blob
+-	 * buffers on behalf of Linus so we must not do it ourselves hence
+-	 * not using the TZMem allocator here.
++	 * For PIL calls the hypervisor like Gunyah or older QHEE creates SHM
++	 * Bridges for the blob buffers on behalf of Linux so we must not do it
++	 * ourselves hence use TZMem allocator only when these hypervisors are
++	 * not present.
+ 	 *
+ 	 * If we pass a buffer that is already part of an SHM Bridge to this
+ 	 * call, it will fail.
+ 	 */
+-	mdata_buf = dma_alloc_coherent(__scm->dev, size, &mdata_phys,
+-				       GFP_KERNEL);
+-	if (!mdata_buf) {
+-		dev_err(__scm->dev, "Allocation of metadata buffer failed.\n");
++	if (ctx && ctx->shm_bridge_needed)
++		mdata_buf = qcom_tzmem_alloc(__scm->mempool, size, GFP_KERNEL);
++	else
++		mdata_buf = dma_alloc_coherent(__scm->dev, size, &mdata_phys, GFP_KERNEL);
++
++	if (!mdata_buf)
+ 		return -ENOMEM;
+-	}
++
+ 	memcpy(mdata_buf, metadata, size);
+ 
+ 	ret = qcom_scm_clk_enable();
+@@ -545,7 +548,10 @@ int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
+ 	if (ret)
+ 		goto disable_clk;
+ 
+-	desc.args[1] = mdata_phys;
++	if (ctx && ctx->shm_bridge_needed)
++		desc.args[1] = qcom_tzmem_to_phys(mdata_buf);
++	else
++		desc.args[1] = mdata_phys;
+ 
+ 	ret = qcom_scm_call(__scm->dev, &desc, &res);
+ 	qcom_scm_bw_disable();
+@@ -554,12 +560,22 @@ int qcom_scm_pas_init_image(u32 peripheral, const void *metadata, size_t size,
+ 	qcom_scm_clk_disable();
+ 
+ out:
+-	if (ret < 0 || !ctx) {
+-		dma_free_coherent(__scm->dev, size, mdata_buf, mdata_phys);
+-	} else if (ctx) {
+-		ctx->ptr = mdata_buf;
+-		ctx->phys = mdata_phys;
+-		ctx->size = size;
++	if (ret < 0) {
++		if (ctx && ctx->shm_bridge_needed)
++			qcom_tzmem_free(mdata_buf);
++		else
++			dma_free_coherent(__scm->dev, size, mdata_buf, mdata_phys);
++	} else {
++		if (ctx) {
++			if (ctx->shm_bridge_needed)
++				ctx->phys = qcom_tzmem_to_phys(mdata_buf);
++			else
++				ctx->phys = mdata_phys;
++			ctx->ptr = mdata_buf;
++			ctx->size = size;
++		} else {
++			dma_free_coherent(__scm->dev, size, mdata_buf, mdata_phys);
++		}
+ 	}
+ 
+ 	return ret ? : res.result[0];
+@@ -575,7 +591,10 @@ void qcom_scm_pas_metadata_release(struct qcom_scm_pas_metadata *ctx)
+ 	if (!ctx->ptr)
+ 		return;
+ 
+-	dma_free_coherent(__scm->dev, ctx->size, ctx->ptr, ctx->phys);
++	if (ctx->shm_bridge_needed)
++		qcom_tzmem_free(ctx->ptr);
++	else
++		dma_free_coherent(__scm->dev, ctx->size, ctx->ptr, ctx->phys);
+ 
+ 	ctx->ptr = NULL;
+ 	ctx->phys = 0;
+diff --git a/drivers/remoteproc/qcom_q6v5_pas.c b/drivers/remoteproc/qcom_q6v5_pas.c
+index 578a9242105f..095e59cc6837 100644
+--- a/drivers/remoteproc/qcom_q6v5_pas.c
++++ b/drivers/remoteproc/qcom_q6v5_pas.c
+@@ -20,6 +20,7 @@
+ #include <linux/pm_domain.h>
+ #include <linux/pm_runtime.h>
+ #include <linux/firmware/qcom/qcom_scm.h>
++#include <linux/firmware/qcom/qcom_tzmem.h>
+ #include <linux/regulator/consumer.h>
+ #include <linux/remoteproc.h>
+ #include <linux/soc/qcom/mdt_loader.h>
+@@ -109,6 +110,7 @@ struct qcom_adsp {
+ 	struct qcom_scm_pas_metadata dtb_pas_metadata;
+ 
+ 	struct qcom_devmem_table *devmem;
++	struct qcom_tzmem_area *tzmem;
+ };
+ 
+ static void adsp_segment_dump(struct rproc *rproc, struct rproc_dump_segment *segment,
+@@ -248,6 +250,43 @@ static int adsp_load(struct rproc *rproc, const struct firmware *fw)
+ 	return ret;
+ }
+ 
++static int adsp_create_shmbridge(struct qcom_adsp *adsp)
++{
++	struct qcom_tzmem_area *rproc_tzmem;
++	struct rproc *rproc = adsp->rproc;
++	int ret;
++
++	if (!rproc->has_iommu)
++		return 0;
++
++	rproc_tzmem = devm_kzalloc(adsp->dev, sizeof(*rproc_tzmem), GFP_KERNEL);
++	if (!rproc_tzmem)
++		return -ENOMEM;
++
++	rproc_tzmem->size = PAGE_ALIGN(adsp->mem_size);
++	rproc_tzmem->paddr = adsp->mem_phys;
++	ret = qcom_tzmem_init_area(rproc_tzmem);
++	if (ret) {
++		dev_err(adsp->dev,
++			"failed to create shmbridge for carveout: %d\n", ret);
++		return ret;
++	}
++
++	adsp->tzmem = rproc_tzmem;
++
++	return ret;
++}
++
++static void adsp_delete_shmbridge(struct qcom_adsp *adsp)
++{
++	struct rproc *rproc = adsp->rproc;
++
++	if (!rproc->has_iommu)
++		return;
++
++	qcom_tzmem_cleanup_area(adsp->tzmem);
++}
++
+ static int adsp_start(struct rproc *rproc)
+ {
+ 	struct qcom_adsp *adsp = rproc->priv;
+@@ -303,6 +342,10 @@ static int adsp_start(struct rproc *rproc)
+ 
+ 	qcom_pil_info_store(adsp->info_name, adsp->mem_phys, adsp->mem_size);
+ 
++	ret = adsp_create_shmbridge(adsp);
++	if (ret)
++		goto release_pas_metadata;
++
+ 	ret = qcom_scm_pas_auth_and_reset(adsp->pas_id);
+ 	if (ret) {
+ 		dev_err(adsp->dev,
+@@ -310,6 +353,7 @@ static int adsp_start(struct rproc *rproc)
+ 		goto release_pas_metadata;
+ 	}
+ 
++	adsp_delete_shmbridge(adsp);
+ 	ret = qcom_q6v5_wait_for_start(&adsp->q6v5, msecs_to_jiffies(5000));
+ 	if (ret == -ETIMEDOUT) {
+ 		dev_err(adsp->dev, "start timed out\n");
+diff --git a/include/linux/firmware/qcom/qcom_scm.h b/include/linux/firmware/qcom/qcom_scm.h
+index 8c6c663dc21b..126fd11dfbd1 100644
+--- a/include/linux/firmware/qcom/qcom_scm.h
++++ b/include/linux/firmware/qcom/qcom_scm.h
+@@ -70,6 +70,7 @@ struct qcom_scm_pas_metadata {
+ 	void *ptr;
+ 	dma_addr_t phys;
+ 	ssize_t size;
++	bool shm_bridge_needed;
+ };
+ 
+ extern int qcom_scm_pas_init_image(u32 peripheral, const void *metadata,
+diff --git a/include/linux/firmware/qcom/qcom_tzmem.h b/include/linux/firmware/qcom/qcom_tzmem.h
+index b83b63a0c049..72cff64eb844 100644
+--- a/include/linux/firmware/qcom/qcom_tzmem.h
++++ b/include/linux/firmware/qcom/qcom_tzmem.h
+@@ -39,6 +39,14 @@ struct qcom_tzmem_pool_config {
+ 	size_t max_size;
+ };
+ 
++struct qcom_tzmem_area {
++	struct list_head list;
++	void *vaddr;
++	dma_addr_t paddr;
++	size_t size;
++	void *priv;
++};
++
+ struct qcom_tzmem_pool *
+ qcom_tzmem_pool_new(const struct qcom_tzmem_pool_config *config);
+ void qcom_tzmem_pool_free(struct qcom_tzmem_pool *pool);
+@@ -49,6 +57,21 @@ devm_qcom_tzmem_pool_new(struct device *dev,
+ void *qcom_tzmem_alloc(struct qcom_tzmem_pool *pool, size_t size, gfp_t gfp);
+ void qcom_tzmem_free(void *ptr);
+ 
++#if IS_ENABLED(CONFIG_QCOM_TZMEM_MODE_SHMBRIDGE)
++int qcom_tzmem_init_area(struct qcom_tzmem_area *area);
++void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area);
++#else
++static int qcom_tzmem_init_area(struct qcom_tzmem_area *area)
++{
++	return 0;
++}
++
++static void qcom_tzmem_cleanup_area(struct qcom_tzmem_area *area)
++{
++
++}
++#endif
++
+ DEFINE_FREE(qcom_tzmem, void *, if (_T) qcom_tzmem_free(_T))
+ 
+ phys_addr_t qcom_tzmem_to_phys(void *ptr);
+-- 
+2.34.1
+

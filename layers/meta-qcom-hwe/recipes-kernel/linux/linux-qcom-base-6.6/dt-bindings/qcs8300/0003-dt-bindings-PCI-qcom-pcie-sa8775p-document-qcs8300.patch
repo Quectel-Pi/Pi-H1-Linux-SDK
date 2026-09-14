@@ -1,0 +1,62 @@
+From 6d8f39e203b913e8c21bd2dd7843b9c459bb052e Mon Sep 17 00:00:00 2001
+From: Ziyue Zhang <quic_ziyuzhan@quicinc.com>
+Date: Mon, 10 Feb 2025 17:16:36 +0800
+Subject: [PATCH 3/8] FROMLIST: dt-bindings: PCI: qcom,pcie-sa8775p: document qcs8300
+
+Add compatible for qcs8300 platform.
+
+Acked-by: Rob Herring (Arm) <robh@kernel.org>
+Signed-off-by: Ziyue Zhang <quic_ziyuzhan@quicinc.com>
+Link: https://lore.kernel.org/all/20241220055239.2744024-4-quic_ziyuzhan@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241220055239.2744024-4-quic_ziyuzhan@quicinc.com/]
+---
+ Documentation/devicetree/bindings/pci/qcom,pcie.yaml | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/Documentation/devicetree/bindings/pci/qcom,pcie.yaml b/Documentation/devicetree/bindings/pci/qcom,pcie.yaml
+index eadba38171e1..f6ad05eb9e10 100644
+--- a/Documentation/devicetree/bindings/pci/qcom,pcie.yaml
++++ b/Documentation/devicetree/bindings/pci/qcom,pcie.yaml
+@@ -28,6 +28,7 @@ properties:
+           - qcom,pcie-ipq8074-gen3
+           - qcom,pcie-msm8996
+           - qcom,pcie-qcs404
++          - qcom,pcie-qcs8300
+           - qcom,pcie-sa8540p
+           - qcom,pcie-sa8775p
+           - qcom,pcie-sc7280
+@@ -212,6 +213,7 @@ allOf:
+         compatible:
+           contains:
+             enum:
++              - qcom,pcie-qcs8300
+               - qcom,pcie-sa8775p
+               - qcom,pcie-sc7280
+               - qcom,pcie-sc8180x
+@@ -750,6 +752,7 @@ allOf:
+         compatible:
+           contains:
+             enum:
++              - qcom,pcie-qcs8300
+               - qcom,pcie-sa8775p
+     then:
+       properties:
+@@ -774,6 +777,7 @@ allOf:
+         compatible:
+           contains:
+             enum:
++              - qcom,pcie-qcs8300
+               - qcom,pcie-sa8540p
+               - qcom,pcie-sa8775p
+               - qcom,pcie-sc8280xp
+@@ -816,6 +820,7 @@ allOf:
+         compatible:
+           contains:
+             enum:
++              - qcom,pcie-qcs8300
+               - qcom,pcie-msm8996
+               - qcom,pcie-sa8775p
+               - qcom,pcie-sc7280
+-- 
+2.25.1
+

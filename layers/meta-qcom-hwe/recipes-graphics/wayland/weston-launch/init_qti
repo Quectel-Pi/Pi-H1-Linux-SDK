@@ -126,32 +126,37 @@ case "$1" in
 
         echo "WESTON INITIALIZATION STARTUP"
 
-        if [ -f /sys/devices/soc0/soc_id ]; then
-            soc_id=`cat /sys/devices/soc0/soc_id`
-            if [ "$soc_id" == 497 ] || [ "$soc_id" == 498 ] ||
-                    [ "$soc_id" == 575 ] || [ "$soc_id" == 576 ]; then
-                        weston --tty=2 --idle-time=0 --log=/tmp/weston.log --config=/etc/xdg/weston/weston.ini &
+        # Detect dual DPU for Lemans/RB8
+        if [ "$soc_id" == "676" ] || [ "$soc_id" == "667" ] || [ "$soc_id" == "534" ] || [ "$soc_id" == "619" ] || [ "$soc_id" == "533" ] || [ "$soc_id" == "535" ] || [ "$soc_id" == "532" ] || [ "$soc_id" == "656" ]; then
+            # Check if /dev/dri/card1 exists
+            if timeout 10 bash -c 'while [ ! -e /dev/dri/card1 ]; do sleep 1; done'; then
+                echo "card1 detected, lauching Weston with dual DPU"
+                weston --idle-time=0 --continue-without-input --additional-devices=card1 &
+            else
+                weston --idle-time=0 --continue-without-input &
             fi
+        else
+            weston --idle-time=0 --continue-without-input &
         fi
 
-        if [ -f /sys/devices/soc0/soc_id ]; then
-            soc_id=`cat /sys/devices/soc0/soc_id`
-            if [ "$soc_id" == 534 ] || [ "$soc_id" == 667 ] || [ "$soc_id" == 606 ] ||
-                    [ "$soc_id" == 674 ] || [ "$soc_id" == 675 ] || [ "$soc_id" == 676 ]; then
-                        weston --tty=2 --idle-time=0 --log=/tmp/weston.log --backend=drm-backend.so \
-                        --continue-without-input &
-            fi
-        fi
+        # Wait for wayland socket node to be created with a maximum of 100 attempts.
+        attempts=0
+        max_attempts=100
 
-        # Wait wayland socket node create.
         filename=$(find $XDG_RUNTIME_DIR -maxdepth 1 -name 'wayland-*' -print -quit)
-        while [ -z "$filename" ]; do
+        while [ -z "$filename" ] && [ $attempts -lt $max_attempts ]; do
             sleep 0.1
+            attempts=$((attempts + 1))
             filename=$(find $XDG_RUNTIME_DIR -maxdepth 1 -name 'wayland-*' -print -quit)
         done
 
-        chown -hR system:video $XDG_RUNTIME_DIR
-        chmod 756 /dev/socket/weston/wayland-1
+        if [ -z "$filename" ]; then
+            echo "Failed to find wayland socket after $max_attempts attempts."
+        else
+            echo "Found wayland socket: $filename"
+            chown -hR system:video $XDG_RUNTIME_DIR
+            chmod 776 /dev/socket/weston/wayland-1
+        fi
   ;;
 
   stop)
@@ -168,13 +173,5 @@ case "$1" in
         echo "usage: $0 { start | stop | restart }"
   ;;
 esac
-
-#For drm based display driver
-vbfile=/sys/module/drm/parameters/vblankoffdelay
-if [ -w $vbfile ]; then
-    echo -1 >  $vbfile
-else
-    echo "vblankoffdelay perms doesn't exist"
-fi
 
 exit 0

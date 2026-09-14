@@ -1,6 +1,6 @@
-From 28ee02687339b657a7aa93570015a6751c824e2d Mon Sep 17 00:00:00 2001
+From 567b618f2ab9bb722826688d84f328773e4f37ce Mon Sep 17 00:00:00 2001
 From: Bruce Ashfield <bruce.ashfield@gmail.com>
-Date: Wed, 10 Feb 2021 09:58:24 -0500
+Date: Wed, 17 Aug 2022 11:03:09 -0400
 Subject: [PATCH] build: allow environmental CGO settings and pass
  dontusecurrentpkgs
 
@@ -13,9 +13,9 @@ builds (for the most part), and that is not recommended by many
 packages, we end up with errors like:
 
    1.20.0+gitec9e336fd8c21c4bab89a6aed2c4a138c8cfae75/src/import/_output/crictl \
-	-ldflags '-X github.com/kubernetes-sigs/cri-tools/pkg/version.Version=1.20.0' \
-	-tags '' \
-	github.com/kubernetes-sigs/cri-tools/cmd/crictl
+        -ldflags '-X github.com/kubernetes-sigs/cri-tools/pkg/version.Version=1.20.0' \
+        -tags '' \
+        github.com/kubernetes-sigs/cri-tools/cmd/crictl
     # github.com/kubernetes-sigs/cri-tools/cmd/crictl
     cannot find package runtime/cgo (using -importcfg)
     /work/cortexa72-poky-linux/cri-tools/1.20.0+gitec9e336fd8c21c4bab89a6aed2c4a138c8cfae75-r0/recipe-sysroot-native/usr/lib/aarch64-poky-linux/go/pkg/tool/linux_amd64/link:
@@ -28,22 +28,24 @@ https://www.yoctoproject.org/pipermail/meta-virtualization/2019-March/004084.htm
 We introduce '-a -pkgdir dontusecurrentpkgs' to mask/fix the problem,
 and continue to work towards non-static builds.
 
+Upstream-Status: Inappropriate [embedded specific]
+
 Signed-off-by: Bruce Ashfield <bruce.ashfield@gmail.com>
 ---
  src/import/Makefile | 3 ++-
  1 file changed, 2 insertions(+), 1 deletion(-)
 
-Index: cri-tools-1.21.0+gitde32df077e6b0e9e31ce367dfc34c1b6b46e30fa/src/import/Makefile
+Index: cri-tools-1.27.0+gite73a7139ed4986d6a0db784ae7a036841a02b351/src/import/Makefile
 ===================================================================
---- cri-tools-1.21.0+gitde32df077e6b0e9e31ce367dfc34c1b6b46e30fa.orig/src/import/Makefile
-+++ cri-tools-1.21.0+gitde32df077e6b0e9e31ce367dfc34c1b6b46e30fa/src/import/Makefile
+--- cri-tools-1.27.0+gite73a7139ed4986d6a0db784ae7a036841a02b351.orig/src/import/Makefile
++++ cri-tools-1.27.0+gite73a7139ed4986d6a0db784ae7a036841a02b351/src/import/Makefile
 @@ -74,7 +74,8 @@
  	@$(MAKE) -B $(CRICTL)
  
  $(CRICTL):
--	CGO_ENABLED=0 $(GO_BUILD) -o $@ \
+-	CGO_ENABLED=$(CGO_ENABLED) $(GO_BUILD) -o $@ \
 +	$(GO_BUILD) -o $@ \
 +		-a -pkgdir dontusecurrentpkgs \
  		-ldflags '$(GO_LDFLAGS)' \
- 		-trimpath \
- 		-tags '$(BUILDTAGS)' \
+ 		$(GOFLAGS) \
+ 		$(PROJECT)/cmd/crictl

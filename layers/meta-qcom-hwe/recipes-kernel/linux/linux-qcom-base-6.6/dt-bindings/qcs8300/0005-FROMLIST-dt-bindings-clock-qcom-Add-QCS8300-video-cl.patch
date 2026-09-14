@@ -1,0 +1,33 @@
+From e089922635ea11ddd0199633b534f808aed4aba1 Mon Sep 17 00:00:00 2001
+From: Imran Shaik <quic_imrashai@quicinc.com>
+Date: Wed, 6 Nov 2024 15:22:00 +0530
+Subject: [PATCH 5/6] FROMLIST: dt-bindings: clock: qcom: Add QCS8300 video
+ clock controller
+
+The QCS8300 video clock controller is mostly identical to SA8775P, but
+QCS8300 has minor difference. Hence, reuse the SA8775P videocc bindings
+for QCS8300 platform.
+
+Acked-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Signed-off-by: Imran Shaik <quic_imrashai@quicinc.com>
+Link: https://lore.kernel.org/all/20241106-qcs8300-mm-patches-v3-5-f611a8f87f15@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241106-qcs8300-mm-patches-v3-5-f611a8f87f15@quicinc.com/]
+---
+ .../devicetree/bindings/clock/qcom,sa8775p-videocc.yaml          | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/clock/qcom,sa8775p-videocc.yaml b/Documentation/devicetree/bindings/clock/qcom,sa8775p-videocc.yaml
+index 928131bff4c1..07e5d811d816 100644
+--- a/Documentation/devicetree/bindings/clock/qcom,sa8775p-videocc.yaml
++++ b/Documentation/devicetree/bindings/clock/qcom,sa8775p-videocc.yaml
+@@ -18,6 +18,7 @@ description: |
+ properties:
+   compatible:
+     enum:
++      - qcom,qcs8300-videocc
+       - qcom,sa8775p-videocc
+ 
+   clocks:
+-- 
+2.34.1
+

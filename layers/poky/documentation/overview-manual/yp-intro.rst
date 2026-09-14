@@ -24,11 +24,11 @@ software customizations and build interchange for multiple hardware
 platforms as well as software stacks that can be maintained and scaled.
 
 .. image:: figures/key-dev-elements.png
-    :align: center
+    :width: 100%
 
 For further introductory information on the Yocto Project, you might be
 interested in this
-`article <https://www.embedded.com/electronics-blogs/say-what-/4458600/Why-the-Yocto-Project-for-my-IoT-Project->`__
+`article <https://www.embedded.com/why-the-yocto-project-for-my-iot-project/>`__
 by Drew Moseley and in this short introductory
 `video <https://www.youtube.com/watch?v=utZpKM7i5Z4>`__.
 
@@ -172,11 +172,12 @@ Here are challenges you might encounter when developing using the Yocto Project:
    changes on the development system within the BitBake environment and
    then deploying only the updated packages to the target.
 
-   The Yocto Project :term:`OpenEmbedded Build System`
-   produces packages
-   in standard formats (i.e. RPM, DEB, IPK, and TAR). You can deploy
-   these packages into the running system on the target by using
-   utilities on the target such as ``rpm`` or ``ipk``.
+   The Yocto Project :term:`OpenEmbedded Build System` produces packages
+   in standard formats (i.e. RPM, DEB and/or IPK). If you included the
+   runtime package management feature in your image, you can deploy
+   these packages into the running system on the target by using the
+   corresponding utilities on the target such as
+   ``rpm``/``dnf``, ``dpkg``/``apt`` or ``opkg``.
 
 -  *Initial Build Times Can be Significant:* Long initial build times
    are unfortunately unavoidable due to the large number of packages
@@ -218,8 +219,8 @@ your Metadata, the easier it is to cope with future changes.
       possible.
 
    -  Familiarize yourself with the
-      :yocto_home:`Yocto Project curated layer index</software-overview/layers/>`
-      or the :oe_layerindex:`OpenEmbedded layer index <>`.
+      :yocto_home:`Yocto Project Compatible Layers </software-overview/layers/>`
+      or the :oe_layerindex:`OpenEmbedded Layer Index <>`.
       The latter contains more layers but they are less universally
       validated.
 
@@ -400,7 +401,7 @@ Yocto Project:
    Autobuilder :doc:`here </test-manual/understand-autobuilder>`.
 
 -  *Pseudo:* Pseudo is the Yocto Project implementation of
-   `fakeroot <http://man.he.net/man1/fakeroot>`__, which is used to run
+   :manpage:`fakeroot <fakeroot(1)>`, which is used to run
    commands in an environment that seemingly has root privileges.
 
    During a build, it can be necessary to perform operations that
@@ -529,18 +530,18 @@ Historically, the Build Appliance was the second of three methods by
 which you could use the Yocto Project on a system that was not native to
 Linux.
 
-1. *Hob:* Hob, which is now deprecated and is no longer available since
+#. *Hob:* Hob, which is now deprecated and is no longer available since
    the 2.1 release of the Yocto Project provided a rudimentary,
    GUI-based interface to the Yocto Project. Toaster has fully replaced
    Hob.
 
-2. *Build Appliance:* Post Hob, the Build Appliance became available. It
+#. *Build Appliance:* Post Hob, the Build Appliance became available. It
    was never recommended that you use the Build Appliance as a
    day-to-day production development environment with the Yocto Project.
    Build Appliance was useful as a way to try out development in the
    Yocto Project environment.
 
-3. *CROPS:* The final and best solution available now for developing
+#. *CROPS:* The final and best solution available now for developing
    using the Yocto Project on a system not native to Linux is with
    :ref:`CROPS <overview-manual/yp-intro:development tools>`.
 
@@ -653,7 +654,7 @@ these items that make up the Poky repository in the
 The following figure illustrates what generally comprises Poky:
 
 .. image:: figures/poky-reference-distribution.png
-    :align: center
+    :width: 100%
 
 -  BitBake is a task executor and scheduler that is the heart of the
    OpenEmbedded build system.
@@ -703,8 +704,8 @@ Sato.
 
 One of the most powerful properties of Poky is that every aspect of a
 build is controlled by the metadata. You can use metadata to augment
-these base image types by adding metadata
-`layers <overview-manual/yp-intro:the yocto project layer model>` that extend
+these base image types by adding metadata :ref:`layers
+<overview-manual/yp-intro:the yocto project layer model>` that extend
 functionality.
 These layers can provide, for example, an additional software stack for
 an image type, add a board support package (BSP) for additional
@@ -724,7 +725,7 @@ BitBake also supports both ``:prepend`` and ``:append`` operators as a
 method of extending task functionality. These operators inject code into
 the beginning or end of a task. For information on these BitBake
 operators, see the
-":ref:`bitbake:bitbake-user-manual/bitbake-user-manual-metadata:appending and prepending (override style syntax)`"
+":ref:`bitbake-user-manual/bitbake-user-manual-metadata:appending and prepending (override style syntax)`"
 section in the BitBake User's Manual.
 
 The OpenEmbedded Build System Workflow
@@ -735,31 +736,31 @@ accomplish image and SDK generation. The following figure overviews that
 workflow:
 
 .. image:: figures/YP-flow-diagram.png
-    :align: center
+    :width: 100%
 
 Here is a brief summary of the "workflow":
 
-1. Developers specify architecture, policies, patches and configuration
+#. Developers specify architecture, policies, patches and configuration
    details.
 
-2. The build system fetches and downloads the source code from the
+#. The build system fetches and downloads the source code from the
    specified location. The build system supports standard methods such
    as tarballs or source code repositories systems such as Git.
 
-3. Once source code is downloaded, the build system extracts the sources
+#. Once source code is downloaded, the build system extracts the sources
    into a local work area where patches are applied and common steps for
    configuring and compiling the software are run.
 
-4. The build system then installs the software into a temporary staging
+#. The build system then installs the software into a temporary staging
    area where the binary package format you select (DEB, RPM, or IPK) is
    used to roll up the software.
 
-5. Different QA and sanity checks run throughout entire build process.
+#. Different QA and sanity checks run throughout entire build process.
 
-6. After the binaries are created, the build system generates a binary
+#. After the binaries are created, the build system generates a binary
    package feed that is used to create the final root file image.
 
-7. The build system generates the file system image and a customized
+#. The build system generates the file system image and a customized
    Extensible SDK (eSDK) for application development in parallel.
 
 For a very detailed look at this workflow, see the

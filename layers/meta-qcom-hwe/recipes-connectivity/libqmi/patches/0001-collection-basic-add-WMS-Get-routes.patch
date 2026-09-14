@@ -1,0 +1,27 @@
+From 235eb4322b0e9db857709324d14bc696f7057dc9 Mon Sep 17 00:00:00 2001
+From: Chaitanya Saggurthi <quic_csaggurt@quicinc.com>
+Date: Mon, 3 Feb 2025 12:05:30 +0530
+Subject: [PATCH] collection,basic: add WMS Get routes
+
+Will be used by MM for Getting wms routes
+
+Signed-off-by: Chaitanya Saggurthi <quic_csaggurt@quicinc.com>
+---
+ data/qmi-collection-basic.json | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/data/qmi-collection-basic.json b/data/qmi-collection-basic.json
+index ba0e33e0..9e218c3a 100644
+--- a/data/qmi-collection-basic.json
++++ b/data/qmi-collection-basic.json
+@@ -172,6 +172,7 @@
+     "QMI_MESSAGE_WMS_LIST_MESSAGES",
+     "QMI_MESSAGE_WMS_SEND_FROM_MEMORY_STORAGE",
+     "QMI_MESSAGE_WMS_SET_ROUTES",
++    "QMI_MESSAGE_WMS_GET_ROUTES",
+     "QMI_MESSAGE_WMS_DELETE",
+     "QMI_MESSAGE_WMS_SEND_ACK",
+ 
+-- 
+2.25.1
+

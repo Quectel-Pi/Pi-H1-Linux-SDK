@@ -1,4 +1,4 @@
-# Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+# Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
 # SPDX-License-Identifier: BSD-3-Clause-Clear
 
 ## <summary>cam_server</summary>
@@ -76,4 +76,22 @@ interface(`qcom_cam_server_fd_use',`
         type qcom_cam_server_t ;
     ')
     allow $1 qcom_cam_server_t:fd use;
+')
+
+########################################
+## <summary>
+##      Mounton cam-server socket directory.
+## </summary>
+## <param name="domain">
+##      <summary>
+##      Domain allowed access.
+##      </summary>
+## </param>
+#
+interface(`qcom_cam_server_mounton_tmp_dir',`
+    gen_require(`
+        type qcom_cam_server_tmp_t;
+    ')
+
+    allow $1 qcom_cam_server_tmp_t:dir { mounton_dir_perms search };
 ')

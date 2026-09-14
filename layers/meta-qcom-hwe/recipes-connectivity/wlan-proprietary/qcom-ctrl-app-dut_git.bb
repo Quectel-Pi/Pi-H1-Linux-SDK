@@ -1,0 +1,20 @@
+inherit autotools-brokensep pkgconfig qprebuilt
+
+DESCRIPTION = "Qualcomm Technologies Ctrl App Dut Tool"
+LICENSE     = "Qualcomm-Technologies-Inc.-Proprietary"
+LIC_FILES_CHKSUM = "file://${QCOM_COMMON_LICENSE_DIR}${LICENSE};md5=58d50a3d36f27f1a1e6089308a49b403"
+
+DEPENDS += "libnl glib-2.0"
+PV = "1.0"
+
+QCM6490_SHA256SUM = "552e4419711d7bba7090d5135bef1a4cdb1ab94a6c723d5e48c3c48ae18b0f50"
+QCS9100_SHA256SUM = "94d2d6bd55dec6789d57b8b1cd76d146a3cd55b0da3fb61400a8aa57db2d6331"
+QCS8300_SHA256SUM = "cbb0748bb593916eb9cb528e784b776658b6df7d4fd1280f2bd33d7ecdd93a75"
+QCS615_SHA256SUM = "91392e2bd6a80d008833950dc90eaa998095d640f3d59cccddc1e287c09ac7f4"
+
+SRC_URI[qcm6490.sha256sum] = "${QCM6490_SHA256SUM}"
+SRC_URI[qcs9100.sha256sum] = "${QCS9100_SHA256SUM}"
+SRC_URI[qcs8300.sha256sum] = "${QCS8300_SHA256SUM}"
+SRC_URI[qcs615.sha256sum] = "${QCS615_SHA256SUM}"
+
+SRC_URI = "${PBT_ARTIFACTORY}/${PBT_BUILD_ID}/${PBT_BIN_PATH}/${BPN}_${PV}_${PBT_ARCH}.tar.gz;name=${PBT_ARCH}"

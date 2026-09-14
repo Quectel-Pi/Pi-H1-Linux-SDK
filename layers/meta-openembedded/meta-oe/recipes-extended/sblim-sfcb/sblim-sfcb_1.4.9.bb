@@ -27,14 +27,14 @@ SRC_URI = "http://downloads.sourceforge.net/sblim/${BP}.tar.bz2 \
            file://0001-Replace-need-for-error.h-when-it-does-not-exist.patch \
            file://sblim-sfcb-1.4.9-fix-sfcbinst2mof.patch \
            file://0001-Avoid-variable-definition-in-header-files.patch \
+           file://0001-configure-Check-for-function-from-respective-library.patch \
+           file://0001-include-missing-system-headers.patch \
 "
 
 SRC_URI[md5sum] = "28021cdabc73690a94f4f9d57254ce30"
 SRC_URI[sha256sum] = "634a67b2f7ac3b386a79160eb44413d618e33e4e7fc74ae68b0240484af149dd"
 
-CVE_CHECK_IGNORE += "\
-    CVE-2012-3381 \
-"
+CVE_STATUS[CVE-2012-3381] = "fixed-version: The CPE in the NVD database doesn't reflect correctly the vulnerable versions."
 
 inherit autotools
 inherit systemd
@@ -44,6 +44,7 @@ SYSTEMD_SERVICE:${PN} = "sblim-sfcb.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 
 LDFLAGS:append = "${@bb.utils.contains('DISTRO_FEATURES', 'ld-is-gold', ' -fuse-ld=bfd ', '', d)}"
+LDFLAGS:append = "${@bb.utils.contains('DISTRO_FEATURES', 'ld-is-lld', ' -Wl,--allow-shlib-undefined ', '', d)}"
 
 EXTRA_OECONF = '--enable-debug \
                 --enable-ssl \

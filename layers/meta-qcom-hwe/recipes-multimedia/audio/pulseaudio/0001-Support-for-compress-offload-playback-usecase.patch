@@ -51,33 +51,51 @@ Subject: [PATCH 1/6] Support for compress offload playback usecase
   avoid invalid writes of the PA stream.
 * Changes to enable compress volume change support via pulseaudio.
 
-Change-Id: Ia8eb80b9f5b3cba47150689260e42183b664fbc0
+Upstream-Status: Pending
 Signed-off-by: Raveendranath Kondrakunta <quic_rkondrak@quicinc.com>
 Signed-off-by: Yuchao Pan <quic_yuchpan@quicinc.com>
 Signed-off-by: Pratyush Meduri <quic_mpratyus@quicinc.com>
+Signed-off-by: SaiRamReddy Bojja <quic_sbojja@quicinc.com>
+Signed-off-by: leqi <quic_leqi@quicinc.com>
 ---
- src/modules/alsa/alsa-sink.c    |  2 +-
- src/pulse/def.h                 |  3 +
- src/pulse/format.c              | 48 ++++++++++++++++
- src/pulse/format.h              | 42 ++++++++++++++
- src/pulse/map-file              |  2 +
- src/pulse/meson.build           |  2 +-
- src/pulse/stream.c              |  9 +++
- src/pulsecore/core-format.c     | 23 +++++++-
- src/pulsecore/memchunk.h        |  1 +
- src/pulsecore/meson.build       | 47 ++++------------
- src/pulsecore/protocol-native.c | 76 +++++++++++++++++++++++--
- src/pulsecore/sink-input.c      | 98 ++++++++++++++++++++++++++++-----
- src/pulsecore/sink-input.h      | 12 ++++
- src/pulsecore/sink.c            | 98 +++++++++++++++++++++++++++++----
- src/pulsecore/sink.h            | 35 ++++++++++--
- src/pulsecore/source-output.c   |  4 +-
- src/pulsecore/source.c          |  4 +-
- src/utils/pacat.c               | 87 +++++++++++++++++++++++++----
- 18 files changed, 503 insertions(+), 90 deletions(-)
+ src/meson.build                 |   1 +
+ src/modules/alsa/alsa-sink.c    |   2 +-
+ src/pulse/def.h                 |   3 +
+ src/pulse/format.c              |  48 +++++++
+ src/pulse/format.h              |  42 ++++++
+ src/pulse/map-file              |   2 +
+ src/pulse/meson.build           |   2 +-
+ src/pulse/stream.c              |  23 ++-
+ src/pulsecore/core-format.c     |  23 ++-
+ src/pulsecore/memchunk.h        |   1 +
+ src/pulsecore/meson.build       |  47 ++-----
+ src/pulsecore/protocol-native.c |  76 +++++++++-
+ src/pulsecore/rtpoll.c          |   7 +-
+ src/pulsecore/sink-input.c      |  98 +++++++++++--
+ src/pulsecore/sink-input.h      |  12 ++
+ src/pulsecore/sink.c            |  98 +++++++++++--
+ src/pulsecore/sink.h            |  35 ++++-
+ src/pulsecore/source-output.c   |   4 +-
+ src/pulsecore/source.c          |   4 +-
+ src/pulsecore/tinymp3.h         | 109 +++++++++++++++
+ src/utils/pacat.c               | 241 ++++++++++++++++++++++++++++++--
+ 21 files changed, 782 insertions(+), 96 deletions(-)
+ create mode 100644 src/pulsecore/tinymp3.h
 
+diff --git a/src/meson.build b/src/meson.build
+index e2860811b..75e51988e 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -143,6 +143,7 @@ libpulsecommon_headers = [
+   'pulsecore/thread.h',
+   'pulsecore/time-smoother.h',
+   'pulsecore/time-smoother_2.h',
++  'pulsecore/tinymp3.h',
+   'pulsecore/tokenizer.h',
+   'pulsecore/usergroup.h',
+   'pulsecore/sndfile-util.h',
 diff --git a/src/modules/alsa/alsa-sink.c b/src/modules/alsa/alsa-sink.c
-index 76a710e..0d23722 100644
+index 76a710e04..0d23722da 100644
 --- a/src/modules/alsa/alsa-sink.c
 +++ b/src/modules/alsa/alsa-sink.c
 @@ -1164,7 +1164,7 @@ static int unsuspend(struct userdata *u, bool recovering) {
@@ -90,7 +108,7 @@ index 76a710e..0d23722 100644
          int len = strlen(u->device_name) + 8;
  
 diff --git a/src/pulse/def.h b/src/pulse/def.h
-index 4097bd8..a400ffc 100644
+index 4097bd89c..a400ffcf8 100644
 --- a/src/pulse/def.h
 +++ b/src/pulse/def.h
 @@ -694,6 +694,9 @@ typedef struct pa_timing_info {
@@ -104,7 +122,7 @@ index 4097bd8..a400ffc 100644
      /**< Time in usecs a sample takes from being recorded to being
       * delivered to the application. Only for record streams. */
 diff --git a/src/pulse/format.c b/src/pulse/format.c
-index 00bae2d..39180b8 100644
+index 00bae2d46..39180b84b 100644
 --- a/src/pulse/format.c
 +++ b/src/pulse/format.c
 @@ -49,6 +49,13 @@ static const char* const _encoding_str_table[]= {
@@ -170,7 +188,7 @@ index 00bae2d..39180b8 100644
      char *tmp;
  
 diff --git a/src/pulse/format.h b/src/pulse/format.h
-index 5f97929..bc97c6a 100644
+index 5f97929c2..bc97c6ae8 100644
 --- a/src/pulse/format.h
 +++ b/src/pulse/format.h
 @@ -62,10 +62,33 @@ typedef enum pa_encoding {
@@ -241,7 +259,7 @@ index 5f97929..bc97c6a 100644
   * the format represented by \a second. This means that \a second must
   * have all the fields that \a first does, but the reverse need not
 diff --git a/src/pulse/map-file b/src/pulse/map-file
-index 3df03cd..99eb1f1 100644
+index 3df03cdd3..99eb1f106 100644
 --- a/src/pulse/map-file
 +++ b/src/pulse/map-file
 @@ -190,6 +190,8 @@ pa_format_info_get_prop_type;
@@ -254,7 +272,7 @@ index 3df03cd..99eb1f1 100644
  pa_format_info_new;
  pa_format_info_set_channel_map;
 diff --git a/src/pulse/meson.build b/src/pulse/meson.build
-index c2128e0..941f8c3 100644
+index c2128e087..941f8c30f 100644
 --- a/src/pulse/meson.build
 +++ b/src/pulse/meson.build
 @@ -92,7 +92,7 @@ libpulse_dep = declare_dependency(link_with: libpulse)
@@ -267,10 +285,45 @@ index c2128e0..941f8c3 100644
  
  libpulse_simple = shared_library('pulse-simple',
 diff --git a/src/pulse/stream.c b/src/pulse/stream.c
-index f0c8034..ff58029 100644
+index f0c8034a4..39630f58b 100644
 --- a/src/pulse/stream.c
 +++ b/src/pulse/stream.c
-@@ -1742,6 +1742,13 @@ static pa_usec_t calc_time(const pa_stream *s, bool ignore_transport) {
+@@ -51,6 +51,7 @@
+ #define SMOOTHER_ADJUST_TIME (1000*PA_USEC_PER_MSEC)
+ #define SMOOTHER_MIN_HISTORY (4)
+ #endif
++#define OFFLOAD_STREAM_OUT_PREBUFFER (16484 * 4)
+ 
+ pa_stream *pa_stream_new(pa_context *c, const char *name, const pa_sample_spec *ss, const pa_channel_map *map) {
+     return pa_stream_new_with_proplist(c, name, ss, map, NULL);
+@@ -1703,7 +1704,8 @@ size_t pa_stream_readable_size(const pa_stream *s) {
+ pa_operation * pa_stream_drain(pa_stream *s, pa_stream_success_cb_t cb, void *userdata) {
+     pa_operation *o;
+     pa_tagstruct *t;
+-    uint32_t tag;
++    uint32_t tag, drain_buffer_size = 0, drain_time = 0;
++    uint32_t *offload_stream_bitrate = userdata;
+ 
+     pa_assert(s);
+     pa_assert(PA_REFCNT_VALUE(s) >= 1);
+@@ -1722,7 +1724,15 @@ pa_operation * pa_stream_drain(pa_stream *s, pa_stream_success_cb_t cb, void *us
+     t = pa_tagstruct_command(s->context, PA_COMMAND_DRAIN_PLAYBACK_STREAM, &tag);
+     pa_tagstruct_putu32(t, s->channel);
+     pa_pstream_send_tagstruct(s->context->pstream, t);
+-    pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    if (pa_format_info_is_compressed(s->format)) {
++        drain_buffer_size = s->buffer_attr.tlength + OFFLOAD_STREAM_OUT_PREBUFFER;
++        if (offload_stream_bitrate)
++            drain_time = (drain_buffer_size * 8) / *offload_stream_bitrate;
++        pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT + drain_time, pa_stream_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++    }
++    else
++        pa_pdispatch_register_reply(s->context->pdispatch, tag, DEFAULT_TIMEOUT, pa_stream_simple_ack_callback, pa_operation_ref(o), (pa_free_cb_t) pa_operation_unref);
++
+ 
+     /* This might cause the read index to continue again, hence
+      * let's request a timing update */
+@@ -1742,6 +1752,13 @@ static pa_usec_t calc_time(const pa_stream *s, bool ignore_transport) {
      pa_assert(s->direction != PA_STREAM_PLAYBACK || !s->timing_info.read_index_corrupt);
      pa_assert(s->direction != PA_STREAM_RECORD || !s->timing_info.write_index_corrupt);
  
@@ -284,7 +337,7 @@ index f0c8034..ff58029 100644
      if (s->direction == PA_STREAM_PLAYBACK) {
          /* The last byte that was written into the output device
           * had this time value associated */
-@@ -1789,6 +1796,7 @@ static pa_usec_t calc_time(const pa_stream *s, bool ignore_transport) {
+@@ -1789,6 +1806,7 @@ static pa_usec_t calc_time(const pa_stream *s, bool ignore_transport) {
          }
      }
  
@@ -292,7 +345,7 @@ index f0c8034..ff58029 100644
      return usec;
  }
  
-@@ -1819,6 +1827,7 @@ static void stream_get_timing_info_callback(pa_pdispatch *pd, uint32_t command,
+@@ -1819,6 +1837,7 @@ static void stream_get_timing_info_callback(pa_pdispatch *pd, uint32_t command,
      } else {
  
          if (pa_tagstruct_get_usec(t, &i->sink_usec) < 0 ||
@@ -301,7 +354,7 @@ index f0c8034..ff58029 100644
              pa_tagstruct_get_boolean(t, &playing) < 0 ||
              pa_tagstruct_get_timeval(t, &local) < 0 ||
 diff --git a/src/pulsecore/core-format.c b/src/pulsecore/core-format.c
-index 1a21864..5accde0 100644
+index 1a218644b..5accde03c 100644
 --- a/src/pulsecore/core-format.c
 +++ b/src/pulsecore/core-format.c
 @@ -136,7 +136,22 @@ int pa_format_info_to_sample_spec_fake(const pa_format_info *f, pa_sample_spec *
@@ -342,7 +395,7 @@ index 1a21864..5accde0 100644
          ss->channels = 2;
          if (map)
 diff --git a/src/pulsecore/memchunk.h b/src/pulsecore/memchunk.h
-index 2b19712..92cc885 100644
+index 2b197129a..92cc885a7 100644
 --- a/src/pulsecore/memchunk.h
 +++ b/src/pulsecore/memchunk.h
 @@ -31,6 +31,7 @@ typedef struct pa_memchunk pa_memchunk;
@@ -354,7 +407,7 @@ index 2b19712..92cc885 100644
  
  /* Make a memchunk writable, i.e. make sure that the caller may have
 diff --git a/src/pulsecore/meson.build b/src/pulsecore/meson.build
-index d7f9ef2..984725d 100644
+index d7f9ef2cf..984725db1 100644
 --- a/src/pulsecore/meson.build
 +++ b/src/pulsecore/meson.build
 @@ -172,45 +172,18 @@ endif
@@ -414,7 +467,7 @@ index d7f9ef2..984725d 100644
  libpulsecore = shared_library('pulsecore-' + pa_version_major_minor,
    libpulsecore_sources, libpulsecore_headers,
 diff --git a/src/pulsecore/protocol-native.c b/src/pulsecore/protocol-native.c
-index f8dad57..e3f2106 100644
+index f8dad57d6..e3f2106f0 100644
 --- a/src/pulsecore/protocol-native.c
 +++ b/src/pulsecore/protocol-native.c
 @@ -145,6 +145,7 @@ typedef struct playback_stream {
@@ -483,9 +536,9 @@ index f8dad57..e3f2106 100644
              s->render_memblockq_length = pa_memblockq_get_length(s->sink_input->thread_info.render_memblockq);
              s->current_sink_latency = pa_sink_get_latency_within_thread(s->sink_input->sink, false);
 +            s->current_sink_sess_time = s->sink_input->sink->sess_time;
+             /* Add resampler latency */
+             s->current_sink_latency += pa_resampler_get_delay_usec(i->thread_info.resampler);
              s->underrun_for = s->sink_input->thread_info.underrun_for;
-             s->playing_for = s->sink_input->thread_info.playing_for;
- 
 @@ -1476,12 +1508,26 @@ static bool handle_input_underrun(playback_stream *s, bool force) {
          pa_log_debug("%s %s of '%s'", force ? "Actual" : "Implicit",
              s->drain_request ? "drain" : "underrun", pa_strnull(pa_proplist_gets(s->sink_input->proplist, PA_PROP_MEDIA_NAME)));
@@ -558,8 +611,38 @@ index f8dad57..e3f2106 100644
      pa_tagstruct_put_usec(reply,
                            s->current_source_latency +
                            pa_bytes_to_usec(s->on_the_fly_snapshot, &s->source_output->sample_spec));
+diff --git a/src/pulsecore/rtpoll.c b/src/pulsecore/rtpoll.c
+index 1085bf957..85749ca97 100644
+--- a/src/pulsecore/rtpoll.c
++++ b/src/pulsecore/rtpoll.c
+@@ -549,10 +549,11 @@ static int asyncmsgq_read_work(pa_rtpoll_item *i) {
+     void *data;
+     pa_memchunk chunk;
+     int64_t offset;
++    int processed = 0;
+ 
+     pa_assert(i);
+ 
+-    if (pa_asyncmsgq_get(i->work_userdata, &object, &code, &data, &offset, &chunk, 0) == 0) {
++    while (pa_asyncmsgq_get(i->work_userdata, &object, &code, &data, &offset, &chunk, 0) == 0) {
+         int ret;
+ 
+         if (!object && code == PA_MESSAGE_SHUTDOWN) {
+@@ -565,10 +566,10 @@ static int asyncmsgq_read_work(pa_rtpoll_item *i) {
+ 
+         ret = pa_asyncmsgq_dispatch(object, code, data, offset, &chunk);
+         pa_asyncmsgq_done(i->work_userdata, ret);
+-        return 1;
++        processed++;
+     }
+ 
+-    return 0;
++    return processed;
+ }
+ 
+ pa_rtpoll_item *pa_rtpoll_item_new_asyncmsgq_read(pa_rtpoll *p, pa_rtpoll_priority_t prio, pa_asyncmsgq *q) {
 diff --git a/src/pulsecore/sink-input.c b/src/pulsecore/sink-input.c
-index 5e7657c..b78bb12 100644
+index 5e7657c45..b78bb122f 100644
 --- a/src/pulsecore/sink-input.c
 +++ b/src/pulsecore/sink-input.c
 @@ -87,7 +87,7 @@ static void sink_input_free(pa_object *o);
@@ -759,7 +842,7 @@ index 5e7657c..b78bb12 100644
 +        i->drain_complete(i);
 +}
 diff --git a/src/pulsecore/sink-input.h b/src/pulsecore/sink-input.h
-index d3de6e3..bd53fda 100644
+index d3de6e3f8..bd53fda1f 100644
 --- a/src/pulsecore/sink-input.h
 +++ b/src/pulsecore/sink-input.h
 @@ -231,6 +231,11 @@ struct pa_sink_input {
@@ -771,9 +854,9 @@ index d3de6e3..bd53fda 100644
 +     * drain request */
 +    void (*drain_complete)(pa_sink_input *i); /* may be NULL */
 +
-     struct {
-         pa_sink_input_state_t state;
- 
+     /* Used to store the rewind amount of the origin sink during a move */
+     size_t origin_rewind_bytes;    /* In sink input sample spec */
+
 @@ -328,7 +333,9 @@ typedef struct pa_sink_input_new_data {
  pa_sink_input_new_data* pa_sink_input_new_data_init(pa_sink_input_new_data *data);
  void pa_sink_input_new_data_set_sample_spec(pa_sink_input_new_data *data, const pa_sample_spec *spec);
@@ -805,7 +888,7 @@ index d3de6e3..bd53fda 100644
  
  /* Calls the attach() callback if it's set. The input must be in detached
 diff --git a/src/pulsecore/sink.c b/src/pulsecore/sink.c
-index 905e1db..9971665 100644
+index 905e1db7b..9971665ed 100644
 --- a/src/pulsecore/sink.c
 +++ b/src/pulsecore/sink.c
 @@ -38,6 +38,7 @@
@@ -815,7 +898,7 @@ index 905e1db..9971665 100644
 +#include <pulsecore/core-format.h>
  #include <pulsecore/core-util.h>
  #include <pulsecore/sample-util.h>
- #include <pulsecore/mix.h>
+ #include <pulsecore/stream-util.h>
 @@ -354,6 +355,8 @@ pa_sink* pa_sink_new(
      s->thread_info.volume_change_extra_delay = core->deferred_volume_extra_delay_usec;
      s->thread_info.port_latency_offset = s->port_latency_offset;
@@ -961,7 +1044,7 @@ index 905e1db..9971665 100644
 +    pa_sink_input_drain_complete(i);
 +}
 diff --git a/src/pulsecore/sink.h b/src/pulsecore/sink.h
-index 87bfddd..e87b86a 100644
+index 87bfddd0b..e87b86a3e 100644
 --- a/src/pulsecore/sink.h
 +++ b/src/pulsecore/sink.h
 @@ -107,7 +107,9 @@ struct pa_sink {
@@ -1046,7 +1129,7 @@ index 87bfddd..e87b86a 100644
   * the sink is not yet set up, i.e. the thread not set up yet. See
   * pa_assert_io_context() in thread-mq.h for more information. */
 diff --git a/src/pulsecore/source-output.c b/src/pulsecore/source-output.c
-index bee9241..d7256f4 100644
+index bee9241b9..d7256f4d1 100644
 --- a/src/pulsecore/source-output.c
 +++ b/src/pulsecore/source-output.c
 @@ -75,7 +75,7 @@ void pa_source_output_new_data_set_channel_map(pa_source_output_new_data *data,
@@ -1068,7 +1151,7 @@ index bee9241..d7256f4 100644
  
      if (PA_UNLIKELY(o->flags & PA_SOURCE_OUTPUT_PASSTHROUGH))
 diff --git a/src/pulsecore/source.c b/src/pulsecore/source.c
-index 99d8dde..ac48302 100644
+index 99d8dde6e..ac483024b 100644
 --- a/src/pulsecore/source.c
 +++ b/src/pulsecore/source.c
 @@ -1256,8 +1256,8 @@ bool pa_source_is_passthrough(pa_source *s) {
@@ -1082,11 +1165,149 @@ index 99d8dde..ac48302 100644
  }
  
  /* Called from main context */
+diff --git a/src/pulsecore/tinymp3.h b/src/pulsecore/tinymp3.h
+new file mode 100644
+index 000000000..b0d429d5c
+--- /dev/null
++++ b/src/pulsecore/tinymp3.h
+@@ -0,0 +1,109 @@
++/*
++ * This file is provided under a dual BSD/LGPLv2.1 license.  When using or
++ * redistributing this file, you may do so under either license.
++ *
++ * BSD LICENSE
++ *
++ * mp3 header and prasing
++ * Copyright (c) 2011-2012, Intel Corporation
++ * All rights reserved.
++ *
++ * Author: Vinod Koul <vinod.koul@linux.intel.com>
++ *
++ * Redistribution and use in source and binary forms, with or without
++ * modification, are permitted provided that the following conditions are met:
++ *
++ * Redistributions of source code must retain the above copyright notice,
++ * this list of conditions and the following disclaimer.
++ * Redistributions in binary form must reproduce the above copyright notice,
++ * this list of conditions and the following disclaimer in the documentation
++ * and/or other materials provided with the distribution.
++ * Neither the name of Intel Corporation nor the names of its contributors
++ * may be used to endorse or promote products derived from this software
++ * without specific prior written permission.
++ *
++ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
++ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
++ * THE POSSIBILITY OF SUCH DAMAGE.
++ *
++ * LGPL LICENSE
++ *
++ * mp3 header and parsing
++ * Copyright (c) 2011-2012, Intel Corporation.
++ *
++ *
++ * This program is free software; you can redistribute it and/or modify it
++ * under the terms and conditions of the GNU Lesser General Public License,
++ * version 2.1, as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope it will be useful, but WITHOUT
++ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
++ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
++ * License for more details.
++ *
++ * You should have received a copy of the GNU Lesser General Public License
++ * along with this program; if not, write to
++ * the Free Software Foundation, Inc.,
++ * 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++
++
++#ifndef __TINYMP3_H
++#define __TINYMP3_H
++
++#if defined(__cplusplus)
++extern "C" {
++#endif
++
++
++#define MP3_SYNC 0xe0ff
++
++static const int mp3_sample_rates[3][3] = {
++	{44100, 48000, 32000},        /* MPEG-1 */
++	{22050, 24000, 16000},        /* MPEG-2 */
++	{11025, 12000,  8000},        /* MPEG-2.5 */
++};
++
++static const int mp3_bit_rates[3][3][15] = {
++	{
++		/* MPEG-1 */
++		{  0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448}, /* Layer 1 */
++		{  0, 32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384}, /* Layer 2 */
++		{  0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320}, /* Layer 3 */
++	},
++	{
++		/* MPEG-2 */
++		{  0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256}, /* Layer 1 */
++		{  0,  8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160}, /* Layer 2 */
++		{  0,  8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160}, /* Layer 3 */
++	},
++	{
++		/* MPEG-2.5 */
++		{  0, 32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256}, /* Layer 1 */
++		{  0,  8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160}, /* Layer 2 */
++		{  0,  8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160}, /* Layer 3 */
++	},
++};
++
++enum mpeg_version {
++	MPEG1  = 0,
++	MPEG2  = 1,
++	MPEG25 = 2
++};
++
++enum mp3_stereo_mode {
++	STEREO = 0x00,
++	JOINT = 0x01,
++	DUAL = 0x02,
++	MONO = 0x03
++};
++
++#endif
 diff --git a/src/utils/pacat.c b/src/utils/pacat.c
-index 39ccaff..f12067e 100644
+index 39ccaffd0..b13f010a9 100644
 --- a/src/utils/pacat.c
 +++ b/src/utils/pacat.c
-@@ -100,6 +100,13 @@ static bool sample_spec_set = false;
+@@ -43,12 +43,22 @@
+ #include <pulsecore/log.h>
+ #include <pulsecore/macro.h>
+ #include <pulsecore/sndfile-util.h>
++#include <pulsecore/tinymp3.h>
+ #include <pulsecore/sample-util.h>
+ 
+ #define TIME_EVENT_USEC 50000
+ 
+ #define CLEAR_LINE "\x1B[K"
+ 
++#define ID3V2_HEADER_SIZE 10
++#define ID3V2_FILE_IDENTIFIER_SIZE 3
++
++struct mp3_header {
++       uint16_t sync;
++       uint8_t format1;
++       uint8_t format2;
++};
++
+ static enum { RECORD, PLAYBACK } mode = PLAYBACK;
+ static const char *purpose = NULL;
+ 
+@@ -100,6 +110,13 @@ static bool sample_spec_set = false;
  static pa_channel_map channel_map;
  static bool channel_map_set = false;
  
@@ -1100,7 +1321,25 @@ index 39ccaff..f12067e 100644
  static sf_count_t (*readf_function)(SNDFILE *_sndfile, void *ptr, sf_count_t frames) = NULL;
  static sf_count_t (*writef_function)(SNDFILE *_sndfile, const void *ptr, sf_count_t frames) = NULL;
  
-@@ -319,7 +326,7 @@ static void stream_state_callback(pa_stream *s, void *userdata) {
+@@ -107,6 +124,7 @@ static pa_stream_flags_t flags = 0;
+ 
+ static size_t latency = 0, process_time = 0;
+ static int32_t latency_msec = 0, process_time_msec = 0;
++static int32_t offload_stream_bitrate = 8000;
+ 
+ static bool raw = true;
+ static int file_format = -1;
+@@ -159,7 +177,8 @@ static void start_drain(void) {
+ 
+         pa_stream_set_write_callback(stream, NULL, NULL);
+ 
+-        if (!(o = pa_stream_drain(stream, stream_drain_complete, NULL))) {
++
++        if (!(o = pa_stream_drain(stream, stream_drain_complete, &offload_stream_bitrate))) {
+             pa_log(_("pa_stream_drain(): %s"), pa_strerror(pa_context_errno(context)));
+             quit(1);
+             return;
+@@ -319,7 +338,7 @@ static void stream_state_callback(pa_stream *s, void *userdata) {
  
              if (verbose) {
                  const pa_buffer_attr *a;
@@ -1109,7 +1348,7 @@ index 39ccaff..f12067e 100644
  
                  pa_log(_("Stream successfully created."));
  
-@@ -335,9 +342,14 @@ static void stream_state_callback(pa_stream *s, void *userdata) {
+@@ -335,9 +354,14 @@ static void stream_state_callback(pa_stream *s, void *userdata) {
                      }
                  }
  
@@ -1127,7 +1366,7 @@ index 39ccaff..f12067e 100644
  
                  pa_log(_("Connected to device %s (index: %u, suspended: %s)."),
                          pa_stream_get_device_name(s),
-@@ -449,7 +461,12 @@ static void context_state_callback(pa_context *c, void *userdata) {
+@@ -449,7 +473,12 @@ static void context_state_callback(pa_context *c, void *userdata) {
              if (verbose)
                  pa_log(_("Connection established.%s"), CLEAR_LINE);
  
@@ -1141,7 +1380,7 @@ index 39ccaff..f12067e 100644
                  pa_log(_("pa_stream_new() failed: %s"), pa_strerror(pa_context_errno(c)));
                  goto fail;
              }
-@@ -692,6 +709,8 @@ static void help(const char *argv0) {
+@@ -692,6 +721,8 @@ static void help(const char *argv0) {
               "      --channels=CHANNELS               The number of channels, 1 for mono, 2 for stereo\n"
               "                                        (defaults to 2)\n"
               "      --channel-map=CHANNELMAP          Channel map to use instead of the default\n"
@@ -1150,7 +1389,7 @@ index 39ccaff..f12067e 100644
               "      --fix-format                      Take the sample format from the sink/source the stream is\n"
               "                                        being connected to.\n"
               "      --fix-rate                        Take the sampling rate from the sink/source the stream is\n"
-@@ -721,6 +740,8 @@ enum {
+@@ -721,6 +752,8 @@ enum {
      ARG_SAMPLEFORMAT,
      ARG_CHANNELS,
      ARG_CHANNELMAP,
@@ -1159,7 +1398,141 @@ index 39ccaff..f12067e 100644
      ARG_FIX_FORMAT,
      ARG_FIX_RATE,
      ARG_FIX_CHANNELS,
-@@ -762,6 +783,8 @@ int main(int argc, char *argv[]) {
+@@ -738,6 +771,125 @@ enum {
+     ARG_MONITOR_STREAM,
+ };
+ 
++static int skip_id3v2_header(FILE *file)
++{
++       char buffer[ID3V2_HEADER_SIZE + 1];
++       int ret, bytes_read;
++       uint32_t header_size;
++
++       /* we only need to parse ID3v2 header in order to skip
++        * the whole ID3v2 tag found at the beginning of the file.
++        *
++        * ID3v2 header has the following structure(v2.3.0):
++        *
++        * 1) file identifier
++        *      => 3 bytes long.
++        *      => has the value of ID3 for ID3v2 tag.
++        *
++        * 2) version
++        *      => 2 bytes long.
++        *
++        * 3) flags
++        *      => 1 byte long.
++        *
++        * 4) size
++        *      => 4 bytes long.
++        *      => the MSB of each byte is 0 so it needs to be ignored
++        *      when trying to parse the size.
++        *      => this field doesn't include the 10 bytes which make up
++        *      the ID3v2 header so a +10 needs to be added to this
++        *      field in order to get the correct position of the end
++        *      of the ID3v2 tag.
++        */
++
++       /* for now, we only support ID3v2 header found at the beginning
++        * of the file so we need to move file cursor to the beginning
++        * of the file
++        */
++       ret = fseek(file, 0, SEEK_SET);
++       if (ret < 0)
++               return ret;
++
++       buffer[ID3V2_HEADER_SIZE] = '\0';
++
++       /* read first ID3V2_HEADER_SIZE chunk */
++       bytes_read = fread(buffer, sizeof(char), ID3V2_HEADER_SIZE, file);
++
++       /* ID3v2 header is 10 bytes long
++        *
++        * if we can't read the 10 bytes then there's obviously no
++        * ID3v2 tag to skip
++        */
++       if (bytes_read != ID3V2_HEADER_SIZE)
++               return 0;
++
++       /* check if we're dealing with ID3v2 */
++       if (strncmp(buffer, "ID3", ID3V2_FILE_IDENTIFIER_SIZE) != 0)
++               return 0;
++
++       header_size = buffer[9];
++       header_size |= (buffer[8] << 7);
++       header_size |= (buffer[7] << 14);
++       header_size |= (buffer[6] << 21);
++
++       /* the header size field in ID3v2 header doesn't
++        * include the 10 bytes of which the header is made
++        * so we need to add them to get the correct position
++        */
++       return header_size + ID3V2_HEADER_SIZE;
++}
++
++void pa_parse_mpeg_header(FILE *file, int *sample_rate, int *num_channels, int *bit_rate) {
++       size_t read;
++       struct mp3_header header;
++       int offset;
++       int ver_idx, mp3_version, layer, bit_rate_idx, sample_rate_idx, channel_idx;
++
++       offset = skip_id3v2_header(file);
++       if (offset < 0) {
++               pa_log(_("Failed to get ID3 tag end position."));
++               return;
++       }
++
++       if (fseek(file, offset, SEEK_SET) < 0) {
++               pa_log(_("Unable to seek."));
++               return;
++       }
++
++       read = fread(&header, 1, sizeof(header), file);
++       if (read != sizeof(header)) {
++               pa_log(_("Unable to read header"));
++               return;
++       }
++
++       if ((header.sync & MP3_SYNC) != MP3_SYNC) {
++               pa_log(_("Error: Can't find sync word"));
++               return;
++       }
++       ver_idx = (header.sync >> 11) & 0x03;
++       mp3_version = ver_idx == 0 ? MPEG25 : ((ver_idx & 0x1) ? MPEG1 : MPEG2);
++       layer = 4 - ((header.sync >> 9) & 0x03);
++       bit_rate_idx = ((header.format1 >> 4) & 0x0f);
++       sample_rate_idx = ((header.format1 >> 2) & 0x03);
++       channel_idx = ((header.format2 >> 6) & 0x03);
++
++       if (sample_rate_idx == 3 || layer == 4 || bit_rate_idx == 15) {
++               pa_log(_("Can't find valid header"));
++               return;
++       }
++       *num_channels = (channel_idx == MONO ? 1 : 2);
++       *sample_rate = mp3_sample_rates[mp3_version][sample_rate_idx];
++       *bit_rate = (mp3_bit_rates[mp3_version][layer - 1][bit_rate_idx]) * 1000;
++
++
++       pa_log(_("num_channels %d, sample_rate %d, bit_rate %d"), *num_channels, *sample_rate, *bit_rate);
++
++       if (fseek(file, offset, SEEK_SET) < 0) {
++               pa_log(_("Failed to set cursor to offset"));
++               return;
++       }
++}
++
+ int main(int argc, char *argv[]) {
+     pa_mainloop* m = NULL;
+     int ret = 1, c;
+@@ -746,6 +898,7 @@ int main(int argc, char *argv[]) {
+     const char *filename = NULL;
+     /* type for pa_read/_write. passed as userdata to the callbacks */
+     unsigned long type = 0;
++    FILE *fp = NULL;
+ 
+     static const struct option long_options[] = {
+         {"record",       0, NULL, 'r'},
+@@ -762,6 +915,8 @@ int main(int argc, char *argv[]) {
          {"format",       1, NULL, ARG_SAMPLEFORMAT},
          {"channels",     1, NULL, ARG_CHANNELS},
          {"channel-map",  1, NULL, ARG_CHANNELMAP},
@@ -1168,7 +1541,7 @@ index 39ccaff..f12067e 100644
          {"fix-format",   0, NULL, ARG_FIX_FORMAT},
          {"fix-rate",     0, NULL, ARG_FIX_RATE},
          {"fix-channels", 0, NULL, ARG_FIX_CHANNELS},
-@@ -908,6 +931,24 @@ int main(int argc, char *argv[]) {
+@@ -908,6 +1063,24 @@ int main(int argc, char *argv[]) {
                  channel_map_set = true;
                  break;
  
@@ -1193,7 +1566,7 @@ index 39ccaff..f12067e 100644
              case ARG_FIX_CHANNELS:
                  flags |= PA_STREAM_FIX_CHANNELS;
                  break;
-@@ -1007,7 +1048,23 @@ int main(int argc, char *argv[]) {
+@@ -1007,7 +1180,43 @@ int main(int argc, char *argv[]) {
          }
      }
  
@@ -1204,6 +1577,26 @@ index 39ccaff..f12067e 100644
 +    }
 +
 +    if (encoding_set) {
++        if (optind+1 == argc) {
++            filename = argv[optind];
++            fp = fopen(filename, "r");
++            if (fp == NULL) {
++                    pa_log(_("file open fail"));
++                    goto quit;
++            }
++            switch (encoding) {
++            case PA_ENCODING_MPEG:
++                    pa_parse_mpeg_header(fp, &sample_spec.rate, &sample_spec.channels, &offload_stream_bitrate);
++                    break;
++            default:
++                    pa_log(_("using default sample_spec"));
++            }
++            fclose (fp);
++        } else if (optind+1 <= argc) {
++            pa_log(_("Too many arguments."));
++            goto quit;
++        }
++
 +        formats[0] = pa_format_info_new();
 +
 +        formats[0]->encoding = encoding;
@@ -1218,25 +1611,25 @@ index 39ccaff..f12067e 100644
          pa_log(_("Invalid sample specification"));
          goto quit;
      }
-@@ -1132,12 +1189,20 @@ int main(int argc, char *argv[]) {
+@@ -1132,12 +1341,20 @@ int main(int argc, char *argv[]) {
      }
  
      if (verbose) {
 -        char tss[PA_SAMPLE_SPEC_SNPRINT_MAX], tcm[PA_CHANNEL_MAP_SNPRINT_MAX];
 +        if (!encoding_set) {
 +            char tss[PA_SAMPLE_SPEC_SNPRINT_MAX], tcm[PA_CHANNEL_MAP_SNPRINT_MAX];
- 
--        pa_log(_("Opening a %s stream with sample specification '%s' and channel map '%s'."),
--                mode == RECORD ? _("recording") : _("playback"),
--                pa_sample_spec_snprint(tss, sizeof(tss), &sample_spec),
--                pa_channel_map_snprint(tcm, sizeof(tcm), &channel_map));
++
 +            pa_log(_("Opening a %s stream with sample specification '%s' and channel map '%s'."),
 +                    mode == RECORD ? _("recording") : _("playback"),
 +                    pa_sample_spec_snprint(tss, sizeof(tss), &sample_spec),
 +                    pa_channel_map_snprint(tcm, sizeof(tcm), &channel_map));
 +        } else {
 +            char tsf[PA_FORMAT_INFO_SNPRINT_MAX];
-+
+ 
+-        pa_log(_("Opening a %s stream with sample specification '%s' and channel map '%s'."),
+-                mode == RECORD ? _("recording") : _("playback"),
+-                pa_sample_spec_snprint(tss, sizeof(tss), &sample_spec),
+-                pa_channel_map_snprint(tcm, sizeof(tcm), &channel_map));
 +            pa_log(_("Opening a %s stream with format specification '%s'."),
 +                    mode == RECORD ? _("recording") : _("playback"),
 +                    pa_format_info_snprint(tsf, sizeof(tsf), formats[0]));
@@ -1245,5 +1638,5 @@ index 39ccaff..f12067e 100644
  
      /* Fill in client name if none was set */
 -- 
-2.17.1
+2.34.1
 

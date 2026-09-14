@@ -12,8 +12,8 @@ SRC_URI = "git://github.com/tvheadend/tvheadend.git;branch=master;protocol=https
            file://0001-adjust-for-64bit-time_t.patch \
            "
 
-SRCREV = "9a51cea492e4a5579ca3ddf9233fecfa419de078"
-PV = "4.3+git${SRCPV}"
+SRCREV = "cc602833684953fc3e6f1c89d4f08f6dfef179e3"
+PV = "4.3+git"
 PKGV = "4.3+git${GITPKGV}"
 
 S = "${WORKDIR}/git"
@@ -31,3 +31,6 @@ EXTRA_OECONF:append:libc-musl = " --disable-execinfo"
 EXTRA_OEMAKE = "CFLAGS_NO_WERROR=yes"
 CLEANBROKEN = "1"
 
+do_configure:append() {
+    sed -i -e "s|${WORKDIR}|<TOPDIR>|g" ${B}/build.linux/build.c
+}

@@ -1,5 +1,4 @@
 SUMMARY = "Python interface for Remember The Milk API"
-AUTHOR = "Sridhar Ratnakumar / srid"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://PKG-INFO;beginline=8;endline=8;md5=a53cbc7cb75660694e138ba973c148df"
 
@@ -21,9 +20,9 @@ FILES:${PN}-tests += " \
 "
 
 RDEPENDS:${PN} += "\
-    ${PYTHON_PN}-json \
-    ${PYTHON_PN}-logging \
-    ${PYTHON_PN}-netclient \
+    python3-json \
+    python3-logging \
+    python3-netclient \
 "
 
 RDEPENDS:${PN}-samples += " \
@@ -32,5 +31,5 @@ RDEPENDS:${PN}-samples += " \
 
 RDEPENDS:${PN}-tests += " \
     ${PN} \
-    ${PYTHON_PN}-unittest \
+    python3-unittest \
 "

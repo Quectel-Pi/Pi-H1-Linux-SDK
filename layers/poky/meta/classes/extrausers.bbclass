@@ -1,3 +1,9 @@
+#
+# Copyright OpenEmbedded Contributors
+#
+# SPDX-License-Identifier: MIT
+#
+
 # This bbclass is used for image level user/group configuration.
 # Inherit this class if you want to make EXTRA_USERS_PARAMS effective.
 
@@ -17,7 +23,7 @@ inherit useradd_base
 PACKAGE_INSTALL:append = " ${@['', 'base-passwd shadow'][bool(d.getVar('EXTRA_USERS_PARAMS'))]}"
 
 # Image level user / group settings
-ROOTFS_POSTPROCESS_COMMAND:append = " set_user_group;"
+ROOTFS_POSTPROCESS_COMMAND:append = " set_user_group"
 
 # Image level user / group settings
 set_user_group () {

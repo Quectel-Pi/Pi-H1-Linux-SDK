@@ -1,0 +1,98 @@
+From 5cda40f3ea66b22913c3ccaa00379ff5310284d5 Mon Sep 17 00:00:00 2001
+From: Neil Armstrong <neil.armstrong@linaro.org>
+Date: Thu, 17 Apr 2025 16:59:01 +0200
+Subject: [PATCH 1/7] FROMGIT: dt-bindings: media: qcom,sm8550-iris: document
+ SM8650 IRIS accelerator
+
+Document the IRIS video decoder and encoder accelerator found in the
+SM8650 platform, it requires 2 more reset lines in addition to the
+properties required for the SM8550 platform.
+
+Reviewed-by: Rob Herring (Arm) <robh@kernel.org>
+Reviewed-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Tested-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org> # x1e Dell
+Signed-off-by: Neil Armstrong <neil.armstrong@linaro.org>
+Signed-off-by: Bryan O'Donoghue <bod@kernel.org>
+Signed-off-by: Hans Verkuil <hverkuil@xs4all.nl>
+Link: https://lore.kernel.org/linux-media/20250417-topic-sm8x50-iris-v10-v7-1-f020cb1d0e98@linaro.org
+Git-repo: https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git
+Git-commit: f0a0a2388f443e949894f68ca49ccc9618512316
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git/ f0a0a2388f443e949894f68ca49ccc9618512316]
+---
+ .../bindings/media/qcom,sm8550-iris.yaml      | 33 ++++++++++++++++---
+ 1 file changed, 28 insertions(+), 5 deletions(-)
+
+diff --git a/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml b/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml
+index 6a89e9e38087..f567f84bd60d 100644
+--- a/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml
++++ b/Documentation/devicetree/bindings/media/qcom,sm8550-iris.yaml
+@@ -14,9 +14,6 @@ description:
+   The iris video processing unit is a video encode and decode accelerator
+   present on Qualcomm platforms.
+ 
+-allOf:
+-  - $ref: qcom,venus-common.yaml#
+-
+ properties:
+   compatible:
+     oneOf:
+@@ -24,7 +21,9 @@ properties:
+           - enum:
+               - qcom,sa8775p-iris
+           - const: qcom,sm8550-iris
+-      - const: qcom,sm8550-iris
++      - enum:
++          - qcom,sm8550-iris
++          - qcom,sm8650-iris
+ 
+   power-domains:
+     maxItems: 4
+@@ -54,11 +53,15 @@ properties:
+       - const: video-mem
+ 
+   resets:
+-    maxItems: 1
++    minItems: 1
++    maxItems: 3
+ 
+   reset-names:
++    minItems: 1
+     items:
+       - const: bus
++      - const: xo
++      - const: core
+ 
+   iommus:
+     maxItems: 2
+@@ -80,6 +83,26 @@ required:
+   - iommus
+   - dma-coherent
+ 
++allOf:
++  - $ref: qcom,venus-common.yaml#
++  - if:
++      properties:
++        compatible:
++          enum:
++            - qcom,sm8650-iris
++    then:
++      properties:
++        resets:
++          minItems: 3
++        reset-names:
++          minItems: 3
++    else:
++      properties:
++        resets:
++          maxItems: 1
++        reset-names:
++          maxItems: 1
++
+ unevaluatedProperties: false
+ 
+ examples:
+-- 
+2.34.1
+

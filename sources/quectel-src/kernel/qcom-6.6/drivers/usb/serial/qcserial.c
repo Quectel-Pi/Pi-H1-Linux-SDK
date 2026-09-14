@@ -63,9 +63,7 @@ static const struct usb_device_id id_table[] = {
 	{DEVICE_G1K(0x05c6, 0x9202)},	/* Generic Gobi Modem device */
 	{DEVICE_G1K(0x05c6, 0x9203)},	/* Generic Gobi Modem device */
 	{DEVICE_G1K(0x05c6, 0x9222)},	/* Generic Gobi Modem device */
-#if 1 //Del by Quectel
-//	{DEVICE_G1K(0x05c6, 0x9008)},	/* Generic Gobi QDL device */
-#endif
+	{DEVICE_G1K(0x05c6, 0x9008)},	/* Generic Gobi QDL device */
 	{DEVICE_G1K(0x05c6, 0x9009)},	/* Generic Gobi Modem device */
 	{DEVICE_G1K(0x05c6, 0x9201)},	/* Generic Gobi QDL device */
 	{DEVICE_G1K(0x05c6, 0x9221)},	/* Generic Gobi QDL device */
@@ -168,6 +166,8 @@ static const struct usb_device_id id_table[] = {
 	{DEVICE_SWI(0x1199, 0x9090)},	/* Sierra Wireless EM7565 QDL */
 	{DEVICE_SWI(0x1199, 0x9091)},	/* Sierra Wireless EM7565 */
 	{DEVICE_SWI(0x1199, 0x90d2)},	/* Sierra Wireless EM9191 QDL */
+	{DEVICE_SWI(0x1199, 0x90e4)},	/* Sierra Wireless EM86xx QDL*/
+	{DEVICE_SWI(0x1199, 0x90e5)},	/* Sierra Wireless EM86xx */
 	{DEVICE_SWI(0x1199, 0xc080)},	/* Sierra Wireless EM7590 QDL */
 	{DEVICE_SWI(0x1199, 0xc081)},	/* Sierra Wireless EM7590 */
 	{DEVICE_SWI(0x413c, 0x81a2)},	/* Dell Wireless 5806 Gobi(TM) 4G LTE Mobile Broadband Card */

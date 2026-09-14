@@ -616,6 +616,7 @@ struct rx_macro {
 	u16 bit_width[RX_MACRO_MAX_DAIS];
 	int is_softclip_on;
 	int is_aux_hpf_on;
+	int pa_gpios;
 	int softclip_clk_users;
 	struct lpass_macro *pds;
 	struct regmap *regmap;
@@ -921,7 +922,7 @@ static const struct reg_default rx_defaults[] = {
 	{ CDC_RX_BCL_VBAT_PK_EST2, 0x01 },
 	{ CDC_RX_BCL_VBAT_PK_EST3, 0x40 },
 	{ CDC_RX_BCL_VBAT_RF_PROC1, 0x2A },
-	{ CDC_RX_BCL_VBAT_RF_PROC1, 0x00 },
+	{ CDC_RX_BCL_VBAT_RF_PROC2, 0x00 },
 	{ CDC_RX_BCL_VBAT_TAC1, 0x00 },
 	{ CDC_RX_BCL_VBAT_TAC2, 0x18 },
 	{ CDC_RX_BCL_VBAT_TAC3, 0x18 },
@@ -2023,19 +2024,19 @@ static bool rx_macro_adie_lb(struct snd_soc_component *component,
 	return false;
 }
 
-static void wcd937x_set_pa(void)
+static void wcd937x_set_pa(int gpio_num)
 {
-	gpio_direction_output(689, 1);
+	gpio_direction_output(gpio_num, 1);
 	usleep_range(20, 30);
-	gpio_set_value(689, 1);
+	gpio_set_value(gpio_num, 1);
 	usleep_range(20, 30);
 }
 
-static void wcd937x_clr_pa(void)
+static void wcd937x_clr_pa(int gpio_num)
 {
-	gpio_direction_output(689, 1);
+	gpio_direction_output(gpio_num, 1);
 	usleep_range(20, 30);
-	gpio_set_value(689, 0);
+	gpio_set_value(gpio_num, 0);
 	usleep_range(20, 30);
 }
 
@@ -2046,8 +2047,9 @@ static int rx_macro_enable_main_path(struct snd_soc_dapm_widget *w,
 					int event)
 {
 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
+	struct rx_macro *rx = snd_soc_component_get_drvdata(component);
 	u16 gain_reg, reg;
-	
+
 	reg = CDC_RX_RXn_RX_PATH_CTL(w->shift);
 	gain_reg = CDC_RX_RXn_RX_VOL_CTL(w->shift);
 	if(strcmp(w->name, "RX INT2_1 INTERP")==0)
@@ -2055,12 +2057,18 @@ static int rx_macro_enable_main_path(struct snd_soc_dapm_widget *w,
 		if(event==SND_SOC_DAPM_POST_PMU)
 		{
 			dev_info(component->dev, "open wcd9370 pa\n");
-			wcd937x_set_pa();
+			if(rx->pa_gpios>0)
+			{
+				wcd937x_set_pa(rx->pa_gpios);
+			}
 		}
 		if(event==SND_SOC_DAPM_POST_PMD)
 		{
 			dev_info(component->dev, "close wcd9370 pa\n");
-			wcd937x_clr_pa();
+			if(rx->pa_gpios>0)
+			{
+				wcd937x_clr_pa(rx->pa_gpios);
+			}
 		}
 	}
 	switch (event) {
@@ -3645,6 +3653,11 @@ static int rx_macro_probe(struct platform_device *pdev)
 	rx->dcodec = devm_clk_get_optional(dev, "dcodec");
 	if (IS_ERR(rx->dcodec))
 		return dev_err_probe(dev, PTR_ERR(rx->dcodec), "unable to get dcodec clock\n");
+
+	rx->pa_gpios=of_get_named_gpio(dev->of_node, "pa-gpios", 0);
+	if (rx->pa_gpios < 0) {
+        dev_err(dev, "failed to get pa-gpio: %d\n", rx->pa_gpios);
+	}
 
 	rx->mclk = devm_clk_get(dev, "mclk");
 	if (IS_ERR(rx->mclk))

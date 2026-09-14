@@ -62,16 +62,16 @@ oe_mkotaespfs() {
 	fi
 
 	# Create a sparse image block. ESP partition must be 64K blocks.
-	bbdebug 1 Executing "dd if=/dev/zero of=${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}.vfat seek=524288 count=0 bs=1024"
-	dd if=/dev/zero of=${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}.vfat seek=524288 count=0 bs=1024
+	bbdebug 1 Executing "dd if=/dev/zero of=${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat seek=524288 count=0 bs=1024"
+	dd if=/dev/zero of=${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat seek=524288 count=0 bs=1024
 	bbdebug 1 "Actual ESP size: `du -s ${OTA_BOOT}`"
-	bbdebug 1 "Actual Partition size: `stat -c '%s' ${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}.vfat`"
-	bbdebug 1 "${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}.vfat"
-	bbdebug 1 Executing "mkfs.vfat -F 32 -I $extra_imagecmd ${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}.vfat "
-	mkfs.vfat -F 32 -I $extra_imagecmd ${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}.vfat
-	mcopy -i ${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}.vfat -s ${OTA_BOOT}/* ::/
+	bbdebug 1 "Actual Partition size: `stat -c '%s' ${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat`"
+	bbdebug 1 "${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat"
+	bbdebug 1 Executing "mkfs.vfat -F 32 -I $extra_imagecmd ${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat "
+	mkfs.vfat -F 32 -I $extra_imagecmd ${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat
+	mcopy -i ${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat -s ${OTA_BOOT}/* ::/
 	# Error codes 0-3 indicate successfull operation of fsck (no errors or errors corrected)
-	fsck.vfat -pvfV ${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}.vfat
+	fsck.vfat -pvfV ${IMGDEPLOYDIR}/esp-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat
 }
 do_image_ota_esp[depends] += "dosfstools-native:do_populate_sysroot mtools-native:do_populate_sysroot"
 IMAGE_FSTYPES_OTA ?= ""
@@ -81,4 +81,4 @@ IMAGE_TYPEDEP:ota-esp = "ota"
 IMAGE_TYPES += "ota-esp"
 EXTRA_IMAGECMD:ota-esp ?= "-s 1 -S 4096"
 IMAGE_CMD:ota-esp = "oe_mkotaespfs ota-esp ${EXTRA_IMAGECMD}"
-SSTATE_ALLOW_OVERLAP_FILES += " ${DEPLOY_DIR_IMAGE}/esp-qcom-image-${MACHINE}.vfat "
+SSTATE_ALLOW_OVERLAP_FILES += " ${DEPLOY_DIR_IMAGE}/esp-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat "

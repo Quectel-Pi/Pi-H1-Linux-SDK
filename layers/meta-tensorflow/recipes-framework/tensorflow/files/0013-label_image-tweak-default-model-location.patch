@@ -1,0 +1,50 @@
+From fdfacf235bbe0fe8b1cb0424659ff3d74638bd7f Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Mon, 16 May 2022 00:36:00 -0700
+Subject: [PATCH] label_image: tweak default model location
+
+Upstream-Status: Inappropriate [oe specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ tensorflow/examples/label_image/label_image.py | 6 +++---
+ tensorflow/examples/label_image/main.cc        | 6 +++---
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/tensorflow/examples/label_image/label_image.py b/tensorflow/examples/label_image/label_image.py
+index 4b7b79a7291..9bb182c8993 100644
+--- a/tensorflow/examples/label_image/label_image.py
++++ b/tensorflow/examples/label_image/label_image.py
+@@ -64,10 +64,10 @@ def load_labels(label_file):
+ 
+ 
+ if __name__ == "__main__":
+-  file_name = "tensorflow/examples/label_image/data/grace_hopper.jpg"
++  file_name = "/usr/share/label_image/grace_hopper.jpg"
+   model_file = \
+-    "tensorflow/examples/label_image/data/inception_v3_2016_08_28_frozen.pb"
+-  label_file = "tensorflow/examples/label_image/data/imagenet_slim_labels.txt"
++    "/usr/share/label_image/inception_v3_2016_08_28_frozen.pb"
++  label_file = "/usr/share/label_image/imagenet_slim_labels.txt"
+   input_height = 299
+   input_width = 299
+   input_mean = 0
+diff --git a/tensorflow/examples/label_image/main.cc b/tensorflow/examples/label_image/main.cc
+index c96cdc4dd9e..b19d6797146 100644
+--- a/tensorflow/examples/label_image/main.cc
++++ b/tensorflow/examples/label_image/main.cc
+@@ -282,11 +282,11 @@ int main(int argc, char* argv[]) {
+   // They define where the graph and input data is located, and what kind of
+   // input the model expects. If you train your own model, or use something
+   // other than inception_v3, then you'll need to update these.
+-  string image = "tensorflow/examples/label_image/data/grace_hopper.jpg";
++  string image = "/usr/share/label_image/grace_hopper.jpg";
+   string graph =
+-      "tensorflow/examples/label_image/data/inception_v3_2016_08_28_frozen.pb";
++      "/usr/share/label_image/inception_v3_2016_08_28_frozen.pb";
+   string labels =
+-      "tensorflow/examples/label_image/data/imagenet_slim_labels.txt";
++      "/usr/share/label_image/imagenet_slim_labels.txt";
+   int32_t input_width = 299;
+   int32_t input_height = 299;
+   float input_mean = 0;

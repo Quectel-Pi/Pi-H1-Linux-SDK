@@ -6,11 +6,11 @@ LIC_FILES_CHKSUM = "\
 
 HOMEPAGE = "http://www.libimobiledevice.org/"
 
-DEPENDS = "libimobiledevice-glue libusb1"
+DEPENDS = "libimobiledevice-glue libusb1 readline"
 
-PV = "1.0.1+git${SRCPV}"
+PV = "1.1.0"
 
-SRCREV = "e19094594552b7bed60418ffe6f46f455e6bb78f"
+SRCREV = "98c9f7055ec1f2e09fac69ef1413a8757113b838"
 SRC_URI = "git://github.com/libimobiledevice/libirecovery;protocol=https;branch=master"
 
 S = "${WORKDIR}/git"

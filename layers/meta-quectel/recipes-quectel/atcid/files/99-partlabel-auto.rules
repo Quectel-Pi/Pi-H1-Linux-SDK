@@ -1,0 +1,2 @@
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_PART_ENTRY_NAME}!="", SYMLINK+="block/bootdevice/by-name/$env{ID_PART_ENTRY_NAME}"
+ACTION=="remove", SUBSYSTEM=="block", ENV{ID_PART_ENTRY_NAME}!="", RUN+="/bin/rm -f /dev/block/bootdevice/by-name/$env{ID_PART_ENTRY_NAME}"

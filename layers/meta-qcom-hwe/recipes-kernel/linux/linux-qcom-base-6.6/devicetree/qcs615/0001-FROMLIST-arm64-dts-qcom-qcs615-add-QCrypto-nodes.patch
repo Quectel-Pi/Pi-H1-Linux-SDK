@@ -1,0 +1,52 @@
+From 34ae74d1d3473d9f233bea52e6e428bd23f1b777 Mon Sep 17 00:00:00 2001
+From: Abhinaba Rakshit <quic_arakshit@quicinc.com>
+Date: Mon, 24 Feb 2025 22:51:05 +0530
+Subject: [PATCH] FROMLIST: arm64: dts: qcom: qcs615: add QCrypto nodes
+
+Add the QCE and Crypto BAM DMA nodes.
+
+Signed-off-by: Abhinaba Rakshit <quic_arakshit@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20250224-enable-qce-for-qcs615-v1-2-e7c665347eef@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/qcs615.dtsi | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs615.dtsi b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+index 0177c51c3d73..b50aa3c9abe1 100644
+--- a/arch/arm64/boot/dts/qcom/qcs615.dtsi
++++ b/arch/arm64/boot/dts/qcom/qcs615.dtsi
+@@ -1114,6 +1114,31 @@ ufs_mem_phy_lanes: phy@1d87400 {
+ 			};
+ 		};
+ 
++		cryptobam: dma-controller@1dc4000 {
++			compatible = "qcom,bam-v1.7.4", "qcom,bam-v1.7.0";
++			reg = <0x0 0x01dc4000 0x0 0x24000>;
++			interrupts = <GIC_SPI 272 IRQ_TYPE_LEVEL_HIGH>;
++			#dma-cells = <1>;
++			qcom,ee = <0>;
++			qcom,controlled-remotely;
++			num-channels = <16>;
++			qcom,num-ees = <4>;
++			iommus = <&apps_smmu 0x0104 0x0011>,
++				 <&apps_smmu 0x0114 0x0011>;
++		};
++
++		crypto: crypto@1dfa000 {
++			compatible = "qcom,qcs615-qce", "qcom,sm8150-qce", "qcom,qce";
++			reg = <0x0 0x01dfa000 0x0 0x6000>;
++			dmas = <&cryptobam 4>, <&cryptobam 5>;
++			dma-names = "rx", "tx";
++			iommus = <&apps_smmu 0x0104 0x0011>,
++				 <&apps_smmu 0x0114 0x0011>;
++			interconnects = <&aggre1_noc MASTER_CRYPTO QCOM_ICC_TAG_ALWAYS
++					&mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
++			interconnect-names = "memory";
++		};
++
+ 		tcsr_mutex: hwlock@1f40000 {
+ 			compatible = "qcom,tcsr-mutex";
+ 			reg = <0x0 0x01f40000 0x0 0x20000>;
+-- 
+2.34.1
+

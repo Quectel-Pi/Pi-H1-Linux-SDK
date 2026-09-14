@@ -1,0 +1,335 @@
+From 9cace37674b3f83ab4967ca84b2eb809ad25b5ab Mon Sep 17 00:00:00 2001
+From: Mehul Raninga <quic_mraninga@quicinc.com>
+Date: Mon, 18 Nov 2024 14:15:51 +0530
+Subject: [PATCH 8/8] PENDING: arm64: dts: qcom: qcs9075-rb8: QUP Firmware load
+ from Linux
+
+Add a property to SE node that indicates whether
+the firmware should be loaded from Linux, along with the
+transfer mode details.
+
+Change-Id: I8e5332b7c31f4ab82ef3f044fd283ad4ddda52e6
+Signed-off-by: Mehul Raninga <quic_mraninga@quicinc.com>
+Upstream-Status: pending
+---
+ arch/arm64/boot/dts/qcom/qcs9075-rb8.dts | 282 +++++++++++++++++++++++
+ 1 file changed, 282 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts b/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
+index ecaa383b6508..762d14daa488 100644
+--- a/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
++++ b/arch/arm64/boot/dts/qcom/qcs9075-rb8.dts
+@@ -254,14 +254,211 @@ vreg_l8e: ldo8 {
+ 	};
+ };
+ 
++&i2c0 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c1 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c2 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c3 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c4 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c5 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c7 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c8 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c9 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c10 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c11 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c12 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c13 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c14 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c15 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c16 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c17 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c18 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&i2c19 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&qupv3_id_0 {
++	status = "okay";
++};
++
+ &qupv3_id_1 {
+ 	status = "okay";
+ };
+ 
++&qupv3_id_2 {
++	status = "okay";
++};
++
++&qupv3_id_3 {
++	status = "okay";
++};
++
+ &sleep_clk {
+ 	clock-frequency = <32768>;
+ };
+ 
++&spi0 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi1 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi2 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi3 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi4 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi5 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi7 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi8 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi9 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi10 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi11 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi12 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi14 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi15 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi16 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi17 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi18 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&spi19 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
+ &tlmm {
+ 	qup_uart10_default: qup-uart10-state {
+ 		pins = "gpio46", "gpio47";
+@@ -269,6 +466,51 @@ qup_uart10_default: qup-uart10-state {
+ 	};
+ };
+ 
++&uart0 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart1 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart2 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart3 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart4 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart5 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart7 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart8 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart9 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
+ &uart10 {
+ 	compatible = "qcom,geni-debug-uart";
+ 	pinctrl-0 = <&qup_uart10_default>;
+@@ -276,6 +518,46 @@ &uart10 {
+ 	status = "okay";
+ };
+ 
++&uart11 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart12 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart14 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart15 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart16 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart17 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart18 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
++&uart19 {
++	qcom,load-firmware;
++	qcom,xfer-mode = <1>;
++};
++
+ &xo_board_clk {
+ 	clock-frequency = <38400000>;
+ };
+-- 
+2.34.1
+

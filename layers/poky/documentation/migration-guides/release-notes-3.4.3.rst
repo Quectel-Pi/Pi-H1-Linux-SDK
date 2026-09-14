@@ -1,15 +1,17 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Release notes for 3.4.3 (honister)
 ----------------------------------
 
 Security Fixes in 3.4.3
 ~~~~~~~~~~~~~~~~~~~~~~~
 
--  ghostscript: fix :cve:`2021-3781`
--  ghostscript: fix :cve:`2021-45949`
--  tiff: Add backports for two CVEs from upstream (:cve:`2022-0561` & :cve:`2022-0562`)
--  gcc : Fix :cve:`2021-46195`
+-  ghostscript: fix :cve_nist:`2021-3781`
+-  ghostscript: fix :cve_nist:`2021-45949`
+-  tiff: Add backports for two CVEs from upstream (:cve_nist:`2022-0561` & :cve_nist:`2022-0562`)
+-  gcc : Fix :cve_nist:`2021-46195`
 -  virglrenderer: fix `CVE-2022-0135 <https://security-tracker.debian.org/tracker/CVE-2022-0135>`__ and `CVE-2022-0175 <https://security-tracker.debian.org/tracker/CVE-2022-0175>`__
--  binutils: Add fix for :cve:`2021-45078`
+-  binutils: Add fix for :cve_nist:`2021-45078`
 
 
 Fixes in 3.4.3
@@ -28,7 +30,7 @@ Fixes in 3.4.3
 -  build-appliance-image: Update to honister head revision
 -  coreutils: remove obsolete ignored CVE list
 -  crate-fetch: fix setscene failures
--  cups: Add --with-dbusdir to EXTRA_OECONF for deterministic build
+-  cups: Add --with-dbusdir to :term:`EXTRA_OECONF` for deterministic build
 -  cve-check: create directory of CVE_CHECK_MANIFEST before copy
 -  cve-check: get_cve_info should open the database read-only
 -  default-distrovars.inc: Switch connectivity check to a yoctoproject.org page
@@ -59,7 +61,7 @@ Fixes in 3.4.3
 -  kernel-devsrc: do not copy Module.symvers file during install
 -  libarchive : update to 3.5.3
 -  libpcap: Disable DPDK explicitly
--  libxml-parser-perl: Add missing RDEPENDS
+-  libxml-parser-perl: Add missing :term:`RDEPENDS`
 -  linux-firmware: upgrade 20211216 -> 20220209
 -  linux-yocto/5.10: Fix ramoops/ftrace
 -  linux-yocto/5.10: features/zram: remove CONFIG_ZRAM_DEF_COMP
@@ -74,7 +76,7 @@ Fixes in 3.4.3
 -  poky.conf: bump version for 3.4.3 honister release
 -  qemuboot: Fix build error if UNINATIVE_LOADER is unset
 -  quilt: Disable external sendmail for deterministic build
--  recipetool: Fix circular reference in SRC_URI
+-  recipetool: Fix circular reference in :term:`SRC_URI`
 -  releases: update to include 3.3.5
 -  releases: update to include 3.4.2
 -  rootfs-postcommands: amend systemd_create_users add user to group check
@@ -124,16 +126,16 @@ Contributors to 3.4.3
 -  Tean Cunningham
 -  Zoltán Böszörményi
 -  pgowda
--  wangmy
+-  Wang Mingyu
 
 Repositories / Downloads for 3.4.3
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 poky
 
--  Repository Location: https://git.yoctoproject.org/poky/
+-  Repository Location: :yocto_git:`/poky`
 -  Branch: :yocto_git:`honister </poky/log/?h=honister>`
--  Tag: `yocto-3.4.3 <https://git.yoctoproject.org/poky/tag/?h=yocto-3.4.3>`__
+-  Tag: :yocto_git:`yocto-3.4.3 </poky/tag/?h=yocto-3.4.3>`
 -  Git Revision: :yocto_git:`ee68ae307fd951b9de6b31dc6713ea29186b7749 </poky/commit/?id=ee68ae307fd951b9de6b31dc6713ea29186b7749>`
 -  Release Artefact: poky-ee68ae307fd951b9de6b31dc6713ea29186b7749
 -  sha: 92c3d73c3e74f0e1d5c2ab2836ce3a3accbe47772cea70df3755845e0db1379b
@@ -155,7 +157,7 @@ openembedded-core
 
 meta-mingw
 
--  Repository Location: https://git.yoctoproject.org/meta-mingw
+-  Repository Location: :yocto_git:`/meta-mingw`
 -  Branch: :yocto_git:`honister </meta-mingw/log/?h=honister>`
 -  Tag: :yocto_git:`yocto-3.4.3 </meta-mingw/tag/?h=yocto-3.4.3>`
 -  Git Revision: :yocto_git:`f5d761cbd5c957e4405c5d40b0c236d263c916a8 </meta-mingw/commit/?id=f5d761cbd5c957e4405c5d40b0c236d263c916a8>`
@@ -167,7 +169,7 @@ meta-mingw
 
 meta-gplv2
 
--  Repository Location: https://git.yoctoproject.org/meta-gplv2
+-  Repository Location: :yocto_git:`/meta-gplv2`
 -  Branch: :yocto_git:`honister </meta-gplv2/log/?h=honister>`
 -  Tag: :yocto_git:`yocto-3.4.3 </meta-gplv2/tag/?h=yocto-3.4.3>`
 -  Git Revision: :yocto_git:`f04e4369bf9dd3385165281b9fa2ed1043b0e400 </meta-gplv2/commit/?id=f04e4369bf9dd3385165281b9fa2ed1043b0e400>`
@@ -191,7 +193,7 @@ bitbake
 
 yocto-docs
 
--  Repository Location: https://git.yoctoproject.org/yocto-docs
+-  Repository Location: :yocto_git:`/yocto-docs`
 -  Branch: :yocto_git:`honister </yocto-docs/log/?h=honister>`
 -  Tag: :yocto_git:`yocto-3.4.3 </yocto-docs/tag/?h=yocto-3.4.3>`
 -  Git Revision: :yocto_git:`15f46f97d9cad558c19fc1dc19cfbe3720271d04 </yocto-docs/commit/?15f46f97d9cad558c19fc1dc19cfbe3720271d04>`

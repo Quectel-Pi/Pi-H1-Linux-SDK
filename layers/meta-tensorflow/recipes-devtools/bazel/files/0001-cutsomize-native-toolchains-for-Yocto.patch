@@ -1,0 +1,35 @@
+From 81c9eae49a10fa8d5ede088e90632db0103e2168 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Thu, 19 May 2022 01:11:05 -0700
+Subject: [PATCH] cutsomize native toolchains for Yocto
+
+Yocto use environment HOSTTOOLS_DIR to provide native toolchains,
+explicitly set it rather than detect
+
+Upstream-Status: Inappropriate [Yocto specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ tools/cpp/unix_cc_configure.bzl | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/tools/cpp/unix_cc_configure.bzl b/tools/cpp/unix_cc_configure.bzl
+index 1b6aeb2..4a36685 100755
+--- a/tools/cpp/unix_cc_configure.bzl
++++ b/tools/cpp/unix_cc_configure.bzl
+@@ -373,6 +373,12 @@ def configure_unix_toolchain(repository_ctx, cpu_value, overriden_tools):
+     if darwin:
+         overriden_tools["gcc"] = "cc_wrapper.sh"
+         overriden_tools["ar"] = "/usr/bin/libtool"
++
++    hosttools_dir = get_env_var(repository_ctx,"HOSTTOOLS_DIR", False)
++    if hosttools_dir:
++        for k in ["ar", "ld", "cpp", "gcc", "nm", "objcopy", "objdump", "strip"]:
++            overriden_tools[k] = "%s/%s" % (hosttools_dir, k)
++
+     auto_configure_warning_maybe(repository_ctx, "CC used: " + str(cc))
+     tool_paths = _get_tool_paths(repository_ctx, overriden_tools)
+     cc_toolchain_identifier = escape_string(get_env_var(
+-- 
+2.36.0
+

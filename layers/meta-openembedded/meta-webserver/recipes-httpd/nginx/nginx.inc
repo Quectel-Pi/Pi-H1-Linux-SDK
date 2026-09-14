@@ -23,9 +23,9 @@ SRC_URI = " \
     file://nginx.service \
     file://nginx-fix-pidfile.patch \
     file://0001-configure-libxslt-conf.patch \
-    file://CVE-2023-44487.patch \
     file://CVE-2024-7347-1.patch \
     file://CVE-2024-7347-2.patch \
+    file://CVE-2025-53859.patch \
 "
 
 inherit siteinfo update-rc.d useradd systemd
@@ -41,13 +41,16 @@ NGINX_USER   ?= "www"
 EXTRA_OECONF = ""
 DISABLE_STATIC = ""
 
-PACKAGECONFIG ??= "ssl"
+PACKAGECONFIG ??= "ssl ${@bb.utils.filter('DISTRO_FEATURES', 'ipv6', d)}"
 
 PACKAGECONFIG[gunzip] = "--with-http_gunzip_module,,"
 PACKAGECONFIG[http2] = "--with-http_v2_module,,"
 PACKAGECONFIG[ssl] = "--with-http_ssl_module,,openssl"
 PACKAGECONFIG[http-auth-request] = "--with-http_auth_request_module,,"
+PACKAGECONFIG[ipv6] = "--with-ipv6,,"
+PACKAGECONFIG[webdav] = "--with-http_dav_module,,"
 PACKAGECONFIG[stream] = "--with-stream,,"
+PACKAGECONFIG[http-sub-module] = "--with-http_sub_module,,"
 
 PACKAGECONFIG[xslt] = "--with-http_xslt_module,,libxslt"
 
@@ -153,7 +156,7 @@ do_install () {
 
 pkg_postinst:${PN} () {
     if [ -z "$D" ]; then
-        if type systemd-tmpfiles >/dev/null; then
+        if type systemd-tmpfiles >/dev/null 2>&1; then
             systemd-tmpfiles --create
         elif [ -e ${sysconfdir}/init.d/populate-volatile.sh ]; then
             ${sysconfdir}/init.d/populate-volatile.sh update
@@ -186,4 +189,5 @@ USERADD_PARAM:${PN} = " \
     --system --no-create-home \
     --home ${NGINX_WWWDIR} \
     --groups www-data \
+    --shell ${base_sbindir}/nologin \
     --user-group ${NGINX_USER}"

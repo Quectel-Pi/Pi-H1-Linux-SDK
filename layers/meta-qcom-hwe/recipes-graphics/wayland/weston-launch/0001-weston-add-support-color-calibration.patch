@@ -2,17 +2,13 @@
 #
 #Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
 #SPDX-License-Identifier: BSD-3-Clause-Clear
-From b3ccba4c9a2cd4fd6d6442f879aa0905e5570765 Mon Sep 17 00:00:00 2001
-From: Shivam Khamble <quic_skhamble@quicinc.com>
-Date: Tue, 20 Aug 2024 18:03:42 +0530
+From 08f413d66714991469c6510f8d79dcee3e717f49 Mon Sep 17 00:00:00 2001
+From: Devanshi Bansal <quic_devanshi@quicinc.com>
+Date: Fri, 27 Dec 2024 11:14:49 +0530
 Subject: [PATCH] weston: add support color calibration
 
--- Creates qdcm session during display core creation.
--- Adds support for unmarshalling input and marshalling response.
--- Adds qdcm solid color tool to mimic qdcm tpg to support calibration.
-
-Change-Id: I9be7749c507d3bc6ea81f02b7b535d332c43d626
-Signed-off-by: Shivam Khamble <quic_skhamble@quicinc.com>
+Upstream-Status: Inappropriate [Downstream]
+Signed-off-by: Devanshi Bansal <quic_devanshi@quicinc.com>
 ---
  clients/meson.build                           |   14 +
  clients/weston-qdcm-solid-color-tool.c        | 1278 +++++++++++++++++
@@ -26,9 +22,9 @@ Signed-off-by: Shivam Khamble <quic_skhamble@quicinc.com>
  .../sdm-service/sdm_display_qdcm_session.cpp  |  206 +++
  .../sdm-service/sdm_display_qdcm_session.h    |   53 +
  libweston/backend-sdm/sdm.c                   |    4 +
- libweston/meson.build                         |   10 +-
- meson.build                                   |   15 +-
- 14 files changed, 1846 insertions(+), 20 deletions(-)
+ libweston/meson.build                         |    3 +
+ meson.build                                   |    3 +
+ 14 files changed, 1834 insertions(+), 13 deletions(-)
  create mode 100644 clients/weston-qdcm-solid-color-tool.c
  create mode 100644 libweston/backend-sdm/sdm-service/sdm_display_color_manager.cpp
  create mode 100644 libweston/backend-sdm/sdm-service/sdm_display_color_manager.h
@@ -36,10 +32,10 @@ Signed-off-by: Shivam Khamble <quic_skhamble@quicinc.com>
  create mode 100644 libweston/backend-sdm/sdm-service/sdm_display_qdcm_session.h
 
 diff --git a/clients/meson.build b/clients/meson.build
-index 762b882c..af47284f 100644
+index a40b5a6..e91dc8c 100644
 --- a/clients/meson.build
 +++ b/clients/meson.build
-@@ -153,6 +153,20 @@ simple_clients = [
+@@ -162,6 +162,20 @@ simple_clients = [
  		'deps': [ 'egl', 'wayland-egl', 'glesv2', 'wayland-cursor' ],
  		'options': [ 'renderer-gl' ]
  	},
@@ -62,7 +58,7 @@ index 762b882c..af47284f 100644
  		'name': 'shm',
 diff --git a/clients/weston-qdcm-solid-color-tool.c b/clients/weston-qdcm-solid-color-tool.c
 new file mode 100644
-index 00000000..6f3ed7a2
+index 0000000..6f3ed7a
 --- /dev/null
 +++ b/clients/weston-qdcm-solid-color-tool.c
 @@ -0,0 +1,1278 @@
@@ -1345,25 +1341,25 @@ index 00000000..6f3ed7a2
 +  return 0;
 +}
 diff --git a/libweston/backend-sdm/meson.build b/libweston/backend-sdm/meson.build
-index 860e76c8..b12c0d12 100644
+index 1dc7073..3b8324d 100644
 --- a/libweston/backend-sdm/meson.build
 +++ b/libweston/backend-sdm/meson.build
-@@ -25,6 +25,10 @@ srcs_drm = [
- 	'sdm-service/sdm_display_socket_handler.h',
- 	'sdm-service/uevent.c',
- 	'sdm-service/uevent.h',
+@@ -28,6 +28,10 @@ srcs_drm = [
+ 	linux_dmabuf_unstable_v1_protocol_c,
+ 	linux_dmabuf_unstable_v1_server_protocol_h,
+ 	presentation_time_server_protocol_h,
 +	'sdm-service/sdm_display_color_manager.cpp',
 +	'sdm-service/sdm_display_color_manager.h',
 +	'sdm-service/sdm_display_qdcm_session.cpp',
 +	'sdm-service/sdm_display_qdcm_session.h',
- 	linux_dmabuf_unstable_v1_protocol_c,
- 	linux_dmabuf_unstable_v1_server_protocol_h,
- 	gbm_buffer_backend_protocol_c,
+ ]
+ 
+ deps_drm = [
 diff --git a/libweston/backend-sdm/sdm-service/sdm_display.cpp b/libweston/backend-sdm/sdm-service/sdm_display.cpp
-index 09af7f7b..600a80f0 100644
+index 7d3f45e..9be3171 100644
 --- a/libweston/backend-sdm/sdm-service/sdm_display.cpp
 +++ b/libweston/backend-sdm/sdm-service/sdm_display.cpp
-@@ -80,6 +80,7 @@
+@@ -83,6 +83,7 @@
  
  #define __CLASS__ "SdmDisplay"
  extern "C" void NotifyOnRefresh(struct drm_output *);
@@ -1371,7 +1367,7 @@ index 09af7f7b..600a80f0 100644
  
  vblank_cb_t vblank_cb_;
  
-@@ -250,6 +251,12 @@ DisplayError SdmDisplay::HistogramEvent(int /* fd */, uint32_t /* blob_fd */) {
+@@ -253,6 +254,12 @@ DisplayError SdmDisplay::HistogramEvent(int /* fd */, uint32_t /* blob_fd */) {
    return kErrorNone;
  }
  
@@ -1384,7 +1380,7 @@ index 09af7f7b..600a80f0 100644
  void SdmDisplay::RefreshWithCachedLayerstack()
  {
      DisplayError error = kErrorNone;
-@@ -1593,6 +1600,25 @@ DisplayError SdmDisplay::GetHdrInfo(struct DisplayHdrInfo *display_hdr_info) {
+@@ -1583,6 +1590,25 @@ DisplayError SdmDisplay::GetHdrInfo(struct DisplayHdrInfo *display_hdr_info) {
    return error;
  }
  
@@ -1410,7 +1406,7 @@ index 09af7f7b..600a80f0 100644
  SdmNullDisplay::SdmNullDisplay(DisplayType type, CoreInterface *core_intf) {
  }
  
-@@ -1629,6 +1655,17 @@ DisplayError SdmNullDisplay::GetPanelBrightness(float *brightness) {
+@@ -1619,6 +1645,17 @@ DisplayError SdmNullDisplay::GetPanelBrightness(float *brightness) {
    return kErrorNone;
  }
  
@@ -1429,7 +1425,7 @@ index 09af7f7b..600a80f0 100644
    /**
     * TODO: drm_output_ needs to be re-initialized based on the preferred supported mode
 diff --git a/libweston/backend-sdm/sdm-service/sdm_display.h b/libweston/backend-sdm/sdm-service/sdm_display.h
-index 233524ac..3ca9fdd8 100644
+index 233524a..3ca9fdd 100644
 --- a/libweston/backend-sdm/sdm-service/sdm_display.h
 +++ b/libweston/backend-sdm/sdm-service/sdm_display.h
 @@ -30,23 +30,23 @@
@@ -1551,7 +1547,7 @@ index 233524ac..3ca9fdd8 100644
  #endif  // __SDM_DISPLAY_H__
 diff --git a/libweston/backend-sdm/sdm-service/sdm_display_color_manager.cpp b/libweston/backend-sdm/sdm-service/sdm_display_color_manager.cpp
 new file mode 100644
-index 00000000..0146b692
+index 0000000..0146b69
 --- /dev/null
 +++ b/libweston/backend-sdm/sdm-service/sdm_display_color_manager.cpp
 @@ -0,0 +1,83 @@
@@ -1640,7 +1636,7 @@ index 00000000..0146b692
 +} // namespace sdm
 diff --git a/libweston/backend-sdm/sdm-service/sdm_display_color_manager.h b/libweston/backend-sdm/sdm-service/sdm_display_color_manager.h
 new file mode 100644
-index 00000000..317713a0
+index 0000000..317713a
 --- /dev/null
 +++ b/libweston/backend-sdm/sdm-service/sdm_display_color_manager.h
 @@ -0,0 +1,54 @@
@@ -1699,7 +1695,7 @@ index 00000000..317713a0
 +} // namespace sdm
 +#endif // SDM_DISPLAY_COLOR_MANAGER_H
 diff --git a/libweston/backend-sdm/sdm-service/sdm_display_connect.cpp b/libweston/backend-sdm/sdm-service/sdm_display_connect.cpp
-index f55375c3..2e707386 100644
+index f55375c..2e70738 100644
 --- a/libweston/backend-sdm/sdm-service/sdm_display_connect.cpp
 +++ b/libweston/backend-sdm/sdm-service/sdm_display_connect.cpp
 @@ -31,6 +31,7 @@
@@ -1772,7 +1768,7 @@ index f55375c3..2e707386 100644
          DLOGE("Core was already destroyed => core_intf_ = NULL");
          return kErrorNone;
 diff --git a/libweston/backend-sdm/sdm-service/sdm_display_debugger.cpp b/libweston/backend-sdm/sdm-service/sdm_display_debugger.cpp
-index 00008202..a5be72de 100644
+index 0000820..a5be72d 100644
 --- a/libweston/backend-sdm/sdm-service/sdm_display_debugger.cpp
 +++ b/libweston/backend-sdm/sdm-service/sdm_display_debugger.cpp
 @@ -23,14 +23,15 @@
@@ -1808,7 +1804,7 @@ index 00008202..a5be72de 100644
  }  // namespace sdm
 diff --git a/libweston/backend-sdm/sdm-service/sdm_display_qdcm_session.cpp b/libweston/backend-sdm/sdm-service/sdm_display_qdcm_session.cpp
 new file mode 100644
-index 00000000..8af9ea29
+index 0000000..8af9ea2
 --- /dev/null
 +++ b/libweston/backend-sdm/sdm-service/sdm_display_qdcm_session.cpp
 @@ -0,0 +1,206 @@
@@ -2020,7 +2016,7 @@ index 00000000..8af9ea29
 +#endif
 diff --git a/libweston/backend-sdm/sdm-service/sdm_display_qdcm_session.h b/libweston/backend-sdm/sdm-service/sdm_display_qdcm_session.h
 new file mode 100644
-index 00000000..3f9d945d
+index 0000000..3f9d945
 --- /dev/null
 +++ b/libweston/backend-sdm/sdm-service/sdm_display_qdcm_session.h
 @@ -0,0 +1,53 @@
@@ -2078,10 +2074,10 @@ index 00000000..3f9d945d
 +} // namespace sdm
 +#endif // SDM_DISPLAY_QDCM_SESSION_H
 diff --git a/libweston/backend-sdm/sdm.c b/libweston/backend-sdm/sdm.c
-index ea184e7b..4e7c7e44 100644
+index 488d472..4d1aa9c 100644
 --- a/libweston/backend-sdm/sdm.c
 +++ b/libweston/backend-sdm/sdm.c
-@@ -1892,3 +1892,7 @@ void NotifyOnRefresh(struct drm_output *drm_output) {
+@@ -1879,3 +1879,7 @@ void NotifyOnRefresh(struct drm_output *drm_output) {
    drm_output->base.repaint_status = REPAINT_AWAITING_COMPLETION;
    drm_output->atomic_complete_pending = true;
  }
@@ -2090,52 +2086,33 @@ index ea184e7b..4e7c7e44 100644
 +  weston_output_damage(output);
 +}
 diff --git a/libweston/meson.build b/libweston/meson.build
-index 9494fd8e..33977f99 100644
+index 5cf1676..b57acfb 100644
 --- a/libweston/meson.build
 +++ b/libweston/meson.build
-@@ -170,7 +170,15 @@ if get_option('backend-drm')
- endif
- 
- if get_option('backend-sdm')
--deps_session_helper += [dep_libdrm, dep_libsdmcore, dep_libsdmutils, dep_libsdmdal]
-+	deps_session_helper += [
-+		dep_libdrm,
-+		dep_libsdmcore,
-+		dep_libsdmutils,
-+		dep_libsdmdal,
+@@ -193,6 +193,9 @@ if get_option('backend-sdm')
+ 		dep_libsdmcore,
+ 		dep_libsdmutils,
+ 		dep_libsdmdal,
 +		dep_libqdcmgrpc,
 +		dep_libprotobuf,
 +		dep_libgrpc,
-+	]
- endif
- 
- systemd_dep = dependency('', required: false)
+ 	]
+ 	srcs_session_helper += [
+ 		'launcher-libseat.c',
 diff --git a/meson.build b/meson.build
-index 9d55ac3d..1651cd09 100644
+index dae57b5..5b4dd3b 100644
 --- a/meson.build
 +++ b/meson.build
-@@ -164,12 +164,15 @@ dep_libdrm_headers = dep_libdrm.partial_dependency(compile_args: true)
- dep_threads = dependency('threads')
- dep_gbm = dependency('gbm')
- if get_option('backend-sdm')
--dep_glib = dependency('glib-2.0')
--dep_property = cc.find_library('propertyvault', required: true)
--dep_libsdmcore = cc.find_library('sdmcore')
--dep_libsdmutils = cc.find_library('sdmutils')
--dep_libsdmdal = cc.find_library('sdmdal')
--dep_libdrmutils = cc.find_library('drmutils')
-+	dep_glib = dependency('glib-2.0')
-+	dep_property = cc.find_library('propertyvault', required: true)
-+	dep_libsdmcore = cc.find_library('sdmcore')
-+	dep_libsdmutils = cc.find_library('sdmutils')
-+	dep_libsdmdal = cc.find_library('sdmdal')
-+	dep_libdrmutils = cc.find_library('drmutils')
+@@ -156,6 +156,9 @@ if get_option('backend-sdm')
+ 	dep_libsdmutils = cc.find_library('sdmutils')
+ 	dep_libsdmdal = cc.find_library('sdmdal')
+ 	dep_libdrmutils = cc.find_library('drmutils')
 +	dep_libqdcmgrpc = cc.find_library('qdcmgrpc')
 +	dep_libprotobuf = cc.find_library('protobuf')
 +	dep_libgrpc = cc.find_library('grpc++')
  endif
  
- dep_libdrm_version = dep_libdrm.version()
+ dep_lcms2 = dependency('lcms2', version: '>= 2.9', required: false)
 -- 
-2.34.1
+2.17.1
 

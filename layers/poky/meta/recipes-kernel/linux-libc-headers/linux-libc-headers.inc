@@ -44,6 +44,8 @@ python __anonymous () {
         d.setVar("HEADER_FETCH_VER", "4.x")
     elif major == "5":
         d.setVar("HEADER_FETCH_VER", "5.x")
+    elif major == "6":
+        d.setVar("HEADER_FETCH_VER", "6.x")
     else:
         d.setVar("HEADER_FETCH_VER", "2.6")
 }
@@ -103,7 +105,7 @@ do_install_armmultilib () {
 
 BBCLASSEXTEND = "nativesdk"
 
-RDEPENDS:${PN}-dev = ""
+DEV_PKG_DEPENDENCY = ""
 RRECOMMENDS:${PN}-dbg = "${PN}-dev (= ${EXTENDPKGV})"
 
 INHIBIT_DEFAULT_DEPS = "1"

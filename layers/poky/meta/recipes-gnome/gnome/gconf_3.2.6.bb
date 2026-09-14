@@ -7,8 +7,9 @@ HOMEPAGE = "https://gitlab.gnome.org/Archive/gconf"
 LICENSE = "LGPL-2.0-or-later"
 LIC_FILES_CHKSUM = "file://COPYING;md5=55ca817ccb7d5b5b66355690e9abc605"
 
-DEPENDS = "glib-2.0 dbus dbus-glib libxml2 intltool-native"
+DEPENDS = "glib-2.0 glib-2.0-native dbus dbus-glib libxml2 intltool-native"
 
+GNOMEBASEBUILDCLASS = "autotools"
 inherit gnomebase gtk-doc gettext gobject-introspection gio-module-cache
 
 SRC_URI = "${GNOME_MIRROR}/GConf/${@gnome_verdir("${PV}")}/GConf-${PV}.tar.xz;name=archive \

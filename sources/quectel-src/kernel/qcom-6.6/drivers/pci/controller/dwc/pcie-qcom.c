@@ -20,8 +20,10 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/of.h>
+#include <linux/of_pci.h>
 #include <linux/of_gpio.h>
 #include <linux/pci.h>
+#include <linux/pci-ecam.h>
 #include <linux/pm_runtime.h>
 #include <linux/platform_device.h>
 #include <linux/phy/pcie.h>
@@ -33,14 +35,12 @@
 #include <soc/qcom/cmd-db.h>
 
 #include "../../pci.h"
+#include "../pci-host-common.h"
 #include "pcie-designware.h"
+#include "pcie-qcom-common.h"
 
 #include <dt-bindings/interconnect/qcom,icc.h>
 #include <dt-bindings/interconnect/qcom,rpm-icc.h>
-#if 1 //Add by Quectel
-#include <linux/i2c.h>
-int qps615_switch_init_from_pcie(struct i2c_client *client);
-#endif
 
 /* PARF registers */
 #define PARF_SYS_CTRL				0x00
@@ -57,6 +57,9 @@ int qps615_switch_init_from_pcie(struct i2c_client *client);
 #define PARF_AXI_MSTR_WR_ADDR_HALT_V2		0x1a8
 #define PARF_Q2A_FLUSH				0x1ac
 #define PARF_LTSSM				0x1b0
+#define PARF_INT_ALL_STATUS			0x224
+#define PARF_INT_ALL_CLEAR			0x228
+#define PARF_INT_ALL_MASK			0x22c
 #define PARF_SID_OFFSET				0x234
 #define PARF_BDF_TRANSLATE_CFG			0x24c
 #define PARF_SLV_ADDR_SPACE_SIZE		0x358
@@ -91,6 +94,10 @@ int qps615_switch_init_from_pcie(struct i2c_client *client);
 
 /* PARF_PM_CTRL register fields */
 #define REQ_NOT_ENTR_L1				BIT(5) /* "Prevent L0->L1" */
+
+ /* PARF_INT_ALL_{STATUS/CLEAR/MASK} register fields */
+ #define PARF_INT_ALL_LINK_UP			BIT(13)
+#define PARF_INT_MSI_DEV_0_7                   GENMASK(30, 23)
 
 /* PARF_PM_STTS register fields */
 #define PM_ENTER_L23				BIT(5)
@@ -242,6 +249,7 @@ struct qcom_pcie_ops {
 
 struct qcom_pcie_cfg {
 	const struct qcom_pcie_ops *ops;
+	bool firmware_managed;
 };
 
 struct qcom_pcie {
@@ -257,70 +265,33 @@ struct qcom_pcie {
 	struct dentry *debugfs;
 	bool suspended;
 	bool soc_is_rpmh;
-#if 1 //Add by Quectel
-	struct i2c_client *i2c_client;
-	int delay_ms;
-	struct gpio_desc *pwkey;
-#endif
 };
 
 #define to_qcom_pcie(x)		dev_get_drvdata((x)->dev)
 
-
-#if 1 //Add by Quectel
-static void i2c_client_init(struct qcom_pcie *pcie, struct device *dev) {
-	struct device_node *of_node;
-
-	of_node = of_parse_phandle(dev->of_node, "i2c-supply", 0);
-	if (of_node) {
-		pcie->i2c_client = of_find_i2c_device_by_node(of_node);
-		if (pcie->i2c_client) {
-			dev_info(dev, "find qps615 i2c client %s\n", pcie->i2c_client->name);
-		}
-	}
-}
-#endif
-
 static void qcom_ep_reset_assert(struct qcom_pcie *pcie)
 {
-	printk("Enter qcom_ep_reset_assert reset set to 0\n");
-	gpiod_set_value_cansleep(pcie->reset, 1);			//set perst down
+	gpiod_set_value_cansleep(pcie->reset, 1);
 	usleep_range(PERST_DELAY_US, PERST_DELAY_US + 500);
-	
-	if (!pcie->pwkey) {
-		printk("qcom_ep_reset_assert:there is no power key in pcie device only 5G module use it");
-	}else{
-		printk("delay for power off modules");
-		msleep(100);
-		printk("power on 5G moudules");
-		gpiod_set_value_cansleep(pcie->pwkey, 1);		//power on 5G modules
-		printk("5G moudules has turn on");
-	}
-
-	if(pcie->delay_ms)
-		msleep(pcie->delay_ms);
-	printk("Quit qcom_ep_reset_assert\n");
 }
 
 static void qcom_ep_reset_deassert(struct qcom_pcie *pcie)
 {
 	/* Ensure that PERST has been asserted for at least 100 ms */
-	printk("Enter qcom_ep_reset_deassert reset set to 1\n");
 	msleep(100);
 	gpiod_set_value_cansleep(pcie->reset, 0);
 	usleep_range(PERST_DELAY_US, PERST_DELAY_US + 500);
-#if 1 //Add by Quectel
-	if (pcie->i2c_client) {
-		//QPS615 RESX is same as PCIE_RESET_N
-		qps615_switch_init_from_pcie(pcie->i2c_client);
-	}
-#endif
-	printk("Quit qcom_ep_reset_deassert\n");
 }
 
 static int qcom_pcie_start_link(struct dw_pcie *pci)
 {
 	struct qcom_pcie *pcie = to_qcom_pcie(pci);
+
+	qcom_pcie_common_set_equalization(pci);
+
+	if (pcie_link_speed[pci->max_link_speed] == PCIE_SPEED_16_0GT) {
+		qcom_pcie_common_set_16gt_lane_margining(pci);
+	}
 
 	/* Enable Link Training state machine */
 	if (pcie->cfg->ops->ltssm_enable)
@@ -341,7 +312,7 @@ static int qcom_pcie_stop_link(struct dw_pcie *pci)
 				     val & PM_ENTER_L23, 10000, 100000);
 	if (ret_l23) {
 		dev_err(pci->dev, "Failed to enter L2/L3\n");
-		//return -ETIMEDOUT;			//Igni modify this this couse out of suspend
+		return -ETIMEDOUT;
 	}
 
 	return 0;
@@ -1255,7 +1226,6 @@ static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
 	struct qcom_pcie *pcie = to_qcom_pcie(pci);
 	int ret;
 
-	printk("Enter qcom_pcie_host_init\n");
 	qcom_ep_reset_assert(pcie);
 
 	ret = pcie->cfg->ops->init(pcie);
@@ -1283,7 +1253,7 @@ static int qcom_pcie_host_init(struct dw_pcie_rp *pp)
 		if (ret)
 			goto err_assert_reset;
 	}
-	printk("Quit qcom_pcie_host_init\n");
+
 	return 0;
 
 err_assert_reset:
@@ -1301,13 +1271,9 @@ static void qcom_pcie_host_deinit(struct dw_pcie_rp *pp)
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct qcom_pcie *pcie = to_qcom_pcie(pci);
 
-	printk("Enter qcom_pcie_host_deinit\n");
-	gpiod_set_value_cansleep(pcie->reset, 1);
-	if (pcie->pwkey)
-		gpiod_set_value_cansleep(pcie->pwkey, 0);		//power off 5G modules
+	qcom_ep_reset_assert(pcie);
 	phy_power_off(pcie->phy);
 	pcie->cfg->ops->deinit(pcie);
-	printk("Quit qcom_pcie_host_deinit\n");
 }
 
 static const struct dw_pcie_host_ops qcom_pcie_dw_ops = {
@@ -1420,6 +1386,10 @@ static const struct qcom_pcie_cfg cfg_2_9_0 = {
 	.ops = &ops_2_9_0,
 };
 
+static const struct qcom_pcie_cfg cfg_fw_managed = {
+	.firmware_managed = true,
+};
+
 static const struct dw_pcie_ops dw_pcie_ops = {
 	.link_up = qcom_pcie_link_up,
 	.start_link = qcom_pcie_start_link,
@@ -1530,6 +1500,75 @@ static void qcom_pcie_init_debugfs(struct qcom_pcie *pcie)
 				    qcom_pcie_link_transition_count);
 }
 
+static irqreturn_t qcom_pcie_global_irq_thread(int irq, void *data)
+{
+	struct qcom_pcie *pcie = data;
+	struct dw_pcie_rp *pp = &pcie->pci->pp;
+	struct device *dev = pcie->pci->dev;
+	u32 status = readl_relaxed(pcie->parf + PARF_INT_ALL_STATUS);
+
+	writel_relaxed(status, pcie->parf + PARF_INT_ALL_CLEAR);
+
+	if (FIELD_GET(PARF_INT_ALL_LINK_UP, status)) {
+		dev_dbg(dev, "Received Link up event. Starting enumeration!\n");
+		/* Rescan the bus to enumerate endpoint devices */
+		pci_lock_rescan_remove();
+		pci_rescan_bus(pp->bridge->bus);
+		pci_unlock_rescan_remove();
+
+		qcom_pcie_icc_update(pcie);
+	} else {
+		dev_WARN_ONCE(dev, 1, "Received unknown event. INT_STATUS: 0x%08x\n",
+			      status);
+	}
+
+	return IRQ_HANDLED;
+}
+
+static void qcom_pci_free_msi(void *ptr)
+{
+	struct dw_pcie_rp *pp = (struct dw_pcie_rp *)ptr;
+
+	if (pp && pp->has_msi_ctrl)
+		dw_pcie_free_msi(pp);
+}
+
+static int qcom_pcie_ecam_host_init(struct pci_config_window *cfg)
+{
+	struct device *dev = cfg->parent;
+	struct dw_pcie_rp *pp;
+	struct dw_pcie *pci;
+	int ret;
+
+	pci = devm_kzalloc(dev, sizeof(*pci), GFP_KERNEL);
+	if (!pci)
+		return -ENOMEM;
+
+	pci->dev = dev;
+	pp = &pci->pp;
+	pci->dbi_base = cfg->win;
+	pp->num_vectors = MSI_DEF_NUM_VECTORS;
+
+	ret = dw_pcie_msi_host_init(pp);
+	if (ret)
+		return ret;
+
+	pp->has_msi_ctrl = true;
+	dw_pcie_msi_init(pp);
+
+	return devm_add_action_or_reset(dev, qcom_pci_free_msi, pp);
+}
+
+/* ECAM ops */
+static const struct pci_ecam_ops pci_qcom_ecam_ops = {
+	.init		= qcom_pcie_ecam_host_init,
+	.pci_ops	= {
+		.map_bus	= pci_ecam_map_bus,
+		.read		= pci_generic_config_read,
+		.write		= pci_generic_config_write,
+	}
+};
+
 static int qcom_pcie_probe(struct platform_device *pdev)
 {
 	const struct qcom_pcie_cfg *pcie_cfg;
@@ -1538,12 +1577,54 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 	struct dw_pcie_rp *pp;
 	struct resource *res;
 	struct dw_pcie *pci;
-	int ret;
+	int ret, irq;
+	char *name;
 
 	pcie_cfg = of_device_get_match_data(dev);
-	if (!pcie_cfg || !pcie_cfg->ops) {
-		dev_err(dev, "Invalid platform data\n");
+	if (!pcie_cfg) {
+		dev_err(dev, "No platform data\n");
 		return -EINVAL;
+	}
+
+	if (!pcie_cfg->firmware_managed && !pcie_cfg->ops) {
+		dev_err(dev, "No platform ops\n");
+		return -EINVAL;
+	}
+
+	pm_runtime_enable(dev);
+	ret = pm_runtime_get_sync(dev);
+	if (ret < 0)
+		goto err_pm_runtime_put;
+
+	if (pcie_cfg->firmware_managed) {
+		struct pci_host_bridge *bridge;
+		struct pci_config_window *cfg;
+
+		bridge = devm_pci_alloc_host_bridge(dev, 0);
+		if (!bridge) {
+			ret = -ENOMEM;
+			goto err_pm_runtime_put;
+		}
+
+		/* Parse and map our configuration space windows */
+		cfg = pci_host_common_ecam_create(dev, bridge,
+				&pci_qcom_ecam_ops);
+		if (IS_ERR(cfg)) {
+			ret = PTR_ERR(cfg);
+			goto err_pm_runtime_put;
+		}
+
+		bridge->sysdata = cfg;
+		bridge->ops = (struct pci_ops *)&pci_qcom_ecam_ops.pci_ops;
+		bridge->msi_domain = true;
+
+		ret = pci_host_probe(bridge);
+		if (ret) {
+			dev_err(dev, "pci_host_probe() failed:%d\n", ret);
+			goto err_pm_runtime_put;
+		}
+
+		return ret;
 	}
 
 	pcie = devm_kzalloc(dev, sizeof(*pcie), GFP_KERNEL);
@@ -1554,11 +1635,6 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 	if (!pci)
 		return -ENOMEM;
 
-	pm_runtime_enable(dev);
-	ret = pm_runtime_get_sync(dev);
-	if (ret < 0)
-		goto err_pm_runtime_put;
-
 	pci->dev = dev;
 	pci->ops = &dw_pcie_ops;
 	pp = &pci->pp;
@@ -1567,27 +1643,11 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 
 	pcie->cfg = pcie_cfg;
 
-	pcie->pwkey = devm_gpiod_get_optional(dev, "pwkey", GPIOD_OUT_HIGH);
-	if (!pcie->pwkey) {
-		dev_err(dev, "there is no power key in pcie device only 5G module use it");
-	}else{
-		dev_err(dev, "reset or power off 5G module");
-		gpiod_set_value_cansleep(pcie->pwkey, 0);
-	}
-
 	pcie->reset = devm_gpiod_get_optional(dev, "perst", GPIOD_OUT_HIGH);
-	if (!pcie->reset) {
+	if (IS_ERR(pcie->reset)) {
 		ret = PTR_ERR(pcie->reset);
 		goto err_pm_runtime_put;
-	}else{
-		dev_err(dev, "Pull down PERST first\n");
 	}
-
-	ret = of_property_read_u32(dev->of_node, "delay-ms", &pcie->delay_ms);
-    if (ret) {
-        dev_err(dev, "Failed to read delay-ms from DT\n");
-		pcie->delay_ms = 0;
-    }
 
 	pcie->parf = devm_platform_ioremap_resource_byname(pdev, "parf");
 	if (IS_ERR(pcie->parf)) {
@@ -1633,9 +1693,9 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, pcie);
 
-#if 1 //Add by Quectel
-	i2c_client_init(pcie, dev);
-#endif
+	irq = platform_get_irq_byname_optional(pdev, "global");
+	if (irq > 0)
+		pp->use_linkup_irq = true;
 
 	ret = dw_pcie_host_init(pp);
 	if (ret) {
@@ -1643,6 +1703,26 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 		goto err_phy_exit;
 	}
 
+	name = devm_kasprintf(dev, GFP_KERNEL, "qcom_pcie_global_irq%d",
+			      pci_domain_nr(pp->bridge->bus));
+	if (!name) {
+		ret = -ENOMEM;
+		goto err_host_deinit;
+	}
+
+	if (irq > 0) {
+		ret = devm_request_threaded_irq(&pdev->dev, irq, NULL,
+						qcom_pcie_global_irq_thread,
+						IRQF_ONESHOT, name, pcie);
+		if (ret) {
+			dev_err_probe(&pdev->dev, ret,
+				      "Failed to request Global IRQ\n");
+			goto err_host_deinit;
+		}
+
+		writel_relaxed(PARF_INT_ALL_LINK_UP | PARF_INT_MSI_DEV_0_7,
+			       pcie->parf + PARF_INT_ALL_MASK);
+	}
 	/* If the soc features RPMh, cmd_db must have been prepared by now */
 	pcie->soc_is_rpmh = !cmd_db_ready();
 
@@ -1653,6 +1733,8 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 
 	return 0;
 
+err_host_deinit:
+	dw_pcie_host_deinit(pp);
 err_phy_exit:
 	phy_exit(pcie->phy);
 err_pm_runtime_put:
@@ -1664,8 +1746,12 @@ err_pm_runtime_put:
 
 static int qcom_pcie_resume_noirq(struct device *dev)
 {
-	struct qcom_pcie *pcie = dev_get_drvdata(dev);
+	struct qcom_pcie *pcie;
 	int ret;
+
+	pcie = dev_get_drvdata(dev);
+	if (!pcie)
+		return 0;
 
 	if (pcie->soc_is_rpmh) {
 		/*
@@ -1721,8 +1807,12 @@ revert_icc_tag:
 
 static int qcom_pcie_suspend_noirq(struct device *dev)
 {
-	struct qcom_pcie *pcie = dev_get_drvdata(dev);
+	struct qcom_pcie *pcie;
 	int ret;
+
+	pcie = dev_get_drvdata(dev);
+	if (!pcie)
+		return 0;
 
 	if (pcie->suspended)
 		return 0;
@@ -1779,8 +1869,10 @@ static const struct of_device_id qcom_pcie_match[] = {
 	{ .compatible = "qcom,pcie-ipq8064-v2", .data = &cfg_2_1_0 },
 	{ .compatible = "qcom,pcie-ipq8074", .data = &cfg_2_3_3 },
 	{ .compatible = "qcom,pcie-ipq8074-gen3", .data = &cfg_2_9_0 },
+	{ .compatible = "qcom,pcie-ipq9574", .data = &cfg_2_9_0 },
 	{ .compatible = "qcom,pcie-msm8996", .data = &cfg_2_3_2 },
 	{ .compatible = "qcom,pcie-qcs404", .data = &cfg_2_4_0 },
+	{ .compatible = "qcom,pcie-sa8255p", .data = &cfg_fw_managed },
 	{ .compatible = "qcom,pcie-sa8540p", .data = &cfg_1_9_0 },
 	{ .compatible = "qcom,pcie-sa8775p", .data = &cfg_1_9_0},
 	{ .compatible = "qcom,pcie-qcs8300", .data = &cfg_1_9_0},

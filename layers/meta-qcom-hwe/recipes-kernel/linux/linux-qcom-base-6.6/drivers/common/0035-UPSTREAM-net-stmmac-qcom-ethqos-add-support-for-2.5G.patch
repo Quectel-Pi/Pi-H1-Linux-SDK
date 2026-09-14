@@ -1,0 +1,47 @@
+From 07218564d24a3cc7bdf3b25144d01259c5c8a2f5 Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Date: Wed, 3 Jul 2024 20:14:58 +0200
+Subject: [PATCH 35/39] UPSTREAM: net: stmmac: qcom-ethqos: add support for
+ 2.5G BASEX mode
+
+Add support for 2.5G speed in 2500BASEX mode to the QCom ethqos driver.
+
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Reviewed-by: Andrew Lunn <andrew@lunn.ch>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 61e9be0efbe88b5cb6be6a859167a0f3724b6305]
+---
+ .../net/ethernet/stmicro/stmmac/dwmac-qcom-ethqos.c   | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/drivers/net/ethernet/stmicro/stmmac/dwmac-qcom-ethqos.c b/drivers/net/ethernet/stmicro/stmmac/dwmac-qcom-ethqos.c
+index 00a232ae541a..d7b618d64612 100644
+--- a/drivers/net/ethernet/stmicro/stmmac/dwmac-qcom-ethqos.c
++++ b/drivers/net/ethernet/stmicro/stmmac/dwmac-qcom-ethqos.c
+@@ -640,6 +640,14 @@ static int ethqos_configure_sgmii(struct qcom_ethqos *ethqos)
+ 	return val;
+ }
+ 
++static void qcom_ethqos_speed_mode_2500(struct net_device *ndev, void *data)
++{
++	struct stmmac_priv *priv = netdev_priv(ndev);
++
++	priv->plat->max_speed = 2500;
++	priv->plat->phy_interface = PHY_INTERFACE_MODE_2500BASEX;
++}
++
+ static int ethqos_configure(struct qcom_ethqos *ethqos)
+ {
+ 	return ethqos->configure_func(ethqos);
+@@ -762,6 +770,9 @@ static int qcom_ethqos_probe(struct platform_device *pdev)
+ 	case PHY_INTERFACE_MODE_RGMII_TXID:
+ 		ethqos->configure_func = ethqos_configure_rgmii;
+ 		break;
++	case PHY_INTERFACE_MODE_2500BASEX:
++		plat_dat->speed_mode_2500 = qcom_ethqos_speed_mode_2500;
++		fallthrough;
+ 	case PHY_INTERFACE_MODE_SGMII:
+ 		ethqos->configure_func = ethqos_configure_sgmii;
+ 		break;
+-- 
+2.34.1
+

@@ -1,0 +1,64 @@
+From 8e4e2306f3c9ff5efe8175394d091b2f5fd704d7 Mon Sep 17 00:00:00 2001
+From: Wasim Nazir <quic_wasimn@quicinc.com>
+Date: Wed, 19 Mar 2025 12:19:07 +0530
+Subject: [PATCH] PENDING: arm64: dts: qcom: iq-9075-evk: Add PSCI
+ SYSTEM_RESET2 types
+
+iq-9075-evk firmware supports vendor-defined SYSTEM_RESET2 types.
+Describe the reset types: "bootloader" will cause device to reboot and
+stop in the bootloader's fastboot mode. "edl" will cause device to
+reboot into "emergency download mode", which permits loading images via
+the Firehose protocol.
+
+While at it disable nvmem based reboot-mode for all variants of sa8775p
+platforms inlcuding qcs9075/qcs9100.
+
+Signed-off-by: Wasim Nazir <quic_wasimn@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts | 7 +++++++
+ arch/arm64/boot/dts/qcom/sa8775p-pmics.dtsi      | 3 ++-
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts b/arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts
+index 5b7ceef02a51..5912a2c07eb4 100644
+--- a/arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts
++++ b/arch/arm64/boot/dts/qcom/qcs9075-iq-9075-evk.dts
+@@ -676,6 +676,13 @@ wlan_en_state: wlan-en-state {
+ 	};
+ };
+ 
++&psci {
++	reset-types {
++		mode-bootloader = <0x10001 0x2>;
++		mode-edl = <0 0x1>;
++	};
++};
++
+ &qupv3_id_0 {
+ 	status = "okay";
+ };
+diff --git a/arch/arm64/boot/dts/qcom/sa8775p-pmics.dtsi b/arch/arm64/boot/dts/qcom/sa8775p-pmics.dtsi
+index eb9082dc1c8c..48b3744a2aa2 100644
+--- a/arch/arm64/boot/dts/qcom/sa8775p-pmics.dtsi
++++ b/arch/arm64/boot/dts/qcom/sa8775p-pmics.dtsi
+@@ -1,7 +1,7 @@
+ // SPDX-License-Identifier: BSD-3-Clause
+ /*
+  * Copyright (c) 2023, Linaro Limited
+- * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2024,2025, Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ 
+ #include <dt-bindings/input/input.h>
+@@ -178,6 +178,7 @@ reboot-mode {
+ 		nvmem-cell-names = "reboot-mode";
+ 		mode-recovery = <0x01>;
+ 		mode-bootloader = <0x02>;
++		status = "disabled";
+ 	};
+ };
+ 
+-- 
+2.48.1
+

@@ -1,0 +1,7 @@
+# Copyright (c) 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: BSD-3-Clause-Clear
+
+virtlogd_process_signull(syslogd_t)
+allow syslogd_t self:capability net_admin;
+
+systemd_read_logind_sessions_files(syslogd_t)

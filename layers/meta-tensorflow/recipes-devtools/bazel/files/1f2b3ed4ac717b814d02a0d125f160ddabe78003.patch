@@ -1,0 +1,57 @@
+From 1f2b3ed4ac717b814d02a0d125f160ddabe78003 Mon Sep 17 00:00:00 2001
+From: Yun Peng <pcloudy@google.com>
+Date: Wed, 5 Apr 2023 15:13:26 +0200
+Subject: [PATCH] Patch zlib to fix compatibility with latest Xcode
+
+Fixes https://github.com/bazelbuild/bazel/issues/17956
+
+Partial commit for third_party/*, see #17987.
+
+Closes #17987
+
+Signed-off-by: Yun Peng <pcloudy@google.com>
+
+Upstream-Status: Backport [https://github.com/bazelbuild/bazel/commit/1f2b3ed4ac717b814d02a0d125f160ddabe78003]
+Signed-off-by: Anuj Mittal <anuj.mittal@intel.com>
+---
+ third_party/zlib/gzguts.h   |  4 ++++
+ third_party/zlib/zlib.patch | 15 +++++++++++++++
+ 2 files changed, 19 insertions(+)
+ create mode 100644 third_party/zlib/zlib.patch
+
+diff --git a/third_party/zlib/gzguts.h b/third_party/zlib/gzguts.h
+index 57faf37165a354..54f668fcb20536 100644
+--- a/third_party/zlib/gzguts.h
++++ b/third_party/zlib/gzguts.h
+@@ -3,6 +3,10 @@
+  * For conditions of distribution and use, see copyright notice in zlib.h
+  */
+
++#ifndef _WIN32
++  #include <unistd.h>
++#endif
++
+ #ifdef _LARGEFILE64_SOURCE
+ #  ifndef _LARGEFILE_SOURCE
+ #    define _LARGEFILE_SOURCE 1
+diff --git a/third_party/zlib/zlib.patch b/third_party/zlib/zlib.patch
+new file mode 100644
+index 00000000000000..7181d44aa9f9b1
+--- /dev/null
++++ b/third_party/zlib/zlib.patch
+@@ -0,0 +1,15 @@
++diff --git a/third_party/zlib/gzguts.h b/third_party/zlib/gzguts.h
++index 57faf37165..54f668fcb2 100644
++--- a/third_party/zlib/gzguts.h
+++++ b/third_party/zlib/gzguts.h
++@@ -3,6 +3,10 @@
++  * For conditions of distribution and use, see copyright notice in zlib.h
++  */
++
+++#ifndef _WIN32
+++  #include <unistd.h>
+++#endif
+++
++ #ifdef _LARGEFILE64_SOURCE
++ #  ifndef _LARGEFILE_SOURCE
++ #    define _LARGEFILE_SOURCE 1

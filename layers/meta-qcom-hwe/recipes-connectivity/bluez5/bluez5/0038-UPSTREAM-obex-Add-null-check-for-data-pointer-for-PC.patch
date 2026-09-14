@@ -1,0 +1,32 @@
+From 242425e4e5c7c6a6ca4e5ed58c38bdf7ad2a6c86 Mon Sep 17 00:00:00 2001
+From: Amisha Jain <quic_amisjain@quicinc.com>
+Date: Wed, 5 Mar 2025 12:44:18 +0530
+Subject: [PATCH] UPSTREAM:obex: Add null check for data pointer for PCE
+
+Incase of legacy server, when the 'supported fetures bit' attribute
+is NULL, Add the check to avoid any invalid memory access.
+
+Upstream-Status: Backport https://github.com/bluez/bluez/commit/8d1c5165fcd80cc48fb3b7db7744c708c03ac310
+Signed-off-by: Amisha Jain <quic_amisjain@quicinc.com>
+
+---
+ obexd/client/pbap.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/obexd/client/pbap.c b/obexd/client/pbap.c
+index 09d3fd4..48a2de6 100644
+--- a/obexd/client/pbap.c
++++ b/obexd/client/pbap.c
+@@ -1235,6 +1235,9 @@ static void *pbap_supported_features(struct obc_session *session)
+ 	data = obc_session_get_attribute(session,
+ 					SDP_ATTR_PBAP_SUPPORTED_FEATURES);
+ 
++	if (!data)
++		return NULL;
++
+ 	features = *(uint32_t *) data;
+ 	if (!features)
+ 		return NULL;
+-- 
+2.34.1
+

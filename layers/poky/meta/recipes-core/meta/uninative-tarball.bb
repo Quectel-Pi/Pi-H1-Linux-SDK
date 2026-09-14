@@ -3,23 +3,16 @@ LICENSE = "MIT"
 
 TOOLCHAIN_TARGET_TASK = ""
 
-# ibm850 - mcopy from mtools
-# iso8859-1 - guile
-# utf-16, cp1252 - binutils-windres
 TOOLCHAIN_HOST_TASK = "\
     nativesdk-glibc \
     nativesdk-glibc-dbg \
-    nativesdk-glibc-gconv-ibm850 \
-    nativesdk-glibc-gconv-iso8859-1 \
-    nativesdk-glibc-gconv-utf-16 \
-    nativesdk-glibc-gconv-cp1252 \
-    nativesdk-glibc-gconv-euc-jp \
-    nativesdk-glibc-gconv-libjis \
+    nativesdk-glibc-gconvs \
     nativesdk-patchelf \
     nativesdk-libxcrypt \
     nativesdk-libxcrypt-compat \
     nativesdk-libnss-nis \
     nativesdk-sdk-provides-dummy \
+    nativesdk-libgcc \
     "
 
 INHIBIT_DEFAULT_DEPS = "1"
@@ -65,6 +58,8 @@ fakeroot archive_sdk() {
 	DEST="./${SDK_ARCH}-${SDK_OS}"
 	mv sysroots/${SDK_SYS} $DEST
 	rm sysroots -rf
+	# There is a check in meta/files/toolchain-shar-extract.sh -- make sure to
+	# keep that check up to date if changing the `1024`
 	patchelf --set-interpreter ${@''.join('a' for n in range(1024))} $DEST/usr/bin/patchelf
 	mv $DEST/usr/bin/patchelf $DEST/usr/bin/patchelf-uninative
 	${SDK_ARCHIVE_CMD}

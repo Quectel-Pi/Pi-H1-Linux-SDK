@@ -1,24 +1,26 @@
+.. SPDX-License-Identifier: CC-BY-SA-2.0-UK
+
 Release notes for Yocto-4.0.3 (Kirkstone)
 -----------------------------------------
 
 Security Fixes in Yocto-4.0.3
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
--  binutils: fix :cve:`2019-1010204`
--  busybox: fix :cve:`2022-30065`
--  cups: ignore :cve:`2022-26691`
--  curl: Fix :cve:`2022-32205`, :cve:`2022-32206`, :cve:`2022-32207` and :cve:`2022-32208`
--  dpkg: fix :cve:`2022-1664`
--  ghostscript: fix :cve:`2022-2085`
--  harfbuzz: fix :cve:`2022-33068`
--  libtirpc: fix :cve:`2021-46828`
--  lua: fix :cve:`2022-33099`
--  nasm: ignore :cve:`2020-18974`
--  qemu: fix :cve:`2022-35414`
--  qemu: ignore :cve:`2021-20255` and :cve:`2019-12067`
--  tiff: fix :cve:`2022-1354`, :cve:`2022-1355`, :cve:`2022-2056`, :cve:`2022-2057` and :cve:`2022-2058`
--  u-boot: fix :cve:`2022-34835`
--  unzip: fix :cve:`2022-0529` and :cve:`2022-0530`
+-  binutils: fix :cve_nist:`2019-1010204`
+-  busybox: fix :cve_nist:`2022-30065`
+-  cups: ignore :cve_nist:`2022-26691`
+-  curl: Fix :cve_nist:`2022-32205`, :cve_nist:`2022-32206`, :cve_nist:`2022-32207` and :cve_nist:`2022-32208`
+-  dpkg: fix :cve_nist:`2022-1664`
+-  ghostscript: fix :cve_nist:`2022-2085`
+-  harfbuzz: fix :cve_nist:`2022-33068`
+-  libtirpc: fix :cve_nist:`2021-46828`
+-  lua: fix :cve_nist:`2022-33099`
+-  nasm: ignore :cve_nist:`2020-18974`
+-  qemu: fix :cve_nist:`2022-35414`
+-  qemu: ignore :cve_nist:`2021-20255` and :cve_nist:`2019-12067`
+-  tiff: fix :cve_nist:`2022-1354`, :cve_nist:`2022-1355`, :cve_nist:`2022-2056`, :cve_nist:`2022-2057` and :cve_nist:`2022-2058`
+-  u-boot: fix :cve_nist:`2022-34835`
+-  unzip: fix :cve_nist:`2022-0529` and :cve_nist:`2022-0530`
 
 
 Fixes in Yocto-4.0.3
@@ -29,7 +31,7 @@ Fixes in Yocto-4.0.3
 -  base.bbclass: Correct the test for obsolete license exceptions
 -  base/reproducible: Change Source Date Epoch generation methods
 -  bin_package: install into base_prefix
--  bind: Remove legacy python3 PACKAGECONFIG code
+-  bind: Remove legacy python3 :term:`PACKAGECONFIG` code
 -  bind: upgrade to 9.18.4
 -  binutils: stable 2.38 branch updates
 -  build-appliance-image: Update to kirkstone head revision
@@ -38,8 +40,8 @@ Fixes in Yocto-4.0.3
 -  curl: backport openssl fix CN check error code
 -  cve-check: hook cleanup to the BuildCompleted event, not CookerExit
 -  cve-extra-exclusions: Clean up and ignore three CVEs (2xqemu and nasm)
--  devtool: finish: handle patching when S points to subdir of a git repo
--  devtool: ignore pn- overrides when determining SRC_URI overrides
+-  devtool: finish: handle patching when :term:`S` points to subdir of a git repo
+-  devtool: ignore pn- overrides when determining :term:`SRC_URI` overrides
 -  docs: BB_HASHSERVE_UPSTREAM: update to new host
 -  dropbear: break dependency on base package for -dev package
 -  efivar: fix import functionality
@@ -48,7 +50,7 @@ Fixes in Yocto-4.0.3
 -  externalsrc.bbclass: support crate fetcher on externalsrc
 -  font-util: update 1.3.2 -> 1.3.3
 -  gcc-runtime: Fix build when using gold
--  gcc-runtime: Fix missing MLPREFIX in debug mappings
+-  gcc-runtime: Fix missing :term:`MLPREFIX` in debug mappings
 -  gcc-runtime: Pass -nostartfiles when building dummy libstdc++.so
 -  gcc: Backport a fix for gcc bug 105039
 -  git: upgrade to v2.35.4
@@ -56,8 +58,8 @@ Fixes in Yocto-4.0.3
 -  glib-networking: upgrade to 2.72.1
 -  glibc : stable 2.35 branch updates
 -  glibc-tests: Avoid reproducibility issues
--  glibc-tests: not clear BBCLASSEXTEND
--  glibc: revert one upstream change to work around broken DEBUG_BUILD build
+-  glibc-tests: not clear :term:`BBCLASSEXTEND`
+-  glibc: revert one upstream change to work around broken :term:`DEBUG_BUILD` build
 -  glibc: stable 2.35 branch updates
 -  gnupg: upgrade to 2.3.7
 -  go: upgrade to v1.17.12
@@ -84,8 +86,8 @@ Fixes in Yocto-4.0.3
 -  kernel-arch: Fix buildpaths leaking into external module compiles
 -  kernel-devsrc: fix reproducibility and buildpaths QA warning
 -  kernel-devsrc: ppc32: fix reproducibility
--  kernel-uboot.bbclass: Use vmlinux.initramfs when INITRAMFS_IMAGE_BUNDLE set
--  kernel.bbclass: pass LD also in savedefconfig
+-  kernel-uboot.bbclass: Use vmlinux.initramfs when :term:`INITRAMFS_IMAGE_BUNDLE` set
+-  kernel.bbclass: pass :term:`LD` also in savedefconfig
 -  libffi: fix native build being not portable
 -  libgcc: Fix standalone target builds with usrmerge distro feature
 -  libmodule-build-perl: Use env utility to find perl interpreter
@@ -115,7 +117,7 @@ Fixes in Yocto-4.0.3
 -  oeqa/runtime/scp: Disable scp test for dropbear
 -  oeqa/runtime: add test that the kernel has CONFIG_PREEMPT_RT enabled
 -  oeqa/sdk: drop the nativesdk-python 2.x test
--  openssh: Add openssh-sftp-server to openssh RDEPENDS
+-  openssh: Add openssh-sftp-server to openssh :term:`RDEPENDS`
 -  openssh: break dependency on base package for -dev package
 -  openssl: update to 3.0.5
 -  package.bbclass: Avoid stripping signed kernel modules in splitdebuginfo
@@ -123,28 +125,28 @@ Fixes in Yocto-4.0.3
 -  package.bbclass: Fix kernel source handling when not using externalsrc
 -  package_manager/ipk: do not pipe stderr to stdout
 -  packagegroup-core-ssh-dropbear: Add openssh-sftp-server recommendation
--  patch: handle if S points to a subdirectory of a git repo
+-  patch: handle if :term:`S` points to a subdirectory of a git repo
 -  perf: fix reproducibility in 5.19+
 -  perf: fix reproduciblity in older releases of Linux
 -  perf: sort-pmuevents: really keep array terminators
 -  perl: don't install Makefile.old into perl-ptest
 -  poky.conf: bump version for 4.0.3
--  pulseaudio: add m4-native to DEPENDS
+-  pulseaudio: add m4-native to :term:`DEPENDS`
 -  python3: Backport patch to fix an issue in subinterpreters
--  qemu: Add PACKAGECONFIG for brlapi
+-  qemu: Add :term:`PACKAGECONFIG` for brlapi
 -  qemu: Avoid accidental librdmacm linkage
 -  qemu: Avoid accidental libvdeplug linkage
 -  qemu: Fix slirp determinism issue
--  qemu: add PACKAGECONFIG for capstone
--  recipetool/devtool: Fix python egg whitespace issues in PACKAGECONFIG
+-  qemu: add :term:`PACKAGECONFIG` for capstone
+-  recipetool/devtool: Fix python egg whitespace issues in :term:`PACKAGECONFIG`
 -  ref-manual: variables: remove sphinx directive from literal block
 -  rootfs-postcommands.bbclass: move host-user-contaminated.txt to ${S}
--  ruby: add PACKAGECONFIG for capstone
+-  ruby: add :term:`PACKAGECONFIG` for capstone
 -  rust: fix issue building cross-canadian tools for aarch64 on x86_64
 -  sanity.bbclass: Add ftps to accepted URI protocols for mirrors sanity
 -  selftest/runtime_test/virgl: Disable for all almalinux
 -  sstatesig: Include all dependencies in SPDX task signatures
--  strace: set COMPATIBLE_HOST for riscv32
+-  strace: set :term:`COMPATIBLE_HOST` for riscv32
 -  systemd: Added base_bindir into pkg_postinst:udev-hwdb.
 -  udev-extraconf/initrdscripts/parted: Rename mount.blacklist -> mount.ignorelist
 -  udev-extraconf/mount.sh: add LABELs to mountpoints
@@ -169,7 +171,7 @@ Fixes in Yocto-4.0.3
 -  xev: upgrade to 1.2.5
 -  xf86-input-synaptics: upgrade to 1.9.2
 -  xmodmap: upgrade to 1.0.11
--  xorg-app: Tweak handling of compression changes in SRC_URI
+-  xorg-app: Tweak handling of compression changes in :term:`SRC_URI`
 -  xserver-xorg: upgrade to 21.1.4
 -  xwayland: upgrade to 22.1.3
 -  yocto-bsps/5.10: fix buildpaths issue with gen-mach-types
@@ -239,7 +241,7 @@ Contributors to Yocto-4.0.3
 -  Yue Tao
 -  gr embeter
 -  leimaohui
--  wangmy
+-  Wang Mingyu
 
 
 Repositories / Downloads for Yocto-4.0.3
@@ -247,7 +249,7 @@ Repositories / Downloads for Yocto-4.0.3
 
 poky
 
--  Repository Location: https://git.yoctoproject.org/git/poky
+-  Repository Location: :yocto_git:`/poky`
 -  Branch: :yocto_git:`kirkstone </poky/log/?h=kirkstone>`
 -  Tag:  :yocto_git:`yocto-4.0.3 </poky/log/?h=yocto-4.0.3>`
 -  Git Revision: :yocto_git:`387ab5f18b17c3af3e9e30dc58584641a70f359f </poky/commit/?id=387ab5f18b17c3af3e9e30dc58584641a70f359f>`
@@ -259,7 +261,7 @@ poky
 
 openembedded-core
 
--  Repository Location: https://git.openembedded.org/openembedded-core
+-  Repository Location: :oe_git:`/openembedded-core`
 -  Branch: :oe_git:`kirkstone </openembedded-core/log/?h=kirkstone>`
 -  Tag:  :oe_git:`yocto-4.0.3 </openembedded-core/log/?h=yocto-4.0.3>`
 -  Git Revision: :oe_git:`2cafa6ed5f0aa9df5a120b6353755d56c7c7800d </openembedded-core/commit/?id=2cafa6ed5f0aa9df5a120b6353755d56c7c7800d>`
@@ -271,7 +273,7 @@ openembedded-core
 
 meta-mingw
 
--  Repository Location: https://git.yoctoproject.org/git/meta-mingw
+-  Repository Location: :yocto_git:`/meta-mingw`
 -  Branch: :yocto_git:`kirkstone </meta-mingw/log/?h=kirkstone>`
 -  Tag:  :yocto_git:`yocto-4.0.3 </meta-mingw/log/?h=yocto-4.0.3>`
 -  Git Revision: :yocto_git:`a90614a6498c3345704e9611f2842eb933dc51c1 </meta-mingw/commit/?id=a90614a6498c3345704e9611f2842eb933dc51c1>`
@@ -283,7 +285,7 @@ meta-mingw
 
 meta-gplv2
 
--  Repository Location: https://git.yoctoproject.org/git/meta-gplv2
+-  Repository Location: :yocto_git:`/meta-gplv2`
 -  Branch: :yocto_git:`kirkstone </meta-gplv2/log/?h=kirkstone>`
 -  Tag:  :yocto_git:`yocto-4.0.3 </meta-gplv2/log/?h=yocto-4.0.3>`
 -  Git Revision: :yocto_git:`d2f8b5cdb285b72a4ed93450f6703ca27aa42e8a </meta-gplv2/commit/?id=d2f8b5cdb285b72a4ed93450f6703ca27aa42e8a>`
@@ -295,7 +297,7 @@ meta-gplv2
 
 bitbake
 
--  Repository Location: https://git.openembedded.org/bitbake
+-  Repository Location: :oe_git:`/bitbake`
 -  Branch: :oe_git:`2.0 </bitbake/log/?h=2.0>`
 -  Tag:  :oe_git:`yocto-4.0.3 </bitbake/log/?h=yocto-4.0.3>`
 -  Git Revision: :oe_git:`b8fd6f5d9959d27176ea016c249cf6d35ac8ba03 </bitbake/commit/?id=b8fd6f5d9959d27176ea016c249cf6d35ac8ba03>`
@@ -307,7 +309,7 @@ bitbake
 
 yocto-docs
 
--  Repository Location: https://git.yoctoproject.org/git/yocto-docs
+-  Repository Location: :yocto_git:`/yocto-docs`
 -  Branch: :yocto_git:`kirkstone </yocto-docs/log/?h=kirkstone>`
 -  Tag: :yocto_git:`yocto-4.0.3 </yocto-docs/log/?h=yocto-4.0.3>`
 -  Git Revision: :yocto_git:`d9b3dcf65ef25c06f552482aba460dd16862bf96 </yocto-docs/commit/?id=d9b3dcf65ef25c06f552482aba460dd16862bf96>`

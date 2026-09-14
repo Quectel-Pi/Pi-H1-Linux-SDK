@@ -1,4 +1,0 @@
-FILESPATH:prepend =  "${WORKSPACE}/sources/quectel-src:"
-SRC_URI = "file://wlan-devicetree"
-S = "${WORKDIR}/wlan-devicetree"
-

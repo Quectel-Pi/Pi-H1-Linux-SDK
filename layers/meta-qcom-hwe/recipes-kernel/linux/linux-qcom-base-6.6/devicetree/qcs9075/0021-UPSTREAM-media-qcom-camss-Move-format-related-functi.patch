@@ -1,0 +1,367 @@
+From f45d2563ab2d4c49c7c9d1e5b533814c4c600355 Mon Sep 17 00:00:00 2001
+From: Radoslav Tsvetkov <quic_rtsvetko@quicinc.com>
+Date: Thu, 23 Nov 2023 15:42:56 +0200
+Subject: [PATCH 21/42] UPSTREAM: media: qcom: camss: Move format related
+ functions
+
+Move out the format related helper functions from vfe and video in a
+separate file. The goal here is to create a format API.
+
+Signed-off-by: Radoslav Tsvetkov <quic_rtsvetko@quicinc.com>
+Signed-off-by: Gjorgji Rosikopulos <quic_grosikop@quicinc.com>
+Acked-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Signed-off-by: Hans Verkuil <hverkuil-cisco@xs4all.nl>
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git ad458cb90f2c380b750294e72baf53b609a911e1]
+---
+ drivers/media/platform/qcom/camss/Makefile    |  1 +
+ .../media/platform/qcom/camss/camss-format.c  | 98 +++++++++++++++++++
+ .../media/platform/qcom/camss/camss-format.h  |  5 +
+ drivers/media/platform/qcom/camss/camss-vfe.c | 86 +++++-----------
+ .../media/platform/qcom/camss/camss-video.c   | 26 +----
+ 5 files changed, 128 insertions(+), 88 deletions(-)
+ create mode 100644 drivers/media/platform/qcom/camss/camss-format.c
+
+diff --git a/drivers/media/platform/qcom/camss/Makefile b/drivers/media/platform/qcom/camss/Makefile
+index 4e2222358973..b04079703ba6 100644
+--- a/drivers/media/platform/qcom/camss/Makefile
++++ b/drivers/media/platform/qcom/camss/Makefile
+@@ -19,5 +19,6 @@ qcom-camss-objs += \
+ 		camss-vfe-gen1.o \
+ 		camss-vfe.o \
+ 		camss-video.o \
++		camss-format.o \
+ 
+ obj-$(CONFIG_VIDEO_QCOM_CAMSS) += qcom-camss.o
+diff --git a/drivers/media/platform/qcom/camss/camss-format.c b/drivers/media/platform/qcom/camss/camss-format.c
+new file mode 100644
+index 000000000000..04aa828d2642
+--- /dev/null
++++ b/drivers/media/platform/qcom/camss/camss-format.c
+@@ -0,0 +1,98 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/* Copyright (c) 2023, The Linux Foundation. All rights reserved.
++ * Copyright (c) 2023 Qualcomm Technologies, Inc.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 and
++ * only version 2 as published by the Free Software Foundation.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <linux/bug.h>
++#include <linux/errno.h>
++
++#include "camss-format.h"
++
++/*
++ * camss_format_get_bpp - Map media bus format to bpp
++ * @formats: supported media bus formats array
++ * @nformats: size of @formats array
++ * @code: media bus format code
++ *
++ * Return number of bpp
++ */
++u8 camss_format_get_bpp(const struct camss_format_info *formats, unsigned int nformats, u32 code)
++{
++	unsigned int i;
++
++	for (i = 0; i < nformats; i++)
++		if (code == formats[i].code)
++			return formats[i].mbus_bpp;
++
++	WARN(1, "Unknown format\n");
++
++	return formats[0].mbus_bpp;
++}
++
++/*
++ * camss_format_find_code - Find a format code in an array
++ * @code: a pointer to media bus format codes array
++ * @n_code: size of @code array
++ * @index: index of code in the array
++ * @req_code: required code
++ *
++ * Return media bus format code
++ */
++u32 camss_format_find_code(u32 *code, unsigned int n_code, unsigned int index, u32 req_code)
++{
++	int i;
++
++	if (!req_code && index >= n_code)
++		return 0;
++
++	for (i = 0; i < n_code; i++) {
++		if (req_code) {
++			if (req_code == code[i])
++				return req_code;
++		} else {
++			if (i == index)
++				return code[i];
++		}
++	}
++
++	return code[0];
++}
++
++/*
++ * camss_format_find_format - Find a format in an array
++ * @code: media bus format code
++ * @pixelformat: V4L2 pixelformat FCC identifier
++ * @formats: a pointer to formats array
++ * @nformats: size of @formats array
++ *
++ * Return index of a format or a negative error code otherwise
++ */
++int camss_format_find_format(u32 code, u32 pixelformat, const struct camss_format_info *formats,
++			     unsigned int nformats)
++{
++	int i;
++
++	for (i = 0; i < nformats; i++) {
++		if (formats[i].code == code &&
++		    formats[i].pixelformat == pixelformat)
++			return i;
++	}
++
++	for (i = 0; i < nformats; i++) {
++		if (formats[i].code == code)
++			return i;
++	}
++
++	WARN_ON(1);
++
++	return -EINVAL;
++}
+diff --git a/drivers/media/platform/qcom/camss/camss-format.h b/drivers/media/platform/qcom/camss/camss-format.h
+index a55fca6edcb7..0729ed9ee3c5 100644
+--- a/drivers/media/platform/qcom/camss/camss-format.h
++++ b/drivers/media/platform/qcom/camss/camss-format.h
+@@ -60,4 +60,9 @@ struct camss_formats {
+ 	const struct camss_format_info *formats;
+ };
+ 
++u8 camss_format_get_bpp(const struct camss_format_info *formats, unsigned int nformats, u32 code);
++u32 camss_format_find_code(u32 *code, unsigned int n_code, unsigned int index, u32 req_code);
++int camss_format_find_format(u32 code, u32 pixelformat, const struct camss_format_info *formats,
++			     unsigned int nformats);
++
+ #endif /* __CAMSS_FORMAT_H__ */
+diff --git a/drivers/media/platform/qcom/camss/camss-vfe.c b/drivers/media/platform/qcom/camss/camss-vfe.c
+index c1f4f88a869b..54385abad963 100644
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c
+@@ -277,48 +277,6 @@ const struct camss_formats vfe_formats_pix_845 = {
+ 	.formats = formats_rdi_845
+ };
+ 
+-/*
+- * vfe_get_bpp - map media bus format to bits per pixel
+- * @formats: supported media bus formats array
+- * @nformats: size of @formats array
+- * @code: media bus format code
+- *
+- * Return number of bits per pixel
+- */
+-static u8 vfe_get_bpp(const struct camss_format_info *formats,
+-		      unsigned int nformats, u32 code)
+-{
+-	unsigned int i;
+-
+-	for (i = 0; i < nformats; i++)
+-		if (code == formats[i].code)
+-			return formats[i].mbus_bpp;
+-
+-	WARN(1, "Unknown format\n");
+-
+-	return formats[0].mbus_bpp;
+-}
+-
+-static u32 vfe_find_code(u32 *code, unsigned int n_code,
+-			 unsigned int index, u32 req_code)
+-{
+-	int i;
+-
+-	if (!req_code && (index >= n_code))
+-		return 0;
+-
+-	for (i = 0; i < n_code; i++)
+-		if (req_code) {
+-			if (req_code == code[i])
+-				return req_code;
+-		} else {
+-			if (i == index)
+-				return code[i];
+-		}
+-
+-	return code[0];
+-}
+-
+ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ 			    unsigned int index, u32 src_req_code)
+ {
+@@ -334,8 +292,8 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ 				MEDIA_BUS_FMT_YUYV8_1_5X8,
+ 			};
+ 
+-			return vfe_find_code(src_code, ARRAY_SIZE(src_code),
+-					     index, src_req_code);
++			return camss_format_find_code(src_code, ARRAY_SIZE(src_code),
++						      index, src_req_code);
+ 		}
+ 		case MEDIA_BUS_FMT_YVYU8_1X16:
+ 		{
+@@ -344,8 +302,8 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ 				MEDIA_BUS_FMT_YVYU8_1_5X8,
+ 			};
+ 
+-			return vfe_find_code(src_code, ARRAY_SIZE(src_code),
+-					     index, src_req_code);
++			return camss_format_find_code(src_code, ARRAY_SIZE(src_code),
++						      index, src_req_code);
+ 		}
+ 		case MEDIA_BUS_FMT_UYVY8_1X16:
+ 		{
+@@ -354,8 +312,8 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ 				MEDIA_BUS_FMT_UYVY8_1_5X8,
+ 			};
+ 
+-			return vfe_find_code(src_code, ARRAY_SIZE(src_code),
+-					     index, src_req_code);
++			return camss_format_find_code(src_code, ARRAY_SIZE(src_code),
++						      index, src_req_code);
+ 		}
+ 		case MEDIA_BUS_FMT_VYUY8_1X16:
+ 		{
+@@ -364,8 +322,8 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ 				MEDIA_BUS_FMT_VYUY8_1_5X8,
+ 			};
+ 
+-			return vfe_find_code(src_code, ARRAY_SIZE(src_code),
+-					     index, src_req_code);
++			return camss_format_find_code(src_code, ARRAY_SIZE(src_code),
++						      index, src_req_code);
+ 		}
+ 		default:
+ 			if (index > 0)
+@@ -389,8 +347,8 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ 				MEDIA_BUS_FMT_YUYV8_1_5X8,
+ 			};
+ 
+-			return vfe_find_code(src_code, ARRAY_SIZE(src_code),
+-					     index, src_req_code);
++			return camss_format_find_code(src_code, ARRAY_SIZE(src_code),
++						      index, src_req_code);
+ 		}
+ 		case MEDIA_BUS_FMT_YVYU8_1X16:
+ 		{
+@@ -402,8 +360,8 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ 				MEDIA_BUS_FMT_YVYU8_1_5X8,
+ 			};
+ 
+-			return vfe_find_code(src_code, ARRAY_SIZE(src_code),
+-					     index, src_req_code);
++			return camss_format_find_code(src_code, ARRAY_SIZE(src_code),
++						      index, src_req_code);
+ 		}
+ 		case MEDIA_BUS_FMT_UYVY8_1X16:
+ 		{
+@@ -415,8 +373,8 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ 				MEDIA_BUS_FMT_UYVY8_1_5X8,
+ 			};
+ 
+-			return vfe_find_code(src_code, ARRAY_SIZE(src_code),
+-					     index, src_req_code);
++			return camss_format_find_code(src_code, ARRAY_SIZE(src_code),
++						      index, src_req_code);
+ 		}
+ 		case MEDIA_BUS_FMT_VYUY8_1X16:
+ 		{
+@@ -428,8 +386,8 @@ static u32 vfe_src_pad_code(struct vfe_line *line, u32 sink_code,
+ 				MEDIA_BUS_FMT_VYUY8_1_5X8,
+ 			};
+ 
+-			return vfe_find_code(src_code, ARRAY_SIZE(src_code),
+-					     index, src_req_code);
++			return camss_format_find_code(src_code, ARRAY_SIZE(src_code),
++						      index, src_req_code);
+ 		}
+ 		default:
+ 			if (index > 0)
+@@ -678,9 +636,9 @@ static int vfe_set_clock_rates(struct vfe_device *vfe)
+ 				} else {
+ 					struct vfe_line *l = &vfe->line[j];
+ 
+-					bpp = vfe_get_bpp(l->formats,
+-						l->nformats,
+-						l->fmt[MSM_VFE_PAD_SINK].code);
++					bpp = camss_format_get_bpp(l->formats,
++								   l->nformats,
++								   l->fmt[MSM_VFE_PAD_SINK].code);
+ 					tmp = pixel_clock[j] * bpp / 64;
+ 				}
+ 
+@@ -759,9 +717,9 @@ static int vfe_check_clock_rates(struct vfe_device *vfe)
+ 				} else {
+ 					struct vfe_line *l = &vfe->line[j];
+ 
+-					bpp = vfe_get_bpp(l->formats,
+-						l->nformats,
+-						l->fmt[MSM_VFE_PAD_SINK].code);
++					bpp = camss_format_get_bpp(l->formats,
++								   l->nformats,
++								   l->fmt[MSM_VFE_PAD_SINK].code);
+ 					tmp = pixel_clock[j] * bpp / 64;
+ 				}
+ 
+diff --git a/drivers/media/platform/qcom/camss/camss-video.c b/drivers/media/platform/qcom/camss/camss-video.c
+index 50a956580875..2cb063f00915 100644
+--- a/drivers/media/platform/qcom/camss/camss-video.c
++++ b/drivers/media/platform/qcom/camss/camss-video.c
+@@ -28,27 +28,6 @@
+  * Helper functions
+  */
+ 
+-static int video_find_format(u32 code, u32 pixelformat,
+-			     const struct camss_format_info *formats,
+-			     unsigned int nformats)
+-{
+-	int i;
+-
+-	for (i = 0; i < nformats; i++) {
+-		if (formats[i].code == code &&
+-		    formats[i].pixelformat == pixelformat)
+-			return i;
+-	}
+-
+-	for (i = 0; i < nformats; i++)
+-		if (formats[i].code == code)
+-			return i;
+-
+-	WARN_ON(1);
+-
+-	return -EINVAL;
+-}
+-
+ /*
+  * video_mbus_to_pix_mp - Convert v4l2_mbus_framefmt to v4l2_pix_format_mplane
+  * @mbus: v4l2_mbus_framefmt format (input)
+@@ -121,9 +100,8 @@ static int video_get_subdev_format(struct camss_video *video,
+ 	if (ret)
+ 		return ret;
+ 
+-	ret = video_find_format(fmt.format.code,
+-				format->fmt.pix_mp.pixelformat,
+-				video->formats, video->nformats);
++	ret = camss_format_find_format(fmt.format.code, format->fmt.pix_mp.pixelformat,
++				       video->formats, video->nformats);
+ 	if (ret < 0)
+ 		return ret;
+ 
+-- 
+2.25.1
+

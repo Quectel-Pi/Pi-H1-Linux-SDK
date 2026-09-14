@@ -1,0 +1,82 @@
+From 815568678b6efa8ee62988cd59137d4ffbec690d Mon Sep 17 00:00:00 2001
+From: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Date: Thu, 5 Dec 2024 20:31:50 -0800
+Subject: [PATCH 116/146] FROMLIST: drm/msm/dp: add support to program mst
+ support in mainlink
+
+Add support to program the MST enabled bit in the mainlink
+control when a mst session is active and disabled.
+
+Signed-off-by: Abhinav Kumar <quic_abhinavk@quicinc.com>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241205-dp_mst-v1-19-f8618d42a99a@quicinc.com/]
+---
+ drivers/gpu/drm/msm/dp/dp_catalog.c | 17 +++++++++++++++++
+ drivers/gpu/drm/msm/dp/dp_catalog.h |  1 +
+ drivers/gpu/drm/msm/dp/dp_ctrl.c    |  4 ++++
+ 3 files changed, 22 insertions(+)
+
+diff --git a/drivers/gpu/drm/msm/dp/dp_catalog.c b/drivers/gpu/drm/msm/dp/dp_catalog.c
+index 83cdf117e0dc..39a5be48b813 100644
+--- a/drivers/gpu/drm/msm/dp/dp_catalog.c
++++ b/drivers/gpu/drm/msm/dp/dp_catalog.c
+@@ -417,6 +417,23 @@ void msm_dp_catalog_ctrl_psr_mainlink_enable(struct msm_dp_catalog *msm_dp_catal
+ 	msm_dp_write_link(catalog, REG_DP_MAINLINK_CTRL, val);
+ }
+ 
++void msm_dp_catalog_mst_config(struct msm_dp_catalog *msm_dp_catalog, bool enable)
++{
++	struct msm_dp_catalog_private *catalog = container_of(msm_dp_catalog,
++							      struct msm_dp_catalog_private,
++							      msm_dp_catalog);
++
++	u32 mainlink_ctrl;
++
++	mainlink_ctrl = msm_dp_read_link(catalog, REG_DP_MAINLINK_CTRL);
++	if (enable)
++		mainlink_ctrl |= (0x04000100);
++	else
++		mainlink_ctrl &= ~(0x04000100);
++
++	msm_dp_write_link(catalog, REG_DP_MAINLINK_CTRL, mainlink_ctrl);
++}
++
+ void msm_dp_catalog_ctrl_mainlink_ctrl(struct msm_dp_catalog *msm_dp_catalog,
+ 						bool enable)
+ {
+diff --git a/drivers/gpu/drm/msm/dp/dp_catalog.h b/drivers/gpu/drm/msm/dp/dp_catalog.h
+index c91c52d40209..07284f484e28 100644
+--- a/drivers/gpu/drm/msm/dp/dp_catalog.h
++++ b/drivers/gpu/drm/msm/dp/dp_catalog.h
+@@ -138,5 +138,6 @@ void msm_dp_catalog_audio_sfe_level(struct msm_dp_catalog *catalog, u32 safe_to_
+ /* DP MST APIs */
+ void msm_dp_catalog_trigger_act(struct msm_dp_catalog *dp_catalog);
+ bool msm_dp_catalog_read_act_complete_sts(struct msm_dp_catalog *dp_catalog);
++void msm_dp_catalog_mst_config(struct msm_dp_catalog *dp_catalog, bool enable);
+ 
+ #endif /* _DP_CATALOG_H_ */
+diff --git a/drivers/gpu/drm/msm/dp/dp_ctrl.c b/drivers/gpu/drm/msm/dp/dp_ctrl.c
+index 04027429fca8..974f552b8cb0 100644
+--- a/drivers/gpu/drm/msm/dp/dp_ctrl.c
++++ b/drivers/gpu/drm/msm/dp/dp_ctrl.c
+@@ -186,6 +186,9 @@ static void msm_dp_ctrl_configure_source_params(struct msm_dp_ctrl_private *ctrl
+ 	msm_dp_catalog_ctrl_lane_mapping(ctrl->catalog);
+ 	msm_dp_catalog_setup_peripheral_flush(ctrl->catalog);
+ 
++	if (ctrl->mst_active)
++		msm_dp_catalog_mst_config(ctrl->catalog, true);
++
+ 	msm_dp_ctrl_config_ctrl(ctrl, msm_dp_panel);
+ 
+ 	tb = msm_dp_link_get_test_bits_depth(ctrl->link,
+@@ -2154,6 +2157,7 @@ void msm_dp_ctrl_off_link(struct msm_dp_ctrl *msm_dp_ctrl)
+ 	phy = ctrl->phy;
+ 
+ 	msm_dp_catalog_ctrl_mainlink_ctrl(ctrl->catalog, false);
++	msm_dp_catalog_mst_config(ctrl->catalog, false);
+ 
+ 	ctrl->mst_active = false;
+ 
+-- 
+2.34.1
+

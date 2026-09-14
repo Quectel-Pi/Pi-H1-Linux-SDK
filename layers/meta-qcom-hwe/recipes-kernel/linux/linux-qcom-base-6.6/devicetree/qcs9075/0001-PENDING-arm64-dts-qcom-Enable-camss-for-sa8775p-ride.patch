@@ -1,0 +1,31 @@
+From 0990f1cb4b7323bed49f10ad74a12313156bc979 Mon Sep 17 00:00:00 2001
+From: Vikram Sharma <quic_vikramsa@quicinc.com>
+Date: Wed, 22 Jan 2025 16:25:22 +0530
+Subject: [PATCH] PENDING: arm64: dts: qcom: Enable camss for sa8775p-ride
+
+This change enables camera driver for SA8775P ride board.
+
+Signed-off-by: Vikram Sharma <quic_vikramsa@quicinc.com>
+Upstream-Status: Pending
+---
+ arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi b/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
+index e6f8853510cc..cebff50f460e 100644
+--- a/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
++++ b/arch/arm64/boot/dts/qcom/sa8775p-ride.dtsi
+@@ -337,6 +337,10 @@ vreg_l8e: ldo8 {
+ 	};
+ };
+ 
++&camss {
++       status = "okay";
++};
++
+ &ethernet0 {
+ 	phy-handle = <&sgmii_phy0>;
+ 
+-- 
+2.25.1
+

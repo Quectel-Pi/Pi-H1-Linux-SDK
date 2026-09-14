@@ -1,0 +1,52 @@
+From 8060d1208673826665b7297c27aa75003521b52a Mon Sep 17 00:00:00 2001
+From: Luiz Augusto von Dentz <luiz.von.dentz@intel.com>
+Date: Mon, 18 Mar 2024 16:04:59 +0000
+Subject: [PATCH BlueZ v1] device: Fix device_is_connected checking for
+ services being connected
+
+Change 44d3f67277f83983e1e9697eda7b9aeb40ca231d seems to have introduced
+quite a few bugs related to device_is_connected return true which
+prevents proper cleanup of connection.
+
+Fixes: https://github.com/bluez/bluez/issues/774
+Fixes: https://github.com/bluez/bluez/issues/778
+Fixes: https://github.com/bluez/bluez/issues/783
+Fixes: https://github.com/bluez/bluez/issues/784
+
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/bluetooth/bluez.git/commit/?id=8060d1208673826665b7297c27aa75003521b52a]
+Signed-off-by: Damodar Reddy GangiReddy <quic_dgangire@quicinc.com>
+---
+ src/device.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/src/device.c b/src/device.c
+index 17bcfbc49..821ba8b56 100644
+--- a/src/device.c
++++ b/src/device.c
+@@ -3272,10 +3272,23 @@ void device_add_connection(struct btd_device *dev, uint8_t bdaddr_type,
+ 								"Connected");
+ }
+ 
++static bool device_service_connected(struct btd_device *dev)
++{
++       if (find_service_with_state(dev->services,
++                                       BTD_SERVICE_STATE_CONNECTING))
++               return true;
++
++       return find_service_with_state(dev->services,
++                                       BTD_SERVICE_STATE_CONNECTED);
++}
++
+ static bool device_disappeared(gpointer user_data)
+ {
+ 	struct btd_device *dev = user_data;
+ 
++    if (device_service_connected(dev))
++            return TRUE;
++
+ 	dev->temporary_timer = 0;
+ 
+ 	btd_adapter_remove_device(dev->adapter, dev);
+-- 
+2.34.1
+

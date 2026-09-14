@@ -1,0 +1,113 @@
+From d021f85151a3768f3794dd67d9f5304d3846d4bc Mon Sep 17 00:00:00 2001
+From: Shiraz Hashim <quic_shashim@quicinc.com>
+Date: Wed, 2 Oct 2024 11:02:45 +0530
+Subject: [PATCH 4/6] FROMLIST: remoteproc: qcom: Add support to parse
+ qcom,devmem property
+
+Qualcomm remote processors firmware does not contain resource table data
+where devmem setting information should actually be present and for its
+SoC running with Qualcomm EL2 hypervisor(QHEE), IOMMU translation for
+remoteproc is managed by QHEE and it has all the IOMMU resource
+information available to it to apply the settings however, when the same
+SoCs run with KVM hypervisor these translation needs to setup by
+remoteproc PAS driver and required setting information is being overlaid
+from boot firmware to remoteproc device tree node.
+
+Add helper function which parses qcom,devmem information.
+
+Change-Id: Icc1c7d17d23d6fe675d2b0740c9f2e9b675631dc
+Signed-off-by: Shiraz Hashim <quic_shashim@quicinc.com>
+Co-developed-by: Mukesh Ojha <quic_mojha@quicinc.com>
+Signed-off-by: Mukesh Ojha <quic_mojha@quicinc.com>
+Signed-off-by: Mukesh Ojha <mukesh.ojha@oss.qualcomm.com>
+Signed-off-by: Mukesh Ojha <mukesh.ojha@oss.qualcomm.com>
+Upstream-Status: Submitted [https://lore.kernel.org/lkml/20241004212359.2263502-5-quic_mojha@quicinc.com/]
+---
+ drivers/remoteproc/qcom_q6v5_pas.c | 57 ++++++++++++++++++++++++++++++
+ 1 file changed, 57 insertions(+)
+
+diff --git a/drivers/remoteproc/qcom_q6v5_pas.c b/drivers/remoteproc/qcom_q6v5_pas.c
+index ee15bdafca31..578a9242105f 100644
+--- a/drivers/remoteproc/qcom_q6v5_pas.c
++++ b/drivers/remoteproc/qcom_q6v5_pas.c
+@@ -33,6 +33,9 @@
+ 
+ #define ADSP_DECRYPT_SHUTDOWN_DELAY_MS	100
+ 
++#define MAX_ASSIGN_COUNT 3
++#define DEVMEM_ENTRY_SIZE 4
++
+ struct adsp_data {
+ 	int crash_reason_smem;
+ 	const char *firmware_name;
+@@ -104,6 +107,8 @@ struct qcom_adsp {
+ 
+ 	struct qcom_scm_pas_metadata pas_metadata;
+ 	struct qcom_scm_pas_metadata dtb_pas_metadata;
++
++	struct qcom_devmem_table *devmem;
+ };
+ 
+ static void adsp_segment_dump(struct rproc *rproc, struct rproc_dump_segment *segment,
+@@ -645,6 +650,58 @@ static void adsp_unassign_memory_region(struct qcom_adsp *adsp)
+ 		dev_err(adsp->dev, "unassign memory failed\n");
+ }
+ 
++static int adsp_devmem_init(struct qcom_adsp *adsp)
++{
++	unsigned int entry_size = DEVMEM_ENTRY_SIZE;
++	struct qcom_devmem_table *devmem_table;
++	struct rproc *rproc = adsp->rproc;
++	struct device *dev = adsp->dev;
++	struct qcom_devmem_info *info;
++	char *pname = "qcom,devmem";
++	size_t table_size;
++	int num_entries;
++	u32 i;
++
++	if (!rproc->has_iommu)
++		return 0;
++
++	/* devmem property is a set of n-tuple */
++	num_entries = of_property_count_u32_elems(dev->of_node, pname);
++	if (num_entries < 0) {
++		dev_err(adsp->dev, "No '%s' property present\n", pname);
++		return num_entries;
++	}
++
++	if (!num_entries || (num_entries % entry_size)) {
++		dev_err(adsp->dev, "All '%s' list entries need %d vals\n", pname,
++			entry_size);
++		return -EINVAL;
++	}
++
++	num_entries /= entry_size;
++	table_size = sizeof(*devmem_table) + sizeof(*info) * num_entries;
++	devmem_table = devm_kzalloc(dev, table_size, GFP_KERNEL);
++	if (!devmem_table)
++		return -ENOMEM;
++
++	devmem_table->num_entries = num_entries;
++	info = &devmem_table->entries[0];
++	for (i = 0; i < num_entries; i++, info++) {
++		of_property_read_u32_index(dev->of_node, pname,
++					   i * entry_size, (u32 *)&info->da);
++		of_property_read_u32_index(dev->of_node, pname,
++					   i * entry_size + 1, (u32 *)&info->pa);
++		of_property_read_u32_index(dev->of_node, pname,
++					   i * entry_size + 2, &info->len);
++		of_property_read_u32_index(dev->of_node, pname,
++					   i * entry_size + 3, &info->flags);
++	}
++
++	adsp->devmem = devmem_table;
++
++	return 0;
++}
++
+ static int adsp_probe(struct platform_device *pdev)
+ {
+ 	const struct adsp_data *desc;
+-- 
+2.34.1
+

@@ -1,0 +1,37 @@
+From c01d71e8750d5f8e73c8fed5bb96645751c3e364 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Wed, 13 Mar 2024 21:44:51 +0800
+Subject: [PATCH] skip pip file check
+
+|PipPackagingError: Pip package missing the file ./tf_keras/layers/experimental/dynamic_embedding.py.
+If this is expected, add it to PIP_EXCLUDED_FILES in create_pip_helper.py.
+Otherwise, make sure it is a build dependency of the pip package
+
+Upstream-Status: Inappropriate [Yocto specific]
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ tf_keras/tools/pip_package/create_pip_helper.py | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/tf_keras/tools/pip_package/create_pip_helper.py b/tf_keras/tools/pip_package/create_pip_helper.py
+index 65401cfa9..b677f6017 100644
+--- a/tf_keras/tools/pip_package/create_pip_helper.py
++++ b/tf_keras/tools/pip_package/create_pip_helper.py
+@@ -31,6 +31,13 @@ PIP_EXCLUDED_FILES = frozenset(
+         "tf_keras/saving/legacy/saved_model/create_test_saved_model.py",
+         "tf_keras/tools/pip_package/setup.py",
+         "tf_keras/tools/pip_package/create_pip_helper.py",
++        "tf_keras/layers/experimental/dynamic_embedding_distributed_test.py",
++        "tf_keras/layers/experimental/dynamic_lookup_distributed_test.py",
++        "tf_keras/layers/experimental/__init__.py",
++        "tf_keras/layers/experimental/dynamic_embedding.py",
++        "tf_keras/layers/experimental/dynamic_lookup.py",
++        "tf_keras/layers/experimental/dynamic_embedding_test.py",
++        "tf_keras/layers/experimental/dynamic_lookup_test.py",
+     ]
+ )
+ 
+-- 
+2.27.0
+

@@ -74,17 +74,35 @@ static int dsi_mgr_setup_components(int id)
 	int ret;
 
 	if (!IS_BONDED_DSI()) {
+		/*
+		 * Set the usecase before calling msm_dsi_host_register(), which would
+		 * already program the PLL source mux based on a default usecase.
+		 */
+		msm_dsi_phy_set_usecase(msm_dsi->phy, MSM_DSI_PHY_STANDALONE);
+		msm_dsi_host_set_phy_mode(msm_dsi->host, msm_dsi->phy);
+
 		ret = msm_dsi_host_register(msm_dsi->host);
 		if (ret)
 			return ret;
-
-		msm_dsi_phy_set_usecase(msm_dsi->phy, MSM_DSI_PHY_STANDALONE);
-		msm_dsi_host_set_phy_mode(msm_dsi->host, msm_dsi->phy);
 	} else if (other_dsi) {
 		struct msm_dsi *master_link_dsi = IS_MASTER_DSI_LINK(id) ?
 							msm_dsi : other_dsi;
 		struct msm_dsi *slave_link_dsi = IS_MASTER_DSI_LINK(id) ?
 							other_dsi : msm_dsi;
+
+		/*
+		 * PLL0 is to drive both DSI link clocks in bonded DSI mode.
+		 *
+		 * Set the usecase before calling msm_dsi_host_register(), which would
+		 * already program the PLL source mux based on a default usecase.
+		 */
+		msm_dsi_phy_set_usecase(clk_master_dsi->phy,
+					MSM_DSI_PHY_MASTER);
+		msm_dsi_phy_set_usecase(clk_slave_dsi->phy,
+					MSM_DSI_PHY_SLAVE);
+		msm_dsi_host_set_phy_mode(msm_dsi->host, msm_dsi->phy);
+		msm_dsi_host_set_phy_mode(other_dsi->host, other_dsi->phy);
+
 		/* Register slave host first, so that slave DSI device
 		 * has a chance to probe, and do not block the master
 		 * DSI device's probe.
@@ -98,14 +116,6 @@ static int dsi_mgr_setup_components(int id)
 		ret = msm_dsi_host_register(master_link_dsi->host);
 		if (ret)
 			return ret;
-
-		/* PLL0 is to drive both 2 DSI link clocks in bonded DSI mode. */
-		msm_dsi_phy_set_usecase(clk_master_dsi->phy,
-					MSM_DSI_PHY_MASTER);
-		msm_dsi_phy_set_usecase(clk_slave_dsi->phy,
-					MSM_DSI_PHY_SLAVE);
-		msm_dsi_host_set_phy_mode(msm_dsi->host, msm_dsi->phy);
-		msm_dsi_host_set_phy_mode(other_dsi->host, other_dsi->phy);
 	}
 
 	return 0;
@@ -509,13 +519,25 @@ int msm_dsi_manager_ext_bridge_init(u8 id)
 	struct drm_device *dev = msm_dsi->dev;
 	struct drm_encoder *encoder;
 	struct drm_bridge *int_bridge, *ext_bridge;
-	int ret;
+	int ret,i;
 
-	int_bridge = msm_dsi->bridge;
-	ext_bridge = devm_drm_of_get_bridge(&msm_dsi->pdev->dev,
-					    msm_dsi->pdev->dev.of_node, 1, 0);
-	if (IS_ERR(ext_bridge))
-		return PTR_ERR(ext_bridge);
+	int_bridge = msm_dsi->bridge;                                                            
+                                                                                                 
+	/*                                                                                       
+	 * Try to get external bridge/panel from device tree.                                    
+	 * Support fallback: try endpoint 0-4 in order.                                          
+	 * This allows the same DSI controller to work with either a panel or a bridge           
+	 * depending on what's connected in the device tree.                                     
+	 */                                                                                      
+	 for (i = 0; i < 5; i++) {                                                            
+		ext_bridge = devm_drm_of_get_bridge(&msm_dsi->pdev->dev,
+			msm_dsi->pdev->dev.of_node, 1, i);      
+		if (!IS_ERR(ext_bridge))                                                         
+				break;    
+		pr_err("bridge/panel No:%d attach failed\n", i);                                                               
+	}                                                                                          
+																							 																			 
+	pr_err("Using bridge/panel on endpoint %d\n", i);
 
 	msm_dsi->external_bridge = ext_bridge;
 

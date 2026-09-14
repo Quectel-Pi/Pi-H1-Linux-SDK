@@ -1,0 +1,57 @@
+From f0706a85dca8801d87130102b701c7bc2fd7476d Mon Sep 17 00:00:00 2001
+From: Yi Zhao <yi.zhao@windriver.com>
+Date: Fri, 15 Nov 2019 11:25:34 +0800
+Subject: [PATCH] fc/usermanage: apply policy to usermanage alternatives
+
+Upstream-Status: Inappropriate [embedded specific]
+
+Signed-off-by: Yi Zhao <yi.zhao@windriver.com>
+---
+ policy/modules/admin/usermanage.fc | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/policy/modules/admin/usermanage.fc b/policy/modules/admin/usermanage.fc
+index 7209a8dd0..c9dc1f000 100644
+--- a/policy/modules/admin/usermanage.fc
++++ b/policy/modules/admin/usermanage.fc
+@@ -4,8 +4,13 @@ ifdef(`distro_debian',`
+ 
+ /usr/bin/chage		--	gen_context(system_u:object_r:passwd_exec_t,s0)
+ /usr/bin/chfn		--	gen_context(system_u:object_r:chfn_exec_t,s0)
++/usr/bin/chfn\.shadow		--	gen_context(system_u:object_r:chfn_exec_t,s0)
++/usr/bin/chfn\.util-linux		--	gen_context(system_u:object_r:chfn_exec_t,s0)
+ /usr/bin/chpasswd	--	gen_context(system_u:object_r:passwd_exec_t,s0)
++/usr/bin/chpasswd\.shadow	--	gen_context(system_u:object_r:passwd_exec_t,s0)
+ /usr/bin/chsh		--	gen_context(system_u:object_r:chfn_exec_t,s0)
++/usr/bin/chsh\.shadow		--	gen_context(system_u:object_r:chfn_exec_t,s0)
++/usr/bin/chsh\.util-linux		--	gen_context(system_u:object_r:chfn_exec_t,s0)
+ /usr/bin/crack_[a-z]*	--	gen_context(system_u:object_r:crack_exec_t,s0)
+ /usr/bin/cracklib-[a-z]* --	gen_context(system_u:object_r:crack_exec_t,s0)
+ /usr/bin/gpasswd	--	gen_context(system_u:object_r:groupadd_exec_t,s0)
+@@ -15,6 +20,7 @@ ifdef(`distro_debian',`
+ /usr/bin/grpconv	--	gen_context(system_u:object_r:admin_passwd_exec_t,s0)
+ /usr/bin/grpunconv	--	gen_context(system_u:object_r:admin_passwd_exec_t,s0)
+ /usr/bin/passwd		--	gen_context(system_u:object_r:passwd_exec_t,s0)
++/usr/bin/passwd\.shadow		--	gen_context(system_u:object_r:passwd_exec_t,s0)
+ /usr/bin/pwconv		--	gen_context(system_u:object_r:admin_passwd_exec_t,s0)
+ /usr/bin/pwunconv	--	gen_context(system_u:object_r:admin_passwd_exec_t,s0)
+ /usr/bin/useradd	--	gen_context(system_u:object_r:useradd_exec_t,s0)
+@@ -26,6 +32,7 @@ ifdef(`distro_debian',`
+ /usr/lib/cracklib_dict.* --	gen_context(system_u:object_r:crack_db_t,s0)
+ 
+ /usr/sbin/chpasswd	--	gen_context(system_u:object_r:passwd_exec_t,s0)
++/usr/sbin/chpasswd\.shadow	--	gen_context(system_u:object_r:passwd_exec_t,s0)
+ /usr/sbin/crack_[a-z]*	--	gen_context(system_u:object_r:crack_exec_t,s0)
+ /usr/sbin/cracklib-[a-z]* --	gen_context(system_u:object_r:crack_exec_t,s0)
+ /usr/sbin/gpasswd	--	gen_context(system_u:object_r:groupadd_exec_t,s0)
+@@ -41,6 +48,7 @@ ifdef(`distro_debian',`
+ /usr/sbin/usermod	--	gen_context(system_u:object_r:useradd_exec_t,s0)
+ /usr/sbin/vigr		--	gen_context(system_u:object_r:admin_passwd_exec_t,s0)
+ /usr/sbin/vipw		--	gen_context(system_u:object_r:admin_passwd_exec_t,s0)
++/usr/sbin/vipw\.shadow		--	gen_context(system_u:object_r:admin_passwd_exec_t,s0)
+ 
+ /usr/share/cracklib(/.*)?	gen_context(system_u:object_r:crack_db_t,s0)
+ 
+-- 
+2.25.1
+

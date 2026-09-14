@@ -7,17 +7,16 @@ LICENSE = "MIT & LGPL-2.0-or-later & GPL-3.0-only & GPL-2.0-or-later & BSD-3-Cla
 LIC_FILES_CHKSUM = "file://COPYING;md5=b2beded7103a3d8a442a2a0391d607b0"
 
 SRC_URI = "git://gitlab.freedesktop.org/mesa/piglit.git;protocol=https;branch=main \
-           file://0001-cmake-install-bash-completions-in-the-right-place.patch \
-           file://0001-Add-a-missing-include-for-htobe32-definition.patch \
            file://0002-cmake-use-proper-WAYLAND_INCLUDE_DIRS-variable.patch \
            file://0003-tests-util-piglit-shader.c-do-not-hardcode-build-pat.patch \
-           file://0005-cmake-Don-t-enable-GLX-if-tests-are-disabled.patch"
-
+           file://0001-tests-Fix-narrowing-errors-seen-with-clang.patch \
+           file://0001-utils-Include-libgen.h-on-musl-linux-systems.patch \
+           "
 UPSTREAM_CHECK_COMMITS = "1"
 
-SRCREV = "2f80c7cc9c02d37574dc8ba3140b7dd8eb3cbf82"
+SRCREV = "22eaf6a91cfd57f7bb3df4e5068c2ac1472d4ec1"
 # (when PV goes above 1.0 remove the trailing r)
-PV = "1.0+gitr${SRCPV}"
+PV = "1.0+gitr"
 
 S = "${WORKDIR}/git"
 
@@ -53,8 +52,10 @@ do_configure:prepend() {
    fi
 }
 
-# Forcibly strip because Piglit is *huge*
+# Forcibly strip because Piglit is *huge*, and don't bother trying to split/strip the result.
 OECMAKE_TARGET_INSTALL = "install/strip"
+INHIBIT_PACKAGE_STRIP = "1"
+INHIBIT_PACKAGE_DEBUG_SPLIT = "1"
 
 RDEPENDS:${PN} = "waffle waffle-bin python3 python3-mako python3-json \
 	python3-misc \

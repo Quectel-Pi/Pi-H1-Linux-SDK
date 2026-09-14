@@ -1,0 +1,81 @@
+From ef8baf14d67f48a38d61e7d7ebd3b8e37e18fe35 Mon Sep 17 00:00:00 2001
+From: Yuanjie Yang <quic_yuanjiey@quicinc.com>
+Date: Tue, 17 Dec 2024 18:10:17 +0800
+Subject: [PATCH 2/2] UPSTREAM: arm64: dts: qcom: qcs615-ride: enable SDHC1 and
+ SDHC2
+
+Enable SDHC1 and SDHC2 on the Qualcomm QCS615 Ride platform.
+
+Signed-off-by: Yuanjie Yang <quic_yuanjiey@quicinc.com>
+Link: https://lore.kernel.org/r/20241217101017.2933587-3-quic_yuanjiey@quicinc.com
+Signed-off-by: Bjorn Andersson <andersson@kernel.org>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/next/linux-next.git 50f54d4fa3f4827d824b971485b0691e0985d0ba]
+---
+ arch/arm64/boot/dts/qcom/qcs615-ride.dts | 37 ++++++++++++++++++++++++
+ 1 file changed, 37 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/qcs615-ride.dts b/arch/arm64/boot/dts/qcom/qcs615-ride.dts
+index ec32f3f5f8f8..a50f9c1f914e 100644
+--- a/arch/arm64/boot/dts/qcom/qcs615-ride.dts
++++ b/arch/arm64/boot/dts/qcom/qcs615-ride.dts
+@@ -6,6 +6,7 @@
+ 
+ #include <dt-bindings/regulator/qcom,rpmh-regulator.h>
+ #include <dt-bindings/gpio/gpio.h>
++#include <dt-bindings/gpio/gpio.h>
+ #include "qcs615.dtsi"
+ #include "pm8150.dtsi"
+ / {
+@@ -16,6 +17,8 @@ / {
+ 	qcom,board-id = <0x03010019 0>, <0x03020019 0>, <0x10019 0>, <0x20019 0>;
+ 
+ 	aliases {
++		mmc0 = &sdhc_1;
++		mmc1 = &sdhc_2;
+ 		serial0 = &uart0;
+ 		serial1 = &uart7;
+ 	};
+@@ -578,6 +581,40 @@ &qupv3_id_1 {
+ 	status = "okay";
+ };
+ 
++&sdhc_1 {
++	pinctrl-0 = <&sdc1_state_on>;
++	pinctrl-1 = <&sdc1_state_off>;
++	pinctrl-names = "default", "sleep";
++
++	bus-width = <8>;
++	mmc-ddr-1_8v;
++	mmc-hs200-1_8v;
++	mmc-hs400-1_8v;
++	mmc-hs400-enhanced-strobe;
++	vmmc-supply = <&vreg_l17a>;
++	vqmmc-supply = <&vreg_s4a>;
++
++	non-removable;
++	no-sd;
++	no-sdio;
++
++	status = "okay";
++};
++
++&sdhc_2 {
++	pinctrl-0 = <&sdc2_state_on>;
++	pinctrl-1 = <&sdc2_state_off>;
++	pinctrl-names = "default", "sleep";
++
++	bus-width = <4>;
++	cd-gpios = <&tlmm 99 GPIO_ACTIVE_LOW>;
++
++	vmmc-supply = <&vreg_l10a>;
++	vqmmc-supply = <&vreg_s4a>;
++
++	status = "okay";
++};
++
+ &uart0 {
+ 	status = "okay";
+ };
+-- 
+2.34.1
+

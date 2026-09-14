@@ -24,7 +24,7 @@ RDEPENDS:${PN} = "\
     ${PN}-xencommons \
     ${PN}-xendomains \
     ${PN}-xenstore \
-    virtual/xenstored \
+    virtual-xenstored \
     ${PN}-xl \
     "
 
@@ -32,6 +32,7 @@ RDEPENDS:${PN}-dev = ""
 
 RRECOMMENDS:${PN} = " \
     qemu \
+    ${@bb.utils.contains('DISTRO_FEATURES', 'vmsep', 'qemu-x86_64 qemu-i386', '', d)} \
     ${@bb.utils.contains('XEN_TARGET_ARCH', 'x86_64', 'seabios ipxe vgabios', '', d)} \
     ${@bb.utils.contains('PACKAGECONFIG', 'externalblktap', '', '${BLKTAP_RRECOMMENDS}', d)} \
     ${PN}-flask \
@@ -100,7 +101,7 @@ RDEPENDS:${PN}-xencommons = "\
     util-linux-prlimit \
     ${PN}-console \
     ${PN}-xenstore \
-    virtual/xenstored \
+    virtual-xenstored \
     ${PN}-xl \
     ${PN}-scripts-common \
     "
@@ -110,7 +111,7 @@ RDEPENDS:${PN}-xendomains = "\
     ${PN}-console \
     ${PN}-scripts-block \
     ${PN}-scripts-common \
-    virtual/xenstored \
+    virtual-xenstored \
     "
 
 RDEPENDS:${PN}-xenhypfs = " \
@@ -212,16 +213,17 @@ PACKAGES = " \
     ${PN}-test \
     ${PN}-xen-vmtrace \
     ${PN}-xen-mceinj \
+    ${PN}-xen-9pfsd \
     "
 
 PROVIDES =+ " \
-    virtual/xenstored \
+    virtual-xenstored \
     ${@bb.utils.contains('PACKAGECONFIG', 'externalblktap', '', '${BLKTAP_PROVIDES}', d)} \
     "
 
 # There are multiple implementations of the XenStore daemon, so we use a
 # virtual package to allow for substitution.
-RPROVIDES:${PN}-xenstored = "virtual/xenstored"
+RPROVIDES:${PN}-xenstored = "virtual-xenstored"
 
 FILES:${PN}-dbg += "\
     ${libdir}/xen/bin/.debug \
@@ -593,6 +595,12 @@ FILES:${PN}-xenstored = "\
     ${localstatedir}/lib/xenstored \
     "
 
+FILES:${PN}-xen-9pfsd = "\
+    ${libdir}/xen/bin/xen-9pfsd \
+    "
+# 9pfsd is only on xen-4.19+
+ALLOW_EMPTY:${PN}-xen-9pfsd = "1"
+
 FILES:${PN}-xentrace = "\
     ${bindir}/xentrace \
     ${bindir}/xentrace_setsize \
@@ -616,6 +624,7 @@ FILES:${PN}-xl = "\
     ${libdir}/xen/bin/libxl-save-helper \
     ${sbindir}/xl \
     ${libdir}/xen/bin/xen-init-dom0 \
+    ${libdir}/xen/bin/init-dom0less \
     "
 
 FILES:${PN}-xl-examples = "\
@@ -658,6 +667,7 @@ FILES:${PN}-xencommons += "\
     ${@bb.utils.contains('DISTRO_FEATURES', 'systemd', '${systemd_unitdir}/system/xen-init-dom0.service', '', d)} \
     ${@bb.utils.contains('DISTRO_FEATURES', 'systemd', '${systemd_unitdir}/system/xenstored.service', '', d)} \
     ${@bb.utils.contains('DISTRO_FEATURES', 'systemd', '${systemd_unitdir}/system/var-lib-xenstored.mount', '', d)} \
+    ${localstatedir} \
     "
 
 FILES:${PN}-xend += " \
@@ -688,6 +698,7 @@ FILES:${PN}-test += "\
     ${libdir}/xen/bin/test-resource \
     ${libdir}/xen/bin/test-cpu-policy \
     ${libdir}/xen/bin/test-tsx \
+    ${libdir}/xen/bin/test-paging-mempool \
     "
 
 # test-xenstore and test-resource currently only exist in 4.16
@@ -730,7 +741,6 @@ SYSTEMD_SERVICE:${PN}-devd = "xendriverdomain.service"
 SYSTEMD_SERVICE:${PN}-xen-watchdog = "xen-watchdog.service"
 SYSTEMD_SERVICE:${PN}-xencommons = " \
     proc-xen.mount \
-    var-lib-xenstored.mount \
     xen-qemu-dom0-disk-backend.service \
     xenconsoled.service \
     xen-init-dom0.service \

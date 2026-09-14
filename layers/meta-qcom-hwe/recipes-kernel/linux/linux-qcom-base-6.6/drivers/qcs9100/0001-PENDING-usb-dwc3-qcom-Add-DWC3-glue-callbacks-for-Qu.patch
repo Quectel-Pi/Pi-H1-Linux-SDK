@@ -1,0 +1,1613 @@
+From f2b8dfe08f99f78400d506ab288ad2e9b136fc5b Mon Sep 17 00:00:00 2001
+From: Swati Agarwal <quic_swatagar@quicinc.com>
+Date: Fri, 28 Feb 2025 13:55:01 +0530
+Subject: [PATCH] PENDING: usb: dwc3: qcom:: Add DWC3 glue callbacks for
+ Qualcomm SoCs
+
+Add DWC3 glue callbacks for Qualcomm SoCs.
+
+Change-Id: If22254f01ac846863c263bdb3b5df39b8bd59b17
+Signed-off-by: Swati Agarwal <quic_swatagar@quicinc.com>
+Upstream-Status: Pending
+---
+ drivers/usb/dwc3/core.c      | 186 +++++++---
+ drivers/usb/dwc3/core.h      |  80 ++++-
+ drivers/usb/dwc3/drd.c       |  16 +
+ drivers/usb/dwc3/dwc3-qcom.c | 659 ++++++++++++++++++++++++++---------
+ 4 files changed, 708 insertions(+), 233 deletions(-)
+
+diff --git a/drivers/usb/dwc3/core.c b/drivers/usb/dwc3/core.c
+index b7eaad099309..071d3d4abd02 100644
+--- a/drivers/usb/dwc3/core.c
++++ b/drivers/usb/dwc3/core.c
+@@ -154,7 +154,7 @@ static void __dwc3_set_mode(struct work_struct *work)
+ {
+ 	struct dwc3 *dwc = work_to_dwc(work);
+ 	unsigned long flags;
+-	int ret;
++	int ret = 0;
+ 	u32 reg;
+ 	u32 desired_dr_role;
+ 
+@@ -171,6 +171,9 @@ static void __dwc3_set_mode(struct work_struct *work)
+ 	if (!desired_dr_role)
+ 		goto out;
+ 
++	if (!dwc->cable_disconnected)
++		dwc3_notify_set_mode(dwc, desired_dr_role);
++
+ 	if (desired_dr_role == dwc->current_dr_role)
+ 		goto out;
+ 
+@@ -228,6 +231,11 @@ static void __dwc3_set_mode(struct work_struct *work)
+ 
+ 	switch (desired_dr_role) {
+ 	case DWC3_GCTL_PRTCAP_HOST:
++		if (dwc->dwc3_guctl_resbwhseps_quirk) {
++			reg = dwc3_readl(dwc->regs, DWC3_GUCTL);
++			reg |= DWC3_GUCTL_RESBWHSEPS;
++			dwc3_writel(dwc->regs, DWC3_GUCTL, reg);
++		}
+ 		ret = dwc3_host_init(dwc);
+ 		if (ret) {
+ 			dev_err(dwc->dev, "failed to initialize host\n");
+@@ -265,6 +273,9 @@ static void __dwc3_set_mode(struct work_struct *work)
+ 		break;
+ 	}
+ 
++	if (!ret)
++		dwc3_notify_mode_changed(dwc, dwc->current_dr_role);
++
+ out:
+ 	pm_runtime_mark_last_busy(dwc->dev);
+ 	pm_runtime_put_autosuspend(dwc->dev);
+@@ -499,7 +510,7 @@ static struct dwc3_event_buffer *dwc3_alloc_one_event_buffer(struct dwc3 *dwc,
+  * dwc3_free_event_buffers - frees all allocated event buffers
+  * @dwc: Pointer to our controller context structure
+  */
+-static void dwc3_free_event_buffers(struct dwc3 *dwc)
++void dwc3_free_event_buffers(struct dwc3 *dwc)
+ {
+ 	struct dwc3_event_buffer	*evt;
+ 
+@@ -507,6 +518,7 @@ static void dwc3_free_event_buffers(struct dwc3 *dwc)
+ 	if (evt)
+ 		dwc3_free_one_event_buffer(dwc, evt);
+ }
++EXPORT_SYMBOL_GPL(dwc3_free_event_buffers);
+ 
+ /**
+  * dwc3_alloc_event_buffers - Allocates @num event buffers of size @length
+@@ -1444,6 +1456,7 @@ static int dwc3_core_init_mode(struct dwc3 *dwc)
+ {
+ 	struct device *dev = dwc->dev;
+ 	int ret;
++	u32 reg;
+ 
+ 	switch (dwc->dr_mode) {
+ 	case USB_DR_MODE_PERIPHERAL:
+@@ -1466,6 +1479,11 @@ static int dwc3_core_init_mode(struct dwc3 *dwc)
+ 		phy_set_mode(dwc->usb2_generic_phy, PHY_MODE_USB_HOST);
+ 		phy_set_mode(dwc->usb3_generic_phy, PHY_MODE_USB_HOST);
+ 
++		if (dwc->dwc3_guctl_resbwhseps_quirk) {
++			reg = dwc3_readl(dwc->regs, DWC3_GUCTL);
++			reg |= DWC3_GUCTL_RESBWHSEPS;
++			dwc3_writel(dwc->regs, DWC3_GUCTL, reg);
++		}
+ 		ret = dwc3_host_init(dwc);
+ 		if (ret)
+ 			return dev_err_probe(dev, ret, "failed to initialize host\n");
+@@ -1484,7 +1502,7 @@ static int dwc3_core_init_mode(struct dwc3 *dwc)
+ 	return 0;
+ }
+ 
+-static void dwc3_core_exit_mode(struct dwc3 *dwc)
++void dwc3_core_exit_mode(struct dwc3 *dwc)
+ {
+ 	switch (dwc->dr_mode) {
+ 	case USB_DR_MODE_PERIPHERAL:
+@@ -1504,6 +1522,7 @@ static void dwc3_core_exit_mode(struct dwc3 *dwc)
+ 	/* de-assert DRVVBUS for HOST and OTG mode */
+ 	dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_DEVICE, true);
+ }
++EXPORT_SYMBOL_GPL(dwc3_core_exit_mode);
+ 
+ static void dwc3_get_properties(struct dwc3 *dwc)
+ {
+@@ -1636,6 +1655,8 @@ static void dwc3_get_properties(struct dwc3 *dwc)
+ 				"snps,parkmode-disable-hs-quirk");
+ 	dwc->gfladj_refclk_lpm_sel = device_property_read_bool(dev,
+ 				"snps,gfladj-refclk-lpm-sel-quirk");
++	dwc->dwc3_guctl_resbwhseps_quirk = device_property_read_bool(dev,
++				"snps,dwc3_guctl_resbwhseps_quirk");
+ 
+ 	dwc->tx_de_emphasis_quirk = device_property_read_bool(dev,
+ 				"snps,tx_de_emphasis_quirk");
+@@ -1906,19 +1927,19 @@ static struct power_supply *dwc3_get_usb_power_supply(struct dwc3 *dwc)
+ 	return usb_psy;
+ }
+ 
+-static int dwc3_probe(struct platform_device *pdev)
++int dwc3_probe(struct dwc3 *dwc,
++			struct dwc3_glue_data *glue_data)
+ {
+-	struct device		*dev = &pdev->dev;
++	struct platform_device	*pdev = to_platform_device(dwc->dev);
++	struct device		*dev = dwc->dev;
+ 	struct resource		*res, dwc_res;
+ 	void __iomem		*regs;
+-	struct dwc3		*dwc;
+ 	int			ret;
+ 
+-	dwc = devm_kzalloc(dev, sizeof(*dwc), GFP_KERNEL);
+-	if (!dwc)
+-		return -ENOMEM;
+-
+-	dwc->dev = dev;
++	if (glue_data) {
++		dwc->glue_data = glue_data->glue_data;
++		dwc->glue_ops = glue_data->ops;
++	}
+ 
+ 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+ 	if (!res) {
+@@ -1938,6 +1959,7 @@ static int dwc3_probe(struct platform_device *pdev)
+ 	 */
+ 	dwc_res = *res;
+ 	dwc_res.start += DWC3_GLOBALS_REGS_START;
++	dwc_res.end = res->start + DWC3_OTG_REGS_END;
+ 
+ 	if (dev->of_node) {
+ 		struct device_node *parent = of_get_parent(dev->of_node);
+@@ -1945,14 +1967,15 @@ static int dwc3_probe(struct platform_device *pdev)
+ 		if (of_device_is_compatible(parent, "realtek,rtd-dwc3")) {
+ 			dwc_res.start -= DWC3_GLOBALS_REGS_START;
+ 			dwc_res.start += DWC3_RTK_RTD_GLOBALS_REGS_START;
++			dwc_res.end = dwc_res.start + DWC3_OTG_REGS_END;
+ 		}
+ 
+ 		of_node_put(parent);
+ 	}
+ 
+ 	regs = devm_ioremap_resource(dev, &dwc_res);
+-	if (IS_ERR(regs))
+-		return PTR_ERR(regs);
++	if (!regs)
++		return -EINVAL;
+ 
+ 	dwc->regs	= regs;
+ 	dwc->regs_size	= resource_size(&dwc_res);
+@@ -1987,7 +2010,6 @@ static int dwc3_probe(struct platform_device *pdev)
+ 		goto err_disable_clks;
+ 	}
+ 
+-	platform_set_drvdata(pdev, dwc);
+ 	dwc3_cache_hwparams(dwc);
+ 
+ 	if (!dwc->sysdev_is_parent &&
+@@ -2068,12 +2090,28 @@ static int dwc3_probe(struct platform_device *pdev)
+ 
+ 	return ret;
+ }
++EXPORT_SYMBOL_GPL(dwc3_probe);
+ 
+-static void dwc3_remove(struct platform_device *pdev)
++static int dwc3_plat_probe(struct platform_device *pdev)
+ {
+-	struct dwc3	*dwc = platform_get_drvdata(pdev);
++	struct dwc3 *dwc;
+ 
+-	pm_runtime_get_sync(&pdev->dev);
++	dwc = devm_kzalloc(&pdev->dev, sizeof(*dwc), GFP_KERNEL);
++	if (!dwc)
++		return -ENOMEM;
++
++	dwc->dev = &pdev->dev;
++	platform_set_drvdata(pdev, dwc);
++
++	return dwc3_probe(dwc, NULL);
++}
++
++void dwc3_remove(struct dwc3 *dwc)
++{
++	dwc->glue_data = NULL;
++	dwc->glue_ops = NULL;
++
++	pm_runtime_get_sync(dwc->dev);
+ 
+ 	dwc3_core_exit_mode(dwc);
+ 	dwc3_debugfs_exit(dwc);
+@@ -2081,22 +2119,28 @@ static void dwc3_remove(struct platform_device *pdev)
+ 	dwc3_core_exit(dwc);
+ 	dwc3_ulpi_exit(dwc);
+ 
+-	pm_runtime_allow(&pdev->dev);
+-	pm_runtime_disable(&pdev->dev);
+-	pm_runtime_dont_use_autosuspend(&pdev->dev);
+-	pm_runtime_put_noidle(&pdev->dev);
++	pm_runtime_allow(dwc->dev);
++	pm_runtime_disable(dwc->dev);
++	pm_runtime_dont_use_autosuspend(dwc->dev);
++	pm_runtime_put_noidle(dwc->dev);
+ 	/*
+ 	 * HACK: Clear the driver data, which is currently accessed by parent
+ 	 * glue drivers, before allowing the parent to suspend.
+ 	 */
+-	platform_set_drvdata(pdev, NULL);
+-	pm_runtime_set_suspended(&pdev->dev);
++	dev_set_drvdata(dwc->dev, NULL);
++	pm_runtime_set_suspended(dwc->dev);
+ 
+ 	dwc3_free_event_buffers(dwc);
+ 
+ 	if (dwc->usb_psy)
+ 		power_supply_put(dwc->usb_psy);
+ }
++EXPORT_SYMBOL_GPL(dwc3_remove);
++
++static void dwc3_plat_remove(struct platform_device *pdev)
++{
++	dwc3_remove(platform_get_drvdata(pdev));
++}
+ 
+ #ifdef CONFIG_PM
+ static int dwc3_core_init_for_resume(struct dwc3 *dwc)
+@@ -2280,9 +2324,8 @@ static int dwc3_runtime_checks(struct dwc3 *dwc)
+ 	return 0;
+ }
+ 
+-static int dwc3_runtime_suspend(struct device *dev)
++int dwc3_runtime_suspend(struct dwc3 *dwc)
+ {
+-	struct dwc3     *dwc = dev_get_drvdata(dev);
+ 	int		ret;
+ 
+ 	if (dwc3_runtime_checks(dwc))
+@@ -2294,10 +2337,10 @@ static int dwc3_runtime_suspend(struct device *dev)
+ 
+ 	return 0;
+ }
++EXPORT_SYMBOL_GPL(dwc3_runtime_suspend);
+ 
+-static int dwc3_runtime_resume(struct device *dev)
++int dwc3_runtime_resume(struct dwc3 *dwc)
+ {
+-	struct dwc3     *dwc = dev_get_drvdata(dev);
+ 	int		ret;
+ 
+ 	ret = dwc3_resume_common(dwc, PMSG_AUTO_RESUME);
+@@ -2318,15 +2361,14 @@ static int dwc3_runtime_resume(struct device *dev)
+ 		break;
+ 	}
+ 
+-	pm_runtime_mark_last_busy(dev);
++	pm_runtime_mark_last_busy(dwc->dev);
+ 
+ 	return 0;
+ }
++EXPORT_SYMBOL_GPL(dwc3_runtime_resume);
+ 
+-static int dwc3_runtime_idle(struct device *dev)
++int dwc3_runtime_idle(struct dwc3 *dwc)
+ {
+-	struct dwc3     *dwc = dev_get_drvdata(dev);
+-
+ 	switch (dwc->current_dr_role) {
+ 	case DWC3_GCTL_PRTCAP_DEVICE:
+ 		if (dwc3_runtime_checks(dwc))
+@@ -2338,49 +2380,67 @@ static int dwc3_runtime_idle(struct device *dev)
+ 		break;
+ 	}
+ 
+-	pm_runtime_mark_last_busy(dev);
+-	pm_runtime_autosuspend(dev);
++	pm_runtime_mark_last_busy(dwc->dev);
++	pm_runtime_autosuspend(dwc->dev);
+ 
+ 	return 0;
+ }
++EXPORT_SYMBOL_GPL(dwc3_runtime_idle);
++
++static int dwc3_plat_runtime_suspend(struct device *dev)
++{
++	return dwc3_runtime_suspend(dev_get_drvdata(dev));
++}
++
++static int dwc3_plat_runtime_resume(struct device *dev)
++{
++	return dwc3_runtime_resume(dev_get_drvdata(dev));
++}
++
++static int dwc3_plat_runtime_idle(struct device *dev)
++{
++	return dwc3_runtime_idle(dev_get_drvdata(dev));
++}
+ #endif /* CONFIG_PM */
+ 
+ #ifdef CONFIG_PM_SLEEP
+-static int dwc3_suspend(struct device *dev)
++int dwc3_suspend(struct dwc3 *dwc)
+ {
+-	struct dwc3	*dwc = dev_get_drvdata(dev);
+ 	int		ret;
+ 
+ 	ret = dwc3_suspend_common(dwc, PMSG_SUSPEND);
+ 	if (ret)
+ 		return ret;
+ 
+-	pinctrl_pm_select_sleep_state(dev);
++	pinctrl_pm_select_sleep_state(dwc->dev);
+ 
+ 	return 0;
+ }
++EXPORT_SYMBOL_GPL(dwc3_suspend);
+ 
+-static int dwc3_resume(struct device *dev)
++int dwc3_resume(struct dwc3 *dwc)
+ {
+-	struct dwc3	*dwc = dev_get_drvdata(dev);
+ 	int		ret;
+ 
+-	pinctrl_pm_select_default_state(dev);
++	pinctrl_pm_select_default_state(dwc->dev);
++
++	pm_runtime_disable(dwc->dev);
++	pm_runtime_set_active(dwc->dev);
+ 
+ 	ret = dwc3_resume_common(dwc, PMSG_RESUME);
+-	if (ret)
++	if (ret) {
++		pm_runtime_set_suspended(dwc->dev);
+ 		return ret;
++	}
+ 
+-	pm_runtime_disable(dev);
+-	pm_runtime_set_active(dev);
+-	pm_runtime_enable(dev);
++	pm_runtime_enable(dwc->dev);
+ 
+ 	return 0;
+ }
++EXPORT_SYMBOL_GPL(dwc3_resume);
+ 
+-static void dwc3_complete(struct device *dev)
++void dwc3_complete(struct dwc3 *dwc)
+ {
+-	struct dwc3	*dwc = dev_get_drvdata(dev);
+ 	u32		reg;
+ 
+ 	if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_HOST &&
+@@ -2390,21 +2450,31 @@ static void dwc3_complete(struct device *dev)
+ 		dwc3_writel(dwc->regs, DWC3_GUCTL3, reg);
+ 	}
+ }
++EXPORT_SYMBOL_GPL(dwc3_complete);
++
++static int dwc3_plat_suspend(struct device *dev)
++{
++	return dwc3_suspend(dev_get_drvdata(dev));
++}
++
++static int dwc3_plat_resume(struct device *dev)
++{
++	return dwc3_resume(dev_get_drvdata(dev));
++}
++
++static void dwc3_plat_complete(struct device *dev)
++{
++	dwc3_complete(dev_get_drvdata(dev));
++}
+ #else
+-#define dwc3_complete NULL
++#define dwc3_plat_complete NULL
+ #endif /* CONFIG_PM_SLEEP */
+ 
+ static const struct dev_pm_ops dwc3_dev_pm_ops = {
+-	SET_SYSTEM_SLEEP_PM_OPS(dwc3_suspend, dwc3_resume)
+-	.complete = dwc3_complete,
+-
+-	/*
+-	 * Runtime suspend halts the controller on disconnection. It relies on
+-	 * platforms with custom connection notification to start the controller
+-	 * again.
+-	 */
+-	SET_RUNTIME_PM_OPS(dwc3_runtime_suspend, dwc3_runtime_resume,
+-			dwc3_runtime_idle)
++	SET_SYSTEM_SLEEP_PM_OPS(dwc3_plat_suspend, dwc3_plat_resume)
++	.complete = dwc3_plat_complete,
++	SET_RUNTIME_PM_OPS(dwc3_plat_runtime_suspend, dwc3_plat_runtime_resume,
++			   dwc3_plat_runtime_idle)
+ };
+ 
+ #ifdef CONFIG_OF
+@@ -2432,8 +2502,8 @@ MODULE_DEVICE_TABLE(acpi, dwc3_acpi_match);
+ #endif
+ 
+ static struct platform_driver dwc3_driver = {
+-	.probe		= dwc3_probe,
+-	.remove_new	= dwc3_remove,
++	.probe		= dwc3_plat_probe,
++	.remove_new	= dwc3_plat_remove,
+ 	.driver		= {
+ 		.name	= "dwc3",
+ 		.of_match_table	= of_match_ptr(of_dwc3_match),
+diff --git a/drivers/usb/dwc3/core.h b/drivers/usb/dwc3/core.h
+index 06be72f78969..266d36ca2e9b 100644
+--- a/drivers/usb/dwc3/core.h
++++ b/drivers/usb/dwc3/core.h
+@@ -270,6 +270,9 @@
+ #define DWC3_GUCTL1_PARKMODE_DISABLE_HS		BIT(16)
+ #define DWC3_GUCTL1_RESUME_OPMODE_HS_HOST	BIT(10)
+ 
++/* Global User Control Register */
++#define DWC3_GUCTL_RESBWHSEPS			BIT(16)
++
+ /* Global Status Register */
+ #define DWC3_GSTS_OTG_IP	BIT(10)
+ #define DWC3_GSTS_BC_IP		BIT(9)
+@@ -980,6 +983,27 @@ struct dwc3_scratchpad_array {
+ 	__le64	dma_adr[DWC3_MAX_HIBER_SCRATCHBUFS];
+ };
+ 
++/*
++ * struct dwc3_glue_ops - The ops indicate the notifications that
++ *				need to be passed on to glue layer.
++ * @notify_cable_disconnect: Notify glue of cable removal
++ *				irrespective of host or device mode.
++ * @set_mode: Notify glue before mode change is about to happen.
++ * @mode_changed: Notify glue that mode change was done successfully
++ */
++struct dwc3_glue_ops {
++	int	(*notify_cable_disconnect)(void *glue_data);
++	void	(*set_mode)(void *glue_data, u32 desired_dr_role);
++	void	(*mode_changed)(void *glue_data, u32 current_dr_role);
++	void    (*notify_run_stop)(void *glue_data, bool enable);
++	void    (*post_conndone)(void *glue_data);
++};
++
++struct dwc3_glue_data {
++	void			*glue_data;
++	struct dwc3_glue_ops	*ops;
++};
++
+ /**
+  * struct dwc3 - representation of our controller
+  * @drd_work: workqueue used for role swapping
+@@ -1143,6 +1167,9 @@ struct dwc3_scratchpad_array {
+  * @num_ep_resized: carries the current number endpoints which have had its tx
+  *		    fifo resized.
+  * @debug_root: root debugfs directory for this device to put its files in.
++ * @glue_data: Private data stored by core to be passed on to glue during
++ *		role switch notifications.
++ * @glue_ops: Store pointers to glue notifcation callbacks.
+  */
+ struct dwc3 {
+ 	struct work_struct	drd_work;
+@@ -1367,6 +1394,12 @@ struct dwc3 {
+ 	int			last_fifo_depth;
+ 	int			num_ep_resized;
+ 	struct dentry		*debug_root;
++
++	void			*glue_data;
++	const struct dwc3_glue_ops *glue_ops;
++
++	bool			cable_disconnected;
++	bool			dwc3_guctl_resbwhseps_quirk;
+ };
+ 
+ #define INCRX_BURST_MODE 0
+@@ -1577,10 +1610,55 @@ bool dwc3_has_imod(struct dwc3 *dwc);
+ 
+ int dwc3_event_buffers_setup(struct dwc3 *dwc);
+ void dwc3_event_buffers_cleanup(struct dwc3 *dwc);
+-
++void dwc3_core_exit_mode(struct dwc3 *dwc);
++void dwc3_free_event_buffers(struct dwc3 *dwc);
+ int dwc3_core_soft_reset(struct dwc3 *dwc);
+ void dwc3_enable_susphy(struct dwc3 *dwc, bool enable);
+ 
++int dwc3_probe(struct dwc3 *dwc,
++			struct dwc3_glue_data *glue_data);
++void dwc3_remove(struct dwc3 *dwc);
++
++int dwc3_runtime_suspend(struct dwc3 *dwc);
++int dwc3_runtime_resume(struct dwc3 *dwc);
++int dwc3_runtime_idle(struct dwc3 *dwc);
++int dwc3_suspend(struct dwc3 *dwc);
++int dwc3_resume(struct dwc3 *dwc);
++void dwc3_complete(struct dwc3 *dwc);
++
++static inline int dwc3_notify_cable_disconnect(struct dwc3 *dwc)
++{
++	if (dwc->glue_ops && dwc->glue_ops->notify_cable_disconnect)
++		return dwc->glue_ops->notify_cable_disconnect(dwc->glue_data);
++	return 0;
++}
++
++static inline void dwc3_notify_set_mode(struct dwc3 *dwc,
++					u32 desired_dr_role)
++{
++	if (dwc->glue_ops && dwc->glue_ops->set_mode)
++		dwc->glue_ops->set_mode(dwc->glue_data, desired_dr_role);
++}
++
++static inline void dwc3_notify_mode_changed(struct dwc3 *dwc,
++					    u32 current_dr_role)
++{
++	if (dwc->glue_ops && dwc->glue_ops->mode_changed)
++		dwc->glue_ops->mode_changed(dwc->glue_data, current_dr_role);
++}
++
++static inline void dwc3_notify_run_stop(struct dwc3 *dwc, bool enable)
++{
++	if (dwc->glue_ops && dwc->glue_ops->notify_run_stop)
++		dwc->glue_ops->notify_run_stop(dwc->glue_data, enable);
++}
++
++static inline void dwc3_notify_post_conndone(struct dwc3 *dwc)
++{
++	if (dwc->glue_ops && dwc->glue_ops->post_conndone)
++		dwc->glue_ops->post_conndone(dwc->glue_data);
++}
++
+ #if IS_ENABLED(CONFIG_USB_DWC3_HOST) || IS_ENABLED(CONFIG_USB_DWC3_DUAL_ROLE)
+ int dwc3_host_init(struct dwc3 *dwc);
+ void dwc3_host_exit(struct dwc3 *dwc);
+diff --git a/drivers/usb/dwc3/drd.c b/drivers/usb/dwc3/drd.c
+index 80bfe68cde62..620d4a64b460 100644
+--- a/drivers/usb/dwc3/drd.c
++++ b/drivers/usb/dwc3/drd.c
+@@ -445,6 +445,9 @@ static int dwc3_usb_role_switch_set(struct usb_role_switch *sw,
+ {
+ 	struct dwc3 *dwc = usb_role_switch_get_drvdata(sw);
+ 	u32 mode;
++	int ret = 0;
++
++	dwc->cable_disconnected = false;
+ 
+ 	switch (role) {
+ 	case USB_ROLE_HOST:
+@@ -461,6 +464,19 @@ static int dwc3_usb_role_switch_set(struct usb_role_switch *sw,
+ 		break;
+ 	}
+ 
++	/*
++	 * When cable is removed, the role changes to default mode.
++	 * In the case we are in device mode and removed the cable, the
++	 * glue needs to know that we are disconnected. It must not notify
++	 * the change of mode to default mode.
++	 */
++	if (role == USB_ROLE_NONE) {
++		dwc->cable_disconnected = true;
++		ret = dwc3_notify_cable_disconnect(dwc);
++		if (ret < 0)
++			return ret;
++	}
++
+ 	dwc3_set_mode(dwc, mode);
+ 	return 0;
+ }
+diff --git a/drivers/usb/dwc3/dwc3-qcom.c b/drivers/usb/dwc3/dwc3-qcom.c
+index add808efb871..524d2d3ae43d 100644
+--- a/drivers/usb/dwc3/dwc3-qcom.c
++++ b/drivers/usb/dwc3/dwc3-qcom.c
+@@ -49,14 +49,13 @@
+ #define USB_MEMORY_AVG_HS_BW MBps_to_icc(240)
+ #define USB_MEMORY_PEAK_HS_BW MBps_to_icc(700)
+ #define USB_MEMORY_AVG_SS_BW  MBps_to_icc(1000)
+-#define USB_MEMORY_PEAK_SS_BW MBps_to_icc(2500)
++#define USB_MEMORY_PEAK_SS_BW MBps_to_icc(3500)
+ #define APPS_USB_AVG_BW 0
+ #define APPS_USB_PEAK_BW MBps_to_icc(40)
+ 
++#define dwc3_to_qcom(dwc)	container_of(dwc, struct dwc3 *, dwc)
++
+ struct dwc3_acpi_pdata {
+-	u32			qscratch_base_offset;
+-	u32			qscratch_base_size;
+-	u32			dwc3_core_base_size;
+ 	int			hs_phy_irq_index;
+ 	int			dp_hs_phy_irq_index;
+ 	int			dm_hs_phy_irq_index;
+@@ -67,12 +66,16 @@ struct dwc3_acpi_pdata {
+ struct dwc3_qcom {
+ 	struct device		*dev;
+ 	void __iomem		*qscratch_base;
+-	struct platform_device	*dwc3;
+-	struct platform_device	*urs_usb;
++	struct platform_device	*dwc_dev; /* only used when core is separate device */
++	struct dwc3		dwc; /* not used when core is separate device */
+ 	struct clk		**clks;
+ 	int			num_clocks;
+ 	struct reset_control	*resets;
+ 
++	/* VBUS regulator for host mode */
++	struct regulator	*vbus_reg;
++	bool			is_vbus_enabled;
++
+ 	int			hs_phy_irq;
+ 	int			dp_hs_phy_irq;
+ 	int			dm_hs_phy_irq;
+@@ -91,6 +94,10 @@ struct dwc3_qcom {
+ 	bool			pm_suspended;
+ 	struct icc_path		*icc_path_ddr;
+ 	struct icc_path		*icc_path_apps;
++
++	bool			enable_rt;
++	enum usb_role		current_role;
++	struct notifier_block	xhci_nb;
+ };
+ 
+ static inline void dwc3_qcom_setbits(void __iomem *base, u32 offset, u32 val)
+@@ -236,6 +243,16 @@ static int dwc3_qcom_interconnect_disable(struct dwc3_qcom *qcom)
+ 	return ret;
+ }
+ 
++static bool dwc3_qcom_has_separate_dwc3_of_node(struct device *dev)
++{
++	struct device_node *np;
++
++	np = of_get_compatible_child(dev->of_node, "snps,dwc3");
++	of_node_put(np);
++
++	return !!np;
++}
++
+ /**
+  * dwc3_qcom_interconnect_init() - Get interconnect path handles
+  * and set bandwidth.
+@@ -246,11 +263,14 @@ static int dwc3_qcom_interconnect_init(struct dwc3_qcom *qcom)
+ {
+ 	enum usb_device_speed max_speed;
+ 	struct device *dev = qcom->dev;
++	bool legacy_binding;
+ 	int ret;
+ 
+ 	if (has_acpi_companion(dev))
+ 		return 0;
+ 
++	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(qcom->dev);
++
+ 	qcom->icc_path_ddr = of_icc_get(dev, "usb-ddr");
+ 	if (IS_ERR(qcom->icc_path_ddr)) {
+ 		return dev_err_probe(dev, PTR_ERR(qcom->icc_path_ddr),
+@@ -264,7 +284,11 @@ static int dwc3_qcom_interconnect_init(struct dwc3_qcom *qcom)
+ 		goto put_path_ddr;
+ 	}
+ 
+-	max_speed = usb_get_maximum_speed(&qcom->dwc3->dev);
++	if (legacy_binding)
++		max_speed = usb_get_maximum_speed(&qcom->dwc_dev->dev);
++	else
++		max_speed = usb_get_maximum_speed(qcom->dev);
++
+ 	if (max_speed >= USB_SPEED_SUPER || max_speed == USB_SPEED_UNKNOWN) {
+ 		ret = icc_set_bw(qcom->icc_path_ddr,
+ 				USB_MEMORY_AVG_SS_BW, USB_MEMORY_PEAK_SS_BW);
+@@ -307,12 +331,16 @@ static void dwc3_qcom_interconnect_exit(struct dwc3_qcom *qcom)
+ /* Only usable in contexts where the role can not change. */
+ static bool dwc3_qcom_is_host(struct dwc3_qcom *qcom)
+ {
++	bool legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(qcom->dev);
+ 	struct dwc3 *dwc;
+ 
+ 	/*
+ 	 * FIXME: Fix this layering violation.
+ 	 */
+-	dwc = platform_get_drvdata(qcom->dwc3);
++	if (legacy_binding)
++		dwc = platform_get_drvdata(qcom->dwc_dev);
++	else
++		dwc = &qcom->dwc;
+ 
+ 	/* Core driver may not have probed yet. */
+ 	if (!dwc)
+@@ -323,9 +351,15 @@ static bool dwc3_qcom_is_host(struct dwc3_qcom *qcom)
+ 
+ static enum usb_device_speed dwc3_qcom_read_usb2_speed(struct dwc3_qcom *qcom)
+ {
+-	struct dwc3 *dwc = platform_get_drvdata(qcom->dwc3);
+-	struct usb_device *udev;
++	bool legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(qcom->dev);
+ 	struct usb_hcd __maybe_unused *hcd;
++	struct usb_device *udev;
++	struct dwc3 *dwc;
++
++	if (legacy_binding)
++		dwc = platform_get_drvdata(qcom->dwc_dev);
++	else
++		dwc = &qcom->dwc;
+ 
+ 	/*
+ 	 * FIXME: Fix this layering violation.
+@@ -417,6 +451,20 @@ static void dwc3_qcom_enable_interrupts(struct dwc3_qcom *qcom)
+ 	dwc3_qcom_enable_wakeup_irq(qcom->ss_phy_irq, 0);
+ }
+ 
++static void dwc3_qcom_vbus_regulator_enable(struct dwc3_qcom *qcom, bool on)
++{
++	if (!qcom->vbus_reg)
++		return;
++
++	if (!qcom->is_vbus_enabled && on) {
++		regulator_enable(qcom->vbus_reg);
++		qcom->is_vbus_enabled = true;
++	} else if (qcom->is_vbus_enabled && !on) {
++		regulator_disable(qcom->vbus_reg);
++		qcom->is_vbus_enabled = false;
++	}
++}
++
+ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
+ {
+ 	u32 val;
+@@ -446,18 +494,28 @@ static int dwc3_qcom_suspend(struct dwc3_qcom *qcom, bool wakeup)
+ 	}
+ 
+ 	qcom->is_suspended = true;
++	pm_relax(qcom->dev);
+ 
+ 	return 0;
+ }
+ 
+ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
+ {
++	bool legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(qcom->dev);
+ 	int ret;
+ 	int i;
+ 
+ 	if (!qcom->is_suspended)
+ 		return 0;
+ 
++	pm_stay_awake(qcom->dev);
++
++	if (!legacy_binding) {
++		ret = reset_control_deassert(qcom->dwc.reset);
++		if (ret)
++			return ret;
++	}
++
+ 	if (dwc3_qcom_is_host(qcom) && wakeup)
+ 		dwc3_qcom_disable_interrupts(qcom);
+ 
+@@ -486,12 +544,20 @@ static int dwc3_qcom_resume(struct dwc3_qcom *qcom, bool wakeup)
+ static irqreturn_t qcom_dwc3_resume_irq(int irq, void *data)
+ {
+ 	struct dwc3_qcom *qcom = data;
+-	struct dwc3	*dwc = platform_get_drvdata(qcom->dwc3);
++	bool legacy_binding;
++	struct dwc3 *dwc;
++
++	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(qcom->dev);
+ 
+ 	/* If pm_suspended then let pm_resume take care of resuming h/w */
+ 	if (qcom->pm_suspended)
+ 		return IRQ_HANDLED;
+ 
++	if (legacy_binding)
++		dwc = platform_get_drvdata(qcom->dwc_dev);
++	else
++		dwc = &qcom->dwc;
++
+ 	/*
+ 	 * This is safe as role switching is done from a freezable workqueue
+ 	 * and the wakeup interrupts are disabled as part of resume.
+@@ -522,26 +588,43 @@ static void dwc3_qcom_select_utmi_clk(struct dwc3_qcom *qcom)
+ static int dwc3_qcom_get_irq(struct platform_device *pdev,
+ 			     const char *name, int num)
+ {
+-	struct dwc3_qcom *qcom = platform_get_drvdata(pdev);
+-	struct platform_device *pdev_irq = qcom->urs_usb ? qcom->urs_usb : pdev;
+ 	struct device_node *np = pdev->dev.of_node;
+ 	int ret;
+ 
+ 	if (np)
+-		ret = platform_get_irq_byname_optional(pdev_irq, name);
++		ret = platform_get_irq_byname_optional(pdev, name);
+ 	else
+-		ret = platform_get_irq_optional(pdev_irq, num);
++		ret = platform_get_irq_optional(pdev, num);
+ 
+ 	return ret;
+ }
+ 
++static struct dwc3_qcom *get_dwc3_qcom(struct device *dev)
++{
++	bool legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(dev);
++	struct dwc3_qcom *qcom;
++	struct dwc3 *dwc;
++
++	if (!legacy_binding) {
++		dwc = dev_get_drvdata(dev);
++		qcom = container_of(dwc, struct dwc3_qcom, dwc);
++	} else {
++		qcom = dev_get_drvdata(dev);
++	}
++
++	return qcom;
++}
++
+ static int dwc3_qcom_setup_irq(struct platform_device *pdev)
+ {
+-	struct dwc3_qcom *qcom = platform_get_drvdata(pdev);
+-	const struct dwc3_acpi_pdata *pdata = qcom->acpi_pdata;
++	const struct dwc3_acpi_pdata *pdata;
++	struct dwc3_qcom *qcom;
+ 	int irq;
+ 	int ret;
+ 
++	qcom = get_dwc3_qcom(&pdev->dev);
++	pdata = qcom->acpi_pdata;
++
+ 	irq = dwc3_qcom_get_irq(pdev, "hs_phy_irq",
+ 				pdata ? pdata->hs_phy_irq_index : -1);
+ 	if (irq > 0) {
+@@ -662,77 +745,134 @@ static const struct software_node dwc3_qcom_swnode = {
+ 	.properties = dwc3_qcom_acpi_properties,
+ };
+ 
+-static int dwc3_qcom_acpi_register_core(struct platform_device *pdev)
++static int dwc3_xhci_event_notifier(struct notifier_block *nb,
++				    unsigned long event, void *ptr)
+ {
+-	struct dwc3_qcom	*qcom = platform_get_drvdata(pdev);
+-	struct device		*dev = &pdev->dev;
+-	struct resource		*res, *child_res = NULL;
+-	struct platform_device	*pdev_irq = qcom->urs_usb ? qcom->urs_usb :
+-							    pdev;
+-	int			irq;
+-	int			ret;
+-
+-	qcom->dwc3 = platform_device_alloc("dwc3", PLATFORM_DEVID_AUTO);
+-	if (!qcom->dwc3)
+-		return -ENOMEM;
++	struct usb_device *udev = ptr;
+ 
+-	qcom->dwc3->dev.parent = dev;
+-	qcom->dwc3->dev.type = dev->type;
+-	qcom->dwc3->dev.dma_mask = dev->dma_mask;
+-	qcom->dwc3->dev.dma_parms = dev->dma_parms;
+-	qcom->dwc3->dev.coherent_dma_mask = dev->coherent_dma_mask;
++	if (event != USB_DEVICE_ADD)
++		return NOTIFY_DONE;
+ 
+-	child_res = kcalloc(2, sizeof(*child_res), GFP_KERNEL);
+-	if (!child_res) {
+-		platform_device_put(qcom->dwc3);
+-		return -ENOMEM;
++	/*
++	 * If this is a roothub corresponding to this controller, enable autosuspend
++	 */
++	if (!udev->parent) {
++		pm_runtime_use_autosuspend(&udev->dev);
++		pm_runtime_set_autosuspend_delay(&udev->dev, 1000);
+ 	}
+ 
+-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+-	if (!res) {
+-		dev_err(&pdev->dev, "failed to get memory resource\n");
+-		ret = -ENODEV;
+-		goto out;
+-	}
++	usb_mark_last_busy(udev);
+ 
+-	child_res[0].flags = res->flags;
+-	child_res[0].start = res->start;
+-	child_res[0].end = child_res[0].start +
+-		qcom->acpi_pdata->dwc3_core_base_size;
++	return NOTIFY_DONE;
++}
+ 
+-	irq = platform_get_irq(pdev_irq, 0);
+-	if (irq < 0) {
+-		ret = irq;
+-		goto out;
+-	}
+-	child_res[1].flags = IORESOURCE_IRQ;
+-	child_res[1].start = child_res[1].end = irq;
++static int dwc3_qcom_handle_cable_disconnect(void *data)
++{
++	struct dwc3_qcom *qcom = (struct dwc3_qcom *)data;
++	int ret = 0;
+ 
+-	ret = platform_device_add_resources(qcom->dwc3, child_res, 2);
+-	if (ret) {
+-		dev_err(&pdev->dev, "failed to add resources\n");
+-		goto out;
++	/*
++	 * If we are in device mode and get a cable disconnect,
++	 * handle it by clearing OTG_VBUS_VALID bit in wrapper.
++	 * The next set_mode to default role can be ignored.
++	 */
++	if (qcom->current_role == USB_ROLE_DEVICE) {
++		ret = pm_runtime_get_sync(qcom->dev);
++		if ((ret < 0) || (qcom->is_suspended))
++			return ret;
++		dwc3_qcom_vbus_override_enable(qcom, false);
++		pm_runtime_put_autosuspend(qcom->dev);
++	} else if (qcom->current_role == USB_ROLE_HOST) {
++		dwc3_qcom_vbus_regulator_enable(qcom, false);
++		usb_unregister_notify(&qcom->xhci_nb);
+ 	}
+ 
+-	ret = device_add_software_node(&qcom->dwc3->dev, &dwc3_qcom_swnode);
+-	if (ret < 0) {
+-		dev_err(&pdev->dev, "failed to add properties\n");
+-		goto out;
++	pm_runtime_mark_last_busy(qcom->dev);
++	qcom->current_role = USB_ROLE_NONE;
++
++	return 0;
++}
++
++static void dwc3_qcom_handle_set_mode(void *data, u32 desired_dr_role)
++{
++	struct dwc3_qcom *qcom = (struct dwc3_qcom *)data;
++
++	/*
++	 * If we are in device mode and get a cable disconnect,
++	 * handle it by clearing OTG_VBUS_VALID bit in wrapper.
++	 * The next set_mode to default role can be ignored and
++	 * so the OTG_VBUS_VALID should be set iff the current role
++	 * is NONE and we need to enter DEVICE mode.
++	 */
++	if ((qcom->current_role == USB_ROLE_NONE) &&
++	    (desired_dr_role == DWC3_GCTL_PRTCAP_DEVICE)) {
++		dwc3_qcom_vbus_override_enable(qcom, true);
++		qcom->current_role = USB_ROLE_DEVICE;
++	} else if ((desired_dr_role == DWC3_GCTL_PRTCAP_HOST) &&
++		   (qcom->current_role != USB_ROLE_HOST)) {
++		qcom->xhci_nb.notifier_call = dwc3_xhci_event_notifier;
++		usb_register_notify(&qcom->xhci_nb);
++		qcom->current_role = USB_ROLE_HOST;
++		dwc3_qcom_vbus_regulator_enable(qcom, true);
+ 	}
+ 
+-	ret = platform_device_add(qcom->dwc3);
+-	if (ret) {
+-		dev_err(&pdev->dev, "failed to add device\n");
+-		device_remove_software_node(&qcom->dwc3->dev);
+-		goto out;
++	pm_runtime_mark_last_busy(qcom->dev);
++}
++
++static void dwc3_qcom_handle_mode_changed(void *data, u32 current_dr_role)
++{
++	struct dwc3_qcom *qcom = (struct dwc3_qcom *)data;
++
++	/*
++	 * XHCI platform device is allocated upon host init.
++	 * So ensure we are in host mode before enabling autosuspend.
++	 */
++	if ((current_dr_role == DWC3_GCTL_PRTCAP_HOST) &&
++	    (qcom->current_role == USB_ROLE_HOST)) {
++		pm_runtime_use_autosuspend(&qcom->dwc.xhci->dev);
++		pm_runtime_set_autosuspend_delay(&qcom->dwc.xhci->dev, 0);
+ 	}
+-	kfree(child_res);
+-	return 0;
++}
+ 
+-out:
+-	platform_device_put(qcom->dwc3);
+-	kfree(child_res);
+-	return ret;
++static void dwc3_post_conndone_notification(void *data)
++{
++	struct dwc3_qcom *qcom = (struct dwc3_qcom *)data;
++
++	qcom->dwc.cable_disconnected = false;
++	qcom->current_role = USB_ROLE_DEVICE;
++}
++
++static void dwc3_qcom_handle_run_stop_notification(void *data, bool enable)
++{
++	struct dwc3_qcom *qcom = (struct dwc3_qcom *)data;
++
++	if (enable)
++		dwc3_qcom_vbus_override_enable(qcom, true);
++}
++
++struct dwc3_glue_ops dwc3_qcom_glue_hooks = {
++	.notify_cable_disconnect = dwc3_qcom_handle_cable_disconnect,
++	.set_mode = dwc3_qcom_handle_set_mode,
++	.mode_changed = dwc3_qcom_handle_mode_changed,
++	.notify_run_stop = dwc3_qcom_handle_run_stop_notification,
++	.post_conndone = dwc3_post_conndone_notification,
++};
++
++static int dwc3_qcom_probe_core(struct platform_device *pdev, struct dwc3_qcom *qcom)
++{
++	int ret;
++
++	struct dwc3_glue_data qcom_glue_data = {
++		.glue_data	= qcom,
++		.ops		= &dwc3_qcom_glue_hooks,
++	};
++
++	ret = dwc3_probe(&qcom->dwc,
++			 qcom->enable_rt ? &qcom_glue_data : NULL);
++	if (ret)
++		return ret;
++
++	return 0;
+ }
+ 
+ static int dwc3_qcom_of_register_core(struct platform_device *pdev)
+@@ -754,8 +894,8 @@ static int dwc3_qcom_of_register_core(struct platform_device *pdev)
+ 		goto node_put;
+ 	}
+ 
+-	qcom->dwc3 = of_find_device_by_node(dwc3_np);
+-	if (!qcom->dwc3) {
++	qcom->dwc_dev = of_find_device_by_node(dwc3_np);
++	if (!qcom->dwc_dev) {
+ 		ret = -ENODEV;
+ 		dev_err(dev, "failed to get dwc3 platform device\n");
+ 		of_platform_depopulate(dev);
+@@ -767,48 +907,90 @@ static int dwc3_qcom_of_register_core(struct platform_device *pdev)
+ 	return ret;
+ }
+ 
+-static struct platform_device *dwc3_qcom_create_urs_usb_platdev(struct device *dev)
++static int dwc3_qcom_acpi_merge_urs_resources(struct platform_device *pdev)
+ {
+-	struct platform_device *urs_usb = NULL;
++	struct device *dev = &pdev->dev;
++	struct list_head resource_list;
++	struct resource_entry *rentry;
++	struct resource *resources;
+ 	struct fwnode_handle *fwh;
+ 	struct acpi_device *adev;
+ 	char name[8];
++	int count;
+ 	int ret;
+ 	int id;
++	int i;
+ 
+ 	/* Figure out device id */
+ 	ret = sscanf(fwnode_get_name(dev->fwnode), "URS%d", &id);
+ 	if (!ret)
+-		return NULL;
++		return -EINVAL;
+ 
+ 	/* Find the child using name */
+ 	snprintf(name, sizeof(name), "USB%d", id);
+ 	fwh = fwnode_get_named_child_node(dev->fwnode, name);
+ 	if (!fwh)
+-		return NULL;
++		return 0;
+ 
+ 	adev = to_acpi_device_node(fwh);
+ 	if (!adev)
+-		goto err_put_handle;
++		return -EINVAL;
+ 
+-	urs_usb = acpi_create_platform_device(adev, NULL);
+-	if (IS_ERR_OR_NULL(urs_usb))
+-		goto err_put_handle;
++	INIT_LIST_HEAD(&resource_list);
+ 
+-	return urs_usb;
++	count = acpi_dev_get_resources(adev, &resource_list, NULL, NULL);
++	if (count <= 0)
++		return count;
+ 
+-err_put_handle:
+-	fwnode_handle_put(fwh);
++	count += pdev->num_resources;
+ 
+-	return urs_usb;
++	resources = kcalloc(count, sizeof(*resources), GFP_KERNEL);
++	if (!resources) {
++		acpi_dev_free_resource_list(&resource_list);
++		return -ENOMEM;
++	}
++
++	memcpy(resources, pdev->resource, sizeof(struct resource) * pdev->num_resources);
++	count = pdev->num_resources;
++	list_for_each_entry(rentry, &resource_list, node) {
++		/* Avoid inserting duplicate entries, in case this is called more than once */
++		for (i = 0; i < count; i++) {
++			if (resource_type(&resources[i]) == resource_type(rentry->res) &&
++			    resources[i].start == rentry->res->start &&
++			    resources[i].end == rentry->res->end)
++				break;
++		}
++
++		if (i == count)
++			resources[count++] = *rentry->res;
++	}
++
++	ret = platform_device_add_resources(pdev, resources, count);
++	if (ret)
++		dev_err(&pdev->dev, "failed to add resources\n");
++
++	acpi_dev_free_resource_list(&resource_list);
++	kfree(resources);
++
++	return ret;
+ }
+ 
+-static void dwc3_qcom_destroy_urs_usb_platdev(struct platform_device *urs_usb)
++static void dwc3_qcom_vbus_regulator_get(struct dwc3_qcom *qcom)
+ {
+-	struct fwnode_handle *fwh = urs_usb->dev.fwnode;
+-
+-	platform_device_unregister(urs_usb);
+-	fwnode_handle_put(fwh);
++	/*
++	 * The vbus_reg pointer could have multiple values
++	 * NULL: regulator_get() hasn't been called, or was previously deferred
++	 * IS_ERR: regulator could not be obtained, so skip using it
++	 * Valid pointer otherwise
++	 */
++	qcom->vbus_reg = devm_regulator_get_optional(qcom->dev,
++						"vbus_dwc3");
++	if (IS_ERR(qcom->vbus_reg)) {
++		dev_err(qcom->dev, "Unable to get vbus regulator err: %ld\n",
++							PTR_ERR(qcom->vbus_reg));
++		qcom->vbus_reg = NULL;
++		return;
++	}
+ }
+ 
+ static int dwc3_qcom_probe(struct platform_device *pdev)
+@@ -821,13 +1003,21 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
+ 	int			ret, i;
+ 	bool			ignore_pipe_clk;
+ 	bool			wakeup_source;
++	bool			legacy_binding;
+ 
+ 	qcom = devm_kzalloc(&pdev->dev, sizeof(*qcom), GFP_KERNEL);
+ 	if (!qcom)
+ 		return -ENOMEM;
+ 
+-	platform_set_drvdata(pdev, qcom);
++	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(dev);
++
++	if (!legacy_binding)
++		platform_set_drvdata(pdev, &qcom->dwc);
++	else
++		platform_set_drvdata(pdev, qcom);
++
+ 	qcom->dev = &pdev->dev;
++	qcom->dwc.dev = qcom->dev;
+ 
+ 	if (has_acpi_companion(dev)) {
+ 		qcom->acpi_pdata = acpi_device_get_match_data(dev);
+@@ -835,26 +1025,40 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
+ 			dev_err(&pdev->dev, "no supporting ACPI device data\n");
+ 			return -EINVAL;
+ 		}
+-	}
+ 
+-	qcom->resets = devm_reset_control_array_get_optional_exclusive(dev);
+-	if (IS_ERR(qcom->resets)) {
+-		return dev_err_probe(&pdev->dev, PTR_ERR(qcom->resets),
+-				     "failed to get resets\n");
+-	}
++		ret = device_add_software_node(&pdev->dev, &dwc3_qcom_swnode);
++		if (ret < 0) {
++			dev_err(&pdev->dev, "failed to add properties\n");
++			return ret;
++		}
+ 
+-	ret = reset_control_assert(qcom->resets);
+-	if (ret) {
+-		dev_err(&pdev->dev, "failed to assert resets, err=%d\n", ret);
+-		return ret;
++		if (qcom->acpi_pdata->is_urs) {
++			ret = dwc3_qcom_acpi_merge_urs_resources(pdev);
++			if (ret < 0)
++				goto clk_disable;
++		}
+ 	}
+ 
+-	usleep_range(10, 1000);
++	if (legacy_binding) {
++		qcom->resets = devm_reset_control_array_get_optional_exclusive(dev);
++		if (IS_ERR(qcom->resets)) {
++			return dev_err_probe(&pdev->dev, PTR_ERR(qcom->resets),
++					     "failed to get resets\n");
++		}
+ 
+-	ret = reset_control_deassert(qcom->resets);
+-	if (ret) {
+-		dev_err(&pdev->dev, "failed to deassert resets, err=%d\n", ret);
+-		return ret;
++		ret = reset_control_assert(qcom->resets);
++		if (ret) {
++			dev_err(&pdev->dev, "failed to assert resets, err=%d\n", ret);
++			goto reset_assert;
++		}
++
++		usleep_range(10, 1000);
++
++		ret = reset_control_deassert(qcom->resets);
++		if (ret) {
++			dev_err(&pdev->dev, "failed to deassert resets, err=%d\n", ret);
++			goto reset_assert;
++		}
+ 	}
+ 
+ 	ret = dwc3_qcom_clk_init(qcom, of_clk_get_parent_count(np));
+@@ -865,40 +1069,26 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
+ 
+ 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+ 
+-	if (np) {
++	if (legacy_binding) {
+ 		parent_res = res;
+ 	} else {
+ 		memcpy(&local_res, res, sizeof(struct resource));
+ 		parent_res = &local_res;
+ 
+-		parent_res->start = res->start +
+-			qcom->acpi_pdata->qscratch_base_offset;
+-		parent_res->end = parent_res->start +
+-			qcom->acpi_pdata->qscratch_base_size;
+-
+-		if (qcom->acpi_pdata->is_urs) {
+-			qcom->urs_usb = dwc3_qcom_create_urs_usb_platdev(dev);
+-			if (IS_ERR_OR_NULL(qcom->urs_usb)) {
+-				dev_err(dev, "failed to create URS USB platdev\n");
+-				if (!qcom->urs_usb)
+-					ret = -ENODEV;
+-				else
+-					ret = PTR_ERR(qcom->urs_usb);
+-				goto clk_disable;
+-			}
+-		}
++		parent_res->start = res->start + SDM845_QSCRATCH_BASE_OFFSET;
++		parent_res->end = parent_res->start + SDM845_QSCRATCH_SIZE;
+ 	}
+ 
+ 	qcom->qscratch_base = devm_ioremap_resource(dev, parent_res);
+ 	if (IS_ERR(qcom->qscratch_base)) {
+ 		ret = PTR_ERR(qcom->qscratch_base);
+-		goto free_urs;
++		goto clk_disable;
+ 	}
+ 
+ 	ret = dwc3_qcom_setup_irq(pdev);
+ 	if (ret) {
+ 		dev_err(dev, "failed to setup IRQs, err=%d\n", ret);
+-		goto free_urs;
++		goto clk_disable;
+ 	}
+ 
+ 	/*
+@@ -910,81 +1100,142 @@ static int dwc3_qcom_probe(struct platform_device *pdev)
+ 	if (ignore_pipe_clk)
+ 		dwc3_qcom_select_utmi_clk(qcom);
+ 
+-	if (np)
++	qcom->enable_rt = device_property_read_bool(dev,
++				"qcom,enable-rt");
++	if (!legacy_binding) {
++		/*
++		 * If we are enabling runtime, then we are using flattened
++		 * device implementation.
++		 */
++		qcom->mode = usb_get_dr_mode(dev);
++
++		if (qcom->mode == USB_DR_MODE_HOST)
++			qcom->current_role = USB_ROLE_HOST;
++		else if (qcom->mode == USB_DR_MODE_PERIPHERAL)
++			qcom->current_role = USB_ROLE_DEVICE;
++		else
++			qcom->current_role = USB_ROLE_NONE;
++	}
++
++	if (legacy_binding)
+ 		ret = dwc3_qcom_of_register_core(pdev);
+ 	else
+-		ret = dwc3_qcom_acpi_register_core(pdev);
++		ret = dwc3_qcom_probe_core(pdev, qcom);
+ 
+ 	if (ret) {
+ 		dev_err(dev, "failed to register DWC3 Core, err=%d\n", ret);
+-		goto free_urs;
++		goto depopulate;
+ 	}
+ 
+ 	ret = dwc3_qcom_interconnect_init(qcom);
+ 	if (ret)
+ 		goto depopulate;
+ 
+-	qcom->mode = usb_get_dr_mode(&qcom->dwc3->dev);
++	if (legacy_binding) {
++		qcom->mode = usb_get_dr_mode(&qcom->dwc_dev->dev);
+ 
+-	/* enable vbus override for device mode */
+-	if (qcom->mode != USB_DR_MODE_HOST)
+-		dwc3_qcom_vbus_override_enable(qcom, true);
++		/* enable vbus override for device mode */
++		if (qcom->mode != USB_DR_MODE_HOST)
++			dwc3_qcom_vbus_override_enable(qcom, true);
+ 
+-	/* register extcon to override sw_vbus on Vbus change later */
+-	ret = dwc3_qcom_register_extcon(qcom);
+-	if (ret)
+-		goto interconnect_exit;
++		/* register extcon to override sw_vbus on Vbus change later */
++		ret = dwc3_qcom_register_extcon(qcom);
++		if (ret)
++			goto interconnect_exit;
++	}
++
++	dwc3_qcom_vbus_regulator_get(qcom);
++
++	if (qcom->mode == USB_DR_MODE_HOST) {
++		dwc3_qcom_vbus_regulator_enable(qcom, true);
++		qcom->is_vbus_enabled = true;
++	}
+ 
+ 	wakeup_source = of_property_read_bool(dev->of_node, "wakeup-source");
+ 	device_init_wakeup(&pdev->dev, wakeup_source);
+-	device_init_wakeup(&qcom->dwc3->dev, wakeup_source);
+ 
+ 	qcom->is_suspended = false;
+-	pm_runtime_set_active(dev);
+-	pm_runtime_enable(dev);
+-	pm_runtime_forbid(dev);
++
++	if (legacy_binding) {
++		device_init_wakeup(&qcom->dwc_dev->dev, wakeup_source);
++		pm_runtime_set_active(dev);
++		pm_runtime_enable(dev);
++		pm_runtime_forbid(dev);
++	}
+ 
+ 	return 0;
+ 
+ interconnect_exit:
+ 	dwc3_qcom_interconnect_exit(qcom);
+ depopulate:
+-	if (np) {
++	platform_set_drvdata(pdev, NULL);
++	if (legacy_binding)
+ 		of_platform_depopulate(&pdev->dev);
+-	} else {
+-		device_remove_software_node(&qcom->dwc3->dev);
+-		platform_device_del(qcom->dwc3);
+-	}
+-	platform_device_put(qcom->dwc3);
+-free_urs:
+-	if (qcom->urs_usb)
+-		dwc3_qcom_destroy_urs_usb_platdev(qcom->urs_usb);
++	else
++		dwc3_remove(&qcom->dwc);
+ clk_disable:
+ 	for (i = qcom->num_clocks - 1; i >= 0; i--) {
+ 		clk_disable_unprepare(qcom->clks[i]);
+ 		clk_put(qcom->clks[i]);
+ 	}
+-
++reset_assert:
++	reset_control_assert(qcom->resets);
+ 	return ret;
+ }
+ 
+ static void dwc3_qcom_remove(struct platform_device *pdev)
+ {
+-	struct dwc3_qcom *qcom = platform_get_drvdata(pdev);
+ 	struct device_node *np = pdev->dev.of_node;
+ 	struct device *dev = &pdev->dev;
++	struct dwc3_qcom *qcom;
++	bool legacy_binding;
+ 	int i;
+ 
+-	if (np) {
++	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(dev);
++	qcom = get_dwc3_qcom(dev);
++
++	if (!legacy_binding)
++		dwc3_remove(&qcom->dwc);
++	else
++		device_remove_software_node(&qcom->dwc_dev->dev);
++
++	if (np)
+ 		of_platform_depopulate(&pdev->dev);
+-	} else {
+-		device_remove_software_node(&qcom->dwc3->dev);
+-		platform_device_del(qcom->dwc3);
++	else
++		platform_device_put(pdev);
++
++	for (i = qcom->num_clocks - 1; i >= 0; i--) {
++		clk_disable_unprepare(qcom->clks[i]);
++		clk_put(qcom->clks[i]);
+ 	}
+-	platform_device_put(qcom->dwc3);
++	qcom->num_clocks = 0;
+ 
+-	if (qcom->urs_usb)
+-		dwc3_qcom_destroy_urs_usb_platdev(qcom->urs_usb);
++	dwc3_qcom_interconnect_exit(qcom);
++	reset_control_assert(qcom->resets);
++
++	if (qcom->dwc_dev) {
++		pm_runtime_allow(dev);
++		pm_runtime_disable(dev);
++	}
++}
++
++static void dwc3_qcom_shutdown(struct platform_device *pdev)
++{
++	struct device_node *np = pdev->dev.of_node;
++	struct device *dev = &pdev->dev;
++	struct dwc3_qcom *qcom;
++	bool legacy_binding;
++	int i;
++
++	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(dev);
++	qcom = get_dwc3_qcom(dev);
++
++	if (legacy_binding)
++		return;
++
++	pm_runtime_get_sync(qcom->dev);
++	dwc3_core_exit_mode(&qcom->dwc);
++	dwc3_free_event_buffers(&qcom->dwc);
+ 
+ 	for (i = qcom->num_clocks - 1; i >= 0; i--) {
+ 		clk_disable_unprepare(qcom->clks[i]);
+@@ -993,16 +1244,30 @@ static void dwc3_qcom_remove(struct platform_device *pdev)
+ 	qcom->num_clocks = 0;
+ 
+ 	dwc3_qcom_interconnect_exit(qcom);
+-	pm_runtime_allow(dev);
+-	pm_runtime_disable(dev);
++	reset_control_assert(qcom->resets);
++
++	pm_runtime_allow(qcom->dev);
++	pm_runtime_disable(qcom->dev);
++	pm_runtime_dont_use_autosuspend(qcom->dev);
++	pm_runtime_put_noidle(qcom->dev);
+ }
+ 
+ static int __maybe_unused dwc3_qcom_pm_suspend(struct device *dev)
+ {
+-	struct dwc3_qcom *qcom = dev_get_drvdata(dev);
+ 	bool wakeup = device_may_wakeup(dev);
++	struct dwc3_qcom *qcom;
++	bool legacy_binding;
+ 	int ret;
+ 
++	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(dev);
++	qcom = get_dwc3_qcom(dev);
++
++	if (!legacy_binding) {
++		ret = dwc3_suspend(&qcom->dwc);
++		if (ret)
++			return ret;
++	}
++
+ 	ret = dwc3_qcom_suspend(qcom, wakeup);
+ 	if (ret)
+ 		return ret;
+@@ -1014,35 +1279,86 @@ static int __maybe_unused dwc3_qcom_pm_suspend(struct device *dev)
+ 
+ static int __maybe_unused dwc3_qcom_pm_resume(struct device *dev)
+ {
+-	struct dwc3_qcom *qcom = dev_get_drvdata(dev);
+ 	bool wakeup = device_may_wakeup(dev);
++	struct dwc3_qcom *qcom;
++	bool legacy_binding;
+ 	int ret;
+ 
++	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(dev);
++	qcom = get_dwc3_qcom(dev);
++
++	if ((!legacy_binding) && (pm_runtime_suspended(qcom->dev))) {
++		qcom->pm_suspended = false;
++		return 0;
++	}
++
+ 	ret = dwc3_qcom_resume(qcom, wakeup);
+ 	if (ret)
+ 		return ret;
+ 
+ 	qcom->pm_suspended = false;
+ 
++	if (!legacy_binding) {
++		ret = dwc3_resume(&qcom->dwc);
++		if (ret)
++			return ret;
++	}
++
+ 	return 0;
+ }
+ 
++static void dwc3_qcom_complete(struct device *dev)
++{
++	struct dwc3_qcom *qcom;
++	bool legacy_binding;
++
++	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(dev);
++	qcom = get_dwc3_qcom(dev);
++
++	if (!legacy_binding)
++		dwc3_complete(&qcom->dwc);
++}
++
+ static int __maybe_unused dwc3_qcom_runtime_suspend(struct device *dev)
+ {
+-	struct dwc3_qcom *qcom = dev_get_drvdata(dev);
++	struct dwc3_qcom *qcom;
++	bool legacy_binding;
++	int ret;
++
++	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(dev);
++	qcom = get_dwc3_qcom(dev);
++
++	if (!legacy_binding) {
++		ret = dwc3_runtime_suspend(&qcom->dwc);
++		if (ret)
++			return ret;
++	}
+ 
+ 	return dwc3_qcom_suspend(qcom, true);
+ }
+ 
+ static int __maybe_unused dwc3_qcom_runtime_resume(struct device *dev)
+ {
+-	struct dwc3_qcom *qcom = dev_get_drvdata(dev);
++	struct dwc3_qcom *qcom;
++	bool legacy_binding;
++	int ret;
+ 
+-	return dwc3_qcom_resume(qcom, true);
++	legacy_binding = dwc3_qcom_has_separate_dwc3_of_node(dev);
++	qcom = get_dwc3_qcom(dev);
++
++	ret = dwc3_qcom_resume(qcom, true);
++	if (ret)
++		return ret;
++
++	if (!legacy_binding)
++		return dwc3_runtime_resume(&qcom->dwc);
++
++	return 0;
+ }
+ 
+ static const struct dev_pm_ops dwc3_qcom_dev_pm_ops = {
+ 	SET_SYSTEM_SLEEP_PM_OPS(dwc3_qcom_pm_suspend, dwc3_qcom_pm_resume)
++	.complete = dwc3_qcom_complete,
+ 	SET_RUNTIME_PM_OPS(dwc3_qcom_runtime_suspend, dwc3_qcom_runtime_resume,
+ 			   NULL)
+ };
+@@ -1055,9 +1371,6 @@ MODULE_DEVICE_TABLE(of, dwc3_qcom_of_match);
+ 
+ #ifdef CONFIG_ACPI
+ static const struct dwc3_acpi_pdata sdm845_acpi_pdata = {
+-	.qscratch_base_offset = SDM845_QSCRATCH_BASE_OFFSET,
+-	.qscratch_base_size = SDM845_QSCRATCH_SIZE,
+-	.dwc3_core_base_size = SDM845_DWC3_CORE_SIZE,
+ 	.hs_phy_irq_index = 1,
+ 	.dp_hs_phy_irq_index = 4,
+ 	.dm_hs_phy_irq_index = 3,
+@@ -1065,9 +1378,6 @@ static const struct dwc3_acpi_pdata sdm845_acpi_pdata = {
+ };
+ 
+ static const struct dwc3_acpi_pdata sdm845_acpi_urs_pdata = {
+-	.qscratch_base_offset = SDM845_QSCRATCH_BASE_OFFSET,
+-	.qscratch_base_size = SDM845_QSCRATCH_SIZE,
+-	.dwc3_core_base_size = SDM845_DWC3_CORE_SIZE,
+ 	.hs_phy_irq_index = 1,
+ 	.dp_hs_phy_irq_index = 4,
+ 	.dm_hs_phy_irq_index = 3,
+@@ -1088,6 +1398,7 @@ MODULE_DEVICE_TABLE(acpi, dwc3_qcom_acpi_match);
+ static struct platform_driver dwc3_qcom_driver = {
+ 	.probe		= dwc3_qcom_probe,
+ 	.remove_new	= dwc3_qcom_remove,
++	.shutdown	= dwc3_qcom_shutdown,
+ 	.driver		= {
+ 		.name	= "dwc3-qcom",
+ 		.pm	= &dwc3_qcom_dev_pm_ops,
+-- 
+2.17.1
+

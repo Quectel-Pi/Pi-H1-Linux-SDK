@@ -1,5 +1,12 @@
 #!/bin/bash
 
+BASE_RECIPES_FILE="${TOPDIR}/quectel_build/config/base-recipes"
+if [ -f "${BASE_RECIPES_FILE}" ]; then
+    TARGET_IMAGE=$(cat "${BASE_RECIPES_FILE}")
+else
+    TARGET_IMAGE="quecpi-image"
+fi
+
 [ -n "$TOPDIR"   ] || { echo "ERROR: TOPDIR not set, please do source build.sh first"; exit 1; }
 [ -z "$1"        ] || { SDK_NAME=$1; }
 [ -n "$SDK_NAME" ] || { SDK_NAME=${QUECTEL_PROJECT_REV:?"var not set! source quectel_build/compile/build.sh first please."}"_SDK"; }
@@ -7,8 +14,8 @@
 
 
 set -ev
-#[ -f ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/sdk/qcom-wayland-x86_64-qcom-multimedia-image-armv8-2a-qcm6490-idp-toolchain-1.0.sh ] || bitbake -c populate_sdk qcom-multimedia-image
-[ -f ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/sdk/qcom-wayland-x86_64-qcom-multimedia-image-armv8-2a-qcm6490-idp-toolchain-1.3-ver.1.1.sh ] || bitbake -c populate_sdk qcom-multimedia-image
+#[ -f ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/sdk/qcom-wayland-x86_64-${TARGET_IMAGE}-armv8-2a-qcm6490-idp-toolchain-1.0.sh ] || bitbake -c populate_sdk ${TARGET_IMAGE}
+[ -f ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/sdk/qcom-wayland-x86_64-${TARGET_IMAGE}-armv8-2a-qcm6490-idp-toolchain-1.3-ver.1.1.sh ] || bitbake -c populate_sdk ${TARGET_IMAGE}
 #[ -f ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/sdk/qcom-wayland-x86_64-meta-toolchain-armv8-2a-qcm6490-idp-toolchain-1.0.sh        ] || bitbake meta-toolchain
 [ -f ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/sdk/qcom-wayland-x86_64-meta-toolchain-armv8-2a-qcm6490-idp-toolchain-1.3-ver.1.1.sh ] || bitbake meta-toolchain
 mkdir -p $SDK_NAME/patch/include/asm
@@ -19,8 +26,8 @@ mkdir -p $SDK_NAME/patch/scripts/mod
 mkdir -p $SDK_NAME/patch/scripts/basic
 mkdir -p $SDK_NAME/patch/certs
 mkdir -p $SDK_NAME/patch/arch/arm64/tools
-#cp    ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/sdk/qcom-wayland-x86_64-qcom-multimedia-image-armv8-2a-qcm6490-idp-toolchain-1.0.sh $SDK_NAME/
-cp    ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/sdk/qcom-wayland-x86_64-qcom-multimedia-image-armv8-2a-qcm6490-idp-toolchain-1.3-ver.1.1.sh $SDK_NAME/
+#cp    ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/sdk/qcom-wayland-x86_64-${TARGET_IMAGE}-armv8-2a-qcm6490-idp-toolchain-1.0.sh $SDK_NAME/
+cp    ${TOPDIR}/build-qcom-wayland/tmp-glibc/deploy/sdk/qcom-wayland-x86_64-${TARGET_IMAGE}-armv8-2a-qcm6490-idp-toolchain-1.3-ver.1.1.sh $SDK_NAME/
 cp -r ${TOPDIR}/build-qcom-wayland/tmp-glibc/work-shared/qcm6490-idp/kernel-build-artifacts/arch/arm64/include/generated/asm/*          $SDK_NAME/patch/include/asm/
 cp -r ${TOPDIR}/build-qcom-wayland/tmp-glibc/work-shared/qcm6490-idp/kernel-build-artifacts/arch/arm64/include/generated/uapi/asm/*     $SDK_NAME/patch/include/uapi/asm/
 cp    ${TOPDIR}/build-qcom-wayland/tmp-glibc/work-shared/qcm6490-idp/kernel-build-artifacts/include/generated/autoconf.h                $SDK_NAME/patch/include/generated/

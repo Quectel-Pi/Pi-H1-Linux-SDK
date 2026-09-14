@@ -3,9 +3,9 @@
 #
 
 SUMMARY = "Host packages for the standalone SDK or external toolchain"
-PR = "r12"
 
-inherit packagegroup nativesdk
+inherit packagegroup
+inherit_defer nativesdk
 
 PACKAGEGROUP_DISABLE_COMPLEMENTARY = "1"
 

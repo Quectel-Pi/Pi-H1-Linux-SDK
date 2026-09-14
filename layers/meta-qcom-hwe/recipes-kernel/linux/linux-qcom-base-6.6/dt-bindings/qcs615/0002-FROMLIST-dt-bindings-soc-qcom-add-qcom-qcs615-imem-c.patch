@@ -1,0 +1,32 @@
+From be8b32247876fadb8a2260c64426d6c911606b5b Mon Sep 17 00:00:00 2001
+From: Lijuan Gao <quic_lijuang@quicinc.com>
+Date: Wed, 7 May 2025 18:26:12 +0800
+Subject: [PATCH 2/6] FROMLIST: dt-bindings: soc: qcom: add qcom,qcs615-imem
+ compatible
+
+Document qcom,qcs615-imem compatible. It has a child node for debugging
+purposes.
+
+Acked-by: Krzysztof Kozlowski <krzysztof.kozlowski@linaro.org>
+Link: https://lore.kernel.org/all/20250507-add_qcs615_remoteproc_support-v2-2-52ac6cb43a39@quicinc.com/
+Signed-off-by: Lijuan Gao <quic_lijuang@quicinc.com>
+Upstream-Status: Submitted[https://lore.kernel.org/all/20250507-add_qcs615_remoteproc_support-v2-2-52ac6cb43a39@quicinc.com/]
+---
+ Documentation/devicetree/bindings/sram/qcom,imem.yaml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/sram/qcom,imem.yaml b/Documentation/devicetree/bindings/sram/qcom,imem.yaml
+index dfdbe6fc47f7..8e0937aece38 100644
+--- a/Documentation/devicetree/bindings/sram/qcom,imem.yaml
++++ b/Documentation/devicetree/bindings/sram/qcom,imem.yaml
+@@ -21,6 +21,7 @@ properties:
+           - qcom,msm8226-imem
+           - qcom,msm8974-imem
+           - qcom,qcs404-imem
++          - qcom,qcs615-imem
+           - qcom,qcs8300-imem
+           - qcom,qdu1000-imem
+           - qcom,sc7180-imem
+-- 
+2.34.1
+

@@ -1,0 +1,40 @@
+From 8987591b7c77e494f870fc171eb1fb24ef2f4776 Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Date: Mon, 8 Jul 2024 09:50:22 +0200
+Subject: [PATCH 28/39] UPSTREAM: net: phy: aquantia: wait for the GLOBAL_CFG
+ to start returning real values
+
+When the PHY is first coming up (or resuming from suspend), it's
+possible that although the FW status shows as running, we still see
+zeroes in the GLOBAL_CFG set of registers and cannot determine available
+modes. Since all models support 10M, add a poll and wait the config to
+become available.
+
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git 708405f3e56e3bee086f46a43398ee300c36a1d8]
+---
+ drivers/net/phy/aquantia/aquantia_main.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/net/phy/aquantia/aquantia_main.c b/drivers/net/phy/aquantia/aquantia_main.c
+index 974795bd0860..2c8ba2725a91 100644
+--- a/drivers/net/phy/aquantia/aquantia_main.c
++++ b/drivers/net/phy/aquantia/aquantia_main.c
+@@ -652,7 +652,13 @@ static int aqr107_fill_interface_modes(struct phy_device *phydev)
+ 	unsigned long *possible = phydev->possible_interfaces;
+ 	unsigned int serdes_mode, rate_adapt;
+ 	phy_interface_t interface;
+-	int i, val;
++	int i, val, ret;
++
++	ret = phy_read_mmd_poll_timeout(phydev, MDIO_MMD_VEND1,
++					VEND1_GLOBAL_CFG_10M, val, val != 0,
++					1000, 100000, false);
++	if (ret)
++		return ret;
+ 
+ 	/* Walk the media-speed configuration registers to determine which
+ 	 * host-side serdes modes may be used by the PHY depending on the
+-- 
+2.34.1
+

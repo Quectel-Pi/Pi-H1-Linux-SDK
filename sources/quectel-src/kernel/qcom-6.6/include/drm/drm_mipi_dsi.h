@@ -352,6 +352,16 @@ struct mipi_dsi_driver {
 	void (*shutdown)(struct mipi_dsi_device *dsi);
 };
 
+struct lcd_panel_info {
+    int width;
+    int height;
+    int detected;
+    int panel_id;           /* Panel type ID for touch configuration */
+    bool invert_x;          /* Invert X axis */
+    bool invert_y;          /* Invert Y axis */
+    bool swap_xy;           /* Swap X and Y */
+};     
+
 static inline struct mipi_dsi_driver *
 to_mipi_dsi_driver(struct device_driver *driver)
 {

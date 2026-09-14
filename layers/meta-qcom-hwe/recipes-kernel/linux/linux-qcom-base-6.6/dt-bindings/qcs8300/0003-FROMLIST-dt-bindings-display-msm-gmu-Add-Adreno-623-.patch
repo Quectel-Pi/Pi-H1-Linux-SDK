@@ -1,0 +1,32 @@
+From f301eed60d955da1c9e3e57849ec9ce3740b4ddb Mon Sep 17 00:00:00 2001
+From: Jie Zhang <quic_jiezh@quicinc.com>
+Date: Thu, 13 Feb 2025 21:40:08 +0530
+Subject: [PATCH 3/5] FROMLIST: dt-bindings: display/msm/gmu: Add Adreno 623
+ GMU
+
+Document Adreno 623 GMU in the dt-binding specification.
+
+Signed-off-by: Jie Zhang <quic_jiezh@quicinc.com>
+Signed-off-by: Akhil P Oommen <quic_akhilpo@quicinc.com>
+Patchwork: https://patchwork.freedesktop.org/patch/637043/
+Link: https://lore.kernel.org/lkml/20250213-a623-gpu-support-v1-3-993c65c39fd2@quicinc.com/
+Upstream-Status: Submitted [https://lore.kernel.org/lkml/20250213-a623-gpu-support-v1-3-993c65c39fd2@quicinc.com/]
+---
+ Documentation/devicetree/bindings/display/msm/gmu.yaml | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Documentation/devicetree/bindings/display/msm/gmu.yaml b/Documentation/devicetree/bindings/display/msm/gmu.yaml
+index f6c543b436fa..386221acc24d 100644
+--- a/Documentation/devicetree/bindings/display/msm/gmu.yaml
++++ b/Documentation/devicetree/bindings/display/msm/gmu.yaml
+@@ -117,6 +117,7 @@ allOf:
+         compatible:
+           contains:
+             enum:
++              - qcom,adreno-gmu-623.0
+               - qcom,adreno-gmu-635.0
+               - qcom,adreno-gmu-660.1
+               - qcom,adreno-gmu-663.0
+-- 
+2.34.1
+

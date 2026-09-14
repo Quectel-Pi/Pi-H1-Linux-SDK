@@ -31,8 +31,7 @@
 #define MDSP_DOMAIN_ID (1)
 #define SDSP_DOMAIN_ID (2)
 #define CDSP_DOMAIN_ID (3)
-#define CDSP1_DOMAIN_ID (4)
-#define FASTRPC_DEV_MAX		5 /* adsp, mdsp, slpi, cdsp, cdsp1*/
+#define GDSP_DOMAIN_ID (4)
 #define FASTRPC_MAX_SESSIONS	14
 #define FASTRPC_MAX_SPD		4
 #define FASTRPC_MAX_VMIDS	16
@@ -143,9 +142,6 @@ enum fastrpc_response_flags {
 	/* process updates poll memory instead of glink response */
 	POLL_MODE = 1,
 };
-
-static const char *domains[FASTRPC_DEV_MAX] = { "adsp", "mdsp",
-						"sdsp", "cdsp", "cdsp1"};
 
 struct fastrpc_invoke_v2 {
 	struct fastrpc_invoke inv;
@@ -1359,23 +1355,6 @@ static int fastrpc_get_spd_session(struct fastrpc_channel_ctx *cctx,
 	return session;
 }
 
-static int fastrpc_check_pd_status(struct fastrpc_user *fl,
-				char *servloc_name)
-{
-	int session = -1;
-
-	if (fl->servloc_name && servloc_name
-		&& !strcmp(fl->servloc_name, servloc_name)) {
-		session = fastrpc_get_spd_session(fl->cctx, servloc_name);
-		if (session < 0)
-			return -EUSERS;
-		if (atomic_read(&fl->cctx->spd[session].ispdup) == 0)
-			return -ENOTCONN;
-	}
-
-	return 0;
-}
-
 static void fastrpc_update_invoke_count(u32 handle, u64 *perf_counter,
 					struct timespec64 *invoket)
 {
@@ -1391,7 +1370,7 @@ static void fastrpc_update_invoke_count(u32 handle, u64 *perf_counter,
 
 	count = GET_COUNTER(perf_counter, PERF_COUNT);
 	if (count)
-		*count++;
+		(*count)++;
 }
 
 static int poll_for_remote_response(struct fastrpc_invoke_ctx *ctx, u64 timeout)
@@ -1506,17 +1485,6 @@ static int fastrpc_internal_invoke(struct fastrpc_user *fl,
 	if (IS_ERR(ctx))
 		return PTR_ERR(ctx);
 
-	if (fl->servloc_name) {
-		err = fastrpc_check_pd_status(fl,
-			AUDIO_PDR_SERVICE_LOCATION_CLIENT_NAME);
-		err |= fastrpc_check_pd_status(fl,
-			SENSORS_PDR_ADSP_SERVICE_LOCATION_CLIENT_NAME);
-		err |= fastrpc_check_pd_status(fl,
-			SENSORS_PDR_SLPI_SERVICE_LOCATION_CLIENT_NAME);
-		if (err)
-			goto bail;
-	}
-
 	PERF(ctx->perf_kernel, GET_COUNTER((u64 *)ctx->perf, PERF_GETARGS),
 	err = fastrpc_get_args(kernel, ctx);
 	PERF_END);
@@ -1598,7 +1566,7 @@ static bool is_session_rejected(struct fastrpc_user *fl, bool unsigned_pd_reques
 		 * that does not support unsigned PD offload
 		 */
 		if (!fl->cctx->unsigned_support || !unsigned_pd_request) {
-			dev_err(&fl->cctx->rpdev->dev, "Error: Untrusted application trying to offload to signed PD");
+			dev_err(&fl->cctx->rpdev->dev, "Error: Untrusted application trying to offload to signed PD\n");
 			return true;
 		}
 	}
@@ -2147,7 +2115,7 @@ static int fastrpc_copy_args(struct fastrpc_invoke *inv)
 			return -EFAULT;
 		}
 	}
-	inv->args = args;
+	inv->args = (u64)args;
 
 	return 0;
 }
@@ -2156,7 +2124,6 @@ static int fastrpc_invoke(struct fastrpc_user *fl, char __user *argp)
 {
 	struct fastrpc_invoke_v2 ioctl = {0};
 	struct fastrpc_invoke inv;
-	u32 nscalars;
 	int err;
 
 	if (copy_from_user(&inv, argp, sizeof(inv)))
@@ -2168,7 +2135,7 @@ static int fastrpc_invoke(struct fastrpc_user *fl, char __user *argp)
 
 	ioctl.inv = inv;
 	err = fastrpc_internal_invoke(fl, false, &ioctl);
-	kfree(inv.args);
+	kfree((void *)inv.args);
 
 	return err;
 }
@@ -2186,7 +2153,7 @@ static int fastrpc_invokev2(struct fastrpc_user *fl, char __user *argp)
 		return err;
 
 	err = fastrpc_internal_invoke(fl, false, &inv2);
-	kfree(inv2.inv.args);
+	kfree((void *)inv2.inv.args);
 
 	return err;
 }
@@ -2225,7 +2192,6 @@ static int fastrpc_get_info_from_kernel(struct fastrpc_ioctl_capability *cap,
 	uint32_t attribute_id = cap->attribute_id;
 	uint32_t *dsp_attributes;
 	unsigned long flags;
-	uint32_t domain = cap->domain;
 	int err;
 
 	spin_lock_irqsave(&cctx->lock, flags);
@@ -2243,7 +2209,7 @@ static int fastrpc_get_info_from_kernel(struct fastrpc_ioctl_capability *cap,
 	err = fastrpc_get_info_from_dsp(fl, dsp_attributes, FASTRPC_MAX_DSP_ATTRIBUTES);
 	if (err == DSP_UNSUPPORTED_API) {
 		dev_info(&cctx->rpdev->dev,
-			 "Warning: DSP capabilities not supported on domain: %d\n", domain);
+			 "Warning: DSP capabilities not supported\n");
 		kfree(dsp_attributes);
 		return -EOPNOTSUPP;
 	} else if (err) {
@@ -2271,17 +2237,6 @@ static int fastrpc_get_dsp_info(struct fastrpc_user *fl, char __user *argp)
 		return  -EFAULT;
 
 	cap.capability = 0;
-	if (cap.domain >= FASTRPC_DEV_MAX) {
-		dev_err(&fl->cctx->rpdev->dev, "Error: Invalid domain id:%d, err:%d\n",
-			cap.domain, err);
-		return -ECHRNG;
-	}
-
-	/* Fastrpc Capablities does not support modem domain */
-	if (cap.domain == MDSP_DOMAIN_ID) {
-		dev_err(&fl->cctx->rpdev->dev, "Error: modem not supported %d\n", err);
-		return -ECHRNG;
-	}
 
 	if (cap.attribute_id >= FASTRPC_MAX_DSP_ATTRIBUTES) {
 		dev_err(&fl->cctx->rpdev->dev, "Error: invalid attribute: %d, err: %d\n",
@@ -2516,10 +2471,13 @@ static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
 			spin_unlock(&fl->lock);
 		}
 
-		if (copy_to_user((void __user *)argp, &req, sizeof(req))) {
-			err = -EFAULT;
-			goto err_assign;
-		}
+		if (copy_to_user((void __user *)argp, &req, sizeof(req)))
+			/*
+			 * The usercopy failed, but buf is already mapped
+			 * in the DSP and accessible for the current process.
+			 * Rely on the process exit path to do required cleanup.
+			 */
+			return -EFAULT;
 	} else {
 		err = fastrpc_map_create(fl, req.fd, req.vaddrin, req.size,
 				0, &map, true);
@@ -2560,10 +2518,13 @@ static int fastrpc_req_mmap(struct fastrpc_user *fl, char __user *argp)
 		/* let the client know the address to use */
 		req.vaddrout = rsp_msg.vaddr;
 
-		if (copy_to_user((void __user *)argp, &req, sizeof(req))) {
-			err = -EFAULT;
-			goto err_assign;
-		}
+		if (copy_to_user((void __user *)argp, &req, sizeof(req)))
+			/*
+			 * The usercopy failed, but buf is already mapped
+			 * in the DSP and accessible for the current process.
+			 * Rely on the process exit path to do required cleanup.
+			 */
+			return -EFAULT;
 	}
 	return 0;
 
@@ -2642,7 +2603,6 @@ static int fastrpc_req_mem_map(struct fastrpc_user *fl, char __user *argp)
 	struct fastrpc_invoke_v2 ioctl = {0};
 	struct fastrpc_mem_map_req_msg req_msg = { 0 };
 	struct fastrpc_mmap_rsp_msg rsp_msg = { 0 };
-	struct fastrpc_mem_unmap req_unmap = { 0 };
 	struct fastrpc_phy_page pages = { 0 };
 	struct fastrpc_mem_map req;
 	struct device *dev = fl->sctx->dev;
@@ -2700,13 +2660,13 @@ static int fastrpc_req_mem_map(struct fastrpc_user *fl, char __user *argp)
 	/* let the client know the address to use */
 	req.vaddrout = rsp_msg.vaddr;
 
-	if (copy_to_user((void __user *)argp, &req, sizeof(req))) {
-		/* unmap the memory and release the buffer */
-		req_unmap.vaddr = (uintptr_t) rsp_msg.vaddr;
-		req_unmap.length = map->len;
-		fastrpc_req_mem_unmap_impl(fl, &req_unmap);
+	if (copy_to_user((void __user *)argp, &req, sizeof(req)))
+		/*
+		 * The usercopy failed, but map is already mapped
+		 * in the DSP and accessible for the current process.
+		 * Rely on the process exit path to do required cleanup.
+		 */
 		return -EFAULT;
-	}
 
 	return 0;
 
@@ -2750,7 +2710,9 @@ static long fastrpc_device_ioctl(struct file *file, unsigned int cmd,
 		err = fastrpc_req_mmap(fl, argp);
 		break;
 	case FASTRPC_IOCTL_MUNMAP:
+		mutex_lock(&fl->mutex);
 		err = fastrpc_req_munmap(fl, argp);
+		mutex_unlock(&fl->mutex);
 		break;
 	case FASTRPC_IOCTL_MEM_MAP:
 		err = fastrpc_req_mem_map(fl, argp);
@@ -2808,10 +2770,10 @@ static void fastrpc_pdr_cb(int state, char *service_path, void *priv)
 	switch (state) {
 	case SERVREG_SERVICE_STATE_DOWN:
 		dev_info(&spd->cctx->rpdev->dev,
-			"%s: %s (%s) is down for PDR on %s\n",
+			"%s: %s (%s) is down for PDR on %d\n",
 			__func__, spd->spdname,
 			spd->servloc_name,
-			domains[spd->domain]);
+			spd->domain);
 		spin_lock_irqsave(&spd->cctx->lock, flags);
 		spd->pdrcount++;
 		atomic_set(&spd->ispdup, 0);
@@ -2824,10 +2786,10 @@ static void fastrpc_pdr_cb(int state, char *service_path, void *priv)
 		break;
 	case SERVREG_SERVICE_STATE_UP:
 		dev_info(&spd->cctx->rpdev->dev,
-			"%s: %s (%s) is up for PDR on %s\n",
+			"%s: %s (%s) is up for PDR on %d\n",
 			__func__, spd->spdname,
 			spd->servloc_name,
-			domains[spd->domain]);
+			spd->domain);
 		atomic_set(&spd->ispdup, 1);
 		break;
 	default:
@@ -2963,6 +2925,22 @@ static int fastrpc_device_register(struct device *dev, struct fastrpc_channel_ct
 	return err;
 }
 
+static int fastrpc_get_domain_id(const char *domain)
+{
+	if (!strncmp(domain, "adsp", 4))
+		return ADSP_DOMAIN_ID;
+	else if (!strncmp(domain, "cdsp", 4))
+		return CDSP_DOMAIN_ID;
+	else if (!strncmp(domain, "mdsp", 4))
+		return MDSP_DOMAIN_ID;
+	else if (!strncmp(domain, "sdsp", 4))
+		return SDSP_DOMAIN_ID;
+	else if (!strncmp(domain, "gdsp", 4))
+		return GDSP_DOMAIN_ID;
+
+	return -EINVAL;
+}
+
 static int fastrpc_setup_service_locator(struct fastrpc_channel_ctx *cctx, char *client_name,
 			char *service_name, char *service_path, int domain, int spd_session)
 {
@@ -3012,15 +2990,10 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 		return err;
 	}
 
-	for (i = 0; i < FASTRPC_DEV_MAX; i++) {
-		if (!strcmp(domains[i], domain)) {
-			domain_id = i;
-			break;
-		}
-	}
+	domain_id = fastrpc_get_domain_id(domain);
 
 	if (domain_id < 0) {
-		dev_info(rdev, "FastRPC Invalid Domain ID %d\n", domain_id);
+		dev_info(rdev, "FastRPC Domain %s not supported\n", domain);
 		return -EINVAL;
 	}
 
@@ -3053,23 +3026,23 @@ static int fastrpc_rpmsg_probe(struct rpmsg_device *rpdev)
 	case ADSP_DOMAIN_ID:
 	case MDSP_DOMAIN_ID:
 	case SDSP_DOMAIN_ID:
-		/* Unsigned PD offloading is only supported on CDSP and CDSP1*/
+		/* Unsigned PD offloading is only supported on CDSP and GDSP*/
 		data->unsigned_support = false;
-		err = fastrpc_device_register(rdev, data, secure_dsp, domains[domain_id]);
+		err = fastrpc_device_register(rdev, data, secure_dsp, domain);
 		if (err)
 			goto fdev_error;
 		break;
 	case CDSP_DOMAIN_ID:
-	case CDSP1_DOMAIN_ID:
+	case GDSP_DOMAIN_ID:
 		data->unsigned_support = true;
 		/* Create both device nodes so that we can allow both Signed and Unsigned PD */
-		err = fastrpc_device_register(rdev, data, true, domains[domain_id]);
+		err = fastrpc_device_register(rdev, data, true, domain);
 		if (err)
 			goto fdev_error;
 
-		err = fastrpc_device_register(rdev, data, false, domains[domain_id]);
+		err = fastrpc_device_register(rdev, data, false, domain);
 		if (err)
-			goto fdev_error;
+			goto populate_error;
 		break;
 	default:
 		err = -EINVAL;
@@ -3173,16 +3146,17 @@ static int fastrpc_rpmsg_callback(struct rpmsg_device *rpdev, void *data,
 
 	spin_lock_irqsave(&cctx->lock, flags);
 	ctx = idr_find(&cctx->ctx_idr, ctxid);
-	spin_unlock_irqrestore(&cctx->lock, flags);
 
 	if (!ctx) {
 		dev_dbg(&rpdev->dev, "No context ID matches response\n");
+		spin_unlock_irqrestore(&cctx->lock, flags);
 		return 0;
 	}
 
 	ctx->retval = rsp->retval;
 	ctx->is_work_done = true;
 	complete(&ctx->work);
+	spin_unlock_irqrestore(&cctx->lock, flags);
 
 	return 0;
 }

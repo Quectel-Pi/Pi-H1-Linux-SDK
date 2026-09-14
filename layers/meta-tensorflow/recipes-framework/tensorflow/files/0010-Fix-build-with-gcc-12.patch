@@ -1,0 +1,32 @@
+From e750973d0c3c9e11f4e11fb1b04875a8e052de84 Mon Sep 17 00:00:00 2001
+From: Hongxu Jia <hongxu.jia@windriver.com>
+Date: Fri, 28 Jun 2024 11:27:15 +0800
+Subject: [PATCH] Fix build with gcc-12
+
+```
+external/net_zstd/compress/zstd_lazy.c:603:30: error: inlining failed in call to 'always_inline' 'ZSTD_HcFindBestMatch_extDict_selectMLS': function not considered for inlining
+  603 | FORCE_INLINE_TEMPLATE size_t ZSTD_HcFindBestMatch_extDict_selectMLS (
+      |                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+```
+
+Upstream-Status: Pending
+
+Signed-off-by: Hongxu Jia <hongxu.jia@windriver.com>
+---
+ third_party/net_zstd.BUILD | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/third_party/net_zstd.BUILD b/third_party/net_zstd.BUILD
+index 4bd4c2960e1..45e73ec3831 100644
+--- a/third_party/net_zstd.BUILD
++++ b/third_party/net_zstd.BUILD
+@@ -16,4 +16,9 @@ cc_library(
+         "decompress/*.h",
+     ]),
+     hdrs = ["zstd.h"],
++    copts = select({
++        "//conditions:default": [
++            "-DZSTD_NO_INLINE",
++        ],
++    }),
+ )

@@ -15,19 +15,19 @@ Upstream-Status: Backport
  1 file changed, 2 insertions(+), 1 deletion(-)
 
 diff --git a/src/device.c b/src/device.c
-index 90626204a..097b1fbba 100644
+index 17bcfbc49..dedb70145 100644
 --- a/src/device.c
 +++ b/src/device.c
-@@ -6037,7 +6037,8 @@ void device_bonding_complete(struct btd_device *device, uint8_t bdaddr_type,
+@@ -6348,7 +6348,8 @@ void device_bonding_complete(struct btd_device *device, uint8_t bdaddr_type,
  		/* Put the device back to the temporary state so that it will be
  		 * treated as a newly discovered device.
  		 */
 -		if (!device_is_paired(device, bdaddr_type) &&
 +		if (!btd_device_bearer_is_connected(device) &&
 +				!device_is_paired(device, bdaddr_type) &&
- 				!device_is_trusted(device))
+ 				!btd_device_is_trusted(device))
  			btd_device_set_temporary(device, true);
  
 -- 
-2.25.1
+2.34.1
 

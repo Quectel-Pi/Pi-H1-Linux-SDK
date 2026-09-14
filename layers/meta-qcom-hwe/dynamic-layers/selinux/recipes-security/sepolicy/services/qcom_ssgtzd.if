@@ -46,3 +46,19 @@ interface(`qcom_allow_ssgtzd_sock_write',`
 	allow $1 qcom_ssgtzd_sock_t:sock_file write_sock_file_perms;
 ')
 
+#############################
+## <summary>
+##    Allow domain to connect to ssgtzd socket
+## </summary>
+## <param name="domain">
+##  <summary>
+##    Domain allowed access
+##  </summary>
+## </param>
+
+interface(`qcom_ssgtzd_socket_connect',`
+       gen_require(`
+               type qcom_ssgtzd_t;
+       ')
+       allow $1 qcom_ssgtzd_t:unix_stream_socket connectto;
+')

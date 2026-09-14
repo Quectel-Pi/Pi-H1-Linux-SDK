@@ -6,13 +6,11 @@ inherit module deploy
 
 SRCPROJECT = "git://git.codelinaro.org/clo/le/platform/vendor/qcom/opensource/graphics-devicetree.git;protocol=https"
 SRCBRANCH  = "gfx-kernel.le.0.0.r1-rel"
-SRCREV     = "c2771103aba00fd105dc847cc9cb6446ace38b72"
+SRCREV     = "037412f76f895c55ee0b57f27fc3cd651a4a7aa6"
 
 SRC_URI =  "${SRCPROJECT};branch=${SRCBRANCH};destsuffix=graphics-devicetree"
 
 S = "${WORKDIR}/graphics-devicetree"
-
-PROVIDES += "graphicsdevicetree"
 
 DTC := "${KBUILD_OUTPUT}/scripts/dtc/dtc"
 GRAPHICS_INCLUDE := "${WORKSPACE}/graphics-kernel/"
@@ -24,12 +22,14 @@ do_install() {
 }
 
 do_compile() {
+    oe_runmake ${EXTRA_OEMAKE} qcs615-graphics
     oe_runmake ${EXTRA_OEMAKE} qcs5430-graphics
     oe_runmake ${EXTRA_OEMAKE} qcs5430-fp2p5-graphics
     oe_runmake ${EXTRA_OEMAKE} qcm6490-graphics
     oe_runmake ${EXTRA_OEMAKE} qcs8300-graphics
     oe_runmake ${EXTRA_OEMAKE} qcs8550-graphics
     oe_runmake ${EXTRA_OEMAKE} qcs9100-graphics
+    oe_runmake ${EXTRA_OEMAKE} qcs9100-graphics-el2
 }
 
 do_deploy() {

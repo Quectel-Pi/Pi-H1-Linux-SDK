@@ -2,6 +2,7 @@
 /* Copyright (c) 2010-2015, 2018-2019 The Linux Foundation. All rights reserved.
  * Copyright (C) 2015 Linaro Ltd.
  * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
  */
 #ifndef __QCOM_SCM_H
 #define __QCOM_SCM_H
@@ -100,6 +101,7 @@ static inline void qcom_scm_populate_mem_map_info(
 }
 
 extern bool qcom_scm_is_available(void);
+extern bool qcom_scm_is_dump_enabled(void);
 
 extern int qcom_scm_set_cold_boot_addr(void *entry);
 extern int qcom_scm_set_warm_boot_addr(void *entry);
@@ -108,25 +110,46 @@ extern int qcom_scm_set_remote_state(u32 state, u32 id);
 
 struct qcom_scm_pas_metadata {
 	void *ptr;
-	dma_addr_t phys;
+	union {
+		dma_addr_t dma_addr;
+		phys_addr_t phys_addr;
+	} addr;
 	ssize_t size;
 };
 
-extern int qcom_scm_pas_init_image(u32 peripheral, const void *metadata,
+struct qcom_scm_pas_context {
+	struct device *dev;
+	u32 pas_id;
+	phys_addr_t mem_phys;
+	size_t mem_size;
+	struct qcom_scm_pas_metadata *metadata;
+	bool has_iommu;
+};
+
+void *qcom_scm_pas_context_init(struct device *dev, u32 pas_id, phys_addr_t mem_phys,
+				size_t mem_size);
+extern int qcom_scm_pas_init_image(u32 pas_id, const void *metadata,
 				   size_t size,
-				   struct qcom_scm_pas_metadata *ctx);
-extern void qcom_scm_pas_metadata_release(struct qcom_scm_pas_metadata *ctx);
-extern int qcom_scm_pas_mem_setup(u32 peripheral, phys_addr_t addr,
+				   struct qcom_scm_pas_context *ctx);
+extern void qcom_scm_pas_metadata_release(struct qcom_scm_pas_context *ctx);
+extern int qcom_scm_pas_mem_setup(u32 pas_id, phys_addr_t addr,
 				  phys_addr_t size);
-extern int qcom_scm_pas_auth_and_reset(u32 peripheral);
-extern int qcom_scm_pas_shutdown(u32 peripheral);
-extern bool qcom_scm_pas_supported(u32 peripheral);
+extern int qcom_scm_pas_auth_and_reset(u32 pas_id);
+extern int qcom_scm_pas_shutdown(u32 pas_id);
+extern bool qcom_scm_pas_supported(u32 pas_id);
+int qcom_scm_pas_get_rsc_table(struct qcom_scm_pas_context *ctx, void *input_rt,
+			       size_t input_rt_size, void **output_rt,
+			       size_t *output_rt_size);
+
+int qcom_scm_pas_prepare_and_auth_reset(struct qcom_scm_pas_context *ctx);
 
 extern int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val);
 extern int qcom_scm_io_writel(phys_addr_t addr, unsigned int val);
 
 extern bool qcom_scm_restore_sec_cfg_available(void);
 extern int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare);
+int qcom_scm_set_gpu_smmu_aperture(unsigned int context_bank);
+bool qcom_scm_set_gpu_smmu_aperture_is_available(void);
 extern int qcom_scm_iommu_secure_ptbl_size(u32 spare, size_t *size);
 extern int qcom_scm_iommu_secure_ptbl_init(u64 addr, u32 size, u32 spare);
 extern int qcom_scm_iommu_set_cp_pool_size(u32 spare, u32 size);
@@ -172,5 +195,11 @@ extern int qcom_scm_lmh_dcvsh(u32 payload_fn, u32 payload_reg, u32 payload_val,
 			      u64 limit_node, u32 node_id, u64 version);
 extern int qcom_scm_lmh_profile_change(u32 profile_id);
 extern bool qcom_scm_lmh_dcvsh_available(void);
+
+int qcom_scm_shm_bridge_enable(void);
+int qcom_scm_shm_bridge_create(struct device *dev, u64 pfn_and_ns_perm_flags,
+			       u64 ipfn_and_s_perm_flags, u64 size_and_flags,
+			       u64 ns_vmids, u64 *handle);
+int qcom_scm_shm_bridge_delete(struct device *dev, u64 handle);
 
 #endif

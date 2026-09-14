@@ -27,11 +27,10 @@ do_compile:prepend() {
 }
 
 RDEPENDS:${PN} += "\
-    ${PYTHON_PN}-six \
+    python3-six \
 "
 # http://errors.yoctoproject.org/Errors/Details/184713/
 # python-native/python: can't open file 'setup.py': [Errno 2] No such file or directory
 CLEANBROKEN = "1"
 
 inherit setuptools3
-PIP_INSTALL_PACKAGE = "slip"

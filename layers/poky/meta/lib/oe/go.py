@@ -29,4 +29,6 @@ def map_arch(a):
         return 'ppc64'
     elif a == 'riscv64':
         return 'riscv64'
+    elif a == 'loongarch64':
+        return 'loong64'
     return ''

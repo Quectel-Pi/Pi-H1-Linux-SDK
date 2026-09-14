@@ -18,7 +18,11 @@ import os
 import re
 import sys
 import subprocess
+import json
+import urllib.request
 from recipetool.create import RecipeHandler
+from urllib.parse import urldefrag
+from recipetool.create import determine_from_url
 
 logger = logging.getLogger('recipetool')
 
@@ -37,63 +41,8 @@ class PythonRecipeHandler(RecipeHandler):
     assume_provided = ['builtins', 'os.path']
     # Assumes that the host python3 builtin_module_names is sane for target too
     assume_provided = assume_provided + list(sys.builtin_module_names)
+    excluded_fields = []
 
-    bbvar_map = {
-        'Name': 'PN',
-        'Version': 'PV',
-        'Home-page': 'HOMEPAGE',
-        'Summary': 'SUMMARY',
-        'Description': 'DESCRIPTION',
-        'License': 'LICENSE',
-        'Requires': 'RDEPENDS:${PN}',
-        'Provides': 'RPROVIDES:${PN}',
-        'Obsoletes': 'RREPLACES:${PN}',
-    }
-    # PN/PV are already set by recipetool core & desc can be extremely long
-    excluded_fields = [
-        'Description',
-    ]
-    setup_parse_map = {
-        'Url': 'Home-page',
-        'Classifiers': 'Classifier',
-        'Description': 'Summary',
-    }
-    setuparg_map = {
-        'Home-page': 'url',
-        'Classifier': 'classifiers',
-        'Summary': 'description',
-        'Description': 'long-description',
-    }
-    # Values which are lists, used by the setup.py argument based metadata
-    # extraction method, to determine how to process the setup.py output.
-    setuparg_list_fields = [
-        'Classifier',
-        'Requires',
-        'Provides',
-        'Obsoletes',
-        'Platform',
-        'Supported-Platform',
-    ]
-    setuparg_multi_line_values = ['Description']
-    replacements = [
-        ('License', r' +$', ''),
-        ('License', r'^ +', ''),
-        ('License', r' ', '-'),
-        ('License', r'^GNU-', ''),
-        ('License', r'-[Ll]icen[cs]e(,?-[Vv]ersion)?', ''),
-        ('License', r'^UNKNOWN$', ''),
-
-        # Remove currently unhandled version numbers from these variables
-        ('Requires', r' *\([^)]*\)', ''),
-        ('Provides', r' *\([^)]*\)', ''),
-        ('Obsoletes', r' *\([^)]*\)', ''),
-        ('Install-requires', r'^([^><= ]+).*', r'\1'),
-        ('Extras-require', r'^([^><= ]+).*', r'\1'),
-        ('Tests-require', r'^([^><= ]+).*', r'\1'),
-
-        # Remove unhandled dependency on particular features (e.g. foo[PDF])
-        ('Install-requires', r'\[[^\]]+\]$', ''),
-    ]
 
     classifier_license_map = {
         'License :: OSI Approved :: Academic Free License (AFL)': 'AFL',
@@ -166,9 +115,465 @@ class PythonRecipeHandler(RecipeHandler):
     def __init__(self):
         pass
 
+    def process_url(self, args, classes, handled, extravalues):
+        """
+        Convert any pypi url https://pypi.org/project/<package>/<version> into https://files.pythonhosted.org/packages/source/...
+        which corresponds to the archive location, and add pypi class
+        """
+
+        if 'url' in handled:
+            return None
+
+        fetch_uri = None
+        source = args.source
+        required_version = args.version if args.version else None
+        match = re.match(r'https?://pypi.org/project/([^/]+)(?:/([^/]+))?/?$', urldefrag(source)[0])
+        if match:
+            package = match.group(1)
+            version = match.group(2) if match.group(2) else required_version
+
+            json_url = f"https://pypi.org/pypi/%s/json" % package
+            response = urllib.request.urlopen(json_url)
+            if response.status == 200:
+                data = json.loads(response.read())
+                if not version:
+                    # grab latest version
+                    version = data["info"]["version"]
+                pypi_package = data["info"]["name"]
+                for release in reversed(data["releases"][version]):
+                    if release["packagetype"] == "sdist":
+                        fetch_uri = release["url"]
+                        break
+            else:
+                logger.warning("Cannot handle pypi url %s: cannot fetch package information using %s", source, json_url)
+                return None
+        else:
+            match = re.match(r'^https?://files.pythonhosted.org/packages.*/(.*)-.*$', source)
+            if match:
+                fetch_uri = source
+                pypi_package = match.group(1)
+                _, version = determine_from_url(fetch_uri)
+
+        if match and not args.no_pypi:
+            if required_version and version != required_version:
+                raise Exception("Version specified using --version/-V (%s) and version specified in the url (%s) do not match" % (required_version, version))
+            # This is optionnal if BPN looks like "python-<pypi_package>" or "python3-<pypi_package>" (see pypi.bbclass)
+            # but at this point we cannot know because because user can specify the output name of the recipe on the command line
+            extravalues["PYPI_PACKAGE"] = pypi_package
+            # If the tarball extension is not 'tar.gz' (default value in pypi.bblcass) whe should set PYPI_PACKAGE_EXT in the recipe
+            pypi_package_ext = re.match(r'.*%s-%s\.(.*)$' % (pypi_package, version), fetch_uri)
+            if pypi_package_ext:
+                pypi_package_ext = pypi_package_ext.group(1)
+                if pypi_package_ext != "tar.gz":
+                    extravalues["PYPI_PACKAGE_EXT"] = pypi_package_ext
+
+            # Pypi class will handle S and SRC_URI variables, so remove them
+            # TODO: allow oe.recipeutils.patch_recipe_lines() to accept regexp so we can simplify the following to:
+            # extravalues['SRC_URI(?:\[.*?\])?'] = None
+            extravalues['S'] = None
+            extravalues['SRC_URI'] = None
+
+            classes.append('pypi')
+
+        handled.append('url')
+        return fetch_uri
+
+    def handle_classifier_license(self, classifiers, existing_licenses=""):
+
+        licenses = []
+        for classifier in classifiers:
+            if classifier in self.classifier_license_map:
+                license = self.classifier_license_map[classifier]
+                if license == 'Apache' and 'Apache-2.0' in existing_licenses:
+                    license = 'Apache-2.0'
+                elif license == 'GPL':
+                    if 'GPL-2.0' in existing_licenses or 'GPLv2' in existing_licenses:
+                        license = 'GPL-2.0'
+                    elif 'GPL-3.0' in existing_licenses or 'GPLv3' in existing_licenses:
+                        license = 'GPL-3.0'
+                elif license == 'LGPL':
+                    if 'LGPL-2.1' in existing_licenses or 'LGPLv2.1' in existing_licenses:
+                        license = 'LGPL-2.1'
+                    elif 'LGPL-2.0' in existing_licenses or 'LGPLv2' in existing_licenses:
+                        license = 'LGPL-2.0'
+                    elif 'LGPL-3.0' in existing_licenses or 'LGPLv3' in existing_licenses:
+                        license = 'LGPL-3.0'
+                licenses.append(license)
+
+        if licenses:
+            return ' & '.join(licenses)
+
+        return None
+
+    def map_info_to_bbvar(self, info, extravalues):
+
+        # Map PKG-INFO & setup.py fields to bitbake variables
+        for field, values in info.items():
+            if field in self.excluded_fields:
+                continue
+
+            if field not in self.bbvar_map:
+                continue
+
+            if isinstance(values, str):
+                value = values
+            else:
+                value = ' '.join(str(v) for v in values if v)
+
+            bbvar = self.bbvar_map[field]
+            if bbvar == "PN":
+                # by convention python recipes start with "python3-"
+                if not value.startswith('python'):
+                    value = 'python3-' + value
+
+            if bbvar not in extravalues and value:
+                extravalues[bbvar] = value
+
+    def apply_info_replacements(self, info):
+        if not self.replacements:
+            return
+
+        for variable, search, replace in self.replacements:
+            if variable not in info:
+                continue
+
+            def replace_value(search, replace, value):
+                if replace is None:
+                    if re.search(search, value):
+                        return None
+                else:
+                    new_value = re.sub(search, replace, value)
+                    if value != new_value:
+                        return new_value
+                return value
+
+            value = info[variable]
+            if isinstance(value, str):
+                new_value = replace_value(search, replace, value)
+                if new_value is None:
+                    del info[variable]
+                elif new_value != value:
+                    info[variable] = new_value
+            elif hasattr(value, 'items'):
+                for dkey, dvalue in list(value.items()):
+                    new_list = []
+                    for pos, a_value in enumerate(dvalue):
+                        new_value = replace_value(search, replace, a_value)
+                        if new_value is not None and new_value != value:
+                            new_list.append(new_value)
+
+                    if value != new_list:
+                        value[dkey] = new_list
+            else:
+                new_list = []
+                for pos, a_value in enumerate(value):
+                    new_value = replace_value(search, replace, a_value)
+                    if new_value is not None and new_value != value:
+                        new_list.append(new_value)
+
+                if value != new_list:
+                    info[variable] = new_list
+
+
+    def scan_python_dependencies(self, paths):
+        deps = set()
+        try:
+            dep_output = self.run_command(['pythondeps', '-d'] + paths)
+        except (OSError, subprocess.CalledProcessError):
+            pass
+        else:
+            for line in dep_output.splitlines():
+                line = line.rstrip()
+                dep, filename = line.split('\t', 1)
+                if filename.endswith('/setup.py'):
+                    continue
+                deps.add(dep)
+
+        try:
+            provides_output = self.run_command(['pythondeps', '-p'] + paths)
+        except (OSError, subprocess.CalledProcessError):
+            pass
+        else:
+            provides_lines = (l.rstrip() for l in provides_output.splitlines())
+            provides = set(l for l in provides_lines if l and l != 'setup')
+            deps -= provides
+
+        return deps
+
+    def parse_pkgdata_for_python_packages(self):
+        pkgdata_dir = tinfoil.config_data.getVar('PKGDATA_DIR')
+
+        ldata = tinfoil.config_data.createCopy()
+        bb.parse.handle('classes-recipe/python3-dir.bbclass', ldata, True)
+        python_sitedir = ldata.getVar('PYTHON_SITEPACKAGES_DIR')
+
+        dynload_dir = os.path.join(os.path.dirname(python_sitedir), 'lib-dynload')
+        python_dirs = [python_sitedir + os.sep,
+                       os.path.join(os.path.dirname(python_sitedir), 'dist-packages') + os.sep,
+                       os.path.dirname(python_sitedir) + os.sep]
+        packages = {}
+        for pkgdatafile in glob.glob('{}/runtime/*'.format(pkgdata_dir)):
+            files_info = None
+            with open(pkgdatafile, 'r') as f:
+                for line in f.readlines():
+                    field, value = line.split(': ', 1)
+                    if field.startswith('FILES_INFO'):
+                        files_info = ast.literal_eval(value)
+                        break
+                else:
+                    continue
+
+            for fn in files_info:
+                for suffix in importlib.machinery.all_suffixes():
+                    if fn.endswith(suffix):
+                        break
+                else:
+                    continue
+
+                if fn.startswith(dynload_dir + os.sep):
+                    if '/.debug/' in fn:
+                        continue
+                    base = os.path.basename(fn)
+                    provided = base.split('.', 1)[0]
+                    packages[provided] = os.path.basename(pkgdatafile)
+                    continue
+
+                for python_dir in python_dirs:
+                    if fn.startswith(python_dir):
+                        relpath = fn[len(python_dir):]
+                        relstart, _, relremaining = relpath.partition(os.sep)
+                        if relstart.endswith('.egg'):
+                            relpath = relremaining
+                        base, _ = os.path.splitext(relpath)
+
+                        if '/.debug/' in base:
+                            continue
+                        if os.path.basename(base) == '__init__':
+                            base = os.path.dirname(base)
+                        base = base.replace(os.sep + os.sep, os.sep)
+                        provided = base.replace(os.sep, '.')
+                        packages[provided] = os.path.basename(pkgdatafile)
+        return packages
+
+    @classmethod
+    def run_command(cls, cmd, **popenargs):
+        if 'stderr' not in popenargs:
+            popenargs['stderr'] = subprocess.STDOUT
+        try:
+            return subprocess.check_output(cmd, **popenargs).decode('utf-8')
+        except OSError as exc:
+            logger.error('Unable to run `{}`: {}', ' '.join(cmd), exc)
+            raise
+        except subprocess.CalledProcessError as exc:
+            logger.error('Unable to run `{}`: {}', ' '.join(cmd), exc.output)
+            raise
+
+class PythonSetupPyRecipeHandler(PythonRecipeHandler):
+    bbvar_map = {
+        'Name': 'PN',
+        'Version': 'PV',
+        'Home-page': 'HOMEPAGE',
+        'Summary': 'SUMMARY',
+        'Description': 'DESCRIPTION',
+        'License': 'LICENSE',
+        'Requires': 'RDEPENDS:${PN}',
+        'Provides': 'RPROVIDES:${PN}',
+        'Obsoletes': 'RREPLACES:${PN}',
+    }
+    # PN/PV are already set by recipetool core & desc can be extremely long
+    excluded_fields = [
+        'Description',
+    ]
+    setup_parse_map = {
+        'Url': 'Home-page',
+        'Classifiers': 'Classifier',
+        'Description': 'Summary',
+    }
+    setuparg_map = {
+        'Home-page': 'url',
+        'Classifier': 'classifiers',
+        'Summary': 'description',
+        'Description': 'long-description',
+    }
+    # Values which are lists, used by the setup.py argument based metadata
+    # extraction method, to determine how to process the setup.py output.
+    setuparg_list_fields = [
+        'Classifier',
+        'Requires',
+        'Provides',
+        'Obsoletes',
+        'Platform',
+        'Supported-Platform',
+    ]
+    setuparg_multi_line_values = ['Description']
+
+    replacements = [
+        ('License', r' +$', ''),
+        ('License', r'^ +', ''),
+        ('License', r' ', '-'),
+        ('License', r'^GNU-', ''),
+        ('License', r'-[Ll]icen[cs]e(,?-[Vv]ersion)?', ''),
+        ('License', r'^UNKNOWN$', ''),
+
+        # Remove currently unhandled version numbers from these variables
+        ('Requires', r' *\([^)]*\)', ''),
+        ('Provides', r' *\([^)]*\)', ''),
+        ('Obsoletes', r' *\([^)]*\)', ''),
+        ('Install-requires', r'^([^><= ]+).*', r'\1'),
+        ('Extras-require', r'^([^><= ]+).*', r'\1'),
+        ('Tests-require', r'^([^><= ]+).*', r'\1'),
+
+        # Remove unhandled dependency on particular features (e.g. foo[PDF])
+        ('Install-requires', r'\[[^\]]+\]$', ''),
+    ]
+
+    def __init__(self):
+        pass
+
+    def parse_setup_py(self, setupscript='./setup.py'):
+        with codecs.open(setupscript) as f:
+            info, imported_modules, non_literals, extensions = gather_setup_info(f)
+
+        def _map(key):
+            key = key.replace('_', '-')
+            key = key[0].upper() + key[1:]
+            if key in self.setup_parse_map:
+                key = self.setup_parse_map[key]
+            return key
+
+        # Naive mapping of setup() arguments to PKG-INFO field names
+        for d in [info, non_literals]:
+            for key, value in list(d.items()):
+                if key is None:
+                    continue
+                new_key = _map(key)
+                if new_key != key:
+                    del d[key]
+                    d[new_key] = value
+
+        return info, 'setuptools' in imported_modules, non_literals, extensions
+
+    def get_setup_args_info(self, setupscript='./setup.py'):
+        cmd = ['python3', setupscript]
+        info = {}
+        keys = set(self.bbvar_map.keys())
+        keys |= set(self.setuparg_list_fields)
+        keys |= set(self.setuparg_multi_line_values)
+        grouped_keys = itertools.groupby(keys, lambda k: (k in self.setuparg_list_fields, k in self.setuparg_multi_line_values))
+        for index, keys in grouped_keys:
+            if index == (True, False):
+                # Splitlines output for each arg as a list value
+                for key in keys:
+                    arg = self.setuparg_map.get(key, key.lower())
+                    try:
+                        arg_info = self.run_command(cmd + ['--' + arg], cwd=os.path.dirname(setupscript))
+                    except (OSError, subprocess.CalledProcessError):
+                        pass
+                    else:
+                        info[key] = [l.rstrip() for l in arg_info.splitlines()]
+            elif index == (False, True):
+                # Entire output for each arg
+                for key in keys:
+                    arg = self.setuparg_map.get(key, key.lower())
+                    try:
+                        arg_info = self.run_command(cmd + ['--' + arg], cwd=os.path.dirname(setupscript))
+                    except (OSError, subprocess.CalledProcessError):
+                        pass
+                    else:
+                        info[key] = arg_info
+            else:
+                info.update(self.get_setup_byline(list(keys), setupscript))
+        return info
+
+    def get_setup_byline(self, fields, setupscript='./setup.py'):
+        info = {}
+
+        cmd = ['python3', setupscript]
+        cmd.extend('--' + self.setuparg_map.get(f, f.lower()) for f in fields)
+        try:
+            info_lines = self.run_command(cmd, cwd=os.path.dirname(setupscript)).splitlines()
+        except (OSError, subprocess.CalledProcessError):
+            pass
+        else:
+            if len(fields) != len(info_lines):
+                logger.error('Mismatch between setup.py output lines and number of fields')
+                sys.exit(1)
+
+            for lineno, line in enumerate(info_lines):
+                line = line.rstrip()
+                info[fields[lineno]] = line
+        return info
+
+    def get_pkginfo(self, pkginfo_fn):
+        msg = email.message_from_file(open(pkginfo_fn, 'r'))
+        msginfo = {}
+        for field in msg.keys():
+            values = msg.get_all(field)
+            if len(values) == 1:
+                msginfo[field] = values[0]
+            else:
+                msginfo[field] = values
+        return msginfo
+
+    def scan_setup_python_deps(self, srctree, setup_info, setup_non_literals):
+        if 'Package-dir' in setup_info:
+            package_dir = setup_info['Package-dir']
+        else:
+            package_dir = {}
+
+        dist = setuptools.Distribution()
+
+        class PackageDir(setuptools.command.build_py.build_py):
+            def __init__(self, package_dir):
+                self.package_dir = package_dir
+                self.dist = dist
+                super().__init__(self.dist)
+
+        pd = PackageDir(package_dir)
+        to_scan = []
+        if not any(v in setup_non_literals for v in ['Py-modules', 'Scripts', 'Packages']):
+            if 'Py-modules' in setup_info:
+                for module in setup_info['Py-modules']:
+                    try:
+                        package, module = module.rsplit('.', 1)
+                    except ValueError:
+                        package, module = '.', module
+                    module_path = os.path.join(pd.get_package_dir(package), module + '.py')
+                    to_scan.append(module_path)
+
+            if 'Packages' in setup_info:
+                for package in setup_info['Packages']:
+                    to_scan.append(pd.get_package_dir(package))
+
+            if 'Scripts' in setup_info:
+                to_scan.extend(setup_info['Scripts'])
+        else:
+            logger.info("Scanning the entire source tree, as one or more of the following setup keywords are non-literal: py_modules, scripts, packages.")
+
+        if not to_scan:
+            to_scan = ['.']
+
+        logger.info("Scanning paths for packages & dependencies: %s", ', '.join(to_scan))
+
+        provided_packages = self.parse_pkgdata_for_python_packages()
+        scanned_deps = self.scan_python_dependencies([os.path.join(srctree, p) for p in to_scan])
+        mapped_deps, unmapped_deps = set(self.base_pkgdeps), set()
+        for dep in scanned_deps:
+            mapped = provided_packages.get(dep)
+            if mapped:
+                logger.debug('Mapped %s to %s' % (dep, mapped))
+                mapped_deps.add(mapped)
+            else:
+                logger.debug('Could not map %s' % dep)
+                unmapped_deps.add(dep)
+        return mapped_deps, unmapped_deps
+
     def process(self, srctree, classes, lines_before, lines_after, handled, extravalues):
+
         if 'buildsystem' in handled:
             return False
+
+        logger.debug("Trying setup.py parser")
 
         # Check for non-zero size setup.py files
         setupfiles = RecipeHandler.checkfiles(srctree, ['setup.py'])
@@ -176,6 +581,7 @@ class PythonRecipeHandler(RecipeHandler):
             if os.path.getsize(fn):
                 break
         else:
+            logger.debug("No setup.py found")
             return False
 
         # setup.py is always parsed to get at certain required information, such as
@@ -254,51 +660,16 @@ class PythonRecipeHandler(RecipeHandler):
 
         if license_str:
             for i, line in enumerate(lines_before):
-                if line.startswith('LICENSE = '):
+                if line.startswith('##LICENSE_PLACEHOLDER##'):
                     lines_before.insert(i, '# NOTE: License in setup.py/PKGINFO is: %s' % license_str)
                     break
 
         if 'Classifier' in info:
-            existing_licenses = info.get('License', '')
-            licenses = []
-            for classifier in info['Classifier']:
-                if classifier in self.classifier_license_map:
-                    license = self.classifier_license_map[classifier]
-                    if license == 'Apache' and 'Apache-2.0' in existing_licenses:
-                        license = 'Apache-2.0'
-                    elif license == 'GPL':
-                        if 'GPL-2.0' in existing_licenses or 'GPLv2' in existing_licenses:
-                            license = 'GPL-2.0'
-                        elif 'GPL-3.0' in existing_licenses or 'GPLv3' in existing_licenses:
-                            license = 'GPL-3.0'
-                    elif license == 'LGPL':
-                        if 'LGPL-2.1' in existing_licenses or 'LGPLv2.1' in existing_licenses:
-                            license = 'LGPL-2.1'
-                        elif 'LGPL-2.0' in existing_licenses or 'LGPLv2' in existing_licenses:
-                            license = 'LGPL-2.0'
-                        elif 'LGPL-3.0' in existing_licenses or 'LGPLv3' in existing_licenses:
-                            license = 'LGPL-3.0'
-                    licenses.append(license)
+            license = self.handle_classifier_license(info['Classifier'], info.get('License', ''))
+            if license:
+                info['License'] = license
 
-            if licenses:
-                info['License'] = ' & '.join(licenses)
-
-        # Map PKG-INFO & setup.py fields to bitbake variables
-        for field, values in info.items():
-            if field in self.excluded_fields:
-                continue
-
-            if field not in self.bbvar_map:
-                continue
-
-            if isinstance(values, str):
-                value = values
-            else:
-                value = ' '.join(str(v) for v in values if v)
-
-            bbvar = self.bbvar_map[field]
-            if bbvar not in extravalues and value:
-                extravalues[bbvar] = value
+        self.map_info_to_bbvar(info, extravalues)
 
         mapped_deps, unmapped_deps = self.scan_setup_python_deps(srctree, setup_info, setup_non_literals)
 
@@ -355,278 +726,283 @@ class PythonRecipeHandler(RecipeHandler):
 
         handled.append('buildsystem')
 
-    def get_pkginfo(self, pkginfo_fn):
-        msg = email.message_from_file(open(pkginfo_fn, 'r'))
-        msginfo = {}
-        for field in msg.keys():
-            values = msg.get_all(field)
-            if len(values) == 1:
-                msginfo[field] = values[0]
-            else:
-                msginfo[field] = values
-        return msginfo
+class PythonPyprojectTomlRecipeHandler(PythonRecipeHandler):
+    """Base class to support PEP517 and PEP518
 
-    def parse_setup_py(self, setupscript='./setup.py'):
-        with codecs.open(setupscript) as f:
-            info, imported_modules, non_literals, extensions = gather_setup_info(f)
+    PEP517 https://peps.python.org/pep-0517/#source-trees
+    PEP518 https://peps.python.org/pep-0518/#build-system-table
+    """
+    # bitbake currently supports the 4 following backends
+    build_backend_map = {
+        "setuptools.build_meta": "python_setuptools_build_meta",
+        "poetry.core.masonry.api": "python_poetry_core",
+        "flit_core.buildapi": "python_flit_core",
+        "hatchling.build": "python_hatchling",
+        "maturin": "python_maturin",
+        "mesonpy": "python_mesonpy",
+    }
 
-        def _map(key):
-            key = key.replace('_', '-')
-            key = key[0].upper() + key[1:]
-            if key in self.setup_parse_map:
-                key = self.setup_parse_map[key]
-            return key
+    # setuptools.build_meta and flit declare project metadata into the "project" section of pyproject.toml
+    # according to PEP-621: https://packaging.python.org/en/latest/specifications/declaring-project-metadata/#declaring-project-metadata
+    # while poetry uses the "tool.poetry" section according to its official documentation: https://python-poetry.org/docs/pyproject/
+    # keys from "project" and "tool.poetry" sections are almost the same except for the  HOMEPAGE which is "homepage" for tool.poetry
+    # and "Homepage" for "project" section. So keep both
+    bbvar_map = {
+        "name": "PN",
+        "version": "PV",
+        "Homepage": "HOMEPAGE",
+        "homepage": "HOMEPAGE",
+        "description": "SUMMARY",
+        "license": "LICENSE",
+        "dependencies": "RDEPENDS:${PN}",
+        "requires": "DEPENDS",
+    }
 
-        # Naive mapping of setup() arguments to PKG-INFO field names
-        for d in [info, non_literals]:
-            for key, value in list(d.items()):
-                if key is None:
-                    continue
-                new_key = _map(key)
-                if new_key != key:
-                    del d[key]
-                    d[new_key] = value
+    replacements = [
+        ("license", r" +$", ""),
+        ("license", r"^ +", ""),
+        ("license", r" ", "-"),
+        ("license", r"^GNU-", ""),
+        ("license", r"-[Ll]icen[cs]e(,?-[Vv]ersion)?", ""),
+        ("license", r"^UNKNOWN$", ""),
+        # Remove currently unhandled version numbers from these variables
+        ("requires", r"\[[^\]]+\]$", ""),
+        ("requires", r"^([^><= ]+).*", r"\1"),
+        ("dependencies", r"\[[^\]]+\]$", ""),
+        ("dependencies", r"^([^><= ]+).*", r"\1"),
+    ]
 
-        return info, 'setuptools' in imported_modules, non_literals, extensions
+    excluded_native_pkgdeps = [
+        # already provided by python_setuptools_build_meta.bbclass
+        "python3-setuptools-native",
+        "python3-wheel-native",
+        # already provided by python_poetry_core.bbclass
+        "python3-poetry-core-native",
+        # already provided by python_flit_core.bbclass
+        "python3-flit-core-native",
+        # already provided by python_mesonpy
+        "python3-meson-python-native",
+    ]
 
-    def get_setup_args_info(self, setupscript='./setup.py'):
-        cmd = ['python3', setupscript]
+    # add here a list of known and often used packages and the corresponding bitbake package
+    known_deps_map = {
+        "setuptools": "python3-setuptools",
+        "wheel": "python3-wheel",
+        "poetry-core": "python3-poetry-core",
+        "flit_core": "python3-flit-core",
+        "setuptools-scm": "python3-setuptools-scm",
+        "hatchling": "python3-hatchling",
+        "hatch-vcs": "python3-hatch-vcs",
+        "meson-python" : "python3-meson-python",
+    }
+
+    def __init__(self):
+        pass
+
+    def process(self, srctree, classes, lines_before, lines_after, handled, extravalues):
         info = {}
-        keys = set(self.bbvar_map.keys())
-        keys |= set(self.setuparg_list_fields)
-        keys |= set(self.setuparg_multi_line_values)
-        grouped_keys = itertools.groupby(keys, lambda k: (k in self.setuparg_list_fields, k in self.setuparg_multi_line_values))
-        for index, keys in grouped_keys:
-            if index == (True, False):
-                # Splitlines output for each arg as a list value
-                for key in keys:
-                    arg = self.setuparg_map.get(key, key.lower())
-                    try:
-                        arg_info = self.run_command(cmd + ['--' + arg], cwd=os.path.dirname(setupscript))
-                    except (OSError, subprocess.CalledProcessError):
-                        pass
-                    else:
-                        info[key] = [l.rstrip() for l in arg_info.splitlines()]
-            elif index == (False, True):
-                # Entire output for each arg
-                for key in keys:
-                    arg = self.setuparg_map.get(key, key.lower())
-                    try:
-                        arg_info = self.run_command(cmd + ['--' + arg], cwd=os.path.dirname(setupscript))
-                    except (OSError, subprocess.CalledProcessError):
-                        pass
-                    else:
-                        info[key] = arg_info
-            else:
-                info.update(self.get_setup_byline(list(keys), setupscript))
-        return info
+        metadata = {}
 
-    def get_setup_byline(self, fields, setupscript='./setup.py'):
-        info = {}
+        if 'buildsystem' in handled:
+            return False
 
-        cmd = ['python3', setupscript]
-        cmd.extend('--' + self.setuparg_map.get(f, f.lower()) for f in fields)
-        try:
-            info_lines = self.run_command(cmd, cwd=os.path.dirname(setupscript)).splitlines()
-        except (OSError, subprocess.CalledProcessError):
-            pass
+        logger.debug("Trying pyproject.toml parser")
+
+        # Check for non-zero size setup.py files
+        setupfiles = RecipeHandler.checkfiles(srctree, ["pyproject.toml"])
+        for fn in setupfiles:
+            if os.path.getsize(fn):
+                break
         else:
-            if len(fields) != len(info_lines):
-                logger.error('Mismatch between setup.py output lines and number of fields')
-                sys.exit(1)
+            logger.debug("No pyproject.toml found")
+            return False
 
-            for lineno, line in enumerate(info_lines):
-                line = line.rstrip()
-                info[fields[lineno]] = line
-        return info
-
-    def apply_info_replacements(self, info):
-        for variable, search, replace in self.replacements:
-            if variable not in info:
-                continue
-
-            def replace_value(search, replace, value):
-                if replace is None:
-                    if re.search(search, value):
-                        return None
-                else:
-                    new_value = re.sub(search, replace, value)
-                    if value != new_value:
-                        return new_value
-                return value
-
-            value = info[variable]
-            if isinstance(value, str):
-                new_value = replace_value(search, replace, value)
-                if new_value is None:
-                    del info[variable]
-                elif new_value != value:
-                    info[variable] = new_value
-            elif hasattr(value, 'items'):
-                for dkey, dvalue in list(value.items()):
-                    new_list = []
-                    for pos, a_value in enumerate(dvalue):
-                        new_value = replace_value(search, replace, a_value)
-                        if new_value is not None and new_value != value:
-                            new_list.append(new_value)
-
-                    if value != new_list:
-                        value[dkey] = new_list
-            else:
-                new_list = []
-                for pos, a_value in enumerate(value):
-                    new_value = replace_value(search, replace, a_value)
-                    if new_value is not None and new_value != value:
-                        new_list.append(new_value)
-
-                if value != new_list:
-                    info[variable] = new_list
-
-    def scan_setup_python_deps(self, srctree, setup_info, setup_non_literals):
-        if 'Package-dir' in setup_info:
-            package_dir = setup_info['Package-dir']
-        else:
-            package_dir = {}
-
-        dist = setuptools.Distribution()
-
-        class PackageDir(setuptools.command.build_py.build_py):
-            def __init__(self, package_dir):
-                self.package_dir = package_dir
-                self.dist = dist
-                super().__init__(self.dist)
-
-        pd = PackageDir(package_dir)
-        to_scan = []
-        if not any(v in setup_non_literals for v in ['Py-modules', 'Scripts', 'Packages']):
-            if 'Py-modules' in setup_info:
-                for module in setup_info['Py-modules']:
-                    try:
-                        package, module = module.rsplit('.', 1)
-                    except ValueError:
-                        package, module = '.', module
-                    module_path = os.path.join(pd.get_package_dir(package), module + '.py')
-                    to_scan.append(module_path)
-
-            if 'Packages' in setup_info:
-                for package in setup_info['Packages']:
-                    to_scan.append(pd.get_package_dir(package))
-
-            if 'Scripts' in setup_info:
-                to_scan.extend(setup_info['Scripts'])
-        else:
-            logger.info("Scanning the entire source tree, as one or more of the following setup keywords are non-literal: py_modules, scripts, packages.")
-
-        if not to_scan:
-            to_scan = ['.']
-
-        logger.info("Scanning paths for packages & dependencies: %s", ', '.join(to_scan))
-
-        provided_packages = self.parse_pkgdata_for_python_packages()
-        scanned_deps = self.scan_python_dependencies([os.path.join(srctree, p) for p in to_scan])
-        mapped_deps, unmapped_deps = set(self.base_pkgdeps), set()
-        for dep in scanned_deps:
-            mapped = provided_packages.get(dep)
-            if mapped:
-                logger.debug('Mapped %s to %s' % (dep, mapped))
-                mapped_deps.add(mapped)
-            else:
-                logger.debug('Could not map %s' % dep)
-                unmapped_deps.add(dep)
-        return mapped_deps, unmapped_deps
-
-    def scan_python_dependencies(self, paths):
-        deps = set()
-        try:
-            dep_output = self.run_command(['pythondeps', '-d'] + paths)
-        except (OSError, subprocess.CalledProcessError):
-            pass
-        else:
-            for line in dep_output.splitlines():
-                line = line.rstrip()
-                dep, filename = line.split('\t', 1)
-                if filename.endswith('/setup.py'):
-                    continue
-                deps.add(dep)
+        setupscript = os.path.join(srctree, "pyproject.toml")
 
         try:
-            provides_output = self.run_command(['pythondeps', '-p'] + paths)
-        except (OSError, subprocess.CalledProcessError):
-            pass
-        else:
-            provides_lines = (l.rstrip() for l in provides_output.splitlines())
-            provides = set(l for l in provides_lines if l and l != 'setup')
-            deps -= provides
+            try:
+                import tomllib
+            except ImportError:
+                try:
+                    import tomli as tomllib
+                except ImportError:
+                    logger.error("Neither 'tomllib' nor 'tomli' could be imported, cannot scan pyproject.toml.")
+                    return False
 
-        return deps
+            try:
+                with open(setupscript, "rb") as f:
+                    config = tomllib.load(f)
+            except Exception:
+                logger.exception("Failed to parse pyproject.toml")
+                return False
 
-    def parse_pkgdata_for_python_packages(self):
-        pkgdata_dir = tinfoil.config_data.getVar('PKGDATA_DIR')
+            build_backend = config["build-system"]["build-backend"]
+            if build_backend in self.build_backend_map:
+                classes.append(self.build_backend_map[build_backend])
+            else:
+                logger.error(
+                    "Unsupported build-backend: %s, cannot use pyproject.toml. Will try to use legacy setup.py"
+                    % build_backend
+                )
+                return False
 
-        ldata = tinfoil.config_data.createCopy()
-        bb.parse.handle('classes/python3-dir.bbclass', ldata, True)
-        python_sitedir = ldata.getVar('PYTHON_SITEPACKAGES_DIR')
+            licfile = ""
 
-        dynload_dir = os.path.join(os.path.dirname(python_sitedir), 'lib-dynload')
-        python_dirs = [python_sitedir + os.sep,
-                       os.path.join(os.path.dirname(python_sitedir), 'dist-packages') + os.sep,
-                       os.path.dirname(python_sitedir) + os.sep]
-        packages = {}
-        for pkgdatafile in glob.glob('{}/runtime/*'.format(pkgdata_dir)):
-            files_info = None
-            with open(pkgdatafile, 'r') as f:
-                for line in f.readlines():
-                    field, value = line.split(': ', 1)
-                    if field.startswith('FILES_INFO'):
-                        files_info = ast.literal_eval(value)
-                        break
-                else:
-                    continue
+            if build_backend == "poetry.core.masonry.api":
+                if "tool" in config and "poetry" in config["tool"]:
+                    metadata = config["tool"]["poetry"]
+            else:
+                if "project" in config:
+                    metadata = config["project"]
 
-            for fn in files_info:
-                for suffix in importlib.machinery.all_suffixes():
-                    if fn.endswith(suffix):
-                        break
-                else:
-                    continue
-
-                if fn.startswith(dynload_dir + os.sep):
-                    if '/.debug/' in fn:
+            if metadata:
+                for field, values in metadata.items():
+                    if field == "license":
+                        # For setuptools.build_meta and flit, licence is a table
+                        # but for poetry licence is a string
+                        # for hatchling, both table (jsonschema) and string (iniconfig) have been used
+                        if build_backend == "poetry.core.masonry.api":
+                            value = values
+                        else:
+                            value = values.get("text", "")
+                            if not value:
+                                licfile = values.get("file", "")
+                                continue
+                    elif field == "dependencies" and build_backend == "poetry.core.masonry.api":
+                        # For poetry backend, "dependencies" section looks like:
+                        # [tool.poetry.dependencies]
+                        # requests = "^2.13.0"
+                        # requests = { version = "^2.13.0", source = "private" }
+                        # See https://python-poetry.org/docs/master/pyproject/#dependencies-and-dependency-groups for more details
+                        # This class doesn't handle versions anyway, so we just get the dependencies name here and construct a list
+                        value = []
+                        for k in values.keys():
+                            value.append(k)
+                    elif isinstance(values, dict):
+                        for k, v in values.items():
+                            info[k] = v
                         continue
-                    base = os.path.basename(fn)
-                    provided = base.split('.', 1)[0]
-                    packages[provided] = os.path.basename(pkgdatafile)
-                    continue
+                    else:
+                        value = values
 
-                for python_dir in python_dirs:
-                    if fn.startswith(python_dir):
-                        relpath = fn[len(python_dir):]
-                        relstart, _, relremaining = relpath.partition(os.sep)
-                        if relstart.endswith('.egg'):
-                            relpath = relremaining
-                        base, _ = os.path.splitext(relpath)
+                    info[field] = value
 
-                        if '/.debug/' in base:
-                            continue
-                        if os.path.basename(base) == '__init__':
-                            base = os.path.dirname(base)
-                        base = base.replace(os.sep + os.sep, os.sep)
-                        provided = base.replace(os.sep, '.')
-                        packages[provided] = os.path.basename(pkgdatafile)
-        return packages
+            # Grab the license value before applying replacements
+            license_str = info.get("license", "").strip()
 
-    @classmethod
-    def run_command(cls, cmd, **popenargs):
-        if 'stderr' not in popenargs:
-            popenargs['stderr'] = subprocess.STDOUT
-        try:
-            return subprocess.check_output(cmd, **popenargs).decode('utf-8')
-        except OSError as exc:
-            logger.error('Unable to run `{}`: {}', ' '.join(cmd), exc)
-            raise
-        except subprocess.CalledProcessError as exc:
-            logger.error('Unable to run `{}`: {}', ' '.join(cmd), exc.output)
-            raise
+            if license_str:
+                for i, line in enumerate(lines_before):
+                    if line.startswith("##LICENSE_PLACEHOLDER##"):
+                        lines_before.insert(
+                            i, "# NOTE: License in pyproject.toml is: %s" % license_str
+                        )
+                        break
+
+            info["requires"] = config["build-system"]["requires"]
+
+            self.apply_info_replacements(info)
+
+            if "classifiers" in info:
+                license = self.handle_classifier_license(
+                    info["classifiers"], info.get("license", "")
+                )
+                if license:
+                    if licfile:
+                        lines = []
+                        md5value = bb.utils.md5_file(os.path.join(srctree, licfile))
+                        lines.append('LICENSE = "%s"' % license)
+                        lines.append(
+                            'LIC_FILES_CHKSUM = "file://%s;md5=%s"'
+                            % (licfile, md5value)
+                        )
+                        lines.append("")
+
+                        # Replace the placeholder so we get the values in the right place in the recipe file
+                        try:
+                            pos = lines_before.index("##LICENSE_PLACEHOLDER##")
+                        except ValueError:
+                            pos = -1
+                        if pos == -1:
+                            lines_before.extend(lines)
+                        else:
+                            lines_before[pos : pos + 1] = lines
+
+                        handled.append(("license", [license, licfile, md5value]))
+                    else:
+                        info["license"] = license
+
+            provided_packages = self.parse_pkgdata_for_python_packages()
+            provided_packages.update(self.known_deps_map)
+            native_mapped_deps, native_unmapped_deps = set(), set()
+            mapped_deps, unmapped_deps = set(), set()
+
+            if "requires" in info:
+                for require in info["requires"]:
+                    mapped = provided_packages.get(require)
+
+                    if mapped:
+                        logger.debug("Mapped %s to %s" % (require, mapped))
+                        native_mapped_deps.add(mapped)
+                    else:
+                        logger.debug("Could not map %s" % require)
+                        native_unmapped_deps.add(require)
+
+                info.pop("requires")
+
+                if native_mapped_deps != set():
+                    native_mapped_deps = {
+                        item + "-native" for item in native_mapped_deps
+                    }
+                    native_mapped_deps -= set(self.excluded_native_pkgdeps)
+                    if native_mapped_deps != set():
+                        info["requires"] = " ".join(sorted(native_mapped_deps))
+
+                if native_unmapped_deps:
+                    lines_after.append("")
+                    lines_after.append(
+                        "# WARNING: We were unable to map the following python package/module"
+                    )
+                    lines_after.append(
+                        "# dependencies to the bitbake packages which include them:"
+                    )
+                    lines_after.extend(
+                        "#    {}".format(d) for d in sorted(native_unmapped_deps)
+                    )
+
+            if "dependencies" in info:
+                for dependency in info["dependencies"]:
+                    mapped = provided_packages.get(dependency)
+                    if mapped:
+                        logger.debug("Mapped %s to %s" % (dependency, mapped))
+                        mapped_deps.add(mapped)
+                    else:
+                        logger.debug("Could not map %s" % dependency)
+                        unmapped_deps.add(dependency)
+
+                info.pop("dependencies")
+
+                if mapped_deps != set():
+                    if mapped_deps != set():
+                        info["dependencies"] = " ".join(sorted(mapped_deps))
+
+                if unmapped_deps:
+                    lines_after.append("")
+                    lines_after.append(
+                        "# WARNING: We were unable to map the following python package/module"
+                    )
+                    lines_after.append(
+                        "# runtime dependencies to the bitbake packages which include them:"
+                    )
+                    lines_after.extend(
+                        "#    {}".format(d) for d in sorted(unmapped_deps)
+                    )
+
+            self.map_info_to_bbvar(info, extravalues)
+
+            handled.append("buildsystem")
+        except Exception:
+            logger.exception("Failed to correctly handle pyproject.toml, falling back to another method")
+            return False
 
 
 def gather_setup_info(fileobj):
@@ -742,5 +1118,7 @@ def has_non_literals(value):
 
 
 def register_recipe_handlers(handlers):
-    # We need to make sure this is ahead of the makefile fallback handler
-    handlers.append((PythonRecipeHandler(), 70))
+    # We need to make sure these are ahead of the makefile fallback handler
+    # and the pyproject.toml handler ahead of the setup.py handler
+    handlers.append((PythonPyprojectTomlRecipeHandler(), 75))
+    handlers.append((PythonSetupPyRecipeHandler(), 70))

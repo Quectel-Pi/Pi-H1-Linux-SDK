@@ -2,18 +2,17 @@
 #
 #Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
 #SPDX-License-Identifier: BSD-3-Clause-Clear
-From 11196021c3ce382bc1702bcecab847a4681552c6 Mon Sep 17 00:00:00 2001
-From: Rajavenu Kyatham <quic_rkyatham@quicinc.com>
-Date: Mon, 19 Aug 2024 15:00:34 +0530
-Subject: [PATCH] weston: export shared headers
+commit ceca763f12cb6857f78fa6061c861bcd1cde0703
+Author: Rajavenu Kyatham <quic_rkyatham@quicinc.com>
+Date:   Thu Nov 21 13:11:47 2024 +0530
 
+    weston: export shared headers
+
+Upstream-Status: Inappropriate [Downstream]pstream-Status: Not Applicable
 Signed-off-by: Rajavenu Kyatham <quic_rkyatham@quicinc.com>
----
- shared/meson.build | 13 +++++++++++++
- 1 file changed, 13 insertions(+)
 
 diff --git a/shared/meson.build b/shared/meson.build
-index 9a4af53..60307a9 100644
+index 86d46a0..05fbc75 100644
 --- a/shared/meson.build
 +++ b/shared/meson.build
 @@ -1,3 +1,16 @@
@@ -31,5 +30,5 @@ index 9a4af53..60307a9 100644
 +	'xalloc.h'
 +)
  srcs_libshared = [
- 	'config-parser.c',
- 	'option-parser.c',
+	'config-parser.c',
+	'option-parser.c',

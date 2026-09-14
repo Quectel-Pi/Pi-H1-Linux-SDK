@@ -1,0 +1,134 @@
+From ea36e763d3aab65b85eb43adc7da4e8141008f81 Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <brgl@bgdev.pl>
+Date: Sun, 1 Dec 2024 21:45:32 +0530
+Subject: [PATCH 06/17] FROMLIST: firmware: qcom: scm: add a call for deriving
+ the software secret
+
+Inline storage encryption may require deriving a software secret from
+storage keys added to the kernel.
+
+For raw keys, this can be directly done in the kernel as keys are not
+encrypted in memory.
+
+However, hardware wrapped keys can only be unwrapped by the HW wrapping
+entity. In case of Qualcomm's wrapped key solution, this is done by the
+Hardware Key Manager (HWKM) from Trustzone.
+
+Add a new SCM call which provides a hook to the software secret crypto
+profile API provided by the block layer.
+
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org>
+Signed-off-by: Gaurav Kashyap <quic_gaurkash@quicinc.com>
+Reviewed-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Upstream-Status: Submitted [https://lore.kernel.org/all/20241011-wrapped-keys-v7-6-e3f7a752059b@linaro.org/]
+---
+ drivers/firmware/qcom_scm.c            | 65 ++++++++++++++++++++++++++
+ drivers/firmware/qcom_scm.h            |  1 +
+ include/linux/firmware/qcom/qcom_scm.h |  2 +
+ 3 files changed, 68 insertions(+)
+
+diff --git a/drivers/firmware/qcom_scm.c b/drivers/firmware/qcom_scm.c
+index 09e93186839b..d07c74d30383 100644
+--- a/drivers/firmware/qcom_scm.c
++++ b/drivers/firmware/qcom_scm.c
+@@ -1184,6 +1184,71 @@ int qcom_scm_ice_set_key(u32 index, const u8 *key, u32 key_size,
+ }
+ EXPORT_SYMBOL_GPL(qcom_scm_ice_set_key);
+
++/**
++ * qcom_scm_derive_sw_secret() - Derive software secret from wrapped key
++ * @wkey: the hardware wrapped key inaccessible to software
++ * @wkey_size: size of the wrapped key
++ * @sw_secret: the secret to be derived which is exactly the secret size
++ * @sw_secret_size: size of the sw_secret
++ *
++ * Derive a software secret from a hardware wrapped key for software crypto
++ * operations.
++ * For wrapped keys, the key needs to be unwrapped, in order to derive a
++ * software secret, which can be done in the hardware from a secure execution
++ * environment.
++ *
++ * For more information on sw secret, please refer to "Hardware-wrapped keys"
++ * section of Documentation/block/inline-encryption.rst.
++ *
++ * Return: 0 on success; -errno on failure.
++ */
++int qcom_scm_derive_sw_secret(const u8 *wkey, size_t wkey_size,
++			      u8 *sw_secret, size_t sw_secret_size)
++{
++	struct qcom_scm_desc desc = {
++		.svc = QCOM_SCM_SVC_ES,
++		.cmd =  QCOM_SCM_ES_DERIVE_SW_SECRET,
++		.arginfo = QCOM_SCM_ARGS(4, QCOM_SCM_RW,
++					 QCOM_SCM_VAL, QCOM_SCM_RW,
++					 QCOM_SCM_VAL),
++		.args[1] = wkey_size,
++		.args[3] = sw_secret_size,
++		.owner = ARM_SMCCC_OWNER_SIP,
++	};
++
++	int ret;
++
++	void *wkey_buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							    wkey_size,
++							    GFP_KERNEL);
++	if (!wkey_buf)
++		return -ENOMEM;
++
++	void *secret_buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							       sw_secret_size,
++							       GFP_KERNEL);
++	if (!secret_buf) {
++		ret = -ENOMEM;
++		goto out_free_wrapped;
++	}
++
++	memcpy(wkey_buf, wkey, wkey_size);
++	desc.args[0] = qcom_tzmem_to_phys(wkey_buf);
++	desc.args[2] = qcom_tzmem_to_phys(secret_buf);
++
++	ret = qcom_scm_call(__scm->dev, &desc, NULL);
++	if (!ret)
++		memcpy(sw_secret, secret_buf, sw_secret_size);
++
++	memzero_explicit(secret_buf, sw_secret_size);
++
++out_free_wrapped:
++	memzero_explicit(wkey_buf, wkey_size);
++
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_derive_sw_secret);
++
+ /**
+  * qcom_scm_hdcp_available() - Check if secure environment supports HDCP.
+  *
+diff --git a/drivers/firmware/qcom_scm.h b/drivers/firmware/qcom_scm.h
+index 94359f23734e..607cf604558a 100644
+--- a/drivers/firmware/qcom_scm.h
++++ b/drivers/firmware/qcom_scm.h
+@@ -127,6 +127,7 @@ struct qcom_tzmem_pool *qcom_scm_get_tzmem_pool(void);
+ #define QCOM_SCM_SVC_ES			0x10	/* Enterprise Security */
+ #define QCOM_SCM_ES_INVALIDATE_ICE_KEY	0x03
+ #define QCOM_SCM_ES_CONFIG_SET_ICE_KEY	0x04
++#define QCOM_SCM_ES_DERIVE_SW_SECRET	0x07
+
+ #define QCOM_SCM_SVC_HDCP		0x11
+ #define QCOM_SCM_HDCP_INVOKE		0x01
+diff --git a/include/linux/firmware/qcom/qcom_scm.h b/include/linux/firmware/qcom/qcom_scm.h
+index 8c6c663dc21b..d3462b0ccaa0 100644
+--- a/include/linux/firmware/qcom/qcom_scm.h
++++ b/include/linux/firmware/qcom/qcom_scm.h
+@@ -109,6 +109,8 @@ extern int qcom_scm_ice_invalidate_key(u32 index);
+ extern int qcom_scm_ice_set_key(u32 index, const u8 *key, u32 key_size,
+ 				enum qcom_scm_ice_cipher cipher,
+ 				u32 data_unit_size);
++int qcom_scm_derive_sw_secret(const u8 *wkey, size_t wkey_size,
++			      u8 *sw_secret, size_t sw_secret_size);
+
+ extern bool qcom_scm_hdcp_available(void);
+ extern int qcom_scm_hdcp_req(struct qcom_scm_hdcp_req *req, u32 req_cnt,
+--
+2.34.1
+

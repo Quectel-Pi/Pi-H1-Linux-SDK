@@ -1,0 +1,44 @@
+From f1125594506bfa10f5038b127492965ab99f05e7 Wed Mar 5 09:40:42 2025 +0530
+From: Yaswanth Kowtha <quic_ykowtha@quicinc.com>
+Date: Wed, Mar 5 09:40:42 2025 +0530
+Subject: [PATCH] Fix for chromium launch issue
+
+Chromium is crashing on launch. Disabled the functions responsible.
+
+Upstream-Status: Inappropriate [specific to our build setup]
+Signed-off-by: Yaswanth Kowtha <quic_ykowtha@quicinc.com>
+---
+ ui/ozone/platform/wayland/host/xdg_toplevel_wrapper_impl.cc | 9+++++----
+ 1 file changed, 5 insertions(+), 4 deletions(-)
+ 
+diff --git a/ui/ozone/platform/wayland/host/xdg_toplevel_wrapper_impl.cc b/ui/ozone/platform/wayland/host/xdg_toplevel_wrapper_impl.cc
+index 49e11b2..1af8a66 100644
+--- a/ui/ozone/platform/wayland/host/xdg_toplevel_wrapper_impl.cc
++++ b/ui/ozone/platform/wayland/host/xdg_toplevel_wrapper_impl.cc
+@@ -165,8 +165,9 @@ void XDGToplevelWrapperImpl::SetCanMaximize(bool can_maximize) {
+ }
+ 
+ void XDGToplevelWrapperImpl::SetMaximized() {
+-  DCHECK(xdg_toplevel_);
+-  xdg_toplevel_set_maximized(xdg_toplevel_.get());
++  // DCHECK(xdg_toplevel_);
++  // xdg_toplevel_set_maximized(xdg_toplevel_.get());
++  xdg_toplevel_unset_maximized(xdg_toplevel_.get());
+ }
+ 
+ void XDGToplevelWrapperImpl::UnSetMaximized() {
+@@ -272,12 +273,12 @@ void XDGToplevelWrapperImpl::SetWindowGeometry(const gfx::Rect& bounds) {
+ 
+ void XDGToplevelWrapperImpl::SetMinSize(int32_t width, int32_t height) {
+   DCHECK(xdg_toplevel_);
+-  xdg_toplevel_set_min_size(xdg_toplevel_.get(), width, height);
++  // xdg_toplevel_set_min_size(xdg_toplevel_.get(), width, height);
+ }
+ 
+ void XDGToplevelWrapperImpl::SetMaxSize(int32_t width, int32_t height) {
+   DCHECK(xdg_toplevel_);
+-  xdg_toplevel_set_max_size(xdg_toplevel_.get(), width, height);
++  // xdg_toplevel_set_max_size(xdg_toplevel_.get(), width, height);
+ }
+ 
+ void XDGToplevelWrapperImpl::SetAppId(const std::string& app_id) {

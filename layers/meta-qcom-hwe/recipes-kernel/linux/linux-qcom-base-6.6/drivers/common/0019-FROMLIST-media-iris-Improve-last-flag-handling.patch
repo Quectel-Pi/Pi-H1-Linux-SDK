@@ -1,0 +1,115 @@
+From 2c0a879510d108c92944b0850f37b73c43b30e63 Mon Sep 17 00:00:00 2001
+From: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Date: Fri, 9 May 2025 14:09:05 +0530
+Subject: [PATCH 19/26] FROMLIST: media: iris: Improve last flag handling
+
+Improve the handling of the V4L2_BUF_FLAG_LAST flag in the driver:
+- Ensure that the last flag is not sent multiple times.
+- Attach the last flag to the first capture buffer returned during
+  flush, triggered by a sequence change, addressing cases where the
+  firmware does not set the last flag.
+
+Reviewed-by: Vikash Garodia <quic_vgarodia@quicinc.com>
+Reviewed-by: Bryan O'Donoghue <bryan.odonoghue@linaro.org>
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8550-HDK
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-QRD
+Tested-by: Neil Armstrong <neil.armstrong@linaro.org> # on SM8650-HDK
+Signed-off-by: Dikshita Agarwal <quic_dikshita@quicinc.com>
+Signed-off-by: Wangao Wang <quic_wangaow@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-media/20250509-video-iris-hevc-vp9-v5-19-59b4ff7d331c@quicinc.com/]
+---
+ drivers/media/platform/qcom/iris/iris_buffer.c            | 1 +
+ drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c | 7 ++++++-
+ drivers/media/platform/qcom/iris/iris_instance.h          | 2 ++
+ drivers/media/platform/qcom/iris/iris_vb2.c               | 3 ++-
+ drivers/media/platform/qcom/iris/iris_vdec.c              | 2 ++
+ 5 files changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/media/platform/qcom/iris/iris_buffer.c b/drivers/media/platform/qcom/iris/iris_buffer.c
+index 018334512bae..7dbac74b1a8d 100644
+--- a/drivers/media/platform/qcom/iris/iris_buffer.c
++++ b/drivers/media/platform/qcom/iris/iris_buffer.c
+@@ -636,6 +636,7 @@ int iris_vb2_buffer_done(struct iris_inst *inst, struct iris_buffer *buf)
+ 			v4l2_event_queue_fh(&inst->fh, &ev);
+ 			v4l2_m2m_mark_stopped(m2m_ctx);
+ 		}
++		inst->last_buffer_dequeued = true;
+ 	}
+ 
+ 	state = VB2_BUF_STATE_DONE;
+diff --git a/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c b/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c
+index 14d8bef62b60..926acee1f48c 100644
+--- a/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c
++++ b/drivers/media/platform/qcom/iris/iris_hfi_gen1_response.c
+@@ -457,7 +457,12 @@ static void iris_hfi_gen1_session_ftb_done(struct iris_inst *inst, void *packet)
+ 		timestamp_us = timestamp_hi;
+ 		timestamp_us = (timestamp_us << 32) | timestamp_lo;
+ 	} else {
+-		flags |= V4L2_BUF_FLAG_LAST;
++		if (pkt->stream_id == 1 && !inst->last_buffer_dequeued) {
++			if (iris_drc_pending(inst)) {
++				flags |= V4L2_BUF_FLAG_LAST;
++				inst->last_buffer_dequeued = true;
++			}
++		}
+ 	}
+ 	buf->timestamp = timestamp_us;
+ 
+diff --git a/drivers/media/platform/qcom/iris/iris_instance.h b/drivers/media/platform/qcom/iris/iris_instance.h
+index 06a7f1174ad5..5ec6368b2af7 100644
+--- a/drivers/media/platform/qcom/iris/iris_instance.h
++++ b/drivers/media/platform/qcom/iris/iris_instance.h
+@@ -43,6 +43,7 @@
+  * @sequence_out: a sequence counter for output queue
+  * @tss: timestamp metadata
+  * @metadata_idx: index for metadata buffer
++ * @last_buffer_dequeued: a flag to indicate that last buffer is sent by driver
+  */
+ 
+ struct iris_inst {
+@@ -74,6 +75,7 @@ struct iris_inst {
+ 	u32				sequence_out;
+ 	struct iris_ts_metadata		tss[VIDEO_MAX_FRAME];
+ 	u32				metadata_idx;
++	bool				last_buffer_dequeued;
+ };
+ 
+ #endif
+diff --git a/drivers/media/platform/qcom/iris/iris_vb2.c b/drivers/media/platform/qcom/iris/iris_vb2.c
+index b3bde10eb6d2..8b17c7c39487 100644
+--- a/drivers/media/platform/qcom/iris/iris_vb2.c
++++ b/drivers/media/platform/qcom/iris/iris_vb2.c
+@@ -305,7 +305,7 @@ void iris_vb2_buf_queue(struct vb2_buffer *vb2)
+ 		goto exit;
+ 	}
+ 
+-	if (V4L2_TYPE_IS_CAPTURE(vb2->vb2_queue->type)) {
++	if (!inst->last_buffer_dequeued && V4L2_TYPE_IS_CAPTURE(vb2->vb2_queue->type)) {
+ 		if ((inst->sub_state & IRIS_INST_SUB_DRC &&
+ 		     inst->sub_state & IRIS_INST_SUB_DRC_LAST) ||
+ 		    (inst->sub_state & IRIS_INST_SUB_DRAIN &&
+@@ -319,6 +319,7 @@ void iris_vb2_buf_queue(struct vb2_buffer *vb2)
+ 				v4l2_event_queue_fh(&inst->fh, &eos);
+ 				v4l2_m2m_mark_stopped(m2m_ctx);
+ 			}
++			inst->last_buffer_dequeued = true;
+ 			goto exit;
+ 		}
+ 	}
+diff --git a/drivers/media/platform/qcom/iris/iris_vdec.c b/drivers/media/platform/qcom/iris/iris_vdec.c
+index d342f733feb9..de4e3fe8ed5a 100644
+--- a/drivers/media/platform/qcom/iris/iris_vdec.c
++++ b/drivers/media/platform/qcom/iris/iris_vdec.c
+@@ -487,6 +487,8 @@ static int iris_vdec_process_streamon_output(struct iris_inst *inst)
+ 	if (ret)
+ 		return ret;
+ 
++	inst->last_buffer_dequeued = false;
++
+ 	return iris_inst_change_sub_state(inst, clear_sub_state, 0);
+ }
+ 
+-- 
+2.34.1
+

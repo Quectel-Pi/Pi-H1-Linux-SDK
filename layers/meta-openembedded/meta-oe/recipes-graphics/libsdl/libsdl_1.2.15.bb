@@ -10,9 +10,6 @@ SECTION = "libs"
 LICENSE = "LGPL-2.1-only"
 LIC_FILES_CHKSUM = "file://COPYING;md5=27818cd7fd83877a8e3ef82b82798ef4"
 
-PROVIDES = "virtual/libsdl"
-
-PR = "r3"
 
 SRC_URI = "http://www.libsdl.org/release/SDL-${PV}.tar.gz \
            file://libsdl-1.2.15-xdata32.patch \
@@ -28,6 +25,7 @@ SRC_URI = "http://www.libsdl.org/release/SDL-${PV}.tar.gz \
            file://CVE-2019-7638.patch \
            file://CVE-2019-7576.patch \
            file://CVE-2019-13616.patch \
+           file://CVE-2022-34568.patch \
           "
 
 UPSTREAM_CHECK_REGEX = "SDL-(?P<pver>\d+(\.\d+)+)\.tar"
@@ -83,5 +81,4 @@ do_configure:prepend() {
 
 BBCLASSEXTEND = "native nativesdk"
 
-#CVE-2019-14906 is a RHEL specific vulnerability.
-CVE_CHECK_IGNORE += "CVE-2019-14906"
+CVE_STATUS[CVE-2019-14906] = "not-applicable-platform: Applies on RHEL only"

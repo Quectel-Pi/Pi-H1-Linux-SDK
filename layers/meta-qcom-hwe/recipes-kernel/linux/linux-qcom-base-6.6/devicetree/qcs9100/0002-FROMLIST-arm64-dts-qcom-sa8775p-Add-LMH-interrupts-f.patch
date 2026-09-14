@@ -1,0 +1,36 @@
+From d49efc1a5564cb93546bc94a1612bed521130960 Mon Sep 17 00:00:00 2001
+From: Jagadeesh Kona <quic_jkona@quicinc.com>
+Date: Fri, 17 Jan 2025 16:35:54 +0530
+Subject: [PATCH 2/6] FROMLIST: arm64: dts: qcom: sa8775p: Add LMH interrupts
+ for cpufreq_hw node
+
+Add LMH interrupts for cpufreq_hw node to indicate if there is any
+thermal throttle.
+
+Signed-off-by: Jagadeesh Kona <quic_jkona@quicinc.com>
+Reviewed-by: Konrad Dybcio <konrad.dybcio@oss.qualcomm.com>
+Link: https://lore.kernel.org/all/20250117-sa8775p-lmh-interrupts-v1-1-bae549f0bfe8@quicinc.com/
+Upstream-Status: Submitted
+[https://lore.kernel.org/all/20250117-sa8775p-lmh-interrupts-v1-1-bae549f0bfe8@quicinc.com/]
+---
+ arch/arm64/boot/dts/qcom/sa8775p.dtsi | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm64/boot/dts/qcom/sa8775p.dtsi b/arch/arm64/boot/dts/qcom/sa8775p.dtsi
+index ae0eb9748fe1..57afb4f8492a 100644
+--- a/arch/arm64/boot/dts/qcom/sa8775p.dtsi
++++ b/arch/arm64/boot/dts/qcom/sa8775p.dtsi
+@@ -4715,6 +4715,10 @@ cpufreq_hw: cpufreq@18591000 {
+ 			      <0x0 0x18593000 0x0 0x1000>;
+ 			reg-names = "freq-domain0", "freq-domain1";
+ 
++			interrupts = <GIC_SPI 31 IRQ_TYPE_LEVEL_HIGH>,
++				     <GIC_SPI 32 IRQ_TYPE_LEVEL_HIGH>;
++			interrupt-names = "dcvsh-irq-0", "dcvsh-irq-1";
++
+ 			clocks = <&rpmhcc RPMH_CXO_CLK>, <&gcc GCC_GPLL0>;
+ 			clock-names = "xo", "alternate";
+ 
+-- 
+2.34.1
+

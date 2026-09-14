@@ -13,9 +13,6 @@ RM_WORK_EXCLUDE += "${PN}"
 IMAGE_GEN_DEBUGFS = "1"
 IMAGE_FSTYPES_DEBUGFS = "tar.bz2"
 
-# Don't append timestamp to image name
-IMAGE_VERSION_SUFFIX = ""
-
 # Don't install locales into rootfs
 IMAGE_LINGUAS = ""
 
@@ -30,7 +27,9 @@ DEPENDS:append = " \
 BOOTIMAGE_TARGET   ?= "boot.img"
 SYSTEMIMAGE_TARGET ?= "system.img"
 
-SYSTEMIMAGE_TYPE = "${@bb.utils.contains('DISTRO_FEATURES', 'sota', 'ota-ext4', 'ext4', d)}"
+#SYSTEMIMAGE_TYPE = "${@bb.utils.contains('DISTRO_FEATURES', 'sota', 'ota-ext4', 'ext4', d)}"
+SYSTEMIMAGE_TYPE = "btrfs"
+
 
 # Place all files needed to flash the device in DEPLOY_DIR_NAME/IMAGE_BASENAME.
 # As they can't be directly installed into this path from actual recipes,
@@ -39,6 +38,7 @@ do_deploy_fixup[dirs] = "${DEPLOY_DIR_IMAGE}/${IMAGE_BASENAME}"
 do_deploy_fixup[cleandirs] = "${DEPLOY_DIR_IMAGE}/${IMAGE_BASENAME}"
 do_deploy_fixup[depends] += "esp-qcom-image:do_image_complete"
 do_deploy_fixup[depends] += "dtb-qcom-image:do_image_complete"
+do_deploy_fixup[depends] += "dtb-el2-qcom-image:do_image_complete"
 do_deploy_fixup[deptask] = "do_image_complete"
 
 DEPLOYDEPENDS = " \
@@ -75,18 +75,23 @@ do_deploy_fixup () {
     fi
 
     # copy efi.bin
-    if [ -f ${DEPLOY_DIR_IMAGE}/esp-qcom-image-${MACHINE}.vfat ]; then
-        install -m 0644 ${DEPLOY_DIR_IMAGE}/esp-qcom-image-${MACHINE}.vfat efi.bin
+    if [ -f ${DEPLOY_DIR_IMAGE}/esp-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat ]; then
+        install -m 0644 ${DEPLOY_DIR_IMAGE}/esp-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat efi.bin
     fi
 
     # copy dtb.bin
-    if [ -f ${DEPLOY_DIR_IMAGE}/dtb-qcom-image-${MACHINE}.vfat ]; then
-        install -m 0644 ${DEPLOY_DIR_IMAGE}/dtb-qcom-image-${MACHINE}.vfat dtb.bin
+    if [ -f ${DEPLOY_DIR_IMAGE}/dtb-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat ]; then
+        install -m 0644 ${DEPLOY_DIR_IMAGE}/dtb-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat dtb.bin
+    fi
+
+    # copy el2-dtb.bin
+    if [ -f ${DEPLOY_DIR_IMAGE}/dtb-el2-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat ]; then
+        install -m 0644 ${DEPLOY_DIR_IMAGE}/dtb-el2-qcom-image-${MACHINE}${IMAGE_NAME_SUFFIX}.vfat el2-dtb.bin
     fi
 
     # copy system.img
-    if [ -f ${DEPLOY_DIR_IMAGE}/${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.${SYSTEMIMAGE_TYPE} ]; then
-        install -m 0644 ${DEPLOY_DIR_IMAGE}/${IMAGE_NAME}${IMAGE_NAME_SUFFIX}.${SYSTEMIMAGE_TYPE} ${SYSTEMIMAGE_TARGET}
+    if [ -f ${DEPLOY_DIR_IMAGE}/${IMAGE_LINK_NAME}.${SYSTEMIMAGE_TYPE} ]; then
+        install -m 0644 ${DEPLOY_DIR_IMAGE}/${IMAGE_LINK_NAME}.${SYSTEMIMAGE_TYPE} ${SYSTEMIMAGE_TARGET}
     fi
 
     #Copy gpt_main.bin
@@ -146,9 +151,19 @@ do_deploy_fixup () {
         install -m 0644 ${DEPLOY_DIR_IMAGE}/zeros_5sectors.bin zeros_5sectors.bin
     fi
 
-    # copy zeros_1sector.bin
-    if [ -f ${DEPLOY_DIR_IMAGE}/zeros_1sector.bin ]; then
-        install -m 0644 ${DEPLOY_DIR_IMAGE}/zeros_1sector.bin zeros_1sector.bin
+    # copy zeros_33sectors.bin
+    if [ -f ${DEPLOY_DIR_IMAGE}/zeros_33sectors.bin ]; then
+        install -m 0644 ${DEPLOY_DIR_IMAGE}/zeros_33sectors.bin zeros_33sectors.bin
+    fi
+
+    # copy fitimage
+    if [ -f ${DEPLOY_DIR_IMAGE}/fitImage-combineddtb ]; then
+        install -m 0644 ${DEPLOY_DIR_IMAGE}/fitImage-combineddtb boot.img
+    fi 
+
+    # copy u-boot.elf
+    if [ -f ${DEPLOY_DIR_IMAGE}/u-boot.elf ]; then
+        install -m 0644 ${DEPLOY_DIR_IMAGE}/u-boot.elf u-boot.elf
     fi
 
     for patchfile in ${DEPLOY_DIR_IMAGE}/patch*.xml; do
@@ -156,5 +171,29 @@ do_deploy_fixup () {
             install -m 0644 $patchfile .
         fi
     done
+
+    # Copy sail boot bins
+    if [ -d ${DEPLOY_DIR_IMAGE}/sail_nor ]; then
+        install -d sail_nor
+        for f in ${DEPLOY_DIR_IMAGE}/sail_nor/*; do
+            install -m 0644 $f ./sail_nor/
+	done
+    fi
+
+    # Copy ufs partition bins
+    if [ -d ${DEPLOY_DIR_IMAGE}/partition_ufs ]; then
+        install -d partition_ufs
+        for f in ${DEPLOY_DIR_IMAGE}/partition_ufs/*; do
+            install -m 0644 $f ./partition_ufs/
+        done
+    fi
+
+    # Copy emmc partition bins
+    if [ -d ${DEPLOY_DIR_IMAGE}/partition_emmc ]; then
+        install -d partition_emmc
+        for f in ${DEPLOY_DIR_IMAGE}/partition_emmc/*; do
+            install -m 0644 $f ./partition_emmc/
+        done
+    fi
 }
 addtask do_deploy_fixup after do_image_complete before do_build

@@ -19,7 +19,7 @@ EXTRA_OECONF:append:armv6:class-target = " --with-arch=armv6${ARMFPARCHEXT}"
 EXTRA_OECONF:append:armv7a:class-target = " --with-arch=armv7-a${ARMFPARCHEXT}"
 EXTRA_OECONF:append:armv7ve:class-target = " --with-arch=armv7ve${ARMFPARCHEXT}"
 EXTRA_OECONF:append:arc:class-target = " --with-cpu=${TUNE_PKGARCH}"
-EXTRA_OECONF:append:x86-64:class-target = " --with-arch=native"
+EXTRA_OECONF:append:x86-64:class-target = " ${@get_gcc_x86_64_arch_setting(bb, d)}"
 
 # libcc1 requres gcc_cv_objdump when cross build, but gcc_cv_objdump is
 # set in subdir gcc, so subdir libcc1 can't use it, export it here to
@@ -140,20 +140,8 @@ FILES:${PN}-doc = "\
 "
 
 do_compile () {
-	# Prevent full target sysroot path from being used in configargs.h header,
-	# as it will be rewritten when used by other sysroots preventing support
-	# for gcc plugins. Additionally the path is embeddeded into the output
-	# binary, this prevents building a reproducible binary.
-	oe_runmake configure-gcc
-	sed -i 's@${STAGING_DIR_TARGET}@/@g' ${B}/gcc/configargs.h
-	sed -i 's@${STAGING_DIR_HOST}@/@g' ${B}/gcc/configargs.h
-
-	# Prevent sysroot/workdir paths from being used in checksum-options.
-	# checksum-options is used to generate a checksum which is embedded into
-	# the output binary.
-	oe_runmake TARGET-gcc=checksum-options all-gcc
-	sed -i 's@${DEBUG_PREFIX_MAP}@@g' ${B}/gcc/checksum-options
-	sed -i 's@${STAGING_DIR_TARGET}@/@g' ${B}/gcc/checksum-options
+	remove_sysroot_paths_from_configargs '/'
+	remove_sysroot_paths_from_checksum_options '${STAGING_DIR_TARGET}' '/'
 
 	oe_runmake all-host
 }
@@ -218,37 +206,8 @@ do_install () {
 	install -d ${D}${libdir}/bfd-plugins
 	ln -sf ${libexecdir}/gcc/${TARGET_SYS}/${BINV}/liblto_plugin.so ${D}${libdir}/bfd-plugins/liblto_plugin.so
 	chown -R root:root ${D}
-}
 
-do_install:append () {
-        #
-        # Thefixinc.sh script, run on the gcc's compile phase, looks into sysroot header
-        # files and places the modified files into
-        # {D}${libdir}/gcc/${TARGET_SYS}/${BINV}/include-fixed folder. This makes the
-        # build not deterministic. The following code prunes all those headers
-        # except those under include-fixed/linux, *limits.h and README, yielding
-        # the same include-fixed folders no matter what sysroot
-
-        include_fixed="${D}${libdir}/gcc/${TARGET_SYS}/${BINV}/include-fixed"
-        for f in $(find ${include_fixed} -type f); do
-                case $f in
-                */include-fixed/linux/*)
-                    continue
-                    ;;
-                */include-fixed/*limits.h)
-                    continue
-                    ;;
-                */include-fixed/README)
-                    continue
-                    ;;
-                *)
-                    # remove file and directory if empty
-                    bbdebug 2 "Pruning $f"
-                    rm $f
-                    find $(dirname $f) -maxdepth 0 -empty -exec rmdir {} \;
-                    ;;
-                esac
-        done
+	cleanup_installed_include_fixed
 }
 
 # Installing /usr/lib/gcc/* means we'd have two copies, one from gcc-cross

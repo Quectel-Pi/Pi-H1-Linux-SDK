@@ -1,0 +1,9 @@
+[Unit]
+Documentation=man:ostree(1)
+ConditionKernelCommandLine=!systemd.volatile
+Before=local-fs.target
+
+[Mount]
+Where=/var
+What=/sysroot/ostree/deploy/poky/var
+Options=bind

@@ -1,0 +1,7 @@
+# 高通 PAL 音频需要用户(pi)访问 /dev/dma_heap/qcom,audio-ml 和 /dev/aud_pasthru_adsp
+# (AGM init 用)。默认权限 640/600, 普通用户无法访问导致 AGM init failed,
+# pipewire core/wireplumber 起不来。设备创建时直接赋 666, 不依赖服务启动顺序。
+# zz- 前缀保证字典序最后执行: /usr/lib/udev/rules.d/audio-node.rules 对同一批设备
+# 设置 MODE(0640/0666), 必须在其之后执行才不会被覆盖。
+ACTION=="add", SUBSYSTEM=="dma_heap", KERNEL=="qcom,audio-ml", MODE="0666"
+ACTION=="add", SUBSYSTEM=="aud_pasthru_adsp", KERNEL=="aud_pasthru_adsp", MODE="0666"

@@ -1,0 +1,80 @@
+From da2c11523aaf2d52c93a99606a910e797fae89f9 Mon Sep 17 00:00:00 2001
+From: Miaoqing Pan <quic_miaoqing@quicinc.com>
+Date: Tue, 18 Mar 2025 15:23:58 +0800
+Subject: [PATCH 1/2] FROMLIST: wifi: ath11k: add function to get next srng
+ desc
+
+Adding the ath11k_hal_srng_dst_next() function allows for the
+separate invocation of ath11k_hal_srng_dst_peek() and
+ath11k_hal_srng_dst_next() in certain situations, instead of
+calling the ath11k_hal_srng_dst_get_next_entry() function alone.
+
+Tested-on: QCA6698AQ hw2.1 PCI WLAN.HSP.1.1-04546-QCAHSPSWPL_V1_V2_SILICONZ_IOE-1
+
+Change-Id: I92045b82726e00ca067769568095098dcc2e0d20
+Signed-off-by: Miaoqing Pan <quic_miaoqing@quicinc.com>
+Upstream-Status: Submitted [https://lore.kernel.org/linux-wireless/20250317072036.2066518-2-quic_miaoqing@quicinc.com/]
+---
+ drivers/net/wireless/ath/ath11k/hal.c | 17 ++++++++++++++++-
+ drivers/net/wireless/ath/ath11k/hal.h |  3 ++-
+ 2 files changed, 18 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/net/wireless/ath/ath11k/hal.c b/drivers/net/wireless/ath/ath11k/hal.c
+index e6fe0df4b941..9d1f96a39916 100644
+--- a/drivers/net/wireless/ath/ath11k/hal.c
++++ b/drivers/net/wireless/ath/ath11k/hal.c
+@@ -1,7 +1,7 @@
+ // SPDX-License-Identifier: BSD-3-Clause-Clear
+ /*
+  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+- * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2022, 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ #include <linux/dma-mapping.h>
+ #include "hal_tx.h"
+@@ -643,6 +643,21 @@ static void ath11k_hal_srng_prefetch_desc(struct ath11k_base *ab,
+ 	}
+ }
+ 
++void ath11k_hal_srng_dst_next(struct ath11k_base *ab, struct hal_srng *srng)
++{
++	lockdep_assert_held(&srng->lock);
++
++	srng->u.dst_ring.tp += srng->entry_size;
++
++	/* wrap around to start of ring*/
++	if (srng->u.dst_ring.tp == srng->ring_size)
++		srng->u.dst_ring.tp = 0;
++
++	/* Try to prefetch the next descriptor in the ring */
++	if (srng->flags & HAL_SRNG_FLAGS_CACHED)
++		ath11k_hal_srng_prefetch_desc(ab, srng);
++}
++
+ u32 *ath11k_hal_srng_dst_get_next_entry(struct ath11k_base *ab,
+ 					struct hal_srng *srng)
+ {
+diff --git a/drivers/net/wireless/ath/ath11k/hal.h b/drivers/net/wireless/ath/ath11k/hal.h
+index 80447f488954..95abd630de96 100644
+--- a/drivers/net/wireless/ath/ath11k/hal.h
++++ b/drivers/net/wireless/ath/ath11k/hal.h
+@@ -1,7 +1,7 @@
+ /* SPDX-License-Identifier: BSD-3-Clause-Clear */
+ /*
+  * Copyright (c) 2018-2019 The Linux Foundation. All rights reserved.
+- * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2021-2022, 2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ 
+ #ifndef ATH11K_HAL_H
+@@ -940,6 +940,7 @@ int ath11k_hal_srng_get_entrysize(struct ath11k_base *ab, u32 ring_type);
+ int ath11k_hal_srng_get_max_entries(struct ath11k_base *ab, u32 ring_type);
+ void ath11k_hal_srng_get_params(struct ath11k_base *ab, struct hal_srng *srng,
+ 				struct hal_srng_params *params);
++void ath11k_hal_srng_dst_next(struct ath11k_base *ab, struct hal_srng *srng);
+ u32 *ath11k_hal_srng_dst_get_next_entry(struct ath11k_base *ab,
+ 					struct hal_srng *srng);
+ u32 *ath11k_hal_srng_dst_peek(struct ath11k_base *ab, struct hal_srng *srng);
+-- 
+2.25.1
+

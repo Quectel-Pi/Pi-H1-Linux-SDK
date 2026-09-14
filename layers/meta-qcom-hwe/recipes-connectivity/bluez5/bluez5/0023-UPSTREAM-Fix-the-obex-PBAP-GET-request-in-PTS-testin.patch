@@ -1,0 +1,82 @@
+From 208ed82d19d7310e60aedb83106664d14465aacf Mon Sep 17 00:00:00 2001
+From: Amisha Jain <quic_amisjain@quicinc.com>
+Date: Sun, 10 Nov 2024 19:58:23 +0530
+Subject: [PATCH] UPSTREAM: Fix the obex PBAP GET request in PTS testing
+
+This change is required for passing below PTS testcases:
+1. PBAP/PSE/PBD/BV-02-C
+2. PBAP/PSE/PBD/BV-03-C
+3. PBAP/PSE/PBD/BI-01-C
+4. PBAP/PSE/PBD/BV-13-C
+5. PBAP/PSE/PBD/BV-14-C
+6. PBAP/PSE/PBD/BV-17-C
+
+PTS sends all the GET phonebook requests without extra params.
+Therefore, the PBAP server is rejecting the requests with a
+'Bad Request' response.
+So append 'maxlistcount' as default param in GET request to
+avoid testcase failure.
+
+Upstream-Status: Backport https://github.com/bluez/bluez/commit/b22bbf873f819ceef4d50feabcebe907f309c68a
+Signed-off-by: Amisha Jain <quic_amisjain@quicinc.com>
+---
+ obexd/plugins/pbap.c | 27 +++++++++++++--------------
+ 1 file changed, 13 insertions(+), 14 deletions(-)
+
+diff --git a/obexd/plugins/pbap.c b/obexd/plugins/pbap.c
+index ab52363..b7d48f9 100644
+--- a/obexd/plugins/pbap.c
++++ b/obexd/plugins/pbap.c
+@@ -438,10 +438,6 @@ static struct apparam_field *parse_aparam(const uint8_t *buffer, uint32_t hlen)
+ 	GObexApparam *apparam;
+ 	struct apparam_field *param;
+ 
+-	apparam = g_obex_apparam_decode(buffer, hlen);
+-	if (apparam == NULL)
+-		return NULL;
+-
+ 	param = g_new0(struct apparam_field, 1);
+ 
+ 	/*
+@@ -449,25 +445,28 @@ static struct apparam_field *parse_aparam(const uint8_t *buffer, uint32_t hlen)
+ 	 * should be assume as Maximum value in vcardlisting 65535
+ 	 */
+ 	param->maxlistcount = UINT16_MAX;
+-
+-	g_obex_apparam_get_uint8(apparam, ORDER_TAG, &param->order);
+-	g_obex_apparam_get_uint8(apparam, SEARCHATTRIB_TAG,
++	apparam = g_obex_apparam_decode(buffer, hlen);
++	if (apparam) {
++		g_obex_apparam_get_uint8(apparam, ORDER_TAG, &param->order);
++		g_obex_apparam_get_uint8(apparam, SEARCHATTRIB_TAG,
+ 						&param->searchattrib);
+-	g_obex_apparam_get_uint8(apparam, FORMAT_TAG, &param->format);
+-	g_obex_apparam_get_uint16(apparam, MAXLISTCOUNT_TAG,
++		g_obex_apparam_get_uint8(apparam, FORMAT_TAG, &param->format);
++		g_obex_apparam_get_uint16(apparam, MAXLISTCOUNT_TAG,
+ 						&param->maxlistcount);
+-	g_obex_apparam_get_uint16(apparam, LISTSTARTOFFSET_TAG,
++		g_obex_apparam_get_uint16(apparam, LISTSTARTOFFSET_TAG,
+ 						&param->liststartoffset);
+-	g_obex_apparam_get_uint64(apparam, FILTER_TAG, &param->filter);
+-	param->searchval = g_obex_apparam_get_string(apparam, SEARCHVALUE_TAG);
++		g_obex_apparam_get_uint64(apparam, FILTER_TAG, &param->filter);
++		param->searchval = g_obex_apparam_get_string(apparam,
++						SEARCHVALUE_TAG);
++
++		g_obex_apparam_free(apparam);
++	}
+ 
+ 	DBG("o %x sa %x sv %s fil %" G_GINT64_MODIFIER "x for %x max %x off %x",
+ 			param->order, param->searchattrib, param->searchval,
+ 			param->filter, param->format, param->maxlistcount,
+ 			param->liststartoffset);
+ 
+-	g_obex_apparam_free(apparam);
+-
+ 	return param;
+ }
+ 
+-- 
+2.34.1
+

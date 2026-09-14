@@ -1,0 +1,26 @@
+From f1125594506bfa10f5038b127492965ab99f05e7 Wed Mar 5 09:40:42 2025 +0530
+From: Yaswanth Kowtha <quic_ykowtha@quicinc.com>
+Date: Wed, Mar 5 09:40:42 2025 +0530
+Subject: [PATCH] Don't require dri
+
+DRI is not needed, so just disabling it.
+
+Upstream-Status: Inappropriate [specific to our build setup]
+Signed-off-by: Yaswanth Kowtha <quic_ykowtha@quicinc.com>
+---
+ content/gpu/BUILD.gn | 4----
+ 1 file changed, 4 deletions(-)
+
+diff --git a/content/gpu/BUILD.gn b/content/gpu/BUILD.gn
+index 38e5ab7..b5f5291 100644
+--- a/content/gpu/BUILD.gn
++++ b/content/gpu/BUILD.gn
+@@ -128,7 +128,3 @@
+ 
+   # Use DRI on desktop Linux builds.
+-  if (current_cpu != "s390x" && current_cpu != "ppc64" && is_linux &&
+-      !is_castos) {
+-    configs += [ "//build/config/linux/dri" ]
+-  }
+ }
+ 

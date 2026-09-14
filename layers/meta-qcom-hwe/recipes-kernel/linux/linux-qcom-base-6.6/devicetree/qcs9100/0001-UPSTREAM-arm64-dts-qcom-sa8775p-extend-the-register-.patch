@@ -1,0 +1,33 @@
+From 72ee1c5127664ff72527537c02f22b202baec2bf Mon Sep 17 00:00:00 2001
+From: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Date: Mon, 2 Dec 2024 17:09:37 +0530
+Subject: [PATCH] UPSTREAM: arm64: dts: qcom: sa8775p: extend the register
+ range for UFS ICE
+
+The full register range for ICE on sa8775p is 0x18000 so update the
+crypto node.
+
+Signed-off-by: Bartosz Golaszewski <bartosz.golaszewski@linaro.org>
+Link: https://lore.kernel.org/r/20241007-wrapped-keys-dts-v8-3-05ee041f2fc1@linaro.org
+Signed-off-by: Bjorn Andersson <andersson@kernel.org>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git dcf8ef1c8d3046cdbbbe44802a303a94b5bdadcc]
+---
+ arch/arm64/boot/dts/qcom/sa8775p.dtsi | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/arch/arm64/boot/dts/qcom/sa8775p.dtsi b/arch/arm64/boot/dts/qcom/sa8775p.dtsi
+index e43bc030f8ba..6a144b306907 100644
+--- a/arch/arm64/boot/dts/qcom/sa8775p.dtsi
++++ b/arch/arm64/boot/dts/qcom/sa8775p.dtsi
+@@ -1927,7 +1927,7 @@ ufs_mem_phy: phy@1d87000 {
+ 		ice: crypto@1d88000 {
+ 			compatible = "qcom,sa8775p-inline-crypto-engine",
+ 			             "qcom,inline-crypto-engine";
+-			reg = <0x0 0x01d88000 0x0 0x8000>;
++			reg = <0x0 0x01d88000 0x0 0x18000>;
+ 			clocks = <&gcc GCC_UFS_PHY_ICE_CORE_CLK>;
+ 		};
+
+--
+2.34.1
+

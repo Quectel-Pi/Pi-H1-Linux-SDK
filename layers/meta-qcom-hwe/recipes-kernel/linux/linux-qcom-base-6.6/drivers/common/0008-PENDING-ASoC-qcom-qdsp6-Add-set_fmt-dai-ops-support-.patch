@@ -1,0 +1,42 @@
+From 50b141b41e6006a8edcaa851de0056352de90bd4 Mon Sep 17 00:00:00 2001
+From: Mohammad Rafi Shaik <quic_mohs@quicinc.com>
+Date: Sat, 8 Mar 2025 08:46:34 +0530
+Subject: [PATCH] PENDING: ASoC: qcom: qdsp6: Add set_fmt dai ops support for
+ i2s
+
+Add set_fmt dai ops support for i2s interface and
+update the lpaif_type for i2s module media settings.
+
+Change-Id: Iff9ad4237467f770b5e43aaffd09263b0a6cb339
+Signed-off-by: Mohammad Rafi Shaik <quic_mohs@quicinc.com>
+Upstream-Status: Pending
+---
+ sound/soc/qcom/qdsp6/audioreach.c       | 1 +
+ sound/soc/qcom/qdsp6/q6apm-lpass-dais.c | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/sound/soc/qcom/qdsp6/audioreach.c b/sound/soc/qcom/qdsp6/audioreach.c
+index 3eab43e9efb3..08e366b83496 100644
+--- a/sound/soc/qcom/qdsp6/audioreach.c
++++ b/sound/soc/qcom/qdsp6/audioreach.c
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: GPL-2.0
+ // Copyright (c) 2020, Linaro Limited
++// Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ 
+ #include <linux/kernel.h>
+ #include <linux/slab.h>
+diff --git a/sound/soc/qcom/qdsp6/q6apm-lpass-dais.c b/sound/soc/qcom/qdsp6/q6apm-lpass-dais.c
+index 3813fe5e0181..a74a6e219a0d 100644
+--- a/sound/soc/qcom/qdsp6/q6apm-lpass-dais.c
++++ b/sound/soc/qcom/qdsp6/q6apm-lpass-dais.c
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: GPL-2.0
+ // Copyright (c) 2021, Linaro Limited
++// Copyright (c) 2023-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ 
+ #include <linux/err.h>
+ #include <linux/init.h>
+-- 
+2.17.1
+

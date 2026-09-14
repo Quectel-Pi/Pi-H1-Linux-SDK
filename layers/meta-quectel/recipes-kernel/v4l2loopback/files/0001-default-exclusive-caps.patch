@@ -1,0 +1,12 @@
+--- a/v4l2loopback.c
++++ b/v4l2loopback.c
+@@ -940,6 +940,9 @@
+ 		}
+ 	}
+ 
++	/* Always report capture capability for Camx bridge */
++	capabilities |= V4L2_CAP_VIDEO_CAPTURE;
++
+ #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
+ 	dev->vdev->device_caps =
+ #endif /* >=linux-4.7.0 */

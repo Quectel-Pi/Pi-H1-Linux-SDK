@@ -1,0 +1,1516 @@
+From 01cff6fb8a2fe2d167dc88a3851b3b6d1845aed0 Mon Sep 17 00:00:00 2001
+From: Wenmeng Liu <quic_wenmliu@quicinc.com>
+Date: Tue, 31 Dec 2024 16:15:55 +0800
+Subject: [PATCH] PENDING: add TPG driver on camss for sa8775p
+
+This change add TPG driver on camss for sa8775p.
+
+Signed-off-by: Wenmeng Liu <quic_wenmliu@quicinc.com>
+Upstream-Status: Pending
+---
+ drivers/media/platform/qcom/camss/Makefile    |   2 +
+ .../platform/qcom/camss/camss-csid-gen3.c     |  15 +
+ .../media/platform/qcom/camss/camss-csid.c    |  44 +-
+ .../platform/qcom/camss/camss-tpg-gen1.c      | 245 ++++++
+ drivers/media/platform/qcom/camss/camss-tpg.c | 739 ++++++++++++++++++
+ drivers/media/platform/qcom/camss/camss-tpg.h | 130 +++
+ drivers/media/platform/qcom/camss/camss.c     | 126 +++
+ drivers/media/platform/qcom/camss/camss.h     |   5 +
+ 8 files changed, 1297 insertions(+), 9 deletions(-)
+ create mode 100644 drivers/media/platform/qcom/camss/camss-tpg-gen1.c
+ create mode 100644 drivers/media/platform/qcom/camss/camss-tpg.c
+ create mode 100644 drivers/media/platform/qcom/camss/camss-tpg.h
+
+diff --git a/drivers/media/platform/qcom/camss/Makefile b/drivers/media/platform/qcom/camss/Makefile
+index fbed11de630a..cc0704656642 100644
+--- a/drivers/media/platform/qcom/camss/Makefile
++++ b/drivers/media/platform/qcom/camss/Makefile
+@@ -22,5 +22,7 @@ qcom-camss-objs += \
+ 		camss-vfe.o \
+ 		camss-video.o \
+ 		camss-format.o \
++		camss-tpg.o \
++		camss-tpg-gen1.o
+ 
+ obj-$(CONFIG_VIDEO_QCOM_CAMSS) += qcom-camss.o
+diff --git a/drivers/media/platform/qcom/camss/camss-csid-gen3.c b/drivers/media/platform/qcom/camss/camss-csid-gen3.c
+index 1095639465b8..9edf5cddbede 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen3.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen3.c
+@@ -185,13 +185,28 @@ static void __csid_configure_rx(struct csid_device *csid,
+ 				struct csid_phy_config *phy, int vc)
+ {
+ 	int val;
++	struct camss *camss;
++	struct tpg_device *tpg;
+ 
++	camss = csid->camss;
+ 	val = (phy->lane_cnt - 1) << CSI2_RX_CFG0_NUM_ACTIVE_LANES;
+ 	val |= phy->lane_assign << CSI2_RX_CFG0_DL0_INPUT_SEL;
+ 	val |= (phy->csiphy_id + CSI2_RX_CFG0_PHY_SEL_BASE_IDX) << CSI2_RX_CFG0_PHY_NUM_SEL;
+ 	if (vc > 3)
+ 		val |= 1 << CSI2_RX_CFG0_VC_MODE;
+ 
++	if (camss->tpg) {
++		tpg = &camss->tpg[phy->csiphy_id];
++
++		if (tpg->testgen.mode > 0) {
++			val |= (phy->csiphy_id + 1) << CSI2_RX_CFG0_TPG_NUM_SEL;
++			val |= 1 << CSI2_RX_CFG0_TPG_NUM_EN;
++		} else {
++			val |= 0 << CSI2_RX_CFG0_TPG_NUM_SEL;
++			val |= 0 << CSI2_RX_CFG0_TPG_NUM_EN;
++		}
++	}
++
+ 	writel(val, csid->base + CSID_CSI2_RX_CFG0);
+ 
+ 	val = 1 << CSI2_RX_CFG1_ECC_CORRECTION_EN;
+diff --git a/drivers/media/platform/qcom/camss/camss-csid.c b/drivers/media/platform/qcom/camss/camss-csid.c
+index aa32ee16962f..1475acadbabd 100644
+--- a/drivers/media/platform/qcom/camss/camss-csid.c
++++ b/drivers/media/platform/qcom/camss/camss-csid.c
+@@ -1160,6 +1160,23 @@ void msm_csid_get_csid_id(struct media_entity *entity, u8 *id)
+ 	*id = csid->id;
+ }
+ 
++/*
++ * csid_get_csiphy_tpg_lane_assign - Calculate lane assign by tpg lane num
++ * @num - tpg lane num
++ *
++ * Return lane assign
++ */
++static u32 csid_get_csiphy_tpg_lane_assign(int num)
++{
++	u32 lane_assign = 0;
++	int i;
++
++	for (i = (num - 1); i >= 0; i--)
++		lane_assign |= i << (i * 4);
++
++	return lane_assign;
++}
++
+ /*
+  * csid_get_lane_assign - Calculate CSI2 lane assign configuration parameter
+  * @lane_cfg - CSI2 lane configuration
+@@ -1200,6 +1217,7 @@ static int csid_link_setup(struct media_entity *entity,
+ 		struct csid_device *csid;
+ 		struct csiphy_device *csiphy;
+ 		struct csiphy_lanes_cfg *lane_cfg;
++		struct tpg_device *tpg;
+ 
+ 		sd = media_entity_to_v4l2_subdev(entity);
+ 		csid = v4l2_get_subdevdata(sd);
+@@ -1210,18 +1228,26 @@ static int csid_link_setup(struct media_entity *entity,
+ 			return -EBUSY;
+ 
+ 		sd = media_entity_to_v4l2_subdev(remote->entity);
+-		csiphy = v4l2_get_subdevdata(sd);
++		if (strnstr(sd->name, MSM_TPG_NAME, strlen(MSM_TPG_NAME))) {
++			tpg = v4l2_get_subdevdata(sd);
+ 
+-		/* If a sensor is not linked to CSIPHY */
+-		/* do no allow a link from CSIPHY to CSID */
+-		if (!csiphy->cfg.csi2)
+-			return -EPERM;
++			csid->phy.lane_cnt = tpg->res->lane_cnt;
++			csid->phy.csiphy_id = tpg->id;
++			csid->phy.lane_assign = csid_get_csiphy_tpg_lane_assign(csid->phy.lane_cnt);
++		} else {
++			csiphy = v4l2_get_subdevdata(sd);
++
++			/* If a sensor is not linked to CSIPHY */
++			/* do no allow a link from CSIPHY to CSID */
++			if (!csiphy->cfg.csi2)
++				return -EPERM;
+ 
+-		csid->phy.csiphy_id = csiphy->id;
++			csid->phy.csiphy_id = csiphy->id;
+ 
+-		lane_cfg = &csiphy->cfg.csi2->lane_cfg;
+-		csid->phy.lane_cnt = lane_cfg->num_data;
+-		csid->phy.lane_assign = csid_get_lane_assign(lane_cfg);
++			lane_cfg = &csiphy->cfg.csi2->lane_cfg;
++			csid->phy.lane_cnt = lane_cfg->num_data;
++			csid->phy.lane_assign = csid_get_lane_assign(lane_cfg);
++		}
+ 	}
+ 	/* Decide which virtual channels to enable based on which source pads are enabled */
+ 	if (local->flags & MEDIA_PAD_FL_SOURCE) {
+diff --git a/drivers/media/platform/qcom/camss/camss-tpg-gen1.c b/drivers/media/platform/qcom/camss/camss-tpg-gen1.c
+new file mode 100644
+index 000000000000..30cb92f9c122
+--- /dev/null
++++ b/drivers/media/platform/qcom/camss/camss-tpg-gen1.c
+@@ -0,0 +1,245 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * camss-tpg-gen1.c
++ *
++ * Qualcomm MSM Camera Subsystem - TPG (Test Patter Generator) Module
++ *
++ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++#include <linux/completion.h>
++#include <linux/interrupt.h>
++#include <linux/io.h>
++#include <linux/kernel.h>
++#include <linux/of.h>
++
++#include "camss-tpg.h"
++#include "camss.h"
++
++#define TPG_HW_VERSION		0x0
++#define		HW_VERSION_STEPPING		0
++#define		HW_VERSION_REVISION		16
++#define		HW_VERSION_GENERATION		28
++
++#define TPG_HW_STATUS		0x4
++
++#define TPG_VC_n_GAIN_CFG(n)	(0x60 + (n) * 0x60)
++
++#define TPG_CTRL	0x64
++#define		TPG_CTRL_TEST_EN		0
++#define		TPG_CTRL_PHY_SEL		3
++#define		TPG_CTRL_NUM_ACTIVE_LANES	4
++#define		TPG_CTRL_VC_DT_PATTERN_ID	6
++#define		TPG_CTRL_OVERLAP_SHDR_EN	10
++#define		TPG_CTRL_NUM_ACTIVE_VC		30
++#define			NUM_ACTIVE_VC_0_ENABLED		0
++#define			NUM_ACTIVE_VC_0_1_ENABLED	1
++#define			NUM_ACTIVE_VC_0_1_2_ENABLED	2
++#define			NUM_ACTIVE_VC_0_1_3_ENABLED	3
++
++#define TPG_VC_n_CFG0(n)	(0x68 + (n) * 0x60)
++#define		TPG_VC_n_CFG0_VC_NUM		0
++#define		TPG_VC_n_CFG0_NUM_ACTIVE_DT	8
++#define			NUM_ACTIVE_SLOTS_0_ENABLED		0
++#define			NUM_ACTIVE_SLOTS_0_1_ENABLED		1
++#define			NUM_ACTIVE_SLOTS_0_1_2_ENABLED		2
++#define			NUM_ACTIVE_SLOTS_0_1_3_ENABLED		3
++#define		TPG_VC_n_CFG0_NUM_BATCH		12
++#define		TPG_VC_n_CFG0_NUM_FRAMES	16
++
++#define TPG_VC_n_LSFR_SEED(n)		(0x6C + (n) * 0x60)
++
++#define TPG_VC_n_HBI_CFG(n)		(0x70 + (n) * 0x60)
++
++#define TPG_VC_n_VBI_CFG(n)		(0x74 + (n) * 0x60)
++
++#define TPG_VC_n_COLOR_BARS_CFG(n)		(0x78 + (n) * 0x60)
++#define		TPG_VC_n_COLOR_BARS_CFG_PIX_PATTERN		0
++#define		TPG_VC_n_COLOR_BARS_CFG_QCFA_EN			3
++#define		TPG_VC_n_COLOR_BARS_CFG_SPLIT_EN		4
++#define		TPG_VC_n_COLOR_BARS_CFG_NOISE_EN		5
++#define		TPG_VC_n_COLOR_BARS_CFG_ROTATE_PERIOD		8
++#define		TPG_VC_n_COLOR_BARS_CFG_XCFA_EN			16
++#define		TPG_VC_n_COLOR_BARS_CFG_SIZE_X			24
++#define		TPG_VC_n_COLOR_BARS_CFG_SIZE_Y			28
++
++#define TPG_VC_m_DT_n_CFG_0(m, n)	(0x7C + (m) * 0x60 + (n) * 0xC)
++#define		TPG_VC_m_DT_n_CFG_0_FRAME_HEIGHT	0
++#define		TPG_VC_m_DT_n_CFG_0_FRAME_WIDTH		16
++
++#define TPG_VC_m_DT_n_CFG_1(m, n)	(0x80 + (m) * 0x60 + (n) * 0xC)
++#define		TPG_VC_m_DT_n_CFG_1_DATA_TYPE		0
++#define		TPG_VC_m_DT_n_CFG_1_ECC_XOR_MASK	8
++#define		TPG_VC_m_DT_n_CFG_1_CRC_XOR_MASK	16
++
++#define TPG_VC_m_DT_n_CFG_2(m, n)	(0x84 + (m) * 0x60 + (n) * 0xC)
++#define		TPG_VC_m_DT_n_CFG_2_PAYLOAD_MODE		0
++#define		TPG_VC_m_DT_n_CFG_2_USER_SPECIFIED_PAYLOAD	4
++#define		TPG_VC_m_DT_n_CFG_2_ENCODE_FORMAT		28
++
++#define TPG_VC_n_COLOR_BAR_CFA_COLOR0(n)	(0xB0 + (n) * 0x60)
++#define TPG_VC_n_COLOR_BAR_CFA_COLOR1(n)	(0xB4 + (n) * 0x60)
++#define TPG_VC_n_COLOR_BAR_CFA_COLOR2(n)	(0xB8 + (n) * 0x60)
++#define TPG_VC_n_COLOR_BAR_CFA_COLOR3(n)	(0xBC + (n) * 0x60)
++
++/* Line offset between VC(n) and VC(n-1), n form 1 to 3 */
++#define TPG_VC_n_SHDR_CFG	(0x84 + (n) * 0x60)
++
++#define TPG_TOP_IRQ_STATUS	0x1E0
++#define TPG_TOP_IRQ_MASK	0x1E4
++#define TPG_TOP_IRQ_CLEAR	0x1E8
++#define TPG_TOP_IRQ_SET		0x1EC
++#define TPG_IRQ_CMD		0x1F0
++#define TPG_CLEAR		0x1F4
++
++static int tpg_stream_on(struct tpg_device *tpg)
++{
++	struct tpg_testgen_config *tg = &tpg->testgen;
++	struct v4l2_mbus_framefmt *input_format;
++	const struct tpg_format_info *format;
++	u8 lane_cnt = tpg->res->lane_cnt;
++	u8 i;
++	u8 dt_cnt = 0;
++	u32 val;
++
++	/* Loop through all enabled VCs and configure stream for each */
++	for (i = 0; i < tpg->res->vc_cnt; i++) {
++		input_format = &tpg->fmt[MSM_TPG_PAD_SRC + i];
++		format = tpg_get_fmt_entry(tpg->res->formats->formats,
++					   tpg->res->formats->nformats,
++					   input_format->code);
++
++		val = (input_format->height & 0xffff) << TPG_VC_m_DT_n_CFG_0_FRAME_HEIGHT;
++		val |= (input_format->width & 0xffff) << TPG_VC_m_DT_n_CFG_0_FRAME_WIDTH;
++		writel_relaxed(val, tpg->base + TPG_VC_m_DT_n_CFG_0(i, dt_cnt));
++
++		val = format->data_type << TPG_VC_m_DT_n_CFG_1_DATA_TYPE;
++		writel_relaxed(val, tpg->base + TPG_VC_m_DT_n_CFG_1(i, dt_cnt));
++
++		val = (tg->mode - 1) << TPG_VC_m_DT_n_CFG_2_PAYLOAD_MODE;
++		val |= 0xBE << TPG_VC_m_DT_n_CFG_2_USER_SPECIFIED_PAYLOAD;
++		val |= format->encode_format << TPG_VC_m_DT_n_CFG_2_ENCODE_FORMAT;
++		writel_relaxed(val, tpg->base + TPG_VC_m_DT_n_CFG_2(i, dt_cnt));
++
++		writel_relaxed(0xA00, tpg->base + TPG_VC_n_COLOR_BARS_CFG(i));
++
++		writel_relaxed(0x4701, tpg->base + TPG_VC_n_HBI_CFG(i));
++		writel_relaxed(0x438, tpg->base + TPG_VC_n_VBI_CFG(i));
++
++		writel_relaxed(0x12345678, tpg->base + TPG_VC_n_LSFR_SEED(i));
++
++		/* configure one DT, infinite frames */
++		val = i << TPG_VC_n_CFG0_VC_NUM;
++		val |= 0 << TPG_VC_n_CFG0_NUM_FRAMES;
++		writel_relaxed(val, tpg->base + TPG_VC_n_CFG0(i));
++	}
++
++	writel_relaxed(1, tpg->base + TPG_TOP_IRQ_MASK);
++
++	val = 1 << TPG_CTRL_TEST_EN;
++	val |= 0 << TPG_CTRL_PHY_SEL;
++	val |= (lane_cnt - 1) << TPG_CTRL_NUM_ACTIVE_LANES;
++	val |= 0 << TPG_CTRL_VC_DT_PATTERN_ID;
++	val |= (tpg->res->vc_cnt - 1) << TPG_CTRL_NUM_ACTIVE_VC;
++	writel_relaxed(val, tpg->base + TPG_CTRL);
++
++	return 0;
++}
++
++static void tpg_stream_off(struct tpg_device *tpg)
++{
++	writel_relaxed(0, tpg->base + TPG_CTRL);
++	writel_relaxed(0, tpg->base + TPG_TOP_IRQ_MASK);
++	writel_relaxed(1, tpg->base + TPG_TOP_IRQ_CLEAR);
++	writel_relaxed(1, tpg->base + TPG_IRQ_CMD);
++	writel_relaxed(1, tpg->base + TPG_CLEAR);
++}
++
++static void tpg_configure_stream(struct tpg_device *tpg, u8 enable)
++{
++	if (enable)
++		tpg_stream_on(tpg);
++	else
++		tpg_stream_off(tpg);
++}
++
++static int tpg_configure_testgen_pattern(struct tpg_device *tpg, s32 val)
++{
++	if (val > 0 && val <= TPG_PAYLOAD_MODE_COLOR_BARS)
++		tpg->testgen.mode = val;
++
++	return 0;
++}
++
++/*
++ * tpg_hw_version - tpg hardware version query
++ * @tpg: tpg device
++ *
++ * Return HW version or error
++ */
++static u32 tpg_hw_version(struct tpg_device *tpg)
++{
++	u32 hw_version;
++	u32 hw_gen;
++	u32 hw_rev;
++	u32 hw_step;
++
++	hw_version = readl_relaxed(tpg->base + TPG_HW_VERSION);
++	hw_gen = (hw_version >> HW_VERSION_GENERATION) & 0xF;
++	hw_rev = (hw_version >> HW_VERSION_REVISION) & 0xFFF;
++	hw_step = (hw_version >> HW_VERSION_STEPPING) & 0xFFFF;
++	dev_dbg(tpg->camss->dev, "tpg HW Version = %u.%u.%u\n",
++		hw_gen, hw_rev, hw_step);
++
++	return hw_version;
++}
++
++/*
++ * tpg_isr - tpg module interrupt service routine
++ * @irq: Interrupt line
++ * @dev: tpg device
++ *
++ * Return IRQ_HANDLED on success
++ */
++static irqreturn_t tpg_isr(int irq, void *dev)
++{
++	struct tpg_device *tpg = dev;
++	u32 val;
++
++	val = readl_relaxed(tpg->base + TPG_TOP_IRQ_STATUS);
++	writel_relaxed(val, tpg->base + TPG_TOP_IRQ_CLEAR);
++	writel_relaxed(1, tpg->base + TPG_IRQ_CMD);
++
++	return IRQ_HANDLED;
++}
++
++/*
++ * tpg_reset - Trigger reset on tpg module and wait to complete
++ * @tpg: tpg device
++ *
++ * Return 0 on success or a negative error code otherwise
++ */
++static int tpg_reset(struct tpg_device *tpg)
++{
++	writel_relaxed(0, tpg->base + TPG_CTRL);
++	writel_relaxed(0, tpg->base + TPG_TOP_IRQ_MASK);
++	writel_relaxed(1, tpg->base + TPG_TOP_IRQ_CLEAR);
++	writel_relaxed(1, tpg->base + TPG_IRQ_CMD);
++	writel_relaxed(1, tpg->base + TPG_CLEAR);
++
++	return 0;
++}
++
++static void tpg_subdev_init(struct tpg_device *tpg)
++{
++	tpg->testgen.modes = testgen_payload_modes;
++	tpg->testgen.nmodes = TPG_PAYLOAD_MODE_DISABLED;
++}
++
++const struct tpg_hw_ops tpg_ops_gen1 = {
++	.configure_stream = tpg_configure_stream,
++	.configure_testgen_pattern = tpg_configure_testgen_pattern,
++	.hw_version = tpg_hw_version,
++	.isr = tpg_isr,
++	.reset = tpg_reset,
++	.subdev_init = tpg_subdev_init,
++};
+diff --git a/drivers/media/platform/qcom/camss/camss-tpg.c b/drivers/media/platform/qcom/camss/camss-tpg.c
+new file mode 100644
+index 000000000000..b1458583a3ea
+--- /dev/null
++++ b/drivers/media/platform/qcom/camss/camss-tpg.c
+@@ -0,0 +1,739 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * camss-tpg.c
++ *
++ * Qualcomm MSM Camera Subsystem - TPG Module
++ *
++ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++#include <linux/clk.h>
++#include <linux/delay.h>
++#include <linux/interrupt.h>
++#include <linux/io.h>
++#include <linux/kernel.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/pm_runtime.h>
++#include <media/media-entity.h>
++#include <media/v4l2-device.h>
++#include <media/v4l2-subdev.h>
++
++#include "camss-tpg.h"
++#include "camss.h"
++
++const char * const testgen_payload_modes[] = {
++	"Disabled",
++	"Incrementing",
++	"Alternating 0x55/0xAA",
++	NULL,
++	NULL,
++	"Pseudo-random Data",
++	"User Specified",
++	NULL,
++	NULL,
++	"Color bars",
++	NULL
++};
++
++static const struct tpg_format_info formats_gen1[] = {
++	{
++		MEDIA_BUS_FMT_SBGGR8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_8_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_8_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_8_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_8_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_10_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_10_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_10_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_10_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_SBGGR12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_12_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_SGBRG12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_12_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_SGRBG12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_12_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_SRGGB12_1X12,
++		DATA_TYPE_RAW_12BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_12_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_Y8_1X8,
++		DATA_TYPE_RAW_8BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_8_BIT,
++	},
++	{
++		MEDIA_BUS_FMT_Y10_1X10,
++		DATA_TYPE_RAW_10BIT,
++		ENCODE_FORMAT_UNCOMPRESSED_10_BIT,
++	},
++};
++
++const struct tpg_formats tpg_formats_gen1 = {
++	.nformats = ARRAY_SIZE(formats_gen1),
++	.formats = formats_gen1
++};
++
++
++const struct tpg_format_info *tpg_get_fmt_entry(const struct tpg_format_info *formats,
++						unsigned int nformats,
++						u32 code)
++{
++	unsigned int i;
++
++	for (i = 0; i < nformats; i++)
++		if (code == formats[i].code)
++			return &formats[i];
++
++	WARN(1, "Unknown format\n");
++
++	return &formats[0];
++}
++
++/*
++ * tpg_set_clock_rates - Calculate and set clock rates on tpg module
++ * @tpg: tpg device
++ */
++static int tpg_set_clock_rates(struct tpg_device *tpg)
++{
++	struct device *dev = tpg->camss->dev;
++	int i, j;
++	int ret;
++
++	for (i = 0; i < tpg->nclocks; i++) {
++		struct camss_clock *clock = &tpg->clock[i];
++		u64 min_rate = 0;
++		long round_rate;
++
++		camss_add_clock_margin(&min_rate);
++
++		for (j = 0; j < clock->nfreqs; j++)
++			if (min_rate < clock->freq[j])
++				break;
++
++		if (j == clock->nfreqs) {
++			dev_err(dev,
++				"clock is too high for TPG\n");
++			return -EINVAL;
++		}
++
++		/* if clock is not available */
++		/* set highest possible tpg clock rate */
++		if (min_rate == 0)
++			j = clock->nfreqs - 1;
++
++		round_rate = clk_round_rate(clock->clk, clock->freq[j]);
++		if (round_rate < 0) {
++			dev_err(dev, "clk round rate failed: %ld\n",
++				round_rate);
++			return -EINVAL;
++		}
++
++		tpg->timer_clk_rate = round_rate;
++
++		ret = clk_set_rate(clock->clk, tpg->timer_clk_rate);
++		if (ret < 0) {
++			dev_err(dev, "clk set rate failed: %d\n", ret);
++			return ret;
++		}
++	}
++
++	return 0;
++}
++
++/*
++ * tpg_set_power - Power on/off tpg module
++ * @sd: tpg V4L2 subdevice
++ * @on: Requested power state
++ *
++ * Return 0 on success or a negative error code otherwise
++ */
++static int tpg_set_power(struct v4l2_subdev *sd, int on)
++{
++	struct tpg_device *tpg = v4l2_get_subdevdata(sd);
++	struct device *dev = tpg->camss->dev;
++
++	if (on) {
++		int ret;
++
++		ret = pm_runtime_resume_and_get(dev);
++		if (ret < 0)
++			return ret;
++
++		ret = tpg_set_clock_rates(tpg);
++		if (ret < 0) {
++			pm_runtime_put_sync(dev);
++			return ret;
++		}
++
++		ret = camss_enable_clocks(tpg->nclocks, tpg->clock, dev);
++		if (ret < 0) {
++			pm_runtime_put_sync(dev);
++			return ret;
++		}
++
++		enable_irq(tpg->irq);
++
++		tpg->res->hw_ops->reset(tpg);
++
++		tpg->res->hw_ops->hw_version(tpg);
++	} else {
++		disable_irq(tpg->irq);
++
++		camss_disable_clocks(tpg->nclocks, tpg->clock);
++
++		pm_runtime_put_sync(dev);
++	}
++
++	return 0;
++}
++
++
++/*
++ * tpg_set_stream - Enable/disable streaming on tpg module
++ * @sd: tpg V4L2 subdevice
++ * @enable: Requested streaming state
++ *
++ * Return 0 on success or a negative error code otherwise
++ */
++static int tpg_set_stream(struct v4l2_subdev *sd, int enable)
++{
++	struct tpg_device *tpg = v4l2_get_subdevdata(sd);
++	int ret = 0;
++
++	if (enable) {
++		ret = v4l2_ctrl_handler_setup(&tpg->ctrls);
++		if (ret < 0) {
++			dev_err(tpg->camss->dev,
++				"could not sync v4l2 controls: %d\n", ret);
++			return ret;
++		}
++	}
++
++	tpg->res->hw_ops->configure_stream(tpg, enable);
++
++	return 0;
++}
++
++/*
++ * __tpg_get_format - Get pointer to format structure
++ * @tpg: tpg device
++ * @cfg: V4L2 subdev pad configuration
++ * @pad: pad from which format is requested
++ * @which: TRY or ACTIVE format
++ *
++ * Return pointer to TRY or ACTIVE format structure
++ */
++static struct v4l2_mbus_framefmt *
++__tpg_get_format(struct tpg_device *tpg,
++		 struct v4l2_subdev_state *sd_state,
++		 unsigned int pad,
++		 enum v4l2_subdev_format_whence which)
++{
++	if (which == V4L2_SUBDEV_FORMAT_TRY)
++		return v4l2_subdev_get_try_format(&tpg->subdev, sd_state,
++						  pad);
++
++	return &tpg->fmt[pad];
++}
++
++/*
++ * tpg_try_format - Handle try format by pad subdev method
++ * @tpg: tpg device
++ * @cfg: V4L2 subdev pad configuration
++ * @pad: pad on which format is requested
++ * @fmt: pointer to v4l2 format structure
++ * @which: wanted subdev format
++ */
++static void tpg_try_format(struct tpg_device *tpg,
++			   struct v4l2_subdev_state *sd_state,
++			   unsigned int pad,
++			   struct v4l2_mbus_framefmt *fmt,
++			   enum v4l2_subdev_format_whence which)
++{
++	unsigned int i;
++
++	switch (pad) {
++	case MSM_TPG_PAD_SINK:
++		/* Test generator is enabled, set format on source */
++		/* pad to allow test generator usage */
++
++		for (i = 0; i < tpg->res->formats->nformats; i++)
++			if (tpg->res->formats->formats[i].code == fmt->code)
++				break;
++
++		/* If not found, use SBGGR8 as default */
++		if (i >= tpg->res->formats->nformats)
++			fmt->code = MEDIA_BUS_FMT_SBGGR8_1X8;
++
++		fmt->width = clamp_t(u32, fmt->width, 1, 8191);
++		fmt->height = clamp_t(u32, fmt->height, 1, 8191);
++
++		fmt->field = V4L2_FIELD_NONE;
++		fmt->colorspace = V4L2_COLORSPACE_SRGB;
++
++		break;
++	case MSM_TPG_PAD_SRC:
++		/* Set and return a format same as sink pad */
++
++		*fmt = *__tpg_get_format(tpg, sd_state,
++					    MSM_TPG_PAD_SINK,
++					    which);
++
++		break;
++	}
++}
++
++/*
++ * tpg_enum_mbus_code - Handle format enumeration
++ * @sd: tpg V4L2 subdevice
++ * @cfg: V4L2 subdev pad configuration
++ * @code: pointer to v4l2_subdev_mbus_code_enum structure
++ * return -EINVAL or zero on success
++ */
++static int tpg_enum_mbus_code(struct v4l2_subdev *sd,
++			      struct v4l2_subdev_state *sd_state,
++			      struct v4l2_subdev_mbus_code_enum *code)
++{
++	struct tpg_device *tpg = v4l2_get_subdevdata(sd);
++	struct v4l2_mbus_framefmt *format;
++
++	if (code->pad == MSM_TPG_PAD_SINK) {
++		if (code->index >= tpg->res->formats->nformats)
++			return -EINVAL;
++
++		code->code = tpg->res->formats->formats[code->index].code;
++	} else {
++		if (code->index > 0)
++			return -EINVAL;
++
++		format = __tpg_get_format(tpg, sd_state,
++					     MSM_TPG_PAD_SINK,
++					     code->which);
++
++		code->code = format->code;
++	}
++
++	return 0;
++}
++
++/*
++ * tpg_enum_frame_size - Handle frame size enumeration
++ * @sd: tpg V4L2 subdevice
++ * @cfg: V4L2 subdev pad configuration
++ * @fse: pointer to v4l2_subdev_frame_size_enum structure
++ * return -EINVAL or zero on success
++ */
++static int tpg_enum_frame_size(struct v4l2_subdev *sd,
++			       struct v4l2_subdev_state *sd_state,
++			       struct v4l2_subdev_frame_size_enum *fse)
++{
++	struct tpg_device *tpg = v4l2_get_subdevdata(sd);
++	struct v4l2_mbus_framefmt format;
++
++	if (fse->index != 0)
++		return -EINVAL;
++
++	format.code = fse->code;
++	format.width = 1;
++	format.height = 1;
++	tpg_try_format(tpg, sd_state, fse->pad, &format, fse->which);
++	fse->min_width = format.width;
++	fse->min_height = format.height;
++
++	if (format.code != fse->code)
++		return -EINVAL;
++
++	format.code = fse->code;
++	format.width = -1;
++	format.height = -1;
++	tpg_try_format(tpg, sd_state, fse->pad, &format, fse->which);
++	fse->max_width = format.width;
++	fse->max_height = format.height;
++
++	return 0;
++}
++
++/*
++ * tpg_get_format - Handle get format by pads subdev method
++ * @sd: tpg V4L2 subdevice
++ * @cfg: V4L2 subdev pad configuration
++ * @fmt: pointer to v4l2 subdev format structure
++ *
++ * Return -EINVAL or zero on success
++ */
++static int tpg_get_format(struct v4l2_subdev *sd,
++			  struct v4l2_subdev_state *sd_state,
++			  struct v4l2_subdev_format *fmt)
++{
++	struct tpg_device *tpg = v4l2_get_subdevdata(sd);
++	struct v4l2_mbus_framefmt *format;
++
++	format = __tpg_get_format(tpg, sd_state, fmt->pad, fmt->which);
++	if (format == NULL)
++		return -EINVAL;
++
++	fmt->format = *format;
++
++	return 0;
++}
++
++/*
++ * tpg_set_format - Handle set format by pads subdev method
++ * @sd: tpg V4L2 subdevice
++ * @cfg: V4L2 subdev pad configuration
++ * @fmt: pointer to v4l2 subdev format structure
++ *
++ * Return -EINVAL or zero on success
++ */
++static int tpg_set_format(struct v4l2_subdev *sd,
++			  struct v4l2_subdev_state *sd_state,
++			  struct v4l2_subdev_format *fmt)
++{
++	struct tpg_device *tpg = v4l2_get_subdevdata(sd);
++	struct v4l2_mbus_framefmt *format;
++
++	format = __tpg_get_format(tpg, sd_state, fmt->pad, fmt->which);
++	if (format == NULL)
++		return -EINVAL;
++
++	tpg_try_format(tpg, sd_state, fmt->pad, &fmt->format,
++			  fmt->which);
++	*format = fmt->format;
++
++	if (fmt->pad == MSM_TPG_PAD_SINK) {
++		format = __tpg_get_format(tpg, sd_state,
++					     MSM_TPG_PAD_SRC,
++					     fmt->which);
++
++		*format = fmt->format;
++		tpg_try_format(tpg, sd_state, MSM_TPG_PAD_SRC,
++				  format,
++				  fmt->which);
++	}
++	return 0;
++}
++
++/*
++ * tpg_init_formats - Initialize formats on all pads
++ * @sd: tpg V4L2 subdevice
++ * @fh: V4L2 subdev file handle
++ *
++ * Initialize all pad formats with default values.
++ *
++ * Return 0 on success or a negative error code otherwise
++ */
++static int tpg_init_formats(struct v4l2_subdev *sd,
++			    struct v4l2_subdev_fh *fh)
++{
++	struct v4l2_subdev_format format = {
++		.pad = MSM_TPG_PAD_SINK,
++		.which = fh ? V4L2_SUBDEV_FORMAT_TRY :
++			      V4L2_SUBDEV_FORMAT_ACTIVE,
++		.format = {
++			.code = MEDIA_BUS_FMT_SBGGR8_1X8,
++			.width = 1920,
++			.height = 1080
++		}
++	};
++
++	return tpg_set_format(sd, fh ? fh->state : NULL, &format);
++}
++
++/*
++ * tpg_set_test_pattern - Set test generator's pattern mode
++ * @tpg: TPG device
++ * @value: desired test pattern mode
++ *
++ * Return 0 on success or a negative error code otherwise
++ */
++static int tpg_set_test_pattern(struct tpg_device *tpg, s32 value)
++{
++	return tpg->res->hw_ops->configure_testgen_pattern(tpg, value);
++}
++
++/*
++ * tpg_s_ctrl - Handle set control subdev method
++ * @ctrl: pointer to v4l2 control structure
++ *
++ * Return 0 on success or a negative error code otherwise
++ */
++static int tpg_s_ctrl(struct v4l2_ctrl *ctrl)
++{
++	struct tpg_device *tpg = container_of(ctrl->handler,
++					      struct tpg_device, ctrls);
++	int ret = -EINVAL;
++
++	switch (ctrl->id) {
++	case V4L2_CID_TEST_PATTERN:
++		ret = tpg_set_test_pattern(tpg, ctrl->val);
++		break;
++	}
++
++	return ret;
++}
++
++static const struct v4l2_ctrl_ops tpg_ctrl_ops = {
++	.s_ctrl = tpg_s_ctrl,
++};
++
++/*
++ * msm_tpg_subdev_init - Initialize tpg device structure and resources
++ * @tpg: tpg device
++ * @res: tpg module resources table
++ * @id: tpg module id
++ *
++ * Return 0 on success or a negative error code otherwise
++ */
++int msm_tpg_subdev_init(struct camss *camss,
++			struct tpg_device *tpg,
++			const struct camss_subdev_resources *res, u8 id)
++{
++	struct device *dev = camss->dev;
++	struct platform_device *pdev = to_platform_device(dev);
++	int i, j;
++	int ret;
++
++	tpg->camss = camss;
++	tpg->id = id;
++	tpg->res = &res->tpg;
++	tpg->res->hw_ops->subdev_init(tpg);
++
++	/* Memory */
++	tpg->base = devm_platform_ioremap_resource_byname(pdev, res->reg[0]);
++	if (IS_ERR(tpg->base))
++		return PTR_ERR(tpg->base);
++
++	/* Interrupt */
++	ret = platform_get_irq_byname(pdev, res->interrupt[0]);
++	if (ret < 0)
++		return ret;
++
++	tpg->irq = ret;
++	snprintf(tpg->irq_name, sizeof(tpg->irq_name), "%s_%s%d",
++		 dev_name(dev), MSM_TPG_NAME, tpg->id);
++
++	ret = devm_request_irq(dev, tpg->irq, tpg->res->hw_ops->isr,
++			       IRQF_TRIGGER_RISING | IRQF_NO_AUTOEN,
++			       tpg->irq_name, tpg);
++	if (ret < 0) {
++		dev_err(dev, "request_irq failed: %d\n", ret);
++		return ret;
++	}
++
++	/* Clocks */
++	tpg->nclocks = 0;
++	while (res->clock[tpg->nclocks])
++		tpg->nclocks++;
++
++	tpg->clock = devm_kcalloc(dev,
++				  tpg->nclocks, sizeof(*tpg->clock),
++				  GFP_KERNEL);
++	if (!tpg->clock)
++		return -ENOMEM;
++
++	for (i = 0; i < tpg->nclocks; i++) {
++		struct camss_clock *clock = &tpg->clock[i];
++
++		clock->clk = devm_clk_get(dev, res->clock[i]);
++		if (IS_ERR(clock->clk))
++			return PTR_ERR(clock->clk);
++
++		clock->name = res->clock[i];
++
++		clock->nfreqs = 0;
++		while (res->clock_rate[i][clock->nfreqs])
++			clock->nfreqs++;
++
++		if (!clock->nfreqs) {
++			clock->freq = NULL;
++			continue;
++		}
++
++		clock->freq = devm_kcalloc(dev,
++					   clock->nfreqs,
++					   sizeof(*clock->freq),
++					   GFP_KERNEL);
++		if (!clock->freq)
++			return -ENOMEM;
++
++		for (j = 0; j < clock->nfreqs; j++)
++			clock->freq[j] = res->clock_rate[i][j];
++	}
++
++	return 0;
++}
++
++/*
++ * tpg_link_setup - Setup tpg connections
++ * @entity: Pointer to media entity structure
++ * @local: Pointer to local pad
++ * @remote: Pointer to remote pad
++ * @flags: Link flags
++ *
++ * Rreturn 0 on success
++ */
++static int tpg_link_setup(struct media_entity *entity,
++			  const struct media_pad *local,
++			  const struct media_pad *remote, u32 flags)
++{
++	if (flags & MEDIA_LNK_FL_ENABLED)
++		if (media_pad_remote_pad_first(local))
++			return -EBUSY;
++
++	return 0;
++}
++
++static const struct v4l2_subdev_core_ops tpg_core_ops = {
++	.s_power = tpg_set_power,
++};
++
++static const struct v4l2_subdev_video_ops tpg_video_ops = {
++	.s_stream = tpg_set_stream,
++};
++
++static const struct v4l2_subdev_pad_ops tpg_pad_ops = {
++	.enum_mbus_code = tpg_enum_mbus_code,
++	.enum_frame_size = tpg_enum_frame_size,
++	.get_fmt = tpg_get_format,
++	.set_fmt = tpg_set_format,
++};
++
++static const struct v4l2_subdev_ops tpg_v4l2_ops = {
++	.core = &tpg_core_ops,
++	.video = &tpg_video_ops,
++	.pad = &tpg_pad_ops,
++};
++
++static const struct v4l2_subdev_internal_ops tpg_v4l2_internal_ops = {
++	.open = tpg_init_formats,
++};
++
++static const struct media_entity_operations tpg_media_ops = {
++	.link_setup = tpg_link_setup,
++	.link_validate = v4l2_subdev_link_validate,
++};
++
++/*
++ * msm_tpg_register_entity - Register subdev node for tpg module
++ * @tpg: tpg device
++ * @v4l2_dev: V4L2 device
++ *
++ * Return 0 on success or a negative error code otherwise
++ */
++int msm_tpg_register_entity(struct tpg_device *tpg,
++			    struct v4l2_device *v4l2_dev)
++{
++	struct v4l2_subdev *sd = &tpg->subdev;
++	struct media_pad *pads = tpg->pads;
++	struct device *dev = tpg->camss->dev;
++	int ret;
++
++	v4l2_subdev_init(sd, &tpg_v4l2_ops);
++	sd->internal_ops = &tpg_v4l2_internal_ops;
++	sd->flags |= V4L2_SUBDEV_FL_HAS_DEVNODE |
++		     V4L2_SUBDEV_FL_HAS_EVENTS;
++	snprintf(sd->name, ARRAY_SIZE(sd->name), "%s%d",
++		 MSM_TPG_NAME, tpg->id);
++	v4l2_set_subdevdata(sd, tpg);
++
++	ret = v4l2_ctrl_handler_init(&tpg->ctrls, 1);
++	if (ret < 0) {
++		dev_err(dev, "Failed to init ctrl handler: %d\n", ret);
++		return ret;
++	}
++
++	tpg->testgen_mode = v4l2_ctrl_new_std_menu_items(&tpg->ctrls,
++							 &tpg_ctrl_ops, V4L2_CID_TEST_PATTERN,
++							 TPG_PAYLOAD_MODE_COLOR_BARS, 0, 0,
++							 tpg->testgen.modes);
++
++	if (tpg->ctrls.error) {
++		dev_err(dev, "Failed to init ctrl: %d\n", tpg->ctrls.error);
++		ret = tpg->ctrls.error;
++		goto free_ctrl;
++	}
++
++	tpg->subdev.ctrl_handler = &tpg->ctrls;
++
++	ret = tpg_init_formats(sd, NULL);
++	if (ret < 0) {
++		dev_err(dev, "Failed to init format: %d\n", ret);
++		goto free_ctrl;
++	}
++
++	pads[MSM_TPG_PAD_SINK].flags = MEDIA_PAD_FL_SINK;
++	pads[MSM_TPG_PAD_SRC].flags = MEDIA_PAD_FL_SOURCE;
++
++	sd->entity.function = MEDIA_ENT_F_PROC_VIDEO_PIXEL_FORMATTER;
++	sd->entity.ops = &tpg_media_ops;
++	ret = media_entity_pads_init(&sd->entity, MSM_TPG_PADS_NUM, pads);
++	if (ret < 0) {
++		dev_err(dev, "Failed to init media entity: %d\n", ret);
++		goto free_ctrl;
++	}
++
++	ret = v4l2_device_register_subdev(v4l2_dev, sd);
++	if (ret < 0) {
++		dev_err(dev, "Failed to register subdev: %d\n", ret);
++		media_entity_cleanup(&sd->entity);
++		goto free_ctrl;
++	}
++
++	return 0;
++
++free_ctrl:
++	v4l2_ctrl_handler_free(&tpg->ctrls);
++
++	return ret;
++}
++
++/*
++ * msm_tpg_unregister_entity - Unregister tpg module subdev node
++ * @tpg: tpg device
++ */
++void msm_tpg_unregister_entity(struct tpg_device *tpg)
++{
++	v4l2_device_unregister_subdev(&tpg->subdev);
++	media_entity_cleanup(&tpg->subdev.entity);
++	v4l2_ctrl_handler_free(&tpg->ctrls);
++}
+diff --git a/drivers/media/platform/qcom/camss/camss-tpg.h b/drivers/media/platform/qcom/camss/camss-tpg.h
+new file mode 100644
+index 000000000000..74cd7bf608af
+--- /dev/null
++++ b/drivers/media/platform/qcom/camss/camss-tpg.h
+@@ -0,0 +1,130 @@
++/* SPDX-License-Identifier: GPL-2.0 */
++/*
++ * camss-tpg.h
++ *
++ * Qualcomm MSM Camera Subsystem - TPG Module
++ *
++ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
++ */
++#ifndef QC_MSM_CAMSS_TPG_H
++#define QC_MSM_CAMSS_TPG_H
++
++#include <linux/clk.h>
++#include <linux/interrupt.h>
++#include <media/media-entity.h>
++#include <media/v4l2-ctrls.h>
++#include <media/v4l2-device.h>
++#include <media/v4l2-mediabus.h>
++#include <media/v4l2-subdev.h>
++
++#define MSM_TPG_PAD_SINK 0
++#define MSM_TPG_PAD_SRC 1
++#define MSM_TPG_PADS_NUM 2
++
++#define DATA_TYPE_RAW_8BIT		0x2a
++#define DATA_TYPE_RAW_10BIT		0x2b
++#define DATA_TYPE_RAW_12BIT		0x2c
++
++#define ENCODE_FORMAT_UNCOMPRESSED_8_BIT	0x1
++#define ENCODE_FORMAT_UNCOMPRESSED_10_BIT	0x2
++#define ENCODE_FORMAT_UNCOMPRESSED_12_BIT	0x3
++#define ENCODE_FORMAT_UNCOMPRESSED_14_BIT	0x4
++#define ENCODE_FORMAT_UNCOMPRESSED_16_BIT	0x5
++#define ENCODE_FORMAT_UNCOMPRESSED_20_BIT	0x6
++#define ENCODE_FORMAT_UNCOMPRESSED_24_BIT	0x7
++
++#define MSM_TPG_NAME "msm_tpg"
++
++enum tpg_testgen_mode {
++	TPG_PAYLOAD_MODE_DISABLED = 0,
++	TPG_PAYLOAD_MODE_INCREMENTING = 1,
++	TPG_PAYLOAD_MODE_ALTERNATING_55_AA = 2,
++	TPG_PAYLOAD_MODE_RANDOM = 5,
++	TPG_PAYLOAD_MODE_USER_SPECIFIED = 6,
++	TPG_PAYLOAD_MODE_COLOR_BARS = 9,
++};
++
++struct tpg_testgen_config {
++	enum tpg_testgen_mode mode;
++	const char * const*modes;
++	u8 nmodes;
++};
++
++struct tpg_format_info {
++	u32 code;
++	u8 data_type;
++	u8 encode_format;
++};
++
++struct tpg_formats {
++	unsigned int nformats;
++	const struct tpg_format_info *formats;
++};
++
++struct tpg_device;
++
++struct tpg_hw_ops {
++
++	void (*configure_stream)(struct tpg_device *tpg, u8 enable);
++
++	int (*configure_testgen_pattern)(struct tpg_device *tpg, s32 val);
++
++	u32 (*hw_version)(struct tpg_device *tpg);
++
++	irqreturn_t (*isr)(int irq, void *dev);
++
++	int (*reset)(struct tpg_device *tpg);
++
++	void (*subdev_init)(struct tpg_device *tpg);
++};
++
++struct tpg_subdev_resources {
++	u8 lane_cnt;
++	u8 vc_cnt;
++	const struct tpg_formats *formats;
++	const struct tpg_hw_ops *hw_ops;
++};
++
++struct tpg_device {
++	struct camss *camss;
++	u8 id;
++	struct v4l2_subdev subdev;
++	struct media_pad pads[MSM_TPG_PADS_NUM];
++	void __iomem *base;
++	void __iomem *base_clk_mux;
++	u32 irq;
++	char irq_name[30];
++	struct camss_clock *clock;
++	int nclocks;
++	u32 timer_clk_rate;
++	struct tpg_testgen_config testgen;
++	struct v4l2_mbus_framefmt fmt[MSM_TPG_PADS_NUM];
++	struct v4l2_ctrl_handler ctrls;
++	struct v4l2_ctrl *testgen_mode;
++	const struct tpg_subdev_resources *res;
++	const struct tpg_format *formats;
++	unsigned int nformats;
++};
++
++struct camss_subdev_resources;
++
++const struct tpg_format_info *tpg_get_fmt_entry(const struct tpg_format_info *formats,
++						unsigned int nformats,
++						u32 code);
++
++int msm_tpg_subdev_init(struct camss *camss,
++			struct tpg_device *tpg,
++			const struct camss_subdev_resources *res, u8 id);
++
++int msm_tpg_register_entity(struct tpg_device *tpg,
++			    struct v4l2_device *v4l2_dev);
++
++void msm_tpg_unregister_entity(struct tpg_device *tpg);
++
++extern const char * const testgen_payload_modes[];
++
++extern const struct tpg_formats tpg_formats_gen1;
++
++extern const struct tpg_hw_ops tpg_ops_gen1;
++
++#endif /* QC_MSM_CAMSS_TPG_H */
+diff --git a/drivers/media/platform/qcom/camss/camss.c b/drivers/media/platform/qcom/camss/camss.c
+index 28783271f08c..c963b9688d9c 100644
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1864,6 +1864,53 @@ static const struct camss_subdev_resources csiphy_res_8775p[] = {
+ 	},
+ };
+ 
++static const struct camss_subdev_resources tpg_res_8775p[] = {
++	/* TPG0 */
++	{
++		.regulators = {  },
++		.clock = { "cphy_rx_clk" },
++		.clock_rate = { { 400000000 } },
++		.reg = { "tpg0" },
++		.interrupt = { "tpg0" },
++		.tpg = {
++			.lane_cnt = 4,
++			.vc_cnt = 1,
++			.formats = &tpg_formats_gen1,
++			.hw_ops = &tpg_ops_gen1
++		}
++	},
++
++	/* TPG1 */
++	{
++		.regulators = {  },
++		.clock = { "cphy_rx_clk" },
++		.clock_rate = { { 400000000 } },
++		.reg = { "tpg1" },
++		.interrupt = { "tpg1" },
++		.tpg = {
++			.lane_cnt = 4,
++			.vc_cnt = 1,
++			.formats = &tpg_formats_gen1,
++			.hw_ops = &tpg_ops_gen1
++		}
++	},
++
++	/* TPG2 */
++	{
++		.regulators = {  },
++		.clock = { "cphy_rx_clk" },
++		.clock_rate = { { 400000000 } },
++		.reg = { "tpg2" },
++		.interrupt = { "tpg2" },
++		.tpg = {
++			.lane_cnt = 4,
++			.vc_cnt = 1,
++			.formats = &tpg_formats_gen1,
++			.hw_ops = &tpg_ops_gen1
++		}
++	},
++};
++
+ static const struct camss_subdev_resources csid_res_8775p[] = {
+ 	/* CSID0 */
+ 	{
+@@ -2580,6 +2627,19 @@ static int camss_init_subdevices(struct camss *camss)
+ 		return ret;
+ 	}
+ 
++	if (camss->tpg) {
++		for (i = 0; i < camss->res->tpg_num; i++) {
++			ret = msm_tpg_subdev_init(camss, &camss->tpg[i],
++						  &res->tpg_res[i], i);
++			if (ret < 0) {
++				dev_err(camss->dev,
++					"Failed to init tpg%d sub-device: %d\n",
++					i, ret);
++				return ret;
++			}
++		}
++	}
++
+ 	return 0;
+ }
+ 
+@@ -2634,6 +2694,37 @@ static int camss_link_entities_csid(struct camss *camss)
+ 	return 0;
+ }
+ 
++/*
++ * camss_link_entities_tpg - Register subdev nodes and create links
++ * @camss: CAMSS device
++ *
++ * Return 0 on success or a negative error code on failure
++ */
++static int camss_link_entities_tpg(struct camss *camss)
++{
++	int i, j;
++	int ret;
++
++	for (i = 0; i < camss->res->tpg_num; i++) {
++		for (j = 0; j < camss->res->csid_num; j++) {
++			ret = media_create_pad_link(&camss->tpg[i].subdev.entity,
++						    MSM_TPG_PAD_SRC,
++						    &camss->csid[j].subdev.entity,
++						    MSM_CSID_PAD_SINK,
++						    0);
++			if (ret < 0) {
++				dev_err(camss->dev,
++					"Failed to link %s->%s entities: %d\n",
++					camss->tpg[i].subdev.entity.name,
++					camss->csid[j].subdev.entity.name,
++					ret);
++				return ret;
++			}
++		}
++	}
++	return 0;
++}
++
+ /*
+  * camss_link_entities_csiphy - Register subdev nodes and create links
+  * @camss: CAMSS device
+@@ -2709,6 +2800,12 @@ static int camss_link_entities(struct camss *camss)
+ {
+ 	int ret;
+ 
++	if (camss->tpg) {
++		ret = camss_link_entities_tpg(camss);
++		if (ret < 0)
++			return ret;
++	}
++
+ 	ret = camss_link_entities_csiphy(camss);
+ 	if (ret < 0)
+ 		return ret;
+@@ -2734,6 +2831,19 @@ static int camss_register_entities(struct camss *camss)
+ 	int i;
+ 	int ret;
+ 
++	if (camss->tpg) {
++		for (i = 0; i < camss->res->tpg_num; i++) {
++			ret = msm_tpg_register_entity(&camss->tpg[i],
++						      &camss->v4l2_dev);
++			if (ret < 0) {
++				dev_err(camss->dev,
++					"Failed to register tpg%d entity: %d\n",
++					i, ret);
++				goto err_reg_tpg;
++			}
++		}
++	}
++
+ 	for (i = 0; i < camss->res->csiphy_num; i++) {
+ 		ret = msm_csiphy_register_entity(&camss->csiphy[i],
+ 						 &camss->v4l2_dev);
+@@ -2793,6 +2903,11 @@ static int camss_register_entities(struct camss *camss)
+ 	for (i--; i >= 0; i--)
+ 		msm_csiphy_unregister_entity(&camss->csiphy[i]);
+ 
++	i = camss->res->tpg_num;
++err_reg_tpg:
++	for (i--; i >= 0; i--)
++		msm_tpg_unregister_entity(&camss->tpg[i]);
++
+ 	return ret;
+ }
+ 
+@@ -2805,6 +2920,8 @@ static int camss_register_entities(struct camss *camss)
+ static void camss_unregister_entities(struct camss *camss)
+ {
+ 	unsigned int i;
++	for (i = 0; i < camss->res->tpg_num; i++)
++		msm_tpg_unregister_entity(&camss->tpg[i]);
+ 
+ 	for (i = 0; i < camss->res->csiphy_num; i++)
+ 		msm_csiphy_unregister_entity(&camss->csiphy[i]);
+@@ -3049,6 +3166,13 @@ static int camss_probe(struct platform_device *pdev)
+ 	if (!camss->csiphy)
+ 		return -ENOMEM;
+ 
++	if (camss->res->version == CAMSS_8775P) {
++		camss->tpg = devm_kcalloc(dev, camss->res->tpg_num,
++					  sizeof(*camss->tpg), GFP_KERNEL);
++		if (!camss->tpg)
++			return -ENOMEM;
++	}
++
+ 	camss->csid = devm_kcalloc(dev, camss->res->csid_num, sizeof(*camss->csid),
+ 				   GFP_KERNEL);
+ 	if (!camss->csid)
+@@ -3278,11 +3402,13 @@ static const struct camss_resources sa8775p_resources = {
+ 	.version = CAMSS_8775P,
+ 	.pd_name = "top",
+ 	.csiphy_res = csiphy_res_8775p,
++	.tpg_res = tpg_res_8775p,
+ 	.csid_res = csid_res_8775p,
+ 	.vfe_res = vfe_res_8775p,
+ 	.icc_res = icc_res_sa8775p,
+ 	.icc_path_num = ARRAY_SIZE(icc_res_sa8775p),
+ 	.csiphy_num = ARRAY_SIZE(csiphy_res_8775p),
++	.tpg_num = ARRAY_SIZE(tpg_res_8775p),
+ 	.csid_num = ARRAY_SIZE(csid_res_8775p),
+ 	.vfe_num = ARRAY_SIZE(vfe_res_8775p),
+ 	.link_entities = camss_link_entities
+diff --git a/drivers/media/platform/qcom/camss/camss.h b/drivers/media/platform/qcom/camss/camss.h
+index 7c0416bb89f1..b57bdbdee3e8 100644
+--- a/drivers/media/platform/qcom/camss/camss.h
++++ b/drivers/media/platform/qcom/camss/camss.h
+@@ -20,6 +20,7 @@
+ 
+ #include "camss-csid.h"
+ #include "camss-csiphy.h"
++#include "camss-tpg.h"
+ #include "camss-ispif.h"
+ #include "camss-vfe.h"
+ #include "camss-format.h"
+@@ -52,6 +53,7 @@ struct camss_subdev_resources {
+ 	char *interrupt[CAMSS_RES_MAX];
+ 	union {
+ 		struct csiphy_subdev_resources csiphy;
++		struct tpg_subdev_resources tpg;
+ 		struct csid_subdev_resources csid;
+ 		struct vfe_subdev_resources vfe;
+ 	};
+@@ -93,12 +95,14 @@ struct camss_resources {
+ 	enum camss_version version;
+ 	const char *pd_name;
+ 	const struct camss_subdev_resources *csiphy_res;
++	const struct camss_subdev_resources *tpg_res;
+ 	const struct camss_subdev_resources *csid_res;
+ 	const struct camss_subdev_resources *ispif_res;
+ 	const struct camss_subdev_resources *vfe_res;
+ 	const struct resources_icc *icc_res;
+ 	const unsigned int icc_path_num;
+ 	const unsigned int csiphy_num;
++	const unsigned int tpg_num;
+ 	const unsigned int csid_num;
+ 	const unsigned int vfe_num;
+ 	int (*link_entities)(struct camss *camss);
+@@ -110,6 +114,7 @@ struct camss {
+ 	struct media_device media_dev;
+ 	struct device *dev;
+ 	struct csiphy_device *csiphy;
++	struct tpg_device *tpg;
+ 	struct csid_device *csid;
+ 	struct ispif_device *ispif;
+ 	struct vfe_device *vfe;
+-- 
+2.34.1
+

@@ -1,2 +1,1 @@
-
-do_rootfs[vardepsexclude] += "BB_TASKDEPDATA"
+EXTRA_IMAGECMD:vfat = " -s 16 -S 4096"   

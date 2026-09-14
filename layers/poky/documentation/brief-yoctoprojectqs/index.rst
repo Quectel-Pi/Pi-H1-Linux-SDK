@@ -44,7 +44,7 @@ following requirements:
    much more will help to run multiple builds and increase
    performance by reusing build artifacts.
 
--  At least &MIN_RAM; Gbytes of RAM, though a modern modern build host with as
+-  At least &MIN_RAM; Gbytes of RAM, though a modern build host with as
    much RAM and as many CPU cores as possible is strongly recommended to
    maximize build performance.
 
@@ -57,7 +57,7 @@ following requirements:
    :ref:`dev-manual/start:preparing the build host`
    section in the Yocto Project Development Tasks Manual.
 
--
+-  Ensure that the following utilities have these minimum version numbers:
 
    -  Git &MIN_GIT_VERSION; or greater
    -  tar &MIN_TAR_VERSION; or greater
@@ -65,7 +65,7 @@ following requirements:
    -  gcc &MIN_GCC_VERSION; or greater.
    -  GNU make &MIN_MAKE_VERSION; or greater
 
-If your build host does not meet any of these three listed version
+If your build host does not satisfy all of the above version
 requirements, you can take steps to prepare the system so that you
 can still use the Yocto Project. See the
 :ref:`ref-manual/system-requirements:required git, tar, python, make and gcc versions`
@@ -78,7 +78,7 @@ You must install essential host packages on your build host. The
 following command installs the host packages based on an Ubuntu
 distribution::
 
-   $ sudo apt install &UBUNTU_HOST_PACKAGES_ESSENTIAL;
+   $ sudo apt install &UBUNTU_DEBIAN_HOST_PACKAGES_ESSENTIAL;
 
 .. note::
 
@@ -182,7 +182,7 @@ an entire Linux distribution, including the toolchain, from source.
       page of the Yocto Project Wiki.
 
 #. **Initialize the Build Environment:** From within the ``poky``
-   directory, run the :ref:`ref-manual/structure:\`\`oe-init-build-env\`\``
+   directory, run the :ref:`ref-manual/structure:``oe-init-build-env```
    environment
    setup script to define Yocto Project's build environment on your
    build host.
@@ -228,13 +228,13 @@ an entire Linux distribution, including the toolchain, from source.
 
    Among other things, the script creates the :term:`Build Directory`, which is
    ``build`` in this case and is located in the :term:`Source Directory`.  After
-   the script runs, your current working directory is set to the Build
-   Directory. Later, when the build completes, the Build Directory contains all the
-   files created during the build.
+   the script runs, your current working directory is set to the
+   :term:`Build Directory`. Later, when the build completes, the
+   :term:`Build Directory` contains all the files created during the build.
 
 #. **Examine Your Local Configuration File:** When you set up the build
    environment, a local configuration file named ``local.conf`` becomes
-   available in a ``conf`` subdirectory of the Build Directory. For this
+   available in a ``conf`` subdirectory of the :term:`Build Directory`. For this
    example, the defaults are set to build for a ``qemux86`` target,
    which is suitable for emulation. The package manager used is set to
    the RPM package manager.
@@ -251,10 +251,16 @@ an entire Linux distribution, including the toolchain, from source.
       To use such mirrors, uncomment the below lines in your ``conf/local.conf``
       file in the :term:`Build Directory`::
 
-         BB_HASHSERVE_UPSTREAM = "hashserv.yocto.io:8687"
-         SSTATE_MIRRORS ?= "file://.* http://cdn.jsdelivr.net/yocto/sstate/all/PATH;downloadfilename=PATH"
+         BB_HASHSERVE_UPSTREAM = "wss://hashserv.yoctoproject.org/ws"
+         SSTATE_MIRRORS ?= "file://.* http://sstate.yoctoproject.org/all/PATH;downloadfilename=PATH"
          BB_HASHSERVE = "auto"
          BB_SIGNATURE_HANDLER = "OEEquivHash"
+
+      The hash equivalence server needs the websockets python module version 9.1
+      or later. Debian GNU/Linux 12 (Bookworm) and later, Fedora, CentOS Stream
+      9 and later, and Ubuntu 22.04 (LTS) and later, all have a recent enough
+      package. Other supported distributions need to get the module some other
+      place than their package feed, e.g. via ``pip``.
 
 #. **Start the Build:** Continue with the following command to build an OS
    image for the target, which is ``core-image-sato`` in this example:
@@ -266,7 +272,7 @@ an entire Linux distribution, including the toolchain, from source.
    For information on using the ``bitbake`` command, see the
    :ref:`overview-manual/concepts:bitbake` section in the Yocto Project Overview and
    Concepts Manual, or see
-   :ref:`bitbake:bitbake-user-manual/bitbake-user-manual-intro:the bitbake command`
+   :ref:`bitbake-user-manual/bitbake-user-manual-intro:the bitbake command`
    in the BitBake User Manual.
 
 #. **Simulate Your Image Using QEMU:** Once this particular image is
@@ -349,9 +355,7 @@ Follow these steps to add a hardware layer:
 
 #. **Add Your Layer to the Layer Configuration File:** Before you can use
    a layer during a build, you must add it to your ``bblayers.conf``
-   file, which is found in the
-   :term:`Build Directory` ``conf``
-   directory.
+   file, which is found in the :term:`Build Directory` ``conf`` directory.
 
    Use the ``bitbake-layers add-layer`` command to add the layer to the
    configuration file:
@@ -417,9 +421,9 @@ information including the website, wiki pages, and user manuals:
    development documentation, and access to a rich Yocto Project
    Development Community into which you can tap.
 
--  **Video Seminar:** The `Introduction to the Yocto Project and Bitbake, Part 1
+-  **Video Seminar:** The `Introduction to the Yocto Project and BitBake, Part 1
    <https://youtu.be/yuE7my3KOpo>`__ and
-   `Introduction to the Yocto Project and Bitbake, Part 2
+   `Introduction to the Yocto Project and BitBake, Part 2
    <https://youtu.be/iZ05TTyzGHk>`__ videos offer a video seminar
    introducing you to the most important aspects of developing a
    custom embedded Linux distribution with the Yocto Project.

@@ -8,7 +8,7 @@ LIC_FILES_CHKSUM = "file://${S}/LICENSE;md5=815ca599c9df247a0c7f619bab123dad"
 DEPENDS = "boost curl openssl libarchive libsodium sqlite3 asn1c-native ostree"
 DEPENDS:append = "${@bb.utils.contains('PTEST_ENABLED', '1', ' coreutils-native net-tools-native aktualizr-native ', '', d)}"
 RDEPENDS:${PN}:class-target = "lshw"
-RRECOMMENDS:${PN}_class-target = "${PN}-hwid"
+RRECOMMENDS:${PN}:class-target = "${PN}-hwid"
 
 RDEPENDS:${PN}-ptest += "bash cmake curl net-tools python3-core python3-misc python3-modules openssl-bin sqlite3 valgrind"
 
@@ -17,22 +17,23 @@ PRIVATE_LIBS:${PN}-ptest = "libaktualizr.so libaktualizr_secondary.so"
 PV = "1.0+git${SRCPV}"
 PR = "7"
 
-GARAGE_SIGN_PV = "0.7.4-25-g7cfca74"
+GARAGE_SIGN_PV = "0.7.7"
 
 SRC_URI = " \
   gitsm://github.com/uptane/aktualizr;branch=${BRANCH};name=aktualizr;protocol=https \
-  file://run-ptest \
+  file://10-resource-control.conf \
   file://aktualizr.service \
   file://aktualizr-secondary.service \
   file://aktualizr-serialcan.service \
-  file://10-resource-control.conf \
-  ${@ d.expand("https://tuf-cli-releases.ota.here.com/cli-${GARAGE_SIGN_PV}.tgz;unpack=0;name=garagesign") if not oe.types.boolean(d.getVar('GARAGE_SIGN_AUTOVERSION')) else ''} \
+  file://aktualizr-tmpfiles.conf \
+  file://run-ptest \
+  ${@ d.expand("https://garage-sign.s3.eu-west-1.amazonaws.com/cli-${GARAGE_SIGN_PV}.tgz;unpack=0;name=garagesign") if not oe.types.boolean(d.getVar('GARAGE_SIGN_AUTOVERSION')) else ''} \
   "
 
-SRC_URI[garagesign.md5sum] = "584cd16aa7824e34b593dae63796466b"
-SRC_URI[garagesign.sha256sum] = "c7d5fdceef3e815363e3aa398c38643ca213f9b7f66d50f55c76a66cb74565d2"
+SRC_URI[garagesign.md5sum] = "138fc97c7130258efa80865a83290ad1"
+SRC_URI[garagesign.sha256sum] = "16d9eef5a3144fbddf74ec206714ce2c526f4b68d8259da7fb5004f284848d59"
 
-SRCREV = "eced3900754b51273733c66588ca44c44ba03b2c"
+SRCREV = "f88fb5fae020b0aa10d9cefc836e47a38161469f"
 BRANCH ?= "master"
 
 S = "${WORKDIR}/git"
@@ -100,6 +101,8 @@ do_install:append () {
     install -m 0644 ${WORKDIR}/aktualizr-secondary.service ${D}${systemd_unitdir}/system/aktualizr-secondary.service
     install -m 0700 -d ${D}${libdir}/sota/conf.d
     install -m 0700 -d ${D}${sysconfdir}/sota/conf.d
+    install -d ${D}${nonarch_libdir}/tmpfiles.d
+    install -m 0644 ${WORKDIR}/aktualizr-tmpfiles.conf ${D}${nonarch_libdir}/tmpfiles.d/aktualizr.conf
 
     install -m 0755 -d ${D}${systemd_unitdir}/system
     aktualizr_service=${@bb.utils.contains('SOTA_CLIENT_FEATURES', 'serialcan', '${WORKDIR}/aktualizr-serialcan.service', '${WORKDIR}/aktualizr.service', d)}
@@ -144,6 +147,7 @@ FILES:${PN}-info = " \
 
 FILES:${PN}-lib = " \
                 ${libdir}/libaktualizr.so \
+                ${nonarch_libdir}/tmpfiles.d/aktualizr.conf \
                 "
 
 FILES:${PN}-resource-control = " \

@@ -1,0 +1,110 @@
+From a02b294035965d3502f8a73add0a02157488d6e8 Mon Sep 17 00:00:00 2001
+From: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Date: Mon, 9 Oct 2023 20:48:37 +0300
+Subject: [PATCH 011/146] UPSTREAM: drm/msm: allow passing struct msm_kms to
+ msm_drv_probe()
+
+In preparation of moving resource allocation to the probe time, allow
+MSM KMS drivers to pass struct msm_kms pointer via msm_drv_probe().
+
+Reviewed-by: Rob Clark <robdclark@gmail.com>
+Signed-off-by: Dmitry Baryshkov <dmitry.baryshkov@linaro.org>
+Patchwork: https://patchwork.freedesktop.org/patch/561627/
+Signed-off-by: Rob Clark <robdclark@chromium.org>
+Signed-off-by: Yongxing Mou <quic_yongmou@quicinc.com>
+Upstream-Status: Backport [https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git a2ab5d5bb6b1dedef7b6c2711a7a53cbf9f508f4]
+---
+ drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c  | 2 +-
+ drivers/gpu/drm/msm/disp/mdp4/mdp4_kms.c | 2 +-
+ drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c | 2 +-
+ drivers/gpu/drm/msm/msm_drv.c            | 6 ++++--
+ drivers/gpu/drm/msm/msm_drv.h            | 3 ++-
+ 5 files changed, 9 insertions(+), 6 deletions(-)
+
+diff --git a/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c b/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c
+index c499aedca74d..405b05695d2a 100644
+--- a/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c
++++ b/drivers/gpu/drm/msm/disp/dpu1/dpu_kms.c
+@@ -1298,7 +1298,7 @@ static int dpu_kms_init(struct drm_device *ddev)
+ 
+ static int dpu_dev_probe(struct platform_device *pdev)
+ {
+-	return msm_drv_probe(&pdev->dev, dpu_kms_init);
++	return msm_drv_probe(&pdev->dev, dpu_kms_init, NULL);
+ }
+ 
+ static int dpu_dev_remove(struct platform_device *pdev)
+diff --git a/drivers/gpu/drm/msm/disp/mdp4/mdp4_kms.c b/drivers/gpu/drm/msm/disp/mdp4/mdp4_kms.c
+index 700df4040e9a..324355b68733 100644
+--- a/drivers/gpu/drm/msm/disp/mdp4/mdp4_kms.c
++++ b/drivers/gpu/drm/msm/disp/mdp4/mdp4_kms.c
+@@ -557,7 +557,7 @@ static const struct dev_pm_ops mdp4_pm_ops = {
+ 
+ static int mdp4_probe(struct platform_device *pdev)
+ {
+-	return msm_drv_probe(&pdev->dev, mdp4_kms_init);
++	return msm_drv_probe(&pdev->dev, mdp4_kms_init, NULL);
+ }
+ 
+ static int mdp4_remove(struct platform_device *pdev)
+diff --git a/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c b/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c
+index 92bf9d949d09..fbbc99378c60 100644
+--- a/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c
++++ b/drivers/gpu/drm/msm/disp/mdp5/mdp5_kms.c
+@@ -939,7 +939,7 @@ static int mdp5_dev_probe(struct platform_device *pdev)
+ 	if (ret)
+ 		return ret;
+ 
+-	return msm_drv_probe(&pdev->dev, mdp5_kms_init);
++	return msm_drv_probe(&pdev->dev, mdp5_kms_init, NULL);
+ }
+ 
+ static int mdp5_dev_remove(struct platform_device *pdev)
+diff --git a/drivers/gpu/drm/msm/msm_drv.c b/drivers/gpu/drm/msm/msm_drv.c
+index 4bd028fa7500..002c50125f40 100644
+--- a/drivers/gpu/drm/msm/msm_drv.c
++++ b/drivers/gpu/drm/msm/msm_drv.c
+@@ -1230,7 +1230,8 @@ const struct component_master_ops msm_drm_ops = {
+ };
+ 
+ int msm_drv_probe(struct device *master_dev,
+-	int (*kms_init)(struct drm_device *dev))
++	int (*kms_init)(struct drm_device *dev),
++	struct msm_kms *kms)
+ {
+ 	struct msm_drm_private *priv;
+ 	struct component_match *match = NULL;
+@@ -1240,6 +1241,7 @@ int msm_drv_probe(struct device *master_dev,
+ 	if (!priv)
+ 		return -ENOMEM;
+ 
++	priv->kms = kms;
+ 	priv->kms_init = kms_init;
+ 	dev_set_drvdata(master_dev, priv);
+ 
+@@ -1275,7 +1277,7 @@ int msm_drv_probe(struct device *master_dev,
+ 
+ static int msm_pdev_probe(struct platform_device *pdev)
+ {
+-	return msm_drv_probe(&pdev->dev, NULL);
++	return msm_drv_probe(&pdev->dev, NULL, NULL);
+ }
+ 
+ static int msm_pdev_remove(struct platform_device *pdev)
+diff --git a/drivers/gpu/drm/msm/msm_drv.h b/drivers/gpu/drm/msm/msm_drv.h
+index 184f877fcb94..adfbb4c77d3c 100644
+--- a/drivers/gpu/drm/msm/msm_drv.h
++++ b/drivers/gpu/drm/msm/msm_drv.h
+@@ -555,7 +555,8 @@ int msm_pm_prepare(struct device *dev);
+ void msm_pm_complete(struct device *dev);
+ 
+ int msm_drv_probe(struct device *dev,
+-	int (*kms_init)(struct drm_device *dev));
++	int (*kms_init)(struct drm_device *dev),
++	struct msm_kms *kms);
+ void msm_drv_shutdown(struct platform_device *pdev);
+ 
+ 
+-- 
+2.34.1
+

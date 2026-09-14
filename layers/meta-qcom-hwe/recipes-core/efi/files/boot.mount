@@ -1,6 +1,9 @@
 [Unit]
 Before=local-fs.target
 
+#Specify OnFailure directive to run a script if mounting fails
+OnFailure=efi-mount-fail.service
+
 [Mount]
 What=/dev/disk/by-partlabel/efi
 Where=/boot
