@@ -13,98 +13,10 @@ export TARGET_IMAGE
 KERNEL_FILE="$TOPDIR/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/esp-qcom-image-qcm6490-idp.rootfs.vfat"
 DTB_FILE="$TOPDIR/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/dtb-qcom-image-qcm6490-idp.rootfs.vfat"
 
-DOWNLOAD_URL="ftp://192.168.25.201/src_files/buildroot-dl/quectel-pi-h1"
-
 # GitHub rootfs release (used by DEBIAN/UBUNTU builds)
 GITHUB_ROOTFS_DL_URL="https://github.com/super617/pi-rootfs/releases/download/latest"
 GITHUB_ROOTFS_API_URL="https://api.github.com/repos/super617/pi-rootfs/releases/latest"
 GITHUB_ROOTFS_API_CACHE="${TMPDIR:-/tmp}/pi-rootfs-latest.json"
-
-if [ ! -f downloads/downloads.done ]; then
-    SYNC_OK=0
-    mkdir -p downloads
-
-    DL_CMD=""
-    if command -v wget &>/dev/null; then
-        DL_CMD="wget"
-    elif command -v curl &>/dev/null; then
-        DL_CMD="curl"
-    elif busybox wget --help &>/dev/null 2>&1; then
-        DL_CMD="busybox_wget"
-    else
-        echo -e "\033[31;1m[WARN] No download tool found (wget/curl), skipping sync, Yocto will download on its own\033[0m"
-    fi
-
-    if [ -n "${DL_CMD}" ]; then
-        echo -e "\033[33;1m[INFO] Checking server at ${DOWNLOAD_URL}...\033[0m"
-        HTTP_OK=0
-        if [ "${DL_CMD}" = "wget" ]; then
-            wget -q --spider "${DOWNLOAD_URL}/" 2>/dev/null && HTTP_OK=1
-        elif [ "${DL_CMD}" = "curl" ]; then
-            curl -sf -o /dev/null "${DOWNLOAD_URL}/" 2>/dev/null && HTTP_OK=1
-        else
-            busybox wget -q --spider "${DOWNLOAD_URL}/" 2>/dev/null && HTTP_OK=1
-        fi
-
-        if [ ${HTTP_OK} -eq 1 ]; then
-            echo -e "\033[32;1m[INFO] Syncing downloads from FTP mirror...\033[0m"
-            if command -v lftp &>/dev/null; then
-                # lftp mirror: parallel multi-connection sync (fastest for 40G)
-                # NOTE: single mirror pass can miss files (parallel race), so loop 3x
-                # with --only-missing (incremental, idempotent). Verified complete
-                # after loops: top files + git2 repos + .done markers all match.
-                # wget --exclude-directories does NOT work for FTP (leaks git2 to
-                # top level), hence lftp is required.
-                LFTP_PARALLEL="${LFTP_PARALLEL:-8}"
-                FTP_HOST="${DOWNLOAD_URL#*//}"; FTP_HOST="${FTP_HOST%%/*}"
-                FTP_PATH="/${DOWNLOAD_URL#*//${FTP_HOST}}"; FTP_PATH="${FTP_PATH#//}"
-                SYNC_OK=1
-                for i in 1 2 3; do
-                    lftp -u anonymous, -e "
-open ${FTP_HOST}
-set net:timeout 15
-set net:reconnect-interval-base 2
-set mirror:use-pget-n ${LFTP_PARALLEL}
-set mirror:no-empty-dirs true
-mirror --parallel=${LFTP_PARALLEL} --use-pget-n=${LFTP_PARALLEL} --no-empty-dirs --only-missing \
-    --exclude-glob '*.listing' --exclude-glob 'git2/*' \
-    ${FTP_PATH}/ ${TOPDIR}/downloads/
-mirror --parallel=${LFTP_PARALLEL} --use-pget-n=${LFTP_PARALLEL} --no-empty-dirs --only-missing \
-    --exclude-glob '*.listing' \
-    ${FTP_PATH}/git2/ ${TOPDIR}/downloads/git2/
-quit
-" 2>/dev/null || SYNC_OK=0
-                done
-            elif [ "${DL_CMD}" = "wget" ]; then
-                # Fallback: serial wget recursive mirror (works everywhere, slower;
-                # NOTE: leaks git2 to top-level but files still land, bitbake only
-                # reads downloads/git2/ so extra top-level copies are harmless-ish,
-                # prefer lftp)
-                wget -q -r -np --no-parent -nH --cut-dirs=4 -P "${TOPDIR}/downloads" \
-                    --reject "index.html*" "${DOWNLOAD_URL}/" 2>/dev/null && SYNC_OK=1
-            elif [ "${DL_CMD}" = "curl" ]; then
-                # Fallback: serial curl (wget missing but curl present)
-                for file in $(curl -sf "${DOWNLOAD_URL}/" | grep -oP 'href="\K[^"]+' | grep -v '/'); do
-                    curl -sf -o "${TOPDIR}/downloads/${file}" "${DOWNLOAD_URL}/${file}" || break
-                done
-                [ -f "${TOPDIR}/downloads/downloads.done" ] && SYNC_OK=1
-            else
-                busybox wget -q -r -np --no-parent -nH --cut-dirs=4 -P "${TOPDIR}/downloads" \
-                    --reject "index.html*" "${DOWNLOAD_URL}/" 2>/dev/null && SYNC_OK=1
-            fi
-
-            if [ ${SYNC_OK} -eq 1 ]; then
-                touch downloads/downloads.done
-                echo -e "\033[32;1m[INFO] downloads sync completed\033[0m"
-            else
-                echo -e "\033[31;1m[ERROR] download failed, Yocto will download on its own\033[0m"
-            fi
-        else
-            echo -e "\033[33;1m[WARN] server not reachable, skipping sync, Yocto will download on its own\033[0m"
-        fi
-    fi
-fi
-
 
 env_check()
 {
