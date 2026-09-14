@@ -1,6 +1,10 @@
 downloads
 BP
 log/
+/build-*/
+sstate-cache/
 /quectel_build/alpha
 /quectel_build/output
 /quectel_build/compile/quectel-features-config/quectel-buildversion-gen.h
+# buildconfig 生成后由 build.sh:477 拷进 atcid 源码树，属构建产物
+/layers/meta-quectel/recipes-quectel/atcid/files/atci/quectel/inc/quectel-buildconfig-gen.h
