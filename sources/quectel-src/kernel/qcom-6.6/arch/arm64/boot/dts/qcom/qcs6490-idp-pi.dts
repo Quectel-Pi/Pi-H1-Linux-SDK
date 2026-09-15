@@ -1155,6 +1155,8 @@
 
 	delay-ms = <3000>; 
 	pwkey-gpios = <&tlmm 49 GPIO_ACTIVE_LOW>;
+	pwkey-pulse-ms = <1000>;	//5G HAT PWRKEY: press for 1s then release
+	wait-for-link-ms = <10000>;	//link training window for cold booted 5G module
 	max-link-speed = <1>;		//limit for waveshare pci to 5G HAT
 
 	iommu-map = <0x0 &apps_smmu 0x1c80 0x1>,

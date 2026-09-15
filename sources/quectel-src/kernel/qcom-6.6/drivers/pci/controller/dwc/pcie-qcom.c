@@ -17,6 +17,7 @@
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
+#include <linux/jiffies.h>
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/of.h>
@@ -260,6 +261,10 @@ struct qcom_pcie {
 	union qcom_pcie_resources res;
 	struct phy *phy;
 	struct gpio_desc *reset;
+	struct gpio_desc *pwkey;		/* 5G modem power key (M.2 HAT) */
+	u32 pwkey_pulse_ms;			/* DT "pwkey-pulse-ms" */
+	u32 modem_power_delay_ms;		/* DT "delay-ms" */
+	u32 wait_for_link_ms;			/* DT "wait-for-link-ms" */
 	struct icc_path *icc_mem;
 	const struct qcom_pcie_cfg *cfg;
 	struct dentry *debugfs;
@@ -271,8 +276,36 @@ struct qcom_pcie {
 
 static void qcom_ep_reset_assert(struct qcom_pcie *pcie)
 {
+	struct device *dev = pcie->pci->dev;
+
 	gpiod_set_value_cansleep(pcie->reset, 1);
 	usleep_range(PERST_DELAY_US, PERST_DELAY_US + 500);
+
+	/*
+	 * Optional 5G modem power key. Only boards carrying a modem on the
+	 * PCIe slot (e.g. an M.2 5G HAT) wire this line up.
+	 *
+	 * When "pwkey-pulse-ms" is set the key is pressed for that long and
+	 * then released, so the module gets a proper power-on key pulse
+	 * (needed on a cold boot). Without the property the historical
+	 * behaviour of leaving the key asserted is kept.
+	 */
+	if (pcie->pwkey) {
+		msleep(100);
+		gpiod_set_value_cansleep(pcie->pwkey, 1);
+		if (pcie->pwkey_pulse_ms) {
+			msleep(pcie->pwkey_pulse_ms);
+			gpiod_set_value_cansleep(pcie->pwkey, 0);
+			dev_info(dev, "5G HAT power key pulse %ums\n",
+				 pcie->pwkey_pulse_ms);
+		} else {
+			dev_info(dev, "5G HAT power key asserted\n");
+		}
+
+		/* Give the module time to boot before link training starts */
+		if (pcie->modem_power_delay_ms)
+			msleep(pcie->modem_power_delay_ms);
+	}
 }
 
 static void qcom_ep_reset_deassert(struct qcom_pcie *pcie)
@@ -296,6 +329,26 @@ static int qcom_pcie_start_link(struct dw_pcie *pci)
 	/* Enable Link Training state machine */
 	if (pcie->cfg->ops->ltssm_enable)
 		pcie->cfg->ops->ltssm_enable(pcie);
+
+	/*
+	 * A cold booted modem can take far longer than the ~1s window used by
+	 * dw_pcie_wait_for_link() to get its PCIe endpoint ready; the link
+	 * then fails with "Phy link never came up". Boards that need a longer
+	 * window set "wait-for-link-ms".
+	 */
+	if (pcie->wait_for_link_ms) {
+		unsigned long timeout = jiffies +
+					msecs_to_jiffies(pcie->wait_for_link_ms);
+
+		dev_info(pci->dev, "Waiting up to %ums for PCIe link\n",
+			 pcie->wait_for_link_ms);
+
+		while (time_before(jiffies, timeout)) {
+			if (dw_pcie_link_up(pci))
+				break;
+			msleep(20);
+		}
+	}
 
 	return 0;
 }
@@ -1643,11 +1696,26 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 
 	pcie->cfg = pcie_cfg;
 
+	pcie->pwkey = devm_gpiod_get_optional(dev, "pwkey", GPIOD_OUT_LOW);
+	if (IS_ERR(pcie->pwkey)) {
+		ret = PTR_ERR(pcie->pwkey);
+		goto err_pm_runtime_put;
+	}
+
 	pcie->reset = devm_gpiod_get_optional(dev, "perst", GPIOD_OUT_HIGH);
 	if (IS_ERR(pcie->reset)) {
 		ret = PTR_ERR(pcie->reset);
 		goto err_pm_runtime_put;
 	}
+
+	/*
+	 * Optional modem power sequencing timing. device_property_read_u32()
+	 * leaves the (zeroed) value untouched when the property is absent, so
+	 * the values stay 0 and the historical behaviour is preserved.
+	 */
+	device_property_read_u32(dev, "delay-ms", &pcie->modem_power_delay_ms);
+	device_property_read_u32(dev, "pwkey-pulse-ms", &pcie->pwkey_pulse_ms);
+	device_property_read_u32(dev, "wait-for-link-ms", &pcie->wait_for_link_ms);
 
 	pcie->parf = devm_platform_ioremap_resource_byname(pdev, "parf");
 	if (IS_ERR(pcie->parf)) {

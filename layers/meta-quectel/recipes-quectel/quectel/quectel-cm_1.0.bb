@@ -18,4 +18,5 @@ do_install:append () {
 }
 
 SYSTEMD_SERVICE:${PN} += "quectel-cm@.service"
-EXTRA_OECMAKE:append:sdxpinn = " -DUSE_QRTR=1"
+#EXTRA_OECMAKE:append:sdxpinn = " -DUSE_QRTR=1"
+EXTRA_OECMAKE:append = " -DUSE_QRTR=1"
