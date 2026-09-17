@@ -56,15 +56,20 @@ each one takes a single value:
 be added to any `OS`/`VERSION` combination.
 
 The project ID can be any value you like; it is what names the firmware
-directory, e.g. `quectel_build/<Your Project ID>`. A dimension that is not the
-default (`LINUX`, `STD`) is appended to the firmware directory name, so the two
-versions of one system never overwrite each other:
+directory, e.g. `quectel_build/<Your Project ID>`. A `DBG` build is packed into
+`<Your Project ID>_DBG` so it never overwrites the performance package of the
+same project ID:
 
-| Invocation   | Firmware directory                                        |
-| ------------ | --------------------------------------------------------- |
-| `LINUX STD`  | `quectel_build/<Your Project ID>`                          |
-| `LINUX DBG`  | `quectel_build/<Your Project ID>_DBG`                      |
-| `DEBIAN DBG` | `quectel_build/<Your Project ID>_DEBIAN_DBG`               |
+| Invocation   | Firmware directory                                    |
+| ------------ | ----------------------------------------------------- |
+| `LINUX STD`  | `quectel_build/<Your Project ID>`                      |
+| `LINUX DBG`  | `quectel_build/<Your Project ID>_DBG`                  |
+
+Only the version dimension is part of the name: `DEBIAN STD` and `LINUX STD` of
+the same project ID share one directory, so give each system its own project ID
+if you need both at the same time. `flash.sh` reads the firmware directory back
+from the saved configuration, so flash the firmware that `buildpackage` packed
+last.
 
 After the first `buildall`, day to day work should build incrementally:
 
@@ -122,9 +127,8 @@ Same flow as Debian, with `ubuntu-sync-list` and `ubuntu26-gnome-rootfs.tar.xz`
     buildconfig QSM565DWF <Your Project ID> LINUX DBG SEC
 
 SEC boot output needs the signing package, so finish with `buildpackage`.
-The firmware directory name carries the non-default dimensions, so two variants
-of one project ID do not collide; using a different project ID per variant is
-still the clearest way to tell the packages apart.
+A `DBG` package lands in its own `<Your Project ID>_DBG` directory, so it does
+not overwrite the `STD` package of the same project ID.
 
 ## Get your firmware
 

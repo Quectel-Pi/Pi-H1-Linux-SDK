@@ -25,86 +25,6 @@ is_secboot_enabled()
     return 1
 }
 
-derive_target_dir_name()
-{
-    local project_token board_token build_token linux_token custom_token
-    local bp_token modem_token release_token module_seq
-    local linux_major linux_minor linux_patch linux_patch_token
-    local project_suffix target_name token
-    local -a custom_tokens
-
-    project_token="${VERSION_NUMBER%%_*}"
-    build_token="$(printf '%s' "$VERSION_NUMBER" | cut -d'_' -f2)"
-    linux_token="$(printf '%s' "$VERSION_NUMBER" | grep -o 'LP[0-9][0-9A-Z]*\.[0-9][0-9A-Z]*\.[0-9][0-9A-Z]*' | head -n1)"
-    custom_token=""
-
-    IFS='/' read -r -a custom_tokens <<EOF
-$CUSTOM_ID
-EOF
-    # CUSTOM_ID carries two dimensions (OS + VERSION): LINUX|DEBIAN|UBUNTU + STD|DBG.
-    # LINUX and STD are the defaults and add no suffix, every other dimension
-    # token is appended, e.g. DBG -> _DBG, DEBIAN/DBG -> _DEBIAN_DBG.
-    for token in "${custom_tokens[@]}"; do
-        case "${token}" in
-            ""|"LINUX"|"STD"|"SEC"|"OL")
-                ;;
-            *)
-                custom_token="${custom_token:+${custom_token}_}${token}"
-                ;;
-        esac
-    done
-
-    # For current QSM565DWF projects, the project prefix in PROJECT_REV is 8 chars
-    # like SG565DWF/SD565DWF. Keep the board suffix and replace the prefix with
-    # QUECTEL_PROJECT_NAME.
-    if [ ${#project_token} -gt 8 ]; then
-        project_suffix="${project_token:8}"
-    else
-        project_suffix=""
-    fi
-    board_token="${PROJECT_NAME}${project_suffix}"
-
-    bp_token="$(printf '%s' "$build_token" | grep -o 'BP[0-9][0-9]' | head -n1)"
-    modem_token="$(printf '%s' "$build_token" | grep -o 'M[0-9][0-9]' | head -n1)"
-    release_token="$(printf '%s' "$build_token" | grep -o 'V[0-9][0-9]' | tail -n1)"
-    if [ -z "$release_token" ]; then
-        release_token="$(printf '%s' "$VERSION_NUMBER" | tr '_' '\n' | grep -E '^V[0-9][0-9]$' | tail -n1)"
-    fi
-
-    if [ -n "$modem_token" ]; then
-        printf -v module_seq "%03d" "$((10#${modem_token#M}))"
-    else
-        module_seq="000"
-    fi
-
-    if [ -n "$linux_token" ]; then
-        linux_token="${linux_token#LP}"
-        IFS='.' read -r linux_major linux_minor linux_patch_token <<EOF
-$linux_token
-EOF
-        linux_patch="$(printf '%s' "$linux_patch_token" | sed 's/^0*//')"
-        if [ -z "$linux_patch" ]; then
-            linux_patch="0"
-        fi
-    else
-        linux_major="0"
-        linux_minor="0"
-        linux_patch="0"
-    fi
-
-    target_name="${board_token}_${bp_token:-BP00}.${module_seq}_Linux${linux_major}.${linux_minor}.${linux_patch}_${release_token:-V00}"
-
-    case "$custom_token" in
-        "")
-            ;;
-        *)
-            target_name="${target_name}_${custom_token}"
-            ;;
-    esac
-
-    echo "$target_name"
-}
-
 run_secboot_cmd()
 {
     local label="$1"
@@ -148,8 +68,14 @@ else
 fi
 
 # generate TARGET_DIR
-TARGET_DIR_NAME="$(derive_target_dir_name)"
+# A debug build is packed into "<project ID>_DBG" so it never overwrites the
+# performance package of the same project ID. flash.sh applies the same rule
+# from QUECTEL_CUSTOM_NAME; keep the two in sync.
 TARGET_DIR="$TOPDIR/quectel_build/${VERSION_NUMBER}"
+case "/${CUSTOM_ID}/" in
+    */DBG/*) TARGET_DIR="${TARGET_DIR}_DBG" ;;
+esac
+TARGET_DIR_NAME="$(basename "$TARGET_DIR")"
 SECBOOT_STAGE_DIR="$TARGET_DIR"
 
 # Output generating TARGET_DIR

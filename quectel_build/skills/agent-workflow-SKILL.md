@@ -45,14 +45,17 @@ metadata:
 ```
 buildconfig <项目名> <版本号> <系统> <版本> [SEC]
   系统:  LINUX (Linux标准固件) / DEBIAN (Debian固件) / UBUNTU (Ubuntu固件)
-  版本:  STD (标准版，默认 perf) / DBG (调试版，固件目录名带 _DBG 后缀，保留调试符号)
+  版本:  STD (标准版，默认 perf) / DBG (调试版，打包时固件目录名带 _DBG 后缀，保留调试符号)
 ```
 
-| 系统 | 标准版参数 (默认 perf) | Debug版参数 (固件目录名带 _DBG 后缀) |
+| 系统 | 标准版参数 (默认 perf) | Debug版参数 (打包时固件目录名带 _DBG 后缀) |
 |------|----------------------|-----------------------------------|
 | Linux | LINUX STD | LINUX DBG |
 | Debian | DEBIAN STD | DEBIAN DBG |
 | Ubuntu | UBUNTU STD | UBUNTU DBG |
+
+固件目录名 = buildconfig 的第二个参数（版本号），DBG 版打包时追加 `_DBG`；
+系统维度不影响目录名，同版本号需区分系统时请使用不同版本号。
 
 | 系统 | 固件类型 | 说明 |
 |---------|---------|------|

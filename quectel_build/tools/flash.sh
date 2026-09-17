@@ -21,6 +21,11 @@ BUILD_CONFIG="${SCRIPT_DIR}/../compile/quectel-features-config/quectel-buildconf
 if [[ -f "$BUILD_CONFIG" ]]; then
     FW_REV=$(grep 'QUECTEL_PROJECT_REV' "$BUILD_CONFIG" | sed 's/.*"\(.*\)".*/\1/')
     FW_DIR="${SCRIPT_DIR}/../${FW_REV}"
+    # 调试版固件打包到 "<版本号>_DBG"，与 a_key_generation.sh 的规则保持一致
+    FW_CUSTOM=$(grep 'QUECTEL_CUSTOM_NAME' "$BUILD_CONFIG" | sed 's/.*"\(.*\)".*/\1/' || true)
+    case "/${FW_CUSTOM}/" in
+        */DBG/*) FW_DIR="${FW_DIR}_DBG" ;;
+    esac
 else
     error "找不到配置文件: $BUILD_CONFIG"
     exit 1

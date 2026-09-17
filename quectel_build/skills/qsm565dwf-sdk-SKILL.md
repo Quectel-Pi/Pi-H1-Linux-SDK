@@ -63,7 +63,7 @@ buildconfig <项目名> <版本号> <系统> <版本> [SEC]
   可选标志:  SEC (安全启动)
 ```
 
-**维度取值**:
+**维度取值 (参考 c1.csv)**:
 | 系统 | 标准版参数 (默认 perf) | Debug版参数 (固件目录名带 _DBG 后缀) |
 |------|----------------------|-----------------------------------|
 | Linux | LINUX STD | LINUX DBG |
@@ -78,15 +78,21 @@ buildconfig <项目名> <版本号> <系统> <版本> [SEC]
 
 **版本说明**:
 - STD: 标准/性能版 (DEBUG_BUILD=0)，固件目录名不加后缀
-- DBG: 调试版 (DEBUG_BUILD=1，且不 strip 调试符号)，固件目录名后缀带 _DBG
+- DBG: 调试版 (DEBUG_BUILD=1，且不 strip 调试符号)，`buildpackage` 时固件目录名带 `_DBG` 后缀
 
-固件目录名 = buildconfig 的第二个参数（第二个维度会追加后缀），例如：
+固件目录名 = buildconfig 的第二个参数；DBG 版本在打包时追加 `_DBG`，例如：
 ```bash
 buildconfig QSM565DWF MyCustomVersion123 LINUX STD
-# 固件输出到: quectel_build/MyCustomVersion123/  (目录名无维度后缀)
-buildconfig QSM565DWF MyCustomVersion123 DEBIAN DBG
-# 固件输出到: quectel_build/MyCustomVersion123/  (目录名后缀 _DEBIAN_DBG)
+buildpackage
+# 固件输出到: quectel_build/MyCustomVersion123/
+buildconfig QSM565DWF MyCustomVersion123 LINUX DBG
+buildpackage
+# 固件输出到: quectel_build/MyCustomVersion123_DBG/
 ```
+
+注意：系统维度（LINUX/DEBIAN/UBUNTU）**不影响**固件目录名，只影响系统形态。
+同一个版本号下，DEBIAN 与 LINUX 的标准版会写入同一目录，需要区分时请使用不同的版本号
+（第二个参数）。
 
 ## 烧录
 

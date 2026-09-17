@@ -63,17 +63,14 @@ buildconfig <项目名> <版本号> <系统> <版本> [SEC]
   可选标志:  SEC (安全启动)
 ```
 
-| 系统 | 标准版参数 (默认 perf) | Debug版参数 (固件目录名带 _DBG 后缀) |
+| 系统 | 标准版参数 (默认 perf) | Debug版参数 (打包时固件目录名带 _DBG) |
 |------|----------------------|-----------------------------------|
 | Linux | LINUX STD | LINUX DBG |
 | Debian | DEBIAN STD | DEBIAN DBG |
 | Ubuntu | UBUNTU STD | UBUNTU DBG |
 
-固件目录名 = buildconfig 的第二个参数，例如：
-```bash
-buildconfig QSM565DWF MyCustomVersion123 LINUX STD
-# 固件输出到: quectel_build/MyCustomVersion123/
-```
+固件目录名 = buildconfig 的第二个参数（版本号）；DBG 版打包时追加 `_DBG`。
+系统维度不影响目录名，同版本号的 LINUX/DEBIAN 标准版会写入同一目录，需区分时用不同版本号。
 
 ## 烧录
 
