@@ -386,18 +386,11 @@ function buildconfig()
         break
     fi
 
-    # Update auto.conf from quectel_var.inc after config_parser generates it
-    if [ -f "${TOPDIR}/quectel_build/compile/quectel-features-config/quectel_var.inc" ] && [ -n "${BUILDDIR}" ]; then
-        local prj_name=$(grep "^QUECTEL_PROJECT_NAME" "${TOPDIR}/quectel_build/compile/quectel-features-config/quectel_var.inc" | cut -d= -f2 | tr -d ' ')
-        local prj_rev=$(grep "^QUECTEL_PROJECT_REV" "${TOPDIR}/quectel_build/compile/quectel-features-config/quectel_var.inc" | cut -d= -f2 | tr -d ' ')
-        local cust_name=$(grep "^QUECTEL_CUSTOM_NAME" "${TOPDIR}/quectel_build/compile/quectel-features-config/quectel_var.inc" | cut -d= -f2 | tr -d ' ')
-        local git_commit=$(grep "^QUECTEL_GIT_COMMIT" "${TOPDIR}/quectel_build/compile/quectel-features-config/quectel_var.inc" | cut -d= -f2 | tr -d ' ')
-        [ -n "$prj_name" ] && sed -i "s/^BUILDNAME = .*$/BUILDNAME = \"$prj_name\"/" ${BUILDDIR}/conf/auto.conf
-        [ -n "$prj_rev" ] && sed -i "s/^QUECTEL_PROJECT_REV = .*$/QUECTEL_PROJECT_REV = \"$prj_rev\"/" ${BUILDDIR}/conf/auto.conf
-        [ -n "$cust_name" ] && sed -i "s/^QUECTEL_CUSTOM_NAME = .*$/QUECTEL_CUSTOM_NAME = \"$cust_name\"/" ${BUILDDIR}/conf/auto.conf
-        [ -n "$git_commit" ] && sed -i "s/^QUECTEL_GIT_COMMIT = .*$/QUECTEL_GIT_COMMIT = \"$git_commit\"/" ${BUILDDIR}/conf/auto.conf
-        echo -e "\033[32;1mUpdated auto.conf from quectel_var.inc\033[0m"
-    fi
+    # The buildconfig values (project name / rev, custom name, git commit) are
+    # written into /etc/quectel-release by os-release.bbappend, which reads the
+    # generated header directly. They are deliberately not mirrored into
+    # conf/auto.conf: set_bb_env.sh owns that file and never emits those keys,
+    # and sed 's/^KEY = .*$/' can only replace a line, never create it.
 
     # Re-apply SECBOOT_ENABLE after config_parser.py (which regenerates auto.conf)
     if [ "${SECBOOT_ENABLE}" = "1" ] && [ -n "${BUILDDIR}" ]; then

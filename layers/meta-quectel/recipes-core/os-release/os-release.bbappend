@@ -7,13 +7,20 @@ do_install:append() {
 
     # Parse buildconfig generated header as a stable source of "version name"
     gen_h="${WORKSPACE}/quectel_build/compile/quectel-features-config/quectel-buildconfig-gen.h"
-    project_rev="unknown"
 
-    if [ -f "$gen_h" ]; then
-        project_rev="$(sed -n 's/^[[:space:]]*#define[[:space:]]\+QUECTEL_PROJECT_REV[[:space:]]\+"\([^"]*\)".*/\1/p' "$gen_h" | head -n1 || true)"
-    fi
+    # Read one '#define QUECTEL_X "value"' out of the generated header.
+    gen_value() {
+        [ -f "$gen_h" ] || return 0
+        sed -n "s/^[[:space:]]*#define[[:space:]]\+$1[[:space:]]\+\"\([^\"]*\)\".*/\1/p" "$gen_h" | head -n1 || true
+    }
+
+    project_rev="$(gen_value QUECTEL_PROJECT_REV)"
+    project_name="$(gen_value QUECTEL_PROJECT_NAME)"
+    custom_name="$(gen_value QUECTEL_CUSTOM_NAME)"
 
     [ -n "$project_rev" ] || project_rev="unknown"
+    [ -n "$project_name" ] || project_name="unknown"
+    [ -n "$custom_name" ] || custom_name="unknown"
 
     # Get git commit from top repo (fallback to unknown)
     git_commit="unknown"
@@ -27,6 +34,8 @@ do_install:append() {
     # Write dedicated Quectel release info file (overwrite for idempotency).
     cat > "$qrel" <<EOF
 QUECTEL_VERSION="${project_rev}"
+QUECTEL_PROJECT_NAME="${project_name}"
+QUECTEL_CUSTOM_NAME="${custom_name}"
 QUECTEL_BUILD_DATE="${build_date}"
 QUECTEL_GIT_COMMIT="${git_commit}"
 EOF
