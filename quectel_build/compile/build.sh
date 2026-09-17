@@ -352,7 +352,12 @@ function buildconfig()
 
     MOUNT_CONTROL_FILE=${TOPDIR}/layers/meta-qcom-hwe/recipes-core/packagegroups/packagegroup-qcom-initscripts.bb
 
-    if has_custom_token "STD" "${BUILD_ARGS[@]}" || has_custom_token "LINUX" "${BUILD_ARGS[@]}"; then
+    # Only the OS dimension selects the rootfs. It must not be keyed off the
+    # version tokens: a bare "STD" used to mean the Linux system before the OS
+    # dimension existed, so matching it here made "DEBIAN STD" skip the Debian
+    # rootfs and silently pack the Yocto one. A legacy invocation without an OS
+    # token still means the Linux system (LINUX is the default system).
+    if [ "${OS_DIM:-LINUX}" = "LINUX" ]; then
         echo 'SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS = "1"' >> ${BUILDDIR}/conf/local.conf
     else
         sed -i '/^SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS/d' ${BUILDDIR}/conf/local.conf
