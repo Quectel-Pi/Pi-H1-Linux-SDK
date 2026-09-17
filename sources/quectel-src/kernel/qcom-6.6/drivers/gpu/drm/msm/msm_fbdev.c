@@ -57,7 +57,17 @@ static void msm_fbdev_fb_destroy(struct fb_info *info)
 }
 
 static const struct fb_ops msm_fb_ops = {
-	.owner = THIS_MODULE,
+	/*
+	 * 刻意不设 .owner (Quectel Pi H1, 自 Android16 移植):
+	 * 启动 logo 的三道闸门只看 info->fbops->owner 是否为空, 详见
+	 * msm_default/msm_fbdev.c 里同一处注释。
+	 *
+	 * 本目录 (msm/) 编出的是 msm_display.ko (drivers/gpu/drm/Makefile:169),
+	 * 真正驱动本板 DSI 面板的是 msm_default/ 编出的 msm.ko
+	 * (Makefile:170)。msm_display.ko 虽被安装但 /etc/modprobe.d/
+	 * blacklist-msm_display.conf 拉黑、从不加载, 所以这份改动当前不生效;
+	 * 两处一起改是为了放开黑名单那天行为一致。
+	 */
 	__FB_DEFAULT_DEFERRED_OPS_RDWR(msm_fbdev),
 	DRM_FB_HELPER_DEFAULT_OPS,
 	__FB_DEFAULT_DEFERRED_OPS_DRAW(msm_fbdev),

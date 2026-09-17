@@ -57,7 +57,28 @@ static void msm_fbdev_fb_destroy(struct fb_info *info)
 }
 
 static const struct fb_ops msm_fb_ops = {
-	.owner = THIS_MODULE,
+	/*
+	 * 刻意不设 .owner (Quectel Pi H1, 自 Android16 移植):
+	 *
+	 * 内核启动 logo 的三道闸门都只看 info->fbops->owner 是否为空:
+	 *   drivers/video/fbdev/core/fbmem.c:620  fb_prepare_logo()
+	 *   drivers/video/fbdev/core/fbmem.c:464  fb_show_logo_line()
+	 *   drivers/video/fbdev/core/fbcon.c:565  fbcon_prepare_logo()
+	 * .owner 非空 -> 启动 logo 一帧都不画。本板要求开机在 DSI 面板上显示
+	 * Quectel 标识 (logo 资产与生成脚本见 drivers/video/logo/)。
+	 *
+	 * !! 本目录 (msm_default/) 才是编出 msm.ko 的那份:
+	 *      drivers/gpu/drm/Makefile:170  obj-$(CONFIG_DRM_MSM) += msm_default/
+	 *    msm/ 编出的是 msm_display.ko (Makefile:169), 虽然也装进了
+	 *    /lib/modules/, 但被 /etc/modprobe.d/blacklist-msm_display.conf 拉黑、
+	 *    从不加载。两处都改, 以防将来放开黑名单后行为不一致。
+	 *
+	 * 代价: 打开 /dev/fb0 时不再 try_module_get(owner) 钉住本模块。
+	 * 本产品 msm.ko 从不卸载 (无 modprobe -r, 无可卸热插拔路径), 故无实际风险;
+	 * 且 try_module_get()/module_put() 对 NULL 都有保护, fb_chrdev.c / fbcon.c
+	 * 里那几处调用不会因此解引用空指针。
+	 * 若将来要让 msm.ko 可卸载, 必须放弃启动 logo, 不要改回 .owner。
+	 */
 	__FB_DEFAULT_DEFERRED_OPS_RDWR(msm_fbdev),
 	DRM_FB_HELPER_DEFAULT_OPS,
 	__FB_DEFAULT_DEFERRED_OPS_DRAW(msm_fbdev),

@@ -238,14 +238,28 @@ static void write_header(void)
 	fprintf(out, " *  Linux logo %s\n", logoname);
 	fputs(" */\n\n", out);
 	fputs("#include <linux/linux_logo.h>\n\n", out);
-	fprintf(out, "static unsigned char %s_data[] __initdata = {\n",
+	fprintf(out, "static unsigned char %s_data[] = {\n",
 		logoname);
 }
 
+/*
+ * 产品改动 (Quectel Pi H1, 自 Android16 移植): 生成物不再打 __initdata/__initconst。
+ *
+ * 上游把 logo 数据放在 init 段, kernel_init 结束时随 __initdata 一起释放,
+ * 并用 logo.c 的 logos_freed 标记"已释放, 别再找"。这适合"fb 在启动早期就注册"
+ * 的机器 (如 efifb)。
+ * 本板的显示面板由 msm.ko (模块) 驱动, DRM fb 要等模块加载 + udev 才注册
+ * (实测 ~20.7s) —— 那时 init 段早被释放, fb_find_logo() 只会返回 NULL,
+ * logo 永远画不到面板上 (实测: 0.93s efifb 那次能拿到 logo 并画出,
+ * 20.7s msm fb 拿到的是 0)。所以让 logo 数据常驻 (不再进 init 段), 配合
+ * logo.c 去掉 logos_freed 检查。代价: logo 数据不再被回收 (本 logo 约 53KB)
+ * —— 实测两个数组是 static 非 const, 落在常驻 .data 段 (不是 .rodata),
+ * const struct linux_logo 才在 .rodata; 不论哪段都是常驻、不会被释放。
+ */
 static void write_footer(void)
 {
 	fputs("\n};\n\n", out);
-	fprintf(out, "const struct linux_logo %s __initconst = {\n", logoname);
+	fprintf(out, "const struct linux_logo %s = {\n", logoname);
 	fprintf(out, "\t.type\t\t= %s,\n", logo_types[logo_type]);
 	fprintf(out, "\t.width\t\t= %d,\n", logo_width);
 	fprintf(out, "\t.height\t\t= %d,\n", logo_height);
@@ -375,7 +389,7 @@ static void write_logo_clut224(void)
 	fputs("\n};\n\n", out);
 
 	/* write logo clut */
-	fprintf(out, "static unsigned char %s_clut[] __initdata = {\n",
+	fprintf(out, "static unsigned char %s_clut[] = {\n",
 		logoname);
 	write_hex_cnt = 0;
 	for (i = 0; i < logo_clutsize; i++) {

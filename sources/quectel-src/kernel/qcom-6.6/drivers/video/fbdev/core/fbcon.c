@@ -1012,8 +1012,28 @@ static void fbcon_init(struct vc_data *vc, bool init)
 
 	info = fbcon_info_from_console(vc->vc_num);
 
-	if (logo_shown < 0 && console_loglevel <= CONSOLE_LOGLEVEL_QUIET)
-		logo_shown = FBCON_LOGO_DONTSHOW;
+	/*
+	 * 产品改动 (Quectel Pi H1, 自 Android16 移植):
+	 *
+	 * 上游在这里会因为 console_loglevel <= CONSOLE_LOGLEVEL_QUIET(4)
+	 * 就把 boot logo 抑制掉 (logo_shown = DONTSHOW)。
+	 * 本板的要求恰恰相反且两者原本互斥:
+	 *   - console 保持安静 (Debian rootfs 的 /etc/sysctl.conf 固化
+	 *     kernel.printk=4, 即 console_loglevel 恒为 4; plymouth 显示
+	 *     splash 期间也会把 console 压到 QUIET);
+	 *   - 同时必须在 DSI 面板上显示 Quectel 启动标识
+	 *     (logo 资产见 drivers/video/logo/)。
+	 * 4 <= 4 恒成立 -> 上游逻辑下 logo 永远不画 (实测面板全黑)。
+	 *
+	 * 所以这里去掉"安静就抑制"这一条: console 保持安静, 但照画 logo。
+	 * 其余语义保持不变: DONTSHOW 仍然生效, logo 放不下屏幕时仍会在
+	 * fbcon_prepare_logo 里放弃 (logo_lines > vc_bottom)。
+	 * 想恢复上游行为, 把下面这两行取消注释即可。
+	 * 也可改从用户态下手 (把 kernel.printk 抬到 >4 或 cmdline 加 loglevel=7),
+	 * 但那样 LINUX/DEBIAN/UBUNTU 三套 rootfs 都要各自改, 故选择改内核。
+	 */
+	/* if (logo_shown < 0 && console_loglevel <= CONSOLE_LOGLEVEL_QUIET)
+		logo_shown = FBCON_LOGO_DONTSHOW; */
 
 	if (vc != svc || logo_shown == FBCON_LOGO_DONTSHOW ||
 	    (info->fix.type == FB_TYPE_TEXT))

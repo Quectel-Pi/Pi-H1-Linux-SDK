@@ -23,29 +23,25 @@ module_param(nologo, bool, 0);
 MODULE_PARM_DESC(nologo, "Disables startup logo");
 
 /*
- * Logos are located in the initdata, and will be freed in kernel_init.
- * Use late_init to mark the logos as freed to prevent any further use.
- */
-
-static bool logos_freed;
-
-static int __init fb_logo_late_init(void)
-{
-	logos_freed = true;
-	return 0;
-}
-
-late_initcall_sync(fb_logo_late_init);
-
-/* logo's are marked __initdata. Use __ref to tell
- * modpost that it is intended that this function uses data
- * marked __initdata.
+ * 产品改动 (Quectel Pi H1, 自 Android16 移植): 去掉 logos_freed 机制。
+ *
+ * 上游这里在 late_initcall_sync 里把 logos_freed 置真, 之后 fb_find_logo()
+ * 一律返回 NULL —— 因为 logo 数据本来是 __initdata, 那时已被释放。
+ * 本板的显示面板由 msm.ko (模块, CONFIG_DRM_MSM=m) 驱动, DRM fb 要等
+ * 模块加载 + udev 才注册 (实测 ~20.7s), 那时 logos_freed 早已为真 ->
+ * logo 画不到面板上 (实测 logo_height=0)。
+ *
+ * 配套: pnmtologo.c 已不再把 logo 数据放进 init 段 (不再是 __initdata,
+ * 不会被回收), 所以这里保留指针是安全的, 也不再有"释放后使用"的风险。
+ * 注意落地段位: 数组是 `static unsigned char ...[], 非 const, 所以进常驻
+ * .data 而非 .rodata; 只有那个 const struct linux_logo 在 .rodata。
+ * 想恢复上游行为, 把下面的 logos_freed 检查与 late_initcall 加回来即可。
  */
 const struct linux_logo * __ref fb_find_logo(int depth)
 {
 	const struct linux_logo *logo = NULL;
 
-	if (nologo || logos_freed)
+	if (nologo)
 		return NULL;
 
 	if (depth >= 1) {
