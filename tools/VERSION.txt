@@ -1,0 +1,42 @@
+# Quectel PI H1 (QCS6490) Yocto Linux SDK — 平台标识
+# 供 QPI SDK Studio 插件做平台判定 (扩展侧自检脚本优先读本文件的 SOC/BOARD)
+#
+# 与 H1 Simple SDK (QPi-SDK H1-SDK 分支) 通过 SDK_TYPE 区分:
+#   SDK_TYPE=yocto    -> Yocto/BitBake 构建体系 (Pi-H1-Linux-SDK, master)
+#   SDK_TYPE=simple   -> 原生 build.sh 构建体系 (QPi-SDK, H1-SDK 分支)
+# 插件按 SDK_TYPE 切换编译流程: yocto = buildconfig + buildall/buildpackage。
+
+SDK_NAME=yocto-h1
+SDK_TYPE=yocto
+BOARD=H1
+SOC=QCS6490
+VENDOR=Quectel
+
+# 系统
+ROOTFS=Yocto / Debian / Ubuntu (GNOME/Weston)
+MACHINE=qcm6490-idp
+DISTRO=qcom-wayland
+TARGET_IMAGE=quecpi-image
+KERNEL_DTS=qcs6490-idp-pi
+
+# 工具链 (Yocto 由 BitBake 管理, 无需宿主机预装交叉工具链)
+TOOLCHAIN=bitbake (Yocto toolchain)
+SYSROOT_SOURCE=layers (meta-qcom 等)
+
+# 镜像形态
+UPDATE_IMG_SUPPORTED=no
+IMAGE_FORMAT=quectel_build/<project_id>/ 分区镜像 (由 buildpackage 生成)
+
+# 烧录 (Qualcomm EDL / Sahara / Firehose)
+FLASH_PROTOCOL=Qualcomm EDL 9008
+FLASH_ENTRY=quectel_build/tools/flash.sh
+ENTER_EDL=adb shell reboot edl
+
+# 应用工程目录
+PROJECT_DIR=projects
+
+# 构建体系入口 (插件据此走 Yocto 流程: source quectel_build/compile/build.sh)
+BUILD_ENTRY=quectel_build/compile/build.sh
+BUILDCONFIG_HEADER=quectel_build/compile/quectel-features-config/quectel-buildconfig-gen.h
+
+GENERATED_DATE=2026-09-16

@@ -80,9 +80,32 @@ sha256_of()
 # HTTP/1.1 is forced: GitHub's 1GB+ assets over HTTP/2 often die with
 # "curl: (92) HTTP/2 stream was not closed cleanly"; --retry-all-errors
 # (curl >= 7.71) makes transient errors like that retry automatically.
+#
+# QPI SDK Studio progress hook: 插件通过扫描 stdout 的 "[QPI-PROGRESS]" 标记
+# 渲染下载进度条 (断点续传时 done 从已有 .part 字节数起算)。直接终端运行时
+# 这些行也会正常显示, 无副作用。
+qpi_progress()
+{
+    local done="${1:-0}" total="${2:-0}" pct=0
+    case "$done" in ''|*[!0-9]*) done=0 ;; esac
+    case "$total" in ''|*[!0-9]*) total=0 ;; esac
+    [ "$total" -gt 0 ] && pct=$((done * 100 / total))
+    [ "$pct" -gt 100 ] && pct=100
+    printf '[QPI-PROGRESS] total=%s done=%s pct=%s\n' "$total" "$done" "$pct"
+}
+
+# Content-Length of the latest release asset (进度条总大小; 未知时返回 0)
+github_rootfs_remote_size()
+{
+    command -v curl >/dev/null 2>&1 || { echo 0; return 1; }
+    curl -sIL --max-time 30 "${GITHUB_ROOTFS_DL_URL}/${1}" 2>/dev/null \
+        | awk 'BEGIN{IGNORECASE=1} /^content-length:/{v=$2} END{gsub(/\r/,"",v); print v+0}'
+}
+
 github_rootfs_download()
 {
-    local url="$1" out="$2" curl_extra="" wget_extra=""
+    local url="$1" out="$2" total="${3:-0}" curl_extra="" wget_extra="" pid=0 rc=0
+    case "$total" in ''|*[!0-9]*) total=0 ;; esac
     if [ ! -t 2 ]; then
         # Non-interactive: suppress the meter but keep errors visible
         curl_extra="-sS"
@@ -92,7 +115,17 @@ github_rootfs_download()
         if curl --help all 2>/dev/null | grep -q -- '--retry-all-errors'; then
             curl_extra="${curl_extra} --retry-all-errors"
         fi
-        curl -fL --http1.1 --retry 5 --retry-delay 5 -C - --max-time 7200 ${curl_extra} -o "$out" "$url"
+        # 后台下载 + 每秒轮询 .part 文件大小 -> 输出进度标记 (供插件渲染进度条;
+        # 插件环境无 tty, curl 的 meter 被 -sS 抑制, 无标记时终端会长时间无输出)。
+        curl -fL --http1.1 --retry 5 --retry-delay 5 -C - --max-time 7200 ${curl_extra} -o "$out" "$url" &
+        pid=$!
+        while kill -0 "$pid" 2>/dev/null; do
+            qpi_progress "$(stat -c %s "$out" 2>/dev/null || echo 0)" "$total"
+            sleep 1
+        done
+        wait "$pid" || rc=$?
+        qpi_progress "$(stat -c %s "$out" 2>/dev/null || echo 0)" "$total"
+        return "$rc"
     elif command -v wget >/dev/null 2>&1; then
         wget -c --timeout=30 --tries=3 ${wget_extra} -O "$out" "$url"
     else
@@ -195,7 +228,7 @@ fetch_github_rootfs_asset()
         local part="${tar}.part"
         # Keep an existing .part: curl -C - resumes from it on the next run
         # (a failed download must not force a 1GB restart from zero).
-        if github_rootfs_download "$dl_url" "$part"; then
+        if github_rootfs_download "$dl_url" "$part" "$(github_rootfs_remote_size "$asset")"; then
             # Integrity check when the expected sha256 is known
             if [ -n "$remote_sha" ]; then
                 local dl_sha
