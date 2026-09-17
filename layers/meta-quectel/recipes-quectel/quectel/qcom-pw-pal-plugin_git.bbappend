@@ -2,6 +2,7 @@ FILESEXTRAPATHS:prepend := "${THISDIR}/qcom-pw-pal-plugin:"
 FILESEXTRAPATHS:prepend := "${TOPDIR}/../prebuild/audio-profile:"
 
 SRC_URI += " \
+    file://0001-pw-pal-plugin-retry-stream-start-until-ADSP-ready.patch \
     file://usr/share/pipewire/pipewire.conf.d/pw-pal-plugin.conf \
     file://usr/share/pipewire/pipewire.conf.d/HDMI-Audio-Path.md \
     file://zz-audio-dmaheap-perm.rules \

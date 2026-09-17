@@ -1,0 +1,189 @@
+diff --git a/pw-pal-plugin.c b/pw-pal-plugin.c
+index 14cb933..47b0a21 100644
+--- a/pw-pal-plugin.c
++++ b/pw-pal-plugin.c
+@@ -26,6 +26,7 @@
+ #include <spa/param/buffers.h>
+ #include <pipewire/impl.h>
+ #include <pipewire/i18n.h>
++#include <pipewire/loop.h>
+ #include <PalApi.h>
+ #include <PalDefs.h>
+ #include <agm/agm_api.h>
+@@ -49,6 +50,19 @@ PW_LOG_TOPIC_STATIC(log_topic, "log:" LOG_TAG);
+ #define DEV_INPUT_DIR "/dev/input"
+ #define FILE_PREFIX "event"
+ 
++/*
++ * The first PAL graph open of a session can fail while the ADSP audio PD is
++ * still coming up: gsl_graph_open_sgids_and_connections() hits the GSL wait,
++ * pal_stream_start() returns -110 (ETIMEDOUT) / -68, and PAL does not
++ * re-initialise by itself. This plugin used to close the stream and return,
++ * but the stream state callback only fires on a state *transition*, so the
++ * sink stayed silent for the rest of the session while PipeWire kept
++ * consuming buffers (the player never sees an error). Retry the start from
++ * the main loop instead, until the ADSP answers.
++ */
++#define PAL_START_RETRY_INTERVAL_MS 2000
++#define PAL_START_RETRY_ATTEMPTS    90      /* 3 min, ADSP was ready in <= 2.5 */
++
+ struct pw_userdata {
+     struct pw_context *context;
+ 
+@@ -80,6 +94,9 @@ struct pw_userdata {
+ 
+     int jack_fd;
+     char jack_name[MAX_NAME_LENGTH];
++
++    struct spa_source *retry_timer;
++    unsigned int retry_left;
+ };
+ 
+ static void pw_pal_destroy_stream(void *d)
+@@ -135,7 +152,17 @@ static int close_pal_stream(struct pw_userdata *udata)
+ 
+     return rc;
+ }
+-static void pw_pal_stream_start(struct pw_userdata *udata)
++static void pw_pal_retry_disarm(struct pw_userdata *udata)
++{
++    struct timespec zero = { 0, 0 };
++
++    udata->retry_left = 0;
++    if (udata->retry_timer)
++        pw_loop_update_timer(pw_context_get_main_loop(udata->context),
++                udata->retry_timer, &zero, &zero, false);
++}
++
++static int pw_pal_stream_open_start(struct pw_userdata *udata)
+ {
+     int rc = 0;
+     pal_buffer_config_t out_buf_cfg, in_buf_cfg;
+@@ -145,7 +172,7 @@ static void pw_pal_stream_start(struct pw_userdata *udata)
+     if (rc) {
+         udata->stream_handle = NULL;
+         pw_log_error("Could not open output stream %d", rc);
+-        goto exit;
++        return rc;
+     }
+ 
+     if (udata->isplayback) {
+@@ -163,25 +190,84 @@ static void pw_pal_stream_start(struct pw_userdata *udata)
+     rc = pal_stream_set_buffer_size(udata->stream_handle, &in_buf_cfg, &out_buf_cfg);
+     if(rc) {
+         pw_log_error("pal_stream_set_buffer_size failed\n");
+-        goto exit;
++        goto cleanup;
+     }
+     rc = pal_stream_start(udata->stream_handle);
+     if (rc) {
+         pw_log_error("pal_stream_start failed, error %d\n", rc);
+         goto cleanup;
+-        }
+-    if (udata->isplayback) {
+-        pw_log_error("pal_stream_start set volume, error %d\n", rc);
+-        pw_pal_set_volume(udata, 1.0);
+     }
++    if (udata->isplayback)
++        pw_pal_set_volume(udata, 1.0);
+ 
+-    return rc;
++    return 0;
+ cleanup:
+     if (close_pal_stream(udata))
+         pw_log_error("could not close sink handle %p", udata->stream_handle);
+-exit:
+     return rc;
++}
++
++static void pw_pal_retry_timer_func(void *data, uint64_t expirations)
++{
++    struct pw_userdata *udata = data;
++    int rc;
+ 
++    if (udata->retry_left == 0) {
++        pw_pal_retry_disarm(udata);
++        return;
++    }
++    udata->retry_left--;
++
++    /* A previous attempt (or a new stream) already got the handle up. */
++    if (udata->stream_handle != NULL) {
++        pw_pal_retry_disarm(udata);
++        return;
++    }
++
++    rc = pw_pal_stream_open_start(udata);
++    if (rc == 0) {
++        pw_log_info("pal_stream_start succeeded on retry, %u attempts left",
++                udata->retry_left);
++        pw_pal_retry_disarm(udata);
++    } else if (udata->retry_left == 0) {
++        pw_log_error("pal_stream_start still failing (%d) after %d attempts, giving up",
++                rc, PAL_START_RETRY_ATTEMPTS);
++    } else {
++        pw_log_error("pal_stream_start retry failed (%d), %u attempts left",
++                rc, udata->retry_left);
++    }
++}
++
++static void pw_pal_retry_arm(struct pw_userdata *udata)
++{
++    struct timespec interval = {
++        PAL_START_RETRY_INTERVAL_MS / 1000,
++        (PAL_START_RETRY_INTERVAL_MS % 1000) * 1000000,
++    };
++    struct pw_loop *loop = pw_context_get_main_loop(udata->context);
++
++    if (loop == NULL)
++        return;
++    if (udata->retry_timer == NULL) {
++        udata->retry_timer = pw_loop_add_timer(loop, pw_pal_retry_timer_func, udata);
++        if (udata->retry_timer == NULL) {
++            pw_log_error("could not create the pal_stream_start retry timer");
++            return;
++        }
++    }
++    udata->retry_left = PAL_START_RETRY_ATTEMPTS;
++    pw_loop_update_timer(loop, udata->retry_timer, &interval, &interval, false);
++}
++
++static void pw_pal_stream_start(struct pw_userdata *udata)
++{
++    int rc = pw_pal_stream_open_start(udata);
++
++    if (rc) {
++        pw_log_error("stream start failed (%d), retrying every %d ms (up to %d attempts)",
++                rc, PAL_START_RETRY_INTERVAL_MS, PAL_START_RETRY_ATTEMPTS);
++        pw_pal_retry_arm(udata);
++    }
+ }
+ static void pw_pal_change_stream_state(void *d, enum pw_stream_state old,
+         enum pw_stream_state state, const char *error)
+@@ -191,9 +277,11 @@ static void pw_pal_change_stream_state(void *d, enum pw_stream_state old,
+     switch (state) {
+     case PW_STREAM_STATE_ERROR:
+     case PW_STREAM_STATE_UNCONNECTED:
++        pw_pal_retry_disarm(udata);
+         pw_impl_module_schedule_destroy(udata->module);
+         break;
+     case PW_STREAM_STATE_PAUSED:
++        pw_pal_retry_disarm(udata);
+         close_pal_stream(udata);
+         break;
+     case PW_STREAM_STATE_STREAMING:
+@@ -373,6 +461,14 @@ static const struct pw_proxy_events pw_pal_proxy_events_core = {
+ 
+ static void pw_pal_userdata_destroy(struct pw_userdata *udata)
+ {
++    pw_pal_retry_disarm(udata);
++    if (udata->retry_timer) {
++        struct pw_loop *loop = pw_context_get_main_loop(udata->context);
++
++        if (loop)
++            pw_loop_destroy_source(loop, udata->retry_timer);
++        udata->retry_timer = NULL;
++    }
+     if (udata->stream)
+         pw_stream_destroy(udata->stream);
+     if(fcntl(udata->jack_fd, F_GETFD) != 1 || errno != EBADF)
