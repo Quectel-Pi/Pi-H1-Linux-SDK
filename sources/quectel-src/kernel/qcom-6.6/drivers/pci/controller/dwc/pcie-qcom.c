@@ -27,6 +27,7 @@
 #include <linux/pci-ecam.h>
 #include <linux/pm_runtime.h>
 #include <linux/platform_device.h>
+#include <linux/workqueue.h>
 #include <linux/phy/pcie.h>
 #include <linux/phy/phy.h>
 #include <linux/regulator/consumer.h>
@@ -265,6 +266,9 @@ struct qcom_pcie {
 	u32 pwkey_pulse_ms;			/* DT "pwkey-pulse-ms" */
 	u32 modem_power_delay_ms;		/* DT "delay-ms" */
 	u32 wait_for_link_ms;			/* DT "wait-for-link-ms" */
+	struct work_struct host_init_work;	/* deferred host bring-up */
+	int global_irq;				/* DT "interrupts" global entry, <=0 if absent */
+	bool host_up;				/* host initialised (dbi_base is valid) */
 	struct icc_path *icc_mem;
 	const struct qcom_pcie_cfg *cfg;
 	struct dentry *debugfs;
@@ -1622,6 +1626,57 @@ static const struct pci_ecam_ops pci_qcom_ecam_ops = {
 	}
 };
 
+/*
+ * Host bring-up, deferred when the port advertises "wait-for-link-ms" (its
+ * endpoint may be absent or still cold booting). Same calls, same order as the
+ * inline path in probe(); only the context changes, so the boot does not wait
+ * for it -- the pre-/init wait_for_device_probe() waits on probe, not on a
+ * plain workqueue.
+ */
+static void qcom_pcie_deferred_host_init(struct work_struct *work)
+{
+	struct qcom_pcie *pcie = container_of(work, struct qcom_pcie,
+					      host_init_work);
+	struct dw_pcie_rp *pp = &pcie->pci->pp;
+	struct device *dev = pcie->pci->dev;
+	char *name;
+	int ret;
+
+	ret = dw_pcie_host_init(pp);
+	if (ret) {
+		/* Keep booting without this port; PM stays away (see host_up). */
+		dev_err(dev, "deferred: cannot initialize host: %d\n", ret);
+		return;
+	}
+	pcie->host_up = true;
+
+	name = devm_kasprintf(dev, GFP_KERNEL, "qcom_pcie_global_irq%d",
+			      pci_domain_nr(pp->bridge->bus));
+	if (!name)
+		return;
+
+	if (pcie->global_irq > 0) {
+		ret = devm_request_threaded_irq(dev, pcie->global_irq, NULL,
+						qcom_pcie_global_irq_thread,
+						IRQF_ONESHOT, name, pcie);
+		if (ret) {
+			dev_err(dev, "deferred: failed to request Global IRQ: %d\n",
+				ret);
+			return;
+		}
+
+		writel_relaxed(PARF_INT_ALL_LINK_UP | PARF_INT_MSI_DEV_0_7,
+			       pcie->parf + PARF_INT_ALL_MASK);
+	}
+	/* If the soc features RPMh, cmd_db must have been prepared by now */
+	pcie->soc_is_rpmh = !cmd_db_ready();
+
+	qcom_pcie_icc_update(pcie);
+
+	if (pcie->mhi)
+		qcom_pcie_init_debugfs(pcie);
+}
+
 static int qcom_pcie_probe(struct platform_device *pdev)
 {
 	const struct qcom_pcie_cfg *pcie_cfg;
@@ -1764,12 +1819,25 @@ static int qcom_pcie_probe(struct platform_device *pdev)
 	irq = platform_get_irq_byname_optional(pdev, "global");
 	if (irq > 0)
 		pp->use_linkup_irq = true;
+	pcie->global_irq = irq;
+
+	/*
+	 * Defer the bring-up for ports that may have no endpoint (or a cold
+	 * booting one), so boot does not wait for it. Ports without the property
+	 * keep the synchronous path.
+	 */
+	INIT_WORK(&pcie->host_init_work, qcom_pcie_deferred_host_init);
+	if (pcie->wait_for_link_ms) {
+		schedule_work(&pcie->host_init_work);
+		return 0;
+	}
 
 	ret = dw_pcie_host_init(pp);
 	if (ret) {
 		dev_err(dev, "cannot initialize host\n");
 		goto err_phy_exit;
 	}
+	pcie->host_up = true;
 
 	name = devm_kasprintf(dev, GFP_KERNEL, "qcom_pcie_global_irq%d",
 			      pci_domain_nr(pp->bridge->bus));
@@ -1883,6 +1951,12 @@ static int qcom_pcie_suspend_noirq(struct device *dev)
 		return 0;
 
 	if (pcie->suspended)
+		return 0;
+
+	/* Deferred bring-up may still be running; do not race it. */
+	flush_work(&pcie->host_init_work);
+
+	if (!pcie->host_up)
 		return 0;
 
 	if (!dw_pcie_link_up(pcie->pci))
