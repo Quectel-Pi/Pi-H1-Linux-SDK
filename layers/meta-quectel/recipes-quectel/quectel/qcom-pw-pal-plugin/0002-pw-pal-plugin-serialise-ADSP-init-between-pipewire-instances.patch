@@ -1,0 +1,213 @@
+diff --git a/pw-pal-plugin.c b/pw-pal-plugin.c
+index 47b0a21..5103300 100644
+--- a/pw-pal-plugin.c
++++ b/pw-pal-plugin.c
+@@ -7,6 +7,10 @@
+ #include <errno.h>
+ #include <sys/types.h>
+ #include <sys/stat.h>
++#include <sys/socket.h>
++#include <sys/un.h>
++#include <stddef.h>
++#include <time.h>
+ #include <fcntl.h>
+ #include <unistd.h>
+ #include <stdlib.h>
+@@ -63,6 +67,135 @@ PW_LOG_TOPIC_STATIC(log_topic, "log:" LOG_TAG);
+ #define PAL_START_RETRY_INTERVAL_MS 2000
+ #define PAL_START_RETRY_ATTEMPTS    90      /* 3 min, ADSP was ready in <= 2.5 */
+ 
++/*
++ * The ADSP audio path (GPR -> GSL -> AGM/PAL) is single-owner, but every user
++ * session runs its own pipewire, and this module is loaded six times in each
++ * (4 sinks + 2 sources). Calling agm_init()/pal_init() from a second instance
++ * does not fail cleanly: it either errors out ("agm init failed") or deadlocks
++ * inside gpr_deinit() (futex wait, no timeout), and that pipewire then never
++ * serves a single client for the rest of the session -- it looks like pipewire
++ * never started.
++ *
++ * Every boot with GDM hits it: the greeter's pipewire takes the ADSP first and
++ * the instance of the logging-in user starts right away. gdm tears the greeter
++ * session down ~15 s after login, so serialise on a lock held for the life of
++ * the process and wait the owner out instead of colliding with it.
++ *
++ * The lock is an abstract unix socket, not a file: /run/lock is world-writable
++ * *and* sticky while this rootfs sets fs.protected_regular=2, so an O_CREAT open
++ * of a lock file owned by the other uid fails with EACCES -- for root as well,
++ * i.e. the hand-over could never work. An abstract socket has no path to
++ * permission-check, and the kernel releases it when the process exits.
++ */
++#define PAL_ADSP_LOCK_NAME      "pipewire-pal-adsp"
++
++static int pw_pal_snd_card_ready(void)
++{
++    if (access("/sys/class/sound/card0", F_OK) == 0)
++        return 0;
++    pw_log_error("no sound card yet");
++    return -ENODEV;
++}
++
++/*
++ * Deliberately never closed while the ADSP is ours: the lock has to be held
++ * until this process exits, otherwise the next instance would take it while our
++ * streams still own the ADSP. The kernel drops it when we die.
++ */
++static int pal_adsp_lock_fd = -1;
++
++static void pw_pal_unlock_adsp(void)
++{
++    if (pal_adsp_lock_fd >= 0) {
++        close(pal_adsp_lock_fd);
++        pal_adsp_lock_fd = -1;
++    }
++}
++
++static int pw_pal_lock_adsp(void)
++{
++    struct sockaddr_un addr;
++    socklen_t addrlen;
++    int fd;
++
++    if (pal_adsp_lock_fd >= 0)
++        return 0;       /* ours already: module_init runs 6 times per process */
++
++    memset(&addr, 0, sizeof(addr));
++    addr.sun_family = AF_UNIX;
++    /* sun_path[0] == '\0' selects the abstract namespace */
++    snprintf(addr.sun_path + 1, sizeof(addr.sun_path) - 1, "%s", PAL_ADSP_LOCK_NAME);
++    addrlen = offsetof(struct sockaddr_un, sun_path) + 1 + strlen(PAL_ADSP_LOCK_NAME);
++
++    fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
++    if (fd < 0) {
++        pw_log_error("could not create the ADSP lock socket: %m");
++        return -errno;
++    }
++
++    if (bind(fd, (struct sockaddr *)&addr, addrlen) == 0) {
++        pal_adsp_lock_fd = fd;
++        return 0;
++    }
++
++    if (errno != EADDRINUSE)
++        pw_log_error("bind(%s): %m", PAL_ADSP_LOCK_NAME);
++    close(fd);
++    return -EBUSY;      /* or -errno: either way, retryable by the caller */
++}
++
++/*
++ * Bring the ADSP audio path up, at most once per process: the six module
++ * instances share gpr/gsl/agm/pal state. Everything here runs on the pipewire
++ * main loop, so there is no concurrent caller to lock against.
++ *
++ * Deliberately *not* done at module_init: an instance that never plays anything
++ * must not own the ADSP. The greeter's pipewire does exactly that at boot and gdm
++ * only tears it down ~15 s after login, so initialising there stalled the
++ * logging-in user's pipewire for those 15 s (measured: unit start 17:47:22, PAL
++ * ready 17:47:38). Failing here is retryable: pw_pal_stream_start() keeps a 2 s
++ * timer running, which covers the ADSP hand-over and the card coming up.
++ *
++ * agm_init()/pal_init() are never retried after they fail (pal_audio_broken):
++ * their failure path runs gsl_init()'s cleanup (gpr_deinit -> ipc_dl_lx_deinit),
++ * which can wait on a futex forever -- that is the hang where pipewire stays
++ * alive but never serves a single client.
++ */
++static bool pal_audio_ready;
++static bool pal_audio_broken;
++
++static int pw_pal_init_audio(void)
++{
++    int res;
++
++    if (pal_audio_ready)
++        return 0;
++    if (pal_audio_broken)
++        return -EIO;
++
++    if (pw_pal_lock_adsp())
++        return -EAGAIN;         /* another instance owns the ADSP, retryable */
++
++    if (pw_pal_snd_card_ready()) {
++        pw_pal_unlock_adsp();   /* let an instance that can use it have it */
++        return -ENODEV;         /* retryable */
++    }
++
++    res = agm_init();
++    if (res == 0)
++        res = pal_init();
++    if (res) {
++        pw_log_error("audio init failed: %d", res);
++        pal_audio_broken = true;
++        pw_pal_unlock_adsp();
++        return res;
++    }
++
++    pw_log_info("ADSP audio path up");
++    pal_audio_ready = true;
++    return 0;
++}
++
+ struct pw_userdata {
+     struct pw_context *context;
+ 
+@@ -166,6 +299,12 @@ static int pw_pal_stream_open_start(struct pw_userdata *udata)
+ {
+     int rc = 0;
+     pal_buffer_config_t out_buf_cfg, in_buf_cfg;
++
++    rc = pw_pal_init_audio();
++    if (rc) {
++        pw_log_error("no audio path yet (%d)", rc);
++        return rc;      /* pw_pal_stream_start() arms the retry timer on this */
++    }
+     rc = pal_stream_open(udata->stream_attributes, 1, udata->pal_device, 0, NULL, pa_pal_out_cb, udata,
+             &udata->stream_handle);
+ 
+@@ -663,7 +802,24 @@ static void pw_pal_fill_stream_info(struct pw_userdata *udata)
+ static int handle_device_connection(struct pw_userdata *udata, bool state)
+ {
+     int ret = 0;
+-    pal_param_device_connection_t *device_connection = (pal_param_device_connection_t *)
++    pal_param_device_connection_t *device_connection;
++
++    /*
++     * Cheap in practice (the ADSP is ours or it isn't), and the first stream
++     * start will initialise it anyway. A hotplug that lands while some other
++     * instance owns the ADSP is dropped: PAL would not act on it before its own
++     * init either, and the next jack event (or the next boot) re-sends the state.
++     * ponytail: no retry for that case, add one if a hotplug inside the
++     * ~15 s greeter window is ever reported as lost.
++     */
++    ret = pw_pal_init_audio();
++    if (ret) {
++        pw_log_info("%s: no audio path yet (%d), dropping the jack state",
++                udata->jack_name, ret);
++        return ret;
++    }
++
++    device_connection = (pal_param_device_connection_t *)
+         calloc(1, sizeof(pal_param_device_connection_t));
+     device_connection->connection_state = state;
+     device_connection->id = udata->pal_device_id;
+@@ -834,16 +990,12 @@ int pipewire__module_init(struct pw_impl_module *module, const char *args)
+ 
+     udata->module = module;
+     udata->context = context;
+-    res = agm_init();
+-    if (res) {
+-        pw_log_error("%s: agm init failed\n", __func__);
+-        goto error;
+-    }
+-    res = pal_init();
+-    if (res) {
+-        pw_log_error("%s: pal init failed\n", __func__);
+-        goto error;
+-    }
++    /*
++     * No audio initialisation here: it is deferred to the first stream (see
++     * pw_pal_init_audio()). Loading the six module instances and creating their
++     * nodes needs no ADSP, so pipewire comes up immediately whichever instance
++     * already owns it.
++     */
+     if (pw_properties_get(props, PW_KEY_NODE_VIRTUAL) == NULL)
+         pw_properties_set(props, PW_KEY_NODE_VIRTUAL, "true");
+ 
