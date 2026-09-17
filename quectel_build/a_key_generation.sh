@@ -30,7 +30,7 @@ derive_target_dir_name()
     local project_token board_token build_token linux_token custom_token
     local bp_token modem_token release_token module_seq
     local linux_major linux_minor linux_patch linux_patch_token
-    local project_suffix custom_suffix target_name token
+    local project_suffix target_name token
     local -a custom_tokens
 
     project_token="${VERSION_NUMBER%%_*}"
@@ -41,17 +41,15 @@ derive_target_dir_name()
     IFS='/' read -r -a custom_tokens <<EOF
 $CUSTOM_ID
 EOF
+    # CUSTOM_ID carries two dimensions (OS + VERSION): LINUX|DEBIAN|UBUNTU + STD|DBG.
+    # LINUX and STD are the defaults and add no suffix, every other dimension
+    # token is appended, e.g. DBG -> _DBG, DEBIAN/DBG -> _DEBIAN_DBG.
     for token in "${custom_tokens[@]}"; do
         case "${token}" in
-            ""|"SEC"|"OL")
-                ;;
-            "ST")
-                custom_token="STD"
-                break
+            ""|"LINUX"|"STD"|"SEC"|"OL")
                 ;;
             *)
-                custom_token="${token}"
-                break
+                custom_token="${custom_token:+${custom_token}_}${token}"
                 ;;
         esac
     done
@@ -97,11 +95,10 @@ EOF
     target_name="${board_token}_${bp_token:-BP00}.${module_seq}_Linux${linux_major}.${linux_minor}.${linux_patch}_${release_token:-V00}"
 
     case "$custom_token" in
-        ""|"STD"|"ST"|"SEC")
+        "")
             ;;
         *)
-            custom_suffix="$(printf '%s' "$custom_token" | tr '/' '_' )"
-            target_name="${target_name}_${custom_suffix}"
+            target_name="${target_name}_${custom_token}"
             ;;
     esac
 

@@ -26,7 +26,7 @@ metadata:
 > ```bash
 > cd <项目根目录>
 > source quectel_build/compile/build.sh
-> buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 <定制类型>
+> buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 <系统> <版本>
 > bitbake <包名> -c compile -f
 > ```
 > 编译完成后告诉我，我会通过 adb push 替换验证。
@@ -36,21 +36,31 @@ metadata:
 > ```bash
 > cd <项目根目录>
 > source quectel_build/compile/build.sh
-> buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 <定制类型>
+> buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 <系统> <版本>
 > bitbake quecpi-image && buildpackage
 > ```
 > 编译完成后告诉我，我会烧录并验证。
 
-**定制类型说明**:
-| 定制类型 | 固件类型 | 说明 |
+**定制类型说明（两个维度：系统 + 版本）**:
+```
+buildconfig <项目名> <版本号> <系统> <版本> [SEC]
+  系统:  LINUX (Linux标准固件) / DEBIAN (Debian固件) / UBUNTU (Ubuntu固件)
+  版本:  STD (标准版，默认 perf) / DBG (调试版，固件目录名带 _DBG 后缀，保留调试符号)
+```
+
+| 系统 | 标准版参数 (默认 perf) | Debug版参数 (固件目录名带 _DBG 后缀) |
+|------|----------------------|-----------------------------------|
+| Linux | LINUX STD | LINUX DBG |
+| Debian | DEBIAN STD | DEBIAN DBG |
+| Ubuntu | UBUNTU STD | UBUNTU DBG |
+
+| 系统 | 固件类型 | 说明 |
 |---------|---------|------|
-| STD | Linux 标准固件 | 默认的 Yocto 标准构建 |
+| LINUX | Linux 标准固件 | 默认的 Yocto 标准构建 |
 | DEBIAN | Debian 固件 | 基于 Debian 的 rootfs 构建 |
 | UBUNTU | Ubuntu 固件 | 基于 Ubuntu 的 rootfs 构建 |
-| DBG | 调试固件 | 保留调试符号，未strip |
-| WESTON | Weston固件 | 使用 Weston 显示合成器 |
 
-请根据用户需要的固件类型选择对应的定制类型。
+请根据用户需要的固件类型（系统 + 版本）选择对应的两个维度参数。
 
 ## 3. 等待用户确认
 用户确认编译打包完成后，执行下一步。

@@ -271,21 +271,46 @@ function buildenv()
 
 function buildconfig()
 {
-    # Build type selection via an optional trailing DEBUG parameter:
-    #   buildconfig <proj> <rev> <STD|DEBIAN|UBUNTU|...> [DEBUG]
-    #   with DEBUG        -> debug build  (DEBUG_BUILD=1, PERFORMANCE_BUILD=0)
-    #   without DEBUG     -> performance build (DEBUG_BUILD=0, PERFORMANCE_BUILD=1, default)
-    # The DEBUG token is consumed here and NOT passed to config_parser.py
-    # (it is not a registered custoct token).
+    # Two build dimensions:
+    #   buildconfig <proj> <rev> <LINUX|DEBIAN|UBUNTU> <STD|DBG> [SEC]
+    #     OS      : LINUX (Yocto standard) / DEBIAN / UBUNTU
+    #     VERSION : STD -> performance build (DEBUG_BUILD=0, PERFORMANCE_BUILD=1, default)
+    #               DBG -> debug build     (DEBUG_BUILD=1, PERFORMANCE_BUILD=0) + keep symbols
+    # Legacy single-token CUST_NAME (STD / DBG / DEBIAN / ...) still works.
+    # A bare trailing DEBUG token is consumed here and NOT passed to
+    # config_parser.py (it is not a registered custoct token); it is the
+    # same as the DBG version dimension.
     local BUILD_ARGS=()
     local DEBUG_BUILD_FLAG=0
+    local OS_DIM="" VER_DIM=""
     for arg in "$@"; do
-        if [ "${arg^^}" = "DEBUG" ]; then
-            DEBUG_BUILD_FLAG=1
-        else
-            BUILD_ARGS+=("$arg")
-        fi
+        case "${arg^^}" in
+            DEBUG)
+                DEBUG_BUILD_FLAG=1
+                VER_DIM="DBG"
+                ;;
+            LINUX|DEBIAN|UBUNTU)
+                OS_DIM="${arg^^}"
+                BUILD_ARGS+=("$arg")
+                ;;
+            STD)
+                VER_DIM="STD"
+                BUILD_ARGS+=("$arg")
+                ;;
+            DBG)
+                VER_DIM="DBG"
+                BUILD_ARGS+=("$arg")
+                ;;
+            *)
+                BUILD_ARGS+=("$arg")
+                ;;
+        esac
     done
+
+    if [ -z "${OS_DIM}" ]; then
+        echo -e "\033[33;1m[WARN] no OS dimension (LINUX|DEBIAN|UBUNTU) given, keeping legacy single-token behavior\033[0m"
+    fi
+    echo -e "\033[32;1mBuild dimensions: OS=${OS_DIM:-<legacy>} VERSION=${VER_DIM:-STD}\033[0m"
 
     # DBG token: keep debug symbols (no strip) AND force a debug build.
     if has_custom_token "DBG" "${BUILD_ARGS[@]}"; then
@@ -321,14 +346,13 @@ function buildconfig()
         rm -f /tmp/.secboot_enabled
     fi
 
-    # Handle WESTON parameter for secure boot builds
-    WESTON_SYNC_FILE=${TOPDIR}/quectel_build/compile/quectel-features-config/weston-sync-list
+    # Rootfs sync lists
     UBUNTU_SYNC_FILE=${TOPDIR}/quectel_build/compile/quectel-features-config/ubuntu-sync-list
     DEBIAN_SYNC_FILE=${TOPDIR}/quectel_build/compile/quectel-features-config/debian-sync-list
 
     MOUNT_CONTROL_FILE=${TOPDIR}/layers/meta-qcom-hwe/recipes-core/packagegroups/packagegroup-qcom-initscripts.bb
 
-    if has_custom_token "WESTON" "${BUILD_ARGS[@]}" || has_custom_token "STD" "${BUILD_ARGS[@]}"; then
+    if has_custom_token "STD" "${BUILD_ARGS[@]}" || has_custom_token "LINUX" "${BUILD_ARGS[@]}"; then
         echo 'SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS = "1"' >> ${BUILDDIR}/conf/local.conf
     else
         sed -i '/^SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS/d' ${BUILDDIR}/conf/local.conf
@@ -455,10 +479,10 @@ export DISTRO=qcom-wayland
 export FWZIP_PATH="${PWD}/quectel_build/prebuilt_bpfw"
 export EXTRALAYERS="meta-qcom-qim-product-sdk"
 export QCOM_SELECTED_BSP="custom"
-# Build type default is PERFORMANCE (release). buildconfig consumes an
-# optional trailing DEBUG argument to switch to a debug build:
-#   buildconfig <proj> <rev> <STD|DEBIAN|UBUNTU|...> DEBUG  -> DEBUG_BUILD=1
-#   buildconfig <proj> <rev> <STD|DEBIAN|UBUNTU|...>        -> PERFORMANCE_BUILD=1
+# Build type is selected by the VERSION dimension of buildconfig:
+#   buildconfig <proj> <rev> <LINUX|DEBIAN|UBUNTU> DBG   -> DEBUG_BUILD=1
+#   buildconfig <proj> <rev> <LINUX|DEBIAN|UBUNTU> STD   -> PERFORMANCE_BUILD=1 (default)
+# A bare trailing DEBUG token is accepted as an alias of DBG.
 # These exports are used by set_bb_env.sh to write conf/auto.conf.
 export DEBUG_BUILD=${DEBUG_BUILD:-0}
 export PERFORMANCE_BUILD=${PERFORMANCE_BUILD:-1}
@@ -475,13 +499,13 @@ cat <<EOF
 
 #############################################################
 Build command:
-    Buildconfig:            buildconfig [project_name] [project_rev] [custom_name ...]
+    Buildconfig:            buildconfig [project_name] [project_rev] [LINUX|DEBIAN|UBUNTU] [STD|DBG]
     Complete Compilation:   buildall
     Export SDK:             buildsdk [packagename]
     A key generation:       buildpackage
     Flash firmware:         flash [ufs|emmc]
 Secboot:
-    Enable secboot:         buildconfig [project_name] [project_rev] [custom_name ...] SEC
+    Enable secboot:         buildconfig [project_name] [project_rev] [LINUX|DEBIAN|UBUNTU] [STD|DBG] SEC
     Secboot package output: buildpackage
 #############################################################
 

@@ -47,9 +47,9 @@ class color:
 def build_help():
     print ()
     print ("'ProjectRev' can be set any value, but should be same with modem")
-    print ("'CustName' if this Version for Standard module, must be set 'STD'")
+    print ("'CustName' takes two dimensions (OS + VERSION), plus optional SEC, such as 'LINUX STD'")
     print ("********************Build QSM565DWF Standard Firmware Demo*****************************")
-    print ("\033[33mstep1: buildconfig QSM565DWF  SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X STD \033[0m")
+    print ("\033[33mstep1: buildconfig QSM565DWF  SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X LINUX STD \033[0m")
     print ("\033[33mstep2: buildall \033[0m")
     print ("\033[33mstep3: buildpackage\033[0m")
     print ()

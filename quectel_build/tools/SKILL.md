@@ -36,7 +36,7 @@ source quectel_build/compile/build.sh
 source quectel_build/compile/build.sh
 
 # 2. 配置编译参数（项目名、版本号、定制类型）
-buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 STD
+buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 LINUX STD
 
 # 3a. 全量编译（cleanall + 编译，首次或需要干净构建时使用，耗时长）
 buildall
@@ -53,18 +53,25 @@ buildpackage
 - 日常开发建议用 `bitbake $TARGET_IMAGE` 增量编译，只编译改动部分
 - 编译后必须 `buildpackage` 才能更新固件目录
 
-### buildconfig 参数说明
+### buildconfig 参数说明（两个维度：系统 + 版本）
 ```
-buildconfig <项目名> <版本号> <定制类型>
+buildconfig <项目名> <版本号> <系统> <版本> [SEC]
   项目名:    QSM565DWF
   版本号:    自定义，决定固件输出目录名
-  定制类型:  STD (标准) / DBG (调试) / WESTON / UBUNTU / DEBIAN
+  系统:      LINUX (标准) / DEBIAN / UBUNTU
+  版本:      STD (标准版，默认 perf) / DBG (调试版，固件目录名带 _DBG 后缀)
   可选标志:  SEC (安全启动)
 ```
 
+| 系统 | 标准版参数 (默认 perf) | Debug版参数 (固件目录名带 _DBG 后缀) |
+|------|----------------------|-----------------------------------|
+| Linux | LINUX STD | LINUX DBG |
+| Debian | DEBIAN STD | DEBIAN DBG |
+| Ubuntu | UBUNTU STD | UBUNTU DBG |
+
 固件目录名 = buildconfig 的第二个参数，例如：
 ```bash
-buildconfig QSM565DWF MyCustomVersion123 STD
+buildconfig QSM565DWF MyCustomVersion123 LINUX STD
 # 固件输出到: quectel_build/MyCustomVersion123/
 ```
 
@@ -126,7 +133,7 @@ qdl -s ufs -i . prog_firehose_Qcm6490_ddr.elf \
 source quectel_build/compile/build.sh
 
 # 2. 配置编译参数
-buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 STD
+buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 LINUX STD
 
 # 3. 编译（耗时较长）
 buildall
@@ -146,7 +153,7 @@ sudo udevadm control --reload-rules
 ```bash
 # 修改代码后增量编译（只编译改动部分）
 source quectel_build/compile/build.sh
-buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 STD
+buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 LINUX STD
 bitbake $TARGET_IMAGE && buildpackage
 
 # 烧录
@@ -171,7 +178,7 @@ bitbake $TARGET_IMAGE && buildpackage
 > ```bash
 > cd <项目根目录>
 > source quectel_build/compile/build.sh
-> buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 STD
+> buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 LINUX STD
 > bitbake <包名> -c compile -f
 > ```
 > 编译完成后告诉我，我会通过 adb push 替换设备上的二进制文件并验证。
@@ -181,7 +188,7 @@ bitbake $TARGET_IMAGE && buildpackage
 > ```bash
 > cd <项目根目录>
 > source quectel_build/compile/build.sh
-> buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 STD
+> buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 LINUX STD
 > bitbake quecpi-image && buildpackage
 > ```
 > 编译完成后告诉我，我会帮你烧录并验证。
@@ -251,7 +258,7 @@ adb shell cat /etc/os-release
 ```bash
 # 1. 只编译单个应用包
 source quectel_build/compile/build.sh
-buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 STD
+buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 LINUX STD
 bitbake <包名> -c compile -f   # 强制重新编译
 
 # 2. 找到编译产物
@@ -271,7 +278,7 @@ adb shell systemctl restart <服务名>  # 或 reboot
 ```bash
 # 1. 增量编译完整镜像
 source quectel_build/compile/build.sh
-buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 STD
+buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 LINUX STD
 bitbake quecpi-image
 
 # 2. 打包到固件目录

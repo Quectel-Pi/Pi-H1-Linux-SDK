@@ -25,41 +25,51 @@ Linux firmware, and Debian / Ubuntu images on top of a prebuilt GNOME rootfs.
 
 ## Build
 
-Every build starts by sourcing the build environment, then picking a custom
-type with `buildconfig`:
+Every build starts by sourcing the build environment, then picking a system and
+a version with `buildconfig`:
 
     cd your/path/to/Pi-H1-Linux-SDK/
 
     source quectel_build/compile/build.sh
 
-    buildconfig QSM565DWF <Your Project ID> STD
+    buildconfig QSM565DWF <Your Project ID> LINUX STD
 
     buildall            # complete build (cleanall + bitbake, slow)
 
     buildpackage        # pack the firmware into quectel_build/<Your Project ID>
 
-`buildconfig <project> <project ID> <CUSTOM> [DEBUG] [SEC]`
+`buildconfig <project> <project ID> <OS> <VERSION> [SEC]` - two dimensions,
+each one takes a single value:
 
-| CUSTOM   | Firmware                                                        |
-| -------- | --------------------------------------------------------------- |
-| `STD`    | Standard Linux firmware (Yocto). `ST` is accepted as an alias.   |
-| `WESTON` | Weston display compositor firmware                               |
-| `UBUNTU` | Ubuntu firmware, prebuilt GNOME rootfs is downloaded if missing  |
-| `DEBIAN` | Debian firmware, prebuilt GNOME rootfs is downloaded if missing  |
-| `DBG`    | Debug symbols kept (`INHIBIT_PACKAGE_STRIP`) and debug build     |
+| OS       | Firmware                                                          |
+| -------- | ----------------------------------------------------------------- |
+| `LINUX`  | Standard Linux firmware (Yocto)                                    |
+| `UBUNTU` | Ubuntu firmware, prebuilt GNOME rootfs is downloaded if missing    |
+| `DEBIAN` | Debian firmware, prebuilt GNOME rootfs is downloaded if missing    |
 
-Optional flags, add them after CUSTOM (order does not matter):
+| VERSION | Firmware                                                          |
+| ------- | ----------------------------------------------------------------- |
+| `STD`   | Standard build, performance (default)                              |
+| `DBG`   | Debug build, debug symbols kept (`INHIBIT_PACKAGE_STRIP`) and dump enabled |
 
-* `DEBUG` - debug build (`DEBUG_BUILD=1`, dump enabled). `DBG` selects it too.
-* `SEC`   - secure boot build (`SECBOOT_ENABLE=1`).
+`SEC` is the only optional flag: secure boot build (`SECBOOT_ENABLE=1`). It can
+be added to any `OS`/`VERSION` combination.
 
 The project ID can be any value you like; it is what names the firmware
-directory, e.g. `quectel_build/<Your Project ID>`.
+directory, e.g. `quectel_build/<Your Project ID>`. A dimension that is not the
+default (`LINUX`, `STD`) is appended to the firmware directory name, so the two
+versions of one system never overwrite each other:
+
+| Invocation   | Firmware directory                                        |
+| ------------ | --------------------------------------------------------- |
+| `LINUX STD`  | `quectel_build/<Your Project ID>`                          |
+| `LINUX DBG`  | `quectel_build/<Your Project ID>_DBG`                      |
+| `DEBIAN DBG` | `quectel_build/<Your Project ID>_DEBIAN_DBG`               |
 
 After the first `buildall`, day to day work should build incrementally:
 
     source quectel_build/compile/build.sh
-    buildconfig QSM565DWF <Your Project ID> STD
+    buildconfig QSM565DWF <Your Project ID> LINUX STD
     bitbake $TARGET_IMAGE
     buildpackage
 
@@ -69,13 +79,13 @@ After the first `buildall`, day to day work should build incrementally:
 
     source quectel_build/compile/build.sh
 
-    buildconfig QSM565DWF <Your Project ID> DEBIAN
+    buildconfig QSM565DWF <Your Project ID> DEBIAN STD
 
     buildall
 
     buildpackage
 
-`buildconfig ... DEBIAN` selects the Debian customisation, copies
+`buildconfig ... DEBIAN ...` selects the Debian customisation, copies
 `quectel_build/compile/quectel-features-config/debian-sync-list` to
 `prebuild/sync-list` (the files synced into the rootfs) and downloads
 `debian-gnome-rootfs.tar.xz` (~1.1 GB) from the
@@ -90,30 +100,31 @@ the tarball is in place, `buildall` and `buildpackage` are the same as above.
 
     source quectel_build/compile/build.sh
 
-    buildconfig QSM565DWF <Your Project ID> UBUNTU
+    buildconfig QSM565DWF <Your Project ID> UBUNTU STD
 
     buildall
 
     buildpackage
 
 Same flow as Debian, with `ubuntu-sync-list` and `ubuntu26-gnome-rootfs.tar.xz`
-(~1.2 GB). STD and WESTON builds do not need a prebuilt rootfs: they set
+(~1.2 GB). `LINUX` builds do not need a prebuilt rootfs: they set
 `SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS = "1"`.
 
 ## Debug and secure boot builds
 
     # debug build (dump enabled, debug symbols kept)
-    buildconfig QSM565DWF <Your Project ID> DBG
+    buildconfig QSM565DWF <Your Project ID> LINUX DBG
 
     # standard firmware, secure boot
-    buildconfig QSM565DWF <Your Project ID> STD SEC
+    buildconfig QSM565DWF <Your Project ID> LINUX STD SEC
 
     # debug build with secure boot
-    buildconfig QSM565DWF <Your Project ID> DBG SEC
+    buildconfig QSM565DWF <Your Project ID> LINUX DBG SEC
 
 SEC boot output needs the signing package, so finish with `buildpackage`.
-Do not mix the CUSTOM values of two builds in one firmware directory: use a
-different project ID per variant.
+The firmware directory name carries the non-default dimensions, so two variants
+of one project ID do not collide; using a different project ID per variant is
+still the clearest way to tell the packages apart.
 
 ## Get your firmware
 
@@ -139,7 +150,7 @@ power-cycle the board and try again.
 
     source quectel_build/compile/build.sh
 
-    buildconfig QSM565DWF <Your Project ID> DEBIAN
+    buildconfig QSM565DWF <Your Project ID> DEBIAN STD
 
     buildkernel                 (build kernel into efi.bin)
 
@@ -159,14 +170,14 @@ are build scratch space and are not tracked.
 | Command             | Purpose                                                        |
 | ------------------- | -------------------------------------------------------------- |
 | `buildall`          | `bitbake $TARGET_IMAGE -c cleanall` followed by a full build     |
-| `buildconfig`       | Select project / project ID / custom type (writes the config)    |
+| `buildconfig`       | Select project / project ID / OS / version (writes the config)   |
 | `buildpackage`      | Collect image, boot binaries, firehose and partition files       |
 | `buildkernel`       | Rebuild the kernel and drop it into `quectel_build/output/efi.bin` |
 | `builddtb`          | Rebuild the dtb and drop it into `quectel_build/output/dtb.bin`  |
 | `buildsdk`          | Build the image and export the SDK                               |
 | `buildesdk`         | Build the image and export the extensible SDK                    |
 | `do_kernel_images`  | Re-run the kernel/EFI packaging step only                        |
-| `buildenv`          | Print the currently selected project / project ID / custom type  |
+| `buildenv`          | Print the currently selected project / project ID / OS / version |
 | `enter_rootfs`      | Enter the Debian rootfs shell                                    |
 | `rebake <recipe>`   | `bitbake <recipe> -c cleansstate` followed by a rebuild          |
 | `flash [ufs|emmc]`  | Flash the packed firmware                                        |
@@ -174,7 +185,7 @@ are build scratch space and are not tracked.
 ## Incremental development
 
     source quectel_build/compile/build.sh
-    buildconfig QSM565DWF <Your Project ID> STD
+    buildconfig QSM565DWF <Your Project ID> LINUX STD
 
     # rebuild a single package
     bitbake <recipe> -c compile -f

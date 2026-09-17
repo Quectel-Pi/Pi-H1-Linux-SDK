@@ -69,31 +69,34 @@ class color:
     # e.g: print color.BOLD + 'Hello World !' + color.END
 
 def build_help():
-    base_custoct_list = []
+    os_list = []
+    version_list = []
     extra_flag_list = []
 
     prj_list_init(None)
     custoct_list_init(None)
 
+    # CUST_NAME carries two dimensions (OS + VERSION) plus additive flags.
+    # OS is whatever is left over, so a new system token shows up here for free.
     for item in custoct_list:
-        if item == 'SEC':
+        if item in ('STD', 'DBG'):
+            version_list.append(item)
+        elif item in ('SEC', 'OL'):
             extra_flag_list.append(item)
         else:
-            base_custoct_list.append(item)
-    if 'ST' not in base_custoct_list:
-        base_custoct_list.append('ST')
+            os_list.append(item)
 
     print ()
     print ("'ProjectRev' can be set any value, but should be same with modem")
-    print ("'CustName' supports base mode plus optional SEC, such as 'STD SEC' or 'DBG SEC'")
+    print ("'CustName' takes two dimensions (OS + VERSION), plus optional SEC, such as 'LINUX STD' or 'DEBIAN DBG SEC'")
     print ("********************Build QSM565DWF Standard Firmware Demo*****************************")
-    print ("\033[33mstep1: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X STD \033[0m")
-    print ("\033[33mdebug: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X DBG \033[0m")
-    print ("\033[33msecboot: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X STD SEC \033[0m")
-    print ("\033[33mdbg+secboot: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X DBG SEC \033[0m")
+    print ("\033[33mstep1: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X LINUX STD \033[0m")
+    print ("\033[33mdebug: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X LINUX DBG \033[0m")
+    print ("\033[33mdebian: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X DEBIAN STD \033[0m")
+    print ("\033[33msecboot: buildconfig QSM565DWF SG565DWFPARL1A01_BL01BP01K0M01_QDP_LP6.6.0XX.01.00X_V0X LINUX STD SEC \033[0m")
     print ("\033[33mstep2: buildall \033[0m")
     print ("\033[33mstep3: buildpackage\033[0m")
-    print ("\033[33mnote : SEC is additive, and ST will be treated as STD\033[0m")
+    print ("\033[33mnote : SEC is additive\033[0m")
     print ()
     print ("Vaild Projects:")
     print (color.FGREEN)
@@ -101,13 +104,19 @@ def build_help():
         print (i, end=' '),
     print (color.END)
     print ()
-    print ("Vaild Base CUST_NAME:")
+    print ("Vaild OS (dimension 1, pick one):")
     print (color.FGREEN)
-    for i in base_custoct_list:
+    for i in os_list:
         print (i, end=' '),
     print (color.END)
     print ()
-    print ("Optional CUST_FLAG:")
+    print ("Vaild VERSION (dimension 2, pick one):")
+    print (color.FGREEN)
+    for i in version_list:
+        print (i, end=' '),
+    print (color.END)
+    print ()
+    print ("Optional FLAG (additive, may be combined):")
     print (color.FGREEN)
     for i in extra_flag_list:
         print (i, end=' '),
@@ -146,7 +155,7 @@ def prj_valid_check(project):
     else:
         print ()
         print (color.FRED+'ERROR: invaild project!!!'+color.END)
-        build_help(project)
+        build_help()
         print (color.BLINK+color.FRED+color.BOLD+"Please Enter valid ProjectName(using 'buildconfig' get help)."+color.END)
         sys.exit(1)
 
@@ -195,8 +204,6 @@ def normalize_custom_tokens(custom_args):
             token = token.strip().upper()
             if not token:
                 continue
-            if token == 'ST':
-                token = 'STD'
             if token not in seen:
                 seen.add(token)
                 if token == 'SEC':
@@ -501,7 +508,7 @@ def main(argv):
     print (argv)
     arg_len = len(argv)
     if arg_len < 4:
-        print ("\033[31;1mPlease Enter 'ProjectName', 'ProjectRev', CustName [SEC].\033[0m")
+        print ("\033[31;1mPlease Enter 'ProjectName', 'ProjectRev', 'OS' 'Version' [SEC].\033[0m")
         build_help()
         #sys.exit(1)
         return

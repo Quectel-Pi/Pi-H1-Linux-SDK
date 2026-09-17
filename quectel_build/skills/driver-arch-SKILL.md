@@ -79,7 +79,7 @@ find log/ -type f | sort
 ```bash
 cd <项目根目录>
 source quectel_build/compile/build.sh
-buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 <定制类型>
+buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 <系统> <版本>
 bitbake quecpi-image && buildpackage
 ```
 
