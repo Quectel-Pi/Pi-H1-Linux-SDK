@@ -1,0 +1,51 @@
+#!/bin/bash
+# 运行容器，挂载上一级目录和宿主机的 .ssh 目录
+
+set -e
+SDK_DIR=$(cd "$(dirname "$0")/.." && pwd)
+HOST_UID=$(stat -c %u "$SDK_DIR")
+HOST_GID=$(stat -c %g "$SDK_DIR")
+HOST_USER=$(getent passwd "$HOST_UID" | cut -d: -f1)
+HOST_HOME=$(getent passwd "$HOST_UID" | cut -d: -f6)
+HOST_USER=${HOST_USER:-q$HOST_UID}
+HOST_HOME=${HOST_HOME:-/home/$HOST_USER}
+CONTAINER_HOME=/home/q$HOST_UID
+EXTRA_MOUNTS=()
+
+if [ -d "$HOST_HOME/.ssh" ]; then
+    EXTRA_MOUNTS+=( -v "$HOST_HOME/.ssh:$CONTAINER_HOME/.ssh" )
+fi
+if [ -f "$HOST_HOME/.gitconfig" ]; then
+    EXTRA_MOUNTS+=( -v "$HOST_HOME/.gitconfig:$CONTAINER_HOME/.gitconfig:ro" )
+fi
+
+# 自动判断是否需要 -it 参数（交互式终端才加）
+DOCKER_TTY=""
+if [ -t 0 ]; then
+    DOCKER_TTY="-it"
+fi
+
+sudo docker run $DOCKER_TTY --rm \
+        --privileged \
+        --name $(date +%Y%m%d%H%M%S) \
+        --shm-size 32G \
+        --ulimit memlock=-1 \
+        --tmpfs /tmp:exec,rw,size=32G \
+	-u "${HOST_UID}:${HOST_GID}" \
+        -v "/opt:/opt" \
+		-v "$SDK_DIR:$SDK_DIR" \
+		-v /etc/timezone:/etc/timezone \
+		-v /etc/localtime:/etc/localtime:ro \
+        "${EXTRA_MOUNTS[@]}" \
+        --workdir "$SDK_DIR" \
+        --env HOME="$CONTAINER_HOME" \
+        --env USER="$HOST_USER" \
+        --env WORKDIR="$SDK_DIR" \
+        --env SCRIPTSNAME=$SCRIPTSNAME \
+        --env SKIP_EXT=${SKIP_EXT:-} \
+        --env SKIP_SYSTEM=${SKIP_SYSTEM:-} \
+        --env NO_ADD_NEW=${NO_ADD_NEW:-} \
+        --env DT_FW_DIR=${DT_FW_DIR:-} \
+        --env EXT_VERBOSE=${EXT_VERBOSE:-} \
+        ${IMAGENAME} \
+        /bin/bash -c "$*"

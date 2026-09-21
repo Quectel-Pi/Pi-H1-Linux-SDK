@@ -29,7 +29,10 @@ IMAGE_FORMAT=quectel_build/<project_id>/ 分区镜像 (由 buildpackage 生成)
 
 # 烧录 (Qualcomm EDL / Sahara / Firehose)
 FLASH_PROTOCOL=Qualcomm EDL 9008
-FLASH_ENTRY=quectel_build/tools/flash.sh
+# 平台自动分派: scripts/flash.sh 会按 uname 决定 qdl(Linux) / 转发 Windows QFIL 后端
+FLASH_TOOLS_LINUX=quectel_build/tools/qdl
+FLASH_TOOLS_WINDOWS=tools/qfil (QSaharaServer + fh_loader)
+FLASH_ENTRY=scripts/flash.sh (自动判平台) / scripts/flash.bat (Windows)
 ENTER_EDL=adb shell reboot edl
 
 # 应用工程目录

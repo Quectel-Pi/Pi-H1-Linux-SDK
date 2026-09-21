@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Post flash reset directive. scripts/flash.bat appends this file last in
+     the sendxml list so the target reboots once flashing is done; fh_loader
+     sorts <power> after <patch>, and without it the device stays in
+     Firehose. See tools/qfil/README.md for details. -->
+<data>
+<power DelayInSeconds="2" value="reset" />
+</data>
