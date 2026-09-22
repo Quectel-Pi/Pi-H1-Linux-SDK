@@ -20,6 +20,9 @@ sudo apt install -y \
     texinfo \
     gcc \
     build-essential \
+    flex \
+    bison \
+    libssl-dev \
     chrpath \
     socat \
     cpio \
