@@ -1,12 +1,6 @@
 LIBVA_DRIVER_NAME=msm
-# QCom adreno GStreamer plugins live in /usr/lib/gstreamer-1.0/ (Yocto BSP
-# default plugin dir). trixie's libgstreamer only scans the multiarch dir
-# /usr/lib/aarch64-linux-gnu/gstreamer-1.0/ by default, so without this path
-# override the qti* plugins are never registered and customer workloads
-# relying on NPU/video DSP acceleration silently miss them.
-# This is the same mechanism LIBVA_DRIVER_NAME above uses (pam_env readenv=1
-# reads /etc/environment); /etc/environment.d/ alone is NOT honoured across
-# autologin GNOME sessions on this image because user-environment-d-generator
-# is not wired in. /etc/profile.d/gst-qti-plugins.sh additionally covers
-# non-PAM POSIX shells.
-GST_PLUGIN_PATH=/usr/lib/gstreamer-1.0
+GST_VA_ALL_DRIVERS=1
+# vah264dec ties with v4l2h264dec at PRIMARY+1 and loses, so Totem autoplugs the broken one.
+GST_PLUGIN_FEATURE_RANK=vah264dec:MAX
+# trixie's 1.26 plugins must be scanned before the BSP's 1.22.12 set in the same dir.
+GST_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/gstreamer-1.0:/usr/lib/gstreamer-1.0
