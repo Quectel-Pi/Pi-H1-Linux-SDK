@@ -1,0 +1,13 @@
+[Unit]
+Description=Jack 插拔时自动切换 PAL 默认音频通道 (耳机/HDMI/DP)
+Documentation=file:/usr/share/pipewire/pipewire.conf.d/HDMI-Audio-Path.md
+After=pipewire.service wireplumber.service
+PartOf=pipewire.service
+
+[Service]
+ExecStart=/usr/bin/pal-jack-default
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=pipewire.service

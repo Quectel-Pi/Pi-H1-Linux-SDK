@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+# 插拔耳机 / HDMI / DP 时自动切换 PAL 的默认输入输出通道。
+#
+# 检测: 内核给每个插孔建了一个 input 设备, 插拔状态就是 evdev 的开关位:
+#   "Headset Jack"   SW_HEADPHONE_INSERT  耳机/耳麦
+#   "HDMI/DP1 Jack"  SW_LINEOUT_INSERT    HDMI 显示器 (LT9611 桥片)
+#   "HDMI/DP0 Jack"  SW_LINEOUT_INSERT    DP 显示器
+# 名字里的 0/1 是 Q6 端口号, 不是"HDMI 和 DP 的先后", 别按数字猜哪个是哪个。
+# 按 sound/soc/qcom/qcm6490.c 的 snd_init(): PRIMARY_MI2S_RX(LT9611UXC 桥, I2S)
+# -> hdmi_pcm_id=1 -> "HDMI/DP1 Jack"(物理 HDMI 口); DISPLAY_PORT_RX_0(mdss_dp)
+# -> hdmi_pcm_id=0 -> "HDMI/DP0 Jack"(物理 DP 口)。pw-pal-plugin.conf 里两个节点的
+# jack-name 就是这么标的, 与这里的映射必须一致。
+# 这些设备名可以用 /usr/bin/pal-jack-default --status 直接看当前插没插。
+#
+# 切换: wireplumber 的默认节点由 default metadata 的
+# default.configured.audio.sink/source 决定, 用 pw-metadata 写节点名即可,
+# 等价于在 GNOME 设置里手动选设备。
+#
+# 覆盖的四种场景(见 SINKS/SOURCES 的顺序):
+#   接 MIPI 屏        -> pal_sink_speaker  + 板载 mic
+#   接 HDMI 或 DP      -> pal_sink_hdmi_out / pal_sink_dp_out + 板载 mic
+#                        两个显示器都接着 -> 用 HDMI(SINKS 里排在 DP 前面)
+#   插耳机(不论上面)  -> pal_sink_headset  + pal_source_headset_mic
+#   拔耳机            -> 回落到上面那行
+# 板载 mic 这个节点叫 pal_source_speaker_mic, 但它的 description 是
+# "pal source handset mic" —— 就是这个, 别去找什么 pal_source_handset_mic。
+#
+# ponytail: 1s 轮询而不是监听 evdev 事件 —— 每次轮询只开几个 fd 读一下 ioctl,
+# 代价可以忽略, 还免了事件解析和输入设备重连(声卡是后探测的, 开机时设备可能
+# 还不存在)。插线后 1s 内切换, 感觉不出来。
+import fcntl
+import json
+import os
+import struct
+import subprocess
+import sys
+import time
+
+DEV_INPUT_DIR = "/dev/input"
+POLL_INTERVAL = 1.0
+
+EVIOCGNAME = lambda n: (2 << 30) | (n << 16) | (0x45 << 8) | 0x06
+EVIOCGSW = (2 << 30) | (8 << 16) | (0x45 << 8) | 0x1B
+
+SW_HEADPHONE_INSERT = 2
+SW_LINEOUT_INSERT = 6
+
+HEADSET_JACK = "Headset Jack"
+HDMI_JACK = "HDMI/DP1 Jack"     # LT9611UXC 桥, 物理 HDMI 口
+DP_JACK = "HDMI/DP0 Jack"       # mdss_dp, 物理 DP 口
+
+# 输出通道优先级, 从上往下第一个插着的胜出; 都没插就回板载喇叭(MIPI 屏场景)。
+# HDMI 排在 DP 前面: 两个显示器都接入时用 HDMI(PAL 里 HDMI 走 DeviceRX_HDMI_Rx,
+# DP 那路是原生 DP, 见 HDMI-Audio-Path.md)。想改"耳机优先还是显示器优先"就调
+# 这里的顺序 —— pick() 只认这个顺序, 跟 /dev/input/eventN 的枚举顺序无关。
+SINKS = (
+    (HEADSET_JACK, SW_HEADPHONE_INSERT, "pal_sink_headset"),
+    (HDMI_JACK, SW_LINEOUT_INSERT, "pal_sink_hdmi_out"),
+    (DP_JACK, SW_LINEOUT_INSERT, "pal_sink_dp_out"),
+)
+SINK_FALLBACK = "pal_sink_speaker"
+
+# 输入通道: 插上耳机就用耳机麦克风, 否则板载(handset)麦克风。
+SOURCES = (
+    (HEADSET_JACK, SW_HEADPHONE_INSERT, "pal_source_headset_mic"),
+)
+SOURCE_FALLBACK = "pal_source_speaker_mic"      # description 是 "pal source handset mic"
+
+SW_CODE = {0: "SW_LID", 1: "SW_TABLET_MODE", 2: "SW_HEADPHONE_INSERT", 3: "SW_RFKILL_ALL",
+           4: "SW_MICROPHONE_INSERT", 5: "SW_DOCK", 6: "SW_LINEOUT_INSERT",
+           7: "SW_JACK_PHYSICAL_INSERT", 8: "SW_VIDEOOUT_INSERT", 9: "SW_CAMERA_LENS_COVER"}
+
+
+def read_switches():
+    """{input 设备名: 当前的开关位掩码}。设备不存在就是没插(开机早期声卡还没探测)。"""
+    state = {}
+    for entry in sorted(os.listdir(DEV_INPUT_DIR)):
+        if not entry.startswith("event"):
+            continue
+        try:
+            fd = os.open(os.path.join(DEV_INPUT_DIR, entry), os.O_RDONLY | os.O_NONBLOCK)
+        except OSError:
+            continue        # 权限/竞态, 当这轮没看见
+        try:
+            name = fcntl.ioctl(fd, EVIOCGNAME(256), b"\0" * 256).split(b"\0")[0]
+            state[name.decode("utf-8", "replace")] = struct.unpack(
+                "<Q", fcntl.ioctl(fd, EVIOCGSW, b"\0" * 8))[0]
+        except OSError:
+            pass
+        finally:
+            os.close(fd)
+    return state
+
+
+def pick(jacks, fallback, switches):
+    """jacks 里第一个插着的通道名, 都没有就 fallback。"""
+    for device, bit, node in jacks:
+        for name, bits in switches.items():
+            if device in name and bits & (1 << bit):
+                return node
+    return fallback
+
+
+def desired(switches):
+    return (pick(SINKS, SINK_FALLBACK, switches),
+            pick(SOURCES, SOURCE_FALLBACK, switches))
+
+
+def apply_defaults(sink, source):
+    for key, name in (("sink", sink), ("source", source)):
+        subprocess.run(["pw-metadata", "-n", "default", "0",
+                        "default.configured.audio." + key, json.dumps({"name": name})],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    print("切换默认通道: output=%s input=%s" % (sink, source), flush=True)
+
+
+def show_status():
+    switches = read_switches()
+    for device, bit, node in SINKS:
+        seen = [n for n in switches if device in n]
+        if not seen:
+            print("%-14s 无此设备 -> %s" % (device, node))
+            continue
+        plugged = any(switches[n] & (1 << bit) for n in seen)
+        extra = [SW_CODE.get(i, str(i)) for n in seen for i in range(64) if switches[n] & (1 << i)]
+        print("%-14s %s -> %s%s" % (device, "已插入" if plugged else "未插入", node,
+                                    "  [%s]" % ",".join(extra) if extra else ""))
+    sink, source = desired(switches)
+    print("当前应选: output=%s input=%s" % (sink, source))
+
+
+def self_test():
+    """离线验 pick(): 插拔组合 -> 期望的默认通道。"""
+    def sw(**kwargs):
+        return {name: bits for name, bits in kwargs.items()}
+
+    headset = {"card Headset Jack": 1 << SW_HEADPHONE_INSERT}
+    hdmi = {"card HDMI/DP1 Jack": 1 << SW_LINEOUT_INSERT}
+    dp = {"card HDMI/DP0 Jack": 1 << SW_LINEOUT_INSERT}
+    cases = [
+        # 一个都不插 (MIPI 屏) -> 喇叭 + 板载 mic
+        ({}, (SINK_FALLBACK, SOURCE_FALLBACK)),
+        # HDMI / DP -> 对应通道, mic 仍走板载
+        (hdmi, ("pal_sink_hdmi_out", SOURCE_FALLBACK)),
+        (dp, ("pal_sink_dp_out", SOURCE_FALLBACK)),
+        # 耳机 -> 耳机通道 + 耳机 mic
+        (headset, ("pal_sink_headset", "pal_source_headset_mic")),
+        # 耳机优先于显示器, 两个显示器都插时 HDMI 优先(顺序见 SINKS)
+        (dict(headset, **hdmi), ("pal_sink_headset", "pal_source_headset_mic")),
+        (dict(headset, **dp), ("pal_sink_headset", "pal_source_headset_mic")),
+        (dict(hdmi, **dp), ("pal_sink_hdmi_out", SOURCE_FALLBACK)),
+        # 枚举顺序反过来(DP 设备先出现)也还是 HDMI: 优先级只由 SINKS 顺序决定,
+        # 而 switches 的顺序来自 /dev/input/eventN, 不能依赖
+        (dict(dp, **hdmi), ("pal_sink_hdmi_out", SOURCE_FALLBACK)),
+        # HDMI 掉了而 DP 还插着 -> 落到 DP
+        ({**{k: 0 for k in hdmi}, **dp}, ("pal_sink_dp_out", SOURCE_FALLBACK)),
+        # 拔耳机后回落到当前接着的显示器, mic 同时回板载
+        (dict(dp, **{k: 0 for k in headset}), ("pal_sink_dp_out", SOURCE_FALLBACK)),
+    ]
+    for switches, want in cases:
+        got = desired(switches)
+        assert got == want, "%r -> %r, 期望 %r" % (switches, got, want)
+    print("self-test ok (%d cases)" % len(cases))
+
+
+def main():
+    if "--self-test" in sys.argv[1:]:
+        self_test()
+        return 0
+    if "--status" in sys.argv[1:]:
+        show_status()
+        return 0
+
+    last = None
+    while True:
+        want = desired(read_switches())
+        if want != last:
+            # 启动后第一轮无条件设一次, 包括"什么都没插 -> 喇叭": 否则接 MIPI 屏
+            # 时默认设备由 wireplumber 按 priority 自己猜, 可能落到耳机。之后只在
+            # 插拔导致的跳变时设, 不跟用户的手动选择对着干。
+            apply_defaults(*want)
+            last = want
+        time.sleep(POLL_INTERVAL)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
