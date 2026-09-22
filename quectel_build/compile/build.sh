@@ -16,7 +16,6 @@ DTB_FILE="$TOPDIR/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/dtb-qco
 # GitHub rootfs release (used by DEBIAN/UBUNTU builds)
 GITHUB_ROOTFS_DL_URL="https://github.com/super617/pi-rootfs/releases/download/latest"
 GITHUB_ROOTFS_API_URL="https://api.github.com/repos/super617/pi-rootfs/releases/latest"
-GITHUB_ROOTFS_API_CACHE="${TMPDIR:-/tmp}/pi-rootfs-latest.json"
 
 env_check()
 {
@@ -169,11 +168,18 @@ github_rootfs_remote_sha256()
     ' "$2"
 }
 
-# Fetch one rootfs tarball from GitHub:
+# Fetch one rootfs tarball from GitHub.
+# Freshness signals, in order of trust:
 #   - local tarball missing                      -> download
-#   - local sha256 != latest (API digest)        -> download
-#   - API unavailable (rate limit/offline)       -> ETag fallback, else keep
-#                                                   local tarball + warn
+#   - live API digest != local sha256            -> download
+#   - API down/rate-limited, live ETag differs   -> download
+#   - API down, ETag matches                     -> up to date, no download
+#   - neither signal reachable                   -> keep local tarball + warn
+# The API response is deliberately NOT cached: a cached digest has no expiry,
+# so once the API is rate-limited a stale value would outvote a live, matching
+# ETag and force a needless 1GB re-download (2026-09-22: a 5-day-old cache did
+# exactly that), and it would also fail the post-download sha256 check on the
+# file it just fetched.
 fetch_github_rootfs_asset()
 {
     local asset="$1"
@@ -190,17 +196,12 @@ fetch_github_rootfs_asset()
     json_tmp=$(mktemp) || json_tmp=""
     if [ -n "$json_tmp" ] && curl -sfL --max-time 30 "${GITHUB_ROOTFS_API_URL}" -o "$json_tmp" 2>/dev/null; then
         remote_sha=$(github_rootfs_remote_sha256 "$asset" "$json_tmp")
-        if [ -n "$remote_sha" ]; then
-            mkdir -p "$(dirname "${GITHUB_ROOTFS_API_CACHE}")"
-            mv -f "$json_tmp" "${GITHUB_ROOTFS_API_CACHE}" 2>/dev/null
-            json_tmp=""
-        fi
     fi
     [ -z "$json_tmp" ] || rm -f "$json_tmp"
-    # 2) Fall back to the cached release JSON if the fresh call failed
-    if [ -z "$remote_sha" ] && [ -f "${GITHUB_ROOTFS_API_CACHE}" ]; then
-        remote_sha=$(github_rootfs_remote_sha256 "$asset" "${GITHUB_ROOTFS_API_CACHE}")
-    fi
+
+    # 2) API down/rate-limited: compare the live ETag (a cheap CDN HEAD) instead
+    local new_etag=""
+    [ -n "$remote_sha" ] || new_etag=$(github_rootfs_remote_etag "$asset")
 
     local need_download=0 reason=""
     if [ ! -f "$tar" ]; then
@@ -220,9 +221,8 @@ fetch_github_rootfs_asset()
         fi
     else
         # API unreachable/rate-limited: compare ETags instead
-        local old_etag="" new_etag
+        local old_etag=""
         [ -f "$etag_file" ] && old_etag=$(cat "$etag_file")
-        new_etag=$(github_rootfs_remote_etag "$asset")
         if [ -n "$new_etag" ]; then
             if [ -n "$old_etag" ] && [ "$old_etag" = "$new_etag" ]; then
                 echo -e "\033[32;1m[INFO] ${asset}: up to date (etag match)\033[0m"
@@ -239,7 +239,18 @@ fetch_github_rootfs_asset()
         echo -e "\033[33;1m[INFO] ${asset}: ${reason}, downloading ${dl_url}\033[0m"
         local part="${tar}.part"
         # Keep an existing .part: curl -C - resumes from it on the next run
-        # (a failed download must not force a 1GB restart from zero).
+        # (a failed download must not force a 1GB restart from zero). A .part
+        # left by an *older* release must not be resumed though: -C - appends the
+        # new file onto the old bytes, the sha256 check below then always fails,
+        # and the whole download is burnt on every retry. Tag the partial with
+        # the sha it is meant to become; a different value means it is stale.
+        if [ -n "$remote_sha" ]; then
+            if [ -f "$part" ] && [ -f "${part}.sha" ] && [ "$(cat "${part}.sha")" != "$remote_sha" ]; then
+                echo -e "\033[33;1m[INFO] ${asset}: .part is from an older release, restarting download\033[0m"
+                rm -f "$part"
+            fi
+            echo "$remote_sha" > "${part}.sha"
+        fi
         if github_rootfs_download "$dl_url" "$part" "$(github_rootfs_remote_size "$asset")"; then
             # Integrity check when the expected sha256 is known
             if [ -n "$remote_sha" ]; then
@@ -247,12 +258,13 @@ fetch_github_rootfs_asset()
                 dl_sha=$(sha256_of "$part")
                 if [ -n "$dl_sha" ] && [ "$dl_sha" != "$remote_sha" ]; then
                     echo -e "\033[31;1m[ERROR] ${asset}: sha256 mismatch after download (${dl_sha} != ${remote_sha}), aborting\033[0m"
-                    rm -f "$part"
+                    rm -f "$part" "${part}.sha"
                     return 1
                 fi
             fi
             rm -f "$tar"
             mv -f "$part" "$tar"
+            rm -f "${part}.sha"
             local new_etag
             new_etag=$(github_rootfs_remote_etag "$asset")
             [ -n "$new_etag" ] && echo "$new_etag" > "$etag_file"
