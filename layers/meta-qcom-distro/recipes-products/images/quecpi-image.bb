@@ -128,19 +128,39 @@ deploy_debian_gnome_rootfs () {
             need_extract=1
         fi
         if [ "$need_extract" -eq 0 ] && [ -n "$tarball" ] && [ -d "$src_dir" ]; then
-            # Detect files the current user cannot actually read (poisoned
+            # Detect entries the current user cannot actually read (poisoned
             # cache from a sudo extraction or a qemu rootfs copy-out where
-            # files are *real* root:root 600/640). Use -readable (an actual
-            # open() readability test), NOT -perm -004: a 640 file owned by
+            # entries are *real* root:root 0700/0600). Use -readable (an actual
+            # open()/opendir() test), NOT -perm -004: a 640 file owned by
             # *this* user is readable to us even though other has no r, and
             # -perm -004 would wrongly force a re-extract every build.
-            if find "$src_dir" -type f ! -readable 2>/dev/null | read -r _bad; then
-                bbnote "$src_dir: cached tree has unreadable files (poisoned by sudo/root extraction), re-extracting from $tarball"
+            #
+            # Directories must be checked too, not just files: rsync opendir()s
+            # every source directory to build its file list, so one 0700
+            # root:root dir (/etc/credstore, /var/lib/private, ...) kills it
+            # with "opendir ... Permission denied (13)" / exit 23. A
+            # files-only test never saw those: find cannot descend into an
+            # unreadable dir, so it reported no unreadable *files* and the
+            # poisoned tree was silently reused (2026-09-22, ubuntu26 build).
+            if find "$src_dir" \( -type d -o -type f \) ! -readable 2>/dev/null | read -r _bad; then
+                bbnote "$src_dir: cached tree has unreadable entries (poisoned by sudo/root extraction), re-extracting from $tarball"
                 need_extract=1
             fi
         fi
         if [ "$need_extract" -eq 1 ]; then
                 rm -rf "$src_dir"
+                # A tree poisoned with real root:root 0700 dirs cannot be
+                # removed unprivileged (rm cannot even list their contents), so
+                # re-extracting on top of it keeps the poison and rsync fails
+                # the exact same way. Try passwordless sudo for the cleanup
+                # (studio/CI boxes often have it), otherwise stop with the
+                # command the user has to run instead of a second rsync error.
+                if [ -d "$src_dir" ]; then
+                        sudo -n rm -rf "$src_dir" 2>/dev/null || :
+                fi
+                if [ -d "$src_dir" ]; then
+                        bbfatal "$src_dir: cannot remove poisoned extracted tree (real root:root, unreadable by $(id -un)). Run \"sudo rm -rf $src_dir\" once, then rebuild"
+                fi
                 mkdir -p "$src_dir"
                 tar --numeric-owner $tar_opt "$tarball" -C "$src_dir"
         fi
