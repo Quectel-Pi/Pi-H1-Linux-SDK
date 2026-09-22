@@ -77,14 +77,21 @@ sha256_of()
 # When stderr is redirected (logs/CI) the meter is suppressed (-sS still
 # surfaces errors).
 # HTTP/1.1 is forced: GitHub's 1GB+ assets over HTTP/2 often die with
-# "curl: (92) HTTP/2 stream was not closed cleanly"; --retry-all-errors
-# (curl >= 7.71) makes transient errors like that retry automatically.
+# "curl: (92) HTTP/2 stream was not closed cleanly". Transient errors are
+# retried by the shell loop in github_rootfs_download() (NOT by curl's
+# --retry, see there).
 #
 # QPI SDK Studio progress hook: 插件通过扫描 stdout 的 "[QPI-PROGRESS]" 标记
-# 渲染下载进度条 (断点续传时 done 从已有 .part 字节数起算)。直接终端运行时
-# 这些行也会正常显示, 无副作用。
+# 渲染下载进度条 (断点续传时 done 从已有 .part 字节数起算)。
+#
+# 只在下载进度表被抑制时输出 (即 -t 2 为假, 见 github_rootfs_download 的 -sS
+# 判定): 插件/CI 没有 tty, 进度表被 -sS 关掉, 全靠这些行看进度; 真终端里 curl
+# 自带的进度表本来就是一行原地刷新, 再叠一层每秒 printf 就是刷屏 —— 而且 \r 把
+# 新行糊在进度表上, 两行互相覆盖 (实测输出是 "94 1148M ... 452k[QPI-PROGRESS]
+# total=..."), 所以两者只留一个。
 qpi_progress()
 {
+    [ -t 2 ] && return 0
     local done="${1:-0}" total="${2:-0}" pct=0
     case "$done" in ''|*[!0-9]*) done=0 ;; esac
     case "$total" in ''|*[!0-9]*) total=0 ;; esac
@@ -104,38 +111,85 @@ github_rootfs_remote_size()
 github_rootfs_download()
 {
     local url="$1" out="$2" total="${3:-0}" curl_extra="" wget_extra="" pid=0 rc=0
+    local have_tty="" tick=0
     case "$total" in ''|*[!0-9]*) total=0 ;; esac
-    if [ ! -t 2 ]; then
+    if [ -t 2 ]; then
+        have_tty=1
+    else
         # Non-interactive: suppress the meter but keep errors visible
         curl_extra="-sS"
         wget_extra="-q"
     fi
     if command -v curl >/dev/null 2>&1; then
-        if curl --help all 2>/dev/null | grep -q -- '--retry-all-errors'; then
-            curl_extra="${curl_extra} --retry-all-errors"
-        fi
-        # 后台下载 + 每秒轮询 .part 文件大小 -> 输出进度标记 (供插件渲染进度条;
-        # 插件环境无 tty, curl 的 meter 被 -sS 抑制, 无标记时终端会长时间无输出)。
+        # 进度显示两种模式, 取决于 stderr 有没有终端:
+        #   有终端 -> curl 跑前台, 自己画进度表 (单行原地刷新), 不输出进度标记;
+        #   无终端 -> 进度表被 -sS 关掉, 后台跑 + 每秒轮询 .part 输出 [QPI-PROGRESS]
+        #             标记供插件渲染进度条。
+        # 两者不能同时出现: 一个 \r 原地刷新、一个每秒换行, 挤在同一个 tty 上会互相
+        # 覆盖, 实测输出是 "94 1148M ... 452k[QPI-PROGRESS] total=..." 这种刷屏。
         #
-        # Ctrl+C 只发给前台进程组: buildconfig 挂了, 后台这条 curl 收不到信号, 变成
-        # 孤儿继续往 .part 里写。再跑一次 buildconfig, 第二条 curl 从 .part 当前长度
-        # 续传 -> 两条 curl 交错写同一个文件 (实测偏移只差 3MB), sha256 必然不匹配,
-        # 整个 1GB 被 rm -f 丢掉。所以这里把 curl 收进 SIGINT 处理。处理完还原 trap
-        # 并把 INT 重新抛给自己, 保持 "Ctrl+C 中止 buildconfig" 的原有语义。
-        # ponytail: 只挡 SIGINT (Ctrl+C); 终端被直接关掉时的 SIGHUP 仍可能留孤儿 curl
-        local prev_int="" interrupted=""
-        prev_int=$(trap -p INT)
-        trap 'kill "$pid" 2>/dev/null; interrupted=1' INT
-        curl -fL --http1.1 --retry 5 --retry-delay 5 -C - --max-time 7200 ${curl_extra} -o "$out" "$url" &
-        pid=$!
-        while kill -0 "$pid" 2>/dev/null; do
-            qpi_progress "$(stat -c %s "$out" 2>/dev/null || echo 0)" "$total"
-            sleep 1
+        # Ctrl+C (原来的孤儿 curl 根因): 交互式 shell 会给后台作业分配独立进程组,
+        # Ctrl+C 只发给前台进程组, 所以 `curl &` 收不到信号, 只能靠 trap 补刀。而
+        # bash 只在等 `wait` 时才执行 trap —— 原来的轮询循环里是前台 `sleep 1`, trap
+        # 根本不执行: 2026-09-22 在 pty 实测, ^C 后 bash 用默认动作退出, curl 的 PPID
+        # 变 1 且 .part 继续增长 (跑了一小时的那个孤儿就是这么来的)。所以有终端时
+        # 临时关掉 job control 再后台化, curl 留在本 shell 的进程组里 —— Ctrl+C 由
+        # 终端直接送到它, 同时 pid 还在手上, 插件"停止"/终端被关 (TERM/HUP 只发给
+        # shell) 时 trap 也能补刀。等待一律用 `wait`, 且轮询的 sleep 放后台:
+        # 前台命令在跑时 bash 不会执行 trap。
+        # ponytail: 顺带把 SIGHUP/TERM 也收进来, 覆盖插件"停止"按钮/关终端
+        #
+        # 重试放在 shell 层, 不交给 curl 的 --retry: curl 重试时只把文件截断回
+        # "本次调用开始时的偏移", 本次已下到的字节全部丢 (curl 7.81 实测; 8.x 才有
+        # 自动续传的判断)。从 0 起下的那次调用一旦断流, 重试 = 整包重下:
+        # 2026-09-22 实测 1.2GB 下到 1100MB 断流, "Throwing away 1153433600 bytes"
+        # 后又从 0 开始。每轮重新起一个 curl, -C - 会按 .part 当前长度重算偏移,
+        # 断点接着下。
+        local prev_sig="" interrupted="" sig=""
+        local attempt=1
+        prev_sig=$(trap -p INT TERM HUP)
+        # pid 为空时不能裸调 kill (kill 0 = 杀整个进程组)
+        trap 'sig=INT; [ -n "$pid" ] && kill "$pid" 2>/dev/null; interrupted=1' INT
+        trap 'sig=TERM; [ -n "$pid" ] && kill "$pid" 2>/dev/null; interrupted=1' TERM HUP
+        while :; do
+            rc=0
+            if [ -n "$have_tty" ]; then
+                set +m
+                curl -fL --http1.1 -C - --max-time 7200 ${curl_extra} -o "$out" "$url" &
+                pid=$!
+                set -m
+                # 进度表由 curl 自己画, 没有要轮询的东西, 直接等 (bash 在 wait 里跑 trap)
+                wait "$pid" || rc=$?
+            else
+                curl -fL --http1.1 -C - --max-time 7200 ${curl_extra} -o "$out" "$url" &
+                pid=$!
+                while kill -0 "$pid" 2>/dev/null; do
+                    qpi_progress "$(stat -c %s "$out" 2>/dev/null || echo 0)" "$total"
+                    # sleep 必须放后台: 前台 sleep 会把 Ctrl+C 吃掉, trap 不执行
+                    sleep 1 & tick=$!
+                    wait "$tick" 2>/dev/null || :
+                done
+                wait "$pid" || rc=$?
+            fi
+            [ "$rc" -eq 0 ] && break
+            [ -n "$interrupted" ] && break
+            case "$rc" in
+                33|36)
+                    # 服务器不认 Range / 本地件比远端大: 续传无解, 丢掉重下
+                    rm -f "$out"
+                    ;;
+            esac
+            [ "$attempt" -ge 6 ] && break
+            attempt=$((attempt + 1))
+            # 终端里 curl 的进度表刚在屏幕中间留了半行 (\r 未换行), 先清掉再打
+            [ -n "$have_tty" ] && printf '\r\033[K'
+            echo -e "\033[33;1m[WARN] download interrupted (curl rc=${rc}), retry ${attempt}/6 in 5s, resuming from $(stat -c %s "$out" 2>/dev/null || echo 0) bytes\033[0m"
+            sleep 5 & tick=$!
+            wait "$tick" 2>/dev/null || :
         done
-        wait "$pid" || rc=$?
-        eval "${prev_int:-trap - INT}"
+        eval "${prev_sig:-trap - INT TERM HUP}"
         qpi_progress "$(stat -c %s "$out" 2>/dev/null || echo 0)" "$total"
-        [ -n "$interrupted" ] && kill -INT $$
+        [ -n "$interrupted" ] && kill -s "${sig:-INT}" $$
         return "$rc"
     elif command -v wget >/dev/null 2>&1; then
         wget -c --timeout=30 --tries=3 ${wget_extra} -O "$out" "$url"
@@ -174,6 +228,8 @@ github_rootfs_remote_sha256()
 #   - live API digest != local sha256            -> download
 #   - API down/rate-limited, live ETag differs   -> download
 #   - API down, ETag matches                     -> up to date, no download
+#   - API down, no local ETag yet                -> compare Content-Length; equal
+#     means up to date (the ETag is then backfilled, so the next run matches)
 #   - neither signal reachable                   -> keep local tarball + warn
 # The API response is deliberately NOT cached: a cached digest has no expiry,
 # so once the API is rate-limited a stale value would outvote a live, matching
@@ -224,11 +280,27 @@ fetch_github_rootfs_asset()
         local old_etag=""
         [ -f "$etag_file" ] && old_etag=$(cat "$etag_file")
         if [ -n "$new_etag" ]; then
-            if [ -n "$old_etag" ] && [ "$old_etag" = "$new_etag" ]; then
+            if [ -z "$old_etag" ]; then
+                # 本地没有 etag 记录 != 远端内容变了 (上一次下载可能是在限流期间做完的,
+                # 那时没写 .etag)。API 已经用不了, 手头只剩 Content-Length: 大小一致
+                # 就当成同一份, 顺手把 etag 补上, 下次直接走 etag 匹配。否则每跑一次
+                # 限流就重下 1.2GB (2026-09-22: ubuntu26 已下完整, 只因缺 .etag 被
+                # 判成 "etag changed (none -> ...)" 反复整包重下)。
+                local local_size remote_size
+                local_size=$(stat -c %s "$tar" 2>/dev/null || echo 0)
+                remote_size=$(github_rootfs_remote_size "$asset")
+                if [ -n "$remote_size" ] && [ "$remote_size" != "0" ] && [ "$local_size" = "$remote_size" ]; then
+                    echo -e "\033[32;1m[INFO] ${asset}: up to date (no local etag, size matches ${remote_size})\033[0m"
+                    echo "$new_etag" > "$etag_file"
+                else
+                    need_download=1
+                    reason="size differs (local ${local_size} != remote ${remote_size:-unknown})"
+                fi
+            elif [ "$old_etag" = "$new_etag" ]; then
                 echo -e "\033[32;1m[INFO] ${asset}: up to date (etag match)\033[0m"
             else
                 need_download=1
-                reason="etag changed (${old_etag:-none} -> ${new_etag})"
+                reason="etag changed (${old_etag} -> ${new_etag})"
             fi
         else
             echo -e "\033[33;1m[WARN] ${asset}: cannot verify against GitHub (API/network unavailable), keep local tarball\033[0m"
