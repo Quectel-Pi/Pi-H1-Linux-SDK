@@ -18,7 +18,9 @@ inherit image
 IMAGE_FSTYPES = "vfat"
 IMAGE_FSTYPES_DEBUGFS = ""
 
-ROOTFS_SIZE ?= "524288"
-IMAGE_ROOTFS_EXTRA_SPACE="444000"
+# efi partition is 524288KB (512MiB). Pin the image just below it: mkfs.vfat
+# auto-selects FAT32 at >=512MiB, and with 64KiB clusters (EXTRA_IMAGECMD in
+# meta-quectel) FAT32 needs >=65525 clusters -> do_image_vfat fails.
+IMAGE_ROOTFS_SIZE = "512000"
 
 LINGUAS_INSTALL = ""
