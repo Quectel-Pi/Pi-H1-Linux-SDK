@@ -117,6 +117,16 @@ github_rootfs_download()
         fi
         # 后台下载 + 每秒轮询 .part 文件大小 -> 输出进度标记 (供插件渲染进度条;
         # 插件环境无 tty, curl 的 meter 被 -sS 抑制, 无标记时终端会长时间无输出)。
+        #
+        # Ctrl+C 只发给前台进程组: buildconfig 挂了, 后台这条 curl 收不到信号, 变成
+        # 孤儿继续往 .part 里写。再跑一次 buildconfig, 第二条 curl 从 .part 当前长度
+        # 续传 -> 两条 curl 交错写同一个文件 (实测偏移只差 3MB), sha256 必然不匹配,
+        # 整个 1GB 被 rm -f 丢掉。所以这里把 curl 收进 SIGINT 处理。处理完还原 trap
+        # 并把 INT 重新抛给自己, 保持 "Ctrl+C 中止 buildconfig" 的原有语义。
+        # ponytail: 只挡 SIGINT (Ctrl+C); 终端被直接关掉时的 SIGHUP 仍可能留孤儿 curl
+        local prev_int="" interrupted=""
+        prev_int=$(trap -p INT)
+        trap 'kill "$pid" 2>/dev/null; interrupted=1' INT
         curl -fL --http1.1 --retry 5 --retry-delay 5 -C - --max-time 7200 ${curl_extra} -o "$out" "$url" &
         pid=$!
         while kill -0 "$pid" 2>/dev/null; do
@@ -124,7 +134,9 @@ github_rootfs_download()
             sleep 1
         done
         wait "$pid" || rc=$?
+        eval "${prev_int:-trap - INT}"
         qpi_progress "$(stat -c %s "$out" 2>/dev/null || echo 0)" "$total"
+        [ -n "$interrupted" ] && kill -INT $$
         return "$rc"
     elif command -v wget >/dev/null 2>&1; then
         wget -c --timeout=30 --tries=3 ${wget_extra} -O "$out" "$url"
