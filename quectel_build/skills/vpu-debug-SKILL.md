@@ -122,7 +122,13 @@ mpv --hwdec=vaapi-copy video.mp4
 
 可用：
 
-- `vainfo` 报告 H.264 Baseline/Main/High 的 VLD 与 EncSlice
+- `vainfo` 报告 H.264 Baseline/Main/High 的 VLD 与 EncSlice，以及 HEVC Main 的 VLD 与
+  EncSlice、VP9Profile0 的 VLD（VP9 编码内核不支持，未列出）
+- **HEVC / VP9 硬解与软解逐字节一致**（HEVC 1280x720 58 帧、1920x1080 60 帧；VP9
+  1280x720 300 帧；`cmp` 全等），H.264 硬解回归同样一致
+- **HEVC 硬编可用**：`ffmpeg -vaapi_device /dev/dri/renderD128 -vf format=nv12,hwupload
+  -c:v hevc_vaapi -rc_mode CBR -b:v 4M`（CBR 是内核编码器唯一支持的模式；
+  `-vf format=nv12,hwupload` 必须显式给，自动插入的 `scale_vaapi` 需要 VPP，本驱动没有）
 - **无 B 帧的 H.264 解码与软解逐字节一致**（640x480 baseline、1280x720 High 均验证过；
   baseline 720p 98MB NV12 输出 `cmp` 全等）
 - 100Mbps 4K H.264（3840x2160，无 B 帧）整段能播（`mpv --hwdec=vaapi-copy` 到 EOS），
@@ -146,7 +152,12 @@ mpv --hwdec=vaapi-copy video.mp4
   「7. VLC 绿屏 / 用不上硬解」
 - 驱动仍把画面从 V4L2 buffer memcpy 进 VA surface（`files/src/decode.c` 的 memcpy），
   这段拷贝未消除；`vaExportSurfaceHandle` 消掉的是播放器再上传 GPU 那一份
-- 只支持解码，不支持编码
+- 编码只支持 H.264 / HEVC，而且只有 CBR：内核编码器不提供其它码率控制；VP9 编码内核不支持
+- **SPS 里带短时/长时参考图像集（ST-RPS / LT-RPS）的 HEVC 流不能硬解**：VAAPI 客户端只
+  传解析后的字段、不传 VPS/SPS/PPS，驱动只能从 `VAPictureParameterBufferHEVC` 重建参数集，
+  而参考图像集的内容不在其中，这类流直接返回「不支持」而不是照错的参数集解。x265 等软编码
+  输出可用，**板子自身硬编出来的 HEVC 属于被拒的那类**（`dmesg` 里能看到
+  `H265_CONFIG_FLAG_MISSING` 是参数集完全没下发时的表现）
 
 ### 4K 实测（DJI_0010.MP4：3840x2160 H.264 High 100Mbps，617 帧，21 I + 596 P 无 B 帧）
 
