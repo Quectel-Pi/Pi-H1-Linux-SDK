@@ -1,5 +1,8 @@
 # VPU 视频解码调试 (Venus/iris_vpu)
 
+> 会话交接文档：`log/VPU-交接-20260923.md`（含三仓状态、待办、复现命令、血泪教训）。
+> 硬解修复补丁 v2 + 上板验证结论都在那里，接手前先读。
+
 ## VPU 硬件信息
 
 - 解码器: `/dev/video32` (msm_vidc_decoder)
@@ -44,30 +47,165 @@ dmesg | grep 'session' | tail -10
 
 ## VPU 会话泄漏修复（重要！）
 
-VPU 固件有最大 16 会话限制，测试程序如未正确 STREAMOFF + close 会导致泄漏。
+### 泄漏怎么来的（实测归因，2026-09）
 
-症状:
+**触发条件 = 客户端在流还在跑的时候退出。** 不等于"只有被强杀才会"：
+
+| 播放器怎么退的 | 结果（4K，hwdec=vaapi） |
+|---------------|----------------------|
+| 自然播完（EOS 自己退） | 实例 0 — **不漏** |
+| **点窗口关闭按钮（SIGTERM）** | 实例 1，`state=4`(CLOSE) — **漏** |
+| `kill -9`（SIGKILL）/ 崩溃 / OOM | 实例 1，`state=4`(CLOSE) — **漏** |
+
+**"关窗口"这个最日常的动作本身就在漏** —— 播放器收到 `SIGTERM` 就退，不做流级
+收尾，会话留在 CLOSE(4)。所以用户"手动播了几次就废了"，不是他操作有误。
+播放中关窗口与 `kill -9` 后果完全相同，别以为前者安全。
+
+固件层内存泄漏，驱动只是报信者：
+
 ```
-msm_vidc: err: msm_vidc_add_session: max limit 16 already running 16 sessions
-msm_vidc: err: msm_vidc_open: failed to add session
+msm_vidc: fw: <VFW_E:HostDr:264d:76652fc0:00> VenusHostDriver_ParseC2Command(1229):
+  Memory leak found: current heap status: 1292e, expected heap status : 0
 ```
 
-修复方法（不需要重启设备）:
+所以**停播放器做测试时，`pkill -x mpv`（TERM）与 `pkill -9 mpv` 后果一样**，都漏。
+要么让片子自然播完（EOS），要么每轮测量前先按下面「修复」重置 VPU —— 否则你会把
+上一轮的污染当成"本轮新故障"。
+
+### 死会话是什么
+
+被 kill 的实例会留在 `/sys/kernel/debug/msm_vidc/core/inst_*`，`state` 取值
+（`vidc/inc/msm_vidc_state.h` 的 `FOREACH_STATE`）：
+
+```
+OPEN=0  INPUT_STREAMING=1  OUTPUT_STREAMING=2  STREAMING=3  CLOSE=4  ERROR=5
+```
+
+僵尸会话 = **4 (CLOSE)**，失败探测的残留 = **5 (ERROR)**。两者都是终态
+（ERROR 的全部迁移是 `MSM_VIDC_IGNORE`，CLOSE → OPEN/STREAMING 是
+`MSM_VIDC_DISALLOW`），固件永远不会回收它们，**但它们照样被算进负载**。
+
+### 真正的闸门是 MBPF（每帧宏块数），不是会话条数
+
+`msm_vidc_check_session_supported()` 里按顺序过 5 道闸，真正拦住 4K 的是
+**第 2 道 `msm_vidc_check_core_mbpf()`**，不是会话计数那道：
+
+```
+[  60.890933] msm_vidc: err : 7461afc0: avcD_0: msm_vidc_check_core_mbpf: video overloaded. needed 97200, max 77522
+[  60.890946] msm_vidc: err : 7461afc0: avcD_0: msm_vidc_check_session_supported: current session not supported
+[  60.890982] msm_vidc: err : 7461afc0: avcD_0: msm_vidc_streamon: vb2_streamon(10) failed, -12
+```
+
+算式：4K 一帧 = 240 x 135 = **32400** 宏块；`MAX_MBPF = 77522`，只够 **2 个**
+4K 负载（3 x 32400 = 97200 就爆）。所以额度是"2 个 4K 负载"，死会话本来在
+跑 4K，就还占着这 2 个名额之一。mpv 这时静默回落软解（日志里
+`Using hardware decoding (vaapi)` 消失），**而且这次失败又留下一个新的 ERROR
+会话**，越试越糟（棘轮）。
+
+实测（4K H.264，播放中查实例数 + 看 mpv 自报解码方式）：
+
+| 死会话 | 播放中实例 | mpv 自报 |
+|--------|-----------|---------|
+| 0 | 1 | `Using hardware decoding (vaapi)` |
+| 1 | 2 | `Using hardware decoding (vaapi)` |
+| 2 | 3 | 无 → 回落软解，dmesg `streamon失败=2` |
+
+> **别只看 `msm_vidc_check_max_sessions`。** `MAX_NUM_4K_SESSIONS = 2` 那道闸
+> 确实也在数死会话，但把死会话从它里面剔掉**并不能**修好问题 —— mbpf 那道闸
+> 先拦（实测：只改 `check_max_sessions` 的 .ko 上板行为与出厂版一字不差）。
+>
+> ⚠️ **也别去改 mbpf/负载统计去"跳过死会话"** —— 见下面「治本」一节：死会话
+> 确实占着固件堆，跳过它 = 放开超配，实测死会话到 5 个时播放中把板子硬复位。
+> 这个闸门本身是保护，要修的是**泄漏本身**。
+
+### 修复：不需要重启设备
+
+> ⚠️ **前提：先确认没有任何客户端持有 VPU。** 播放中做 unbind 会**当场把板子打挂**
+> （硬复位，连 dmesg 都来不及落盘）。实测 `sync` 过的日志断在 unbind 那一行：
+>
+> ```
+> STEP1 播放中 实例=1 states=[3] mpv=1     ← state 3 = STREAMING
+> STEP2 即将 unbind（客户端仍持有 VPU）
+> （STEP3 从未写出，板子当场复位）
+> ```
+>
+> 顺序错了就是这个后果。**必须先停播放器、确认 `pgrep -x mpv` 为空，再 unbind。**
+
 ```bash
-# 通过 sysfs unbind/rebind 重置 VPU
+# 1. 先停播放器，并确认真的没有了（漏 export 会导致 mpv 秒退，别误判）
+pkill -x mpv; sleep 3; pgrep -x mpv | wc -l     # 必须是 0
+
+# 2. 再重置 VPU
 echo aa00000.video-codec > /sys/bus/platform/drivers/msm_vidc_v4l2/unbind
 sleep 2
 echo aa00000.video-codec > /sys/bus/platform/drivers/msm_vidc_v4l2/bind
 sleep 3
 
-# 验证恢复
-v4l2-ctl -d /dev/video32 --all | head -3
+# 3. 验证：实例数应回到 0
+ls -d /sys/kernel/debug/msm_vidc/core/inst_* 2>/dev/null | wc -l
 ```
 
-如果 unbind/rebind 仍无法恢复（"Power on failed"），需要重启设备:
+**unbind/rebind 是真还额度，不是只清 debugfs 目录** —— 用 mpv 判据实测：
+2 个死会话时播放中实例=3、mpv `Using hardware decoding` 消失、dmesg 2 次
+`streamon failed`；unbind/rebind 后实例回到 0，再播 4K 是实例=1 +
+`Using hardware decoding (vaapi)`、失败行 0、dmesg 0 次 streamon 失败。
+（这一组是在**无客户端持有 VPU** 时做的，所以安全；有客户端时见上面的 ⚠️。）
+
+**别指望 `trigger_ssr`** —— 实测用它是 3 个死会话进、3 个出，无效。
+
+只有 unbind/rebind 也拉不回来（`Power on failed`）才需要重启设备：
 ```bash
 adb shell reboot   # 注意：用 adb shell reboot，不要用 adb reboot
 ```
+
+### 治本：关闭路径上的两个缺陷（补丁已上板验证）
+
+配方侧的补丁（`layers/meta-quectel/recipes-multimedia/video/`）：
+
+```
+qcom-videodlkm_1.0.bbappend
+qcom-videodlkm/0001-vidc-stop-streaming-and-release-the-queues-when-a-session-is-closed.patch
+```
+
+缺陷都在 `msm_vidc_close()`（`vidc/src/msm_vidc.c`）上，都在"客户端没做流级收尾"时
+暴露，补丁各治一处：
+
+**① 会话关闭时队列还在 streaming。** `msm_vidc_close()` 直接把
+`HFI_CMD_SESSION_CLOSE` 发给固件，此时两个队列可能都还在 streaming；而停队列只发生在
+`msm_vidc_close_helper()` 的队列释放里，那时固件会话已经没了 —— 太晚，固件只能报
+`Memory leak found`。补丁在 `msm_vidc_session_close()` 之前新增
+`msm_vidc_stop_streaming_before_close()`，先停两个队列（先输出/帧、后输入/码流，与队列
+释放同序）。停流内部是 `inst_unlock` + 超时等待，所以在关闭路径里调用**不会死锁**。
+
+**② 引用环：队列释放只发生在引用计数归零之后。** `msm_vidc_vb2_queue_deinit()` 只在
+`msm_vidc_close_helper()` 里被调用，而 `close_helper` 只在 kref 归零时才跑；可是
+buffer 自己持有 inst 的引用（`msm_vb2_alloc()` 拿、`msm_vb2_put()` 放，后者在队列释放
+时才跑）。客户端没做 `VIDIOC_REQBUFS(0)` 就退出 → 环闭死 → 实例永远留在
+`core->instances` 的 CLOSE 态、继续吃额度（**这是额度真正被吃掉的原因**）。补丁在最后
+`put_inst()` 之前先调 `msm_vidc_vb2_queue_deinit()`（幂等：`m2m_dev` 为 NULL 直接返回，
+所以 `close_helper` 里那次退化成空操作）。
+
+**两条都要打**：只打①，固件侧干净了（`Memory leak found=0`）但实例照样留、仍 1→2→3
+累加、第 3 次 4K 就回落软解；只打②，固件堆照样漏。
+
+上板验证（干净启动 → 装新 .ko → 4K H.264，每轮播放中 `pkill -9 -x mpv`）：
+
+```
+ko md5=cbc8d645f4385cc22c1e53ffee20f13b
+起始 实例=0
+第1..4次 kill -9: 实例=0  Memory-leak-found=0  本次 Using hardware decoding (vaapi)
+四次泄漏尝试之后 4K: 实例=1  Using hardware decoding (vaapi)  streamon失败=0
+收尾 实例=0
+```
+
+三种 4K 编码同样通过（播放中实例=1、kill 后实例=0、泄漏报告 0、硬解标记 1）：
+`h2644k20 / hevc4k20 / vp94k20`。并发 3 个 4K（第 3 个被 mbpf 正常拒绝、回落软解）
+全部 kill 后实例也回到 0 —— 以前"每次被拒再永久留一个 ERROR 会话"的棘轮也没了。
+
+**别改成"统计时跳过死会话"（这个方向已被实测推翻）**：死会话确实占着固件堆，跳过
+它等于让下一个会话在真正 OOM 的固件上启起来 —— 实测死会话 0..4 时 4K 硬解正常、
+**第 5 个的时候播放中板子硬复位**（主机侧抓 `/dev/kmsg` 无 oops/panic ⇒ 固件侧超配，
+不是内核崩），且每次被拒又多留一个 ERROR 会话。
 
 ## VA-API 驱动 (msm_drv_video.so)
 
@@ -180,27 +318,67 @@ VA context 同时下载解码帧，而这下载就是 CPU 读 V4L2 capture buffe
 71fps 已超过 QCS6490 的 4K60 规格 → 4K 没有更多 fps 可挖。去掉拷贝省的是 CPU（每 4K 帧
 9.4ms、约 89%），不是 fps。
 
-**结论 3：4K 掉帧是上屏（合成器）问题，不是解码。** `mpv --hwdec=vaapi` 掉 247-258/617，
-`--hwdec=vaapi-copy` 只掉 100-103，两者都在 21.7s 内放完（片长 20.6s）→ 解码有 2.4x 余量。
-4K 播放优先 `--hwdec=vaapi-copy`。
+**结论 3：4K 掉帧是上屏（合成器）问题，不是解码。** 4K30 片源下 `mpv --hwdec=vaapi` 掉
+247-258/617，`--hwdec=vaapi-copy` 只掉 100-103 —— 但这是把起播丢帧一起算的读数：稳定期
+（见下节）4K30 两者都是 0 掉帧，4K60 时结论反转（直出 46fps vs copy 18.6fps）。所以
+**4K 应优先 `--hwdec=vaapi`（直出）**，早先那句"优先 `--hwdec=vaapi-copy`"是拿 4K30 片源
+测不出差别导致的误判。
 
 ### 上屏路径才是掉帧来源，已固化 mpv 配置
 
-4K 播放掉帧与解码无关（dec=0），全在上屏：同一个 4K30 片 300 帧（10.0s 内容），
-交替 A/B 四轮：
+#### 测量方法（先排除起播丢帧，否则结论会反）
 
-| 上屏配置 | 掉帧 | wall |
-|---------|------|------|
-| `vo=dmabuf-wayland` + copy | **0, 1, 11** | 10.5s |
-| `vo=dmabuf-wayland` + 直出(vaapi) | 32, 37, 35, 8 | 10.5s |
-| `vo=gpu`(GL) 直出 | 95, 94, 98, 81 | 11.1s |
-| `vo=gpu`(GL) + copy | 85, 89, 73 | 11.1s |
+mpv 的 `frame-drop-count` 把起播阶段的丢帧也算进去。4K60 起播要 7-9s（解码器初始化 + VO
+配置），这期间视频时钟照走，一次性计入几百帧假丢帧 —— 不排除就会得出"直出比 copy 更差"
+这类反向结论（本 skill 早先那版 4K30 表格就是这么来的）。
 
-GPU 不是瓶颈（simple_ondemand 已把 GPU 拉到 550MHz 上限）。GL 路径在做 4K→1080p
-缩放时掉帧，Wayland dmabuf 直通不掉。
+正确做法：经 `--input-ipc-server` 轮询 `time-pos`，等它 > 6 秒（真正进入稳定播放）再统计
+8-12s 窗口内的 `frame-drop-count` 增量。脚本在板上 `/var/tmp/b3.sh <片源> <标签>`：
 
-固化位置（`prebuild/gnome/etc/mpv/mpv.conf`，`gnome` 在 `prebuild/sync-list` 里、
-排在 `bsp-fix` 之后，所以它是 desktop 配置的最终话事层）：
+```bash
+DUR=8 EXTRA="--no-config --vo=dmabuf-wayland --hwdec=vaapi" /var/tmp/b3.sh /var/tmp/vatest/h2644k20.mp4 tag
+#   tag | vo=dmabuf-wayland hwdec=vaapi | 窗口=8s 解码=60.1fps 显示=46.0fps 丢帧=113(14.1/s) | 会话=1
+```
+
+A/B 对比必须两边都带 `--no-config`：profile 在运行时应用，命令行给的 `--vo`/`--hwdec` 会被
+profile 覆盖（实测 `--vo=gpu` 仍然报 `current-vo=dmabuf-wayland`）。
+
+#### 稳定期实测（面板 1920x1080@60，片源 4K60 H.264 1200 帧）
+
+| 内容 | `--hwdec=vaapi-copy`（原配置） | `--hwdec=vaapi`（直出） |
+|------|------------------------------|-----------------------|
+| 4K30 DJI 617 帧 | 30.0fps，丢 0 | 30.0fps，丢 0（CPU 只有一半） |
+| 4K60 H.264 | **18.6fps**，丢 39.5/s | **46.0fps**，丢 14.1/s |
+| 4K60 HEVC | **18.4fps**，丢 38.1/s | **45.2fps**，丢 15.2/s |
+| 4K60 VP9 | 未测（早期含起播污染的读数 12.8fps） | 47.5fps |
+| 1080p60（走 vo=gpu，未改） | 48.1fps | - |
+
+4K60 场景直出是 copy 的 **2.5x**，4K30 两者都满帧 → `hwdec=vaapi` 在 dmabuf 路径下没有代价。
+原因：`vo=dmabuf-wayland` 直接把解码器 buffer 交给合成器，`vaapi-copy` 却先把 4K NV12 下载到
+系统内存（12.4MB/帧，60fps 就是 745MB/s 的 memcpy）再丢掉，纯浪费。
+
+#### 剩下那 ~46-48fps 的天花板与像素无关
+
+同一个 1080p60 源：全屏 46.1fps、640x360 小窗 46.4fps，丢帧数完全相同（各 111 帧/8s）；
+4K60 是 46fps、1080p 是 48fps，也几乎一样。→ 瓶颈是每帧一笔固定开销（合成器提交/回调
+节奏），不是填充率、不是 4K→1080p 缩放、不是解码。GPU 也没满（`simple_ondemand` 停在
+315/550MHz）。要突破得动合成器（GNOME Shell 48.7 / mutter 16），不是 mpv 参数。
+
+#### `--video-sync=display-vdrop` 是陷阱，不要全局开
+
+| 内容 | 默认（display-resample） | `display-vdrop` |
+|------|------------------------|-----------------|
+| 4K60 HEVC | 45.2fps | 59.5fps |
+| 4K30 DJI | 30.0fps，丢 0 | **25.1fps** |
+
+vdrop 以显示时钟为唯一参考、迟到帧直接丢：60fps 内容收益明显，30fps 内容因为要和 60Hz 的
+抖动对齐反而掉到 25fps。带音频的同一组读数一致（4K60 54.2fps、4K30 25.5fps）。
+
+#### 固化位置
+
+`prebuild/gnome/etc/mpv/mpv.conf`（`gnome` 在 `prebuild/sync-list` 里、排在 `bsp-fix` 之后，
+所以它是 desktop 配置的最终话事层）；Ubuntu 侧 `prebuild/ubuntu26/etc/mpv/mpv.conf` 需同步，
+两份文件除头部同步说明外内容一致。
 
 ```ini
 hwdec=vaapi-copy
@@ -209,24 +387,73 @@ hwdec=vaapi-copy
 profile-desc=DMABUF passthrough for >=1440p sources
 profile-cond=width ~= nil and height ~= nil and (width >= 2560 or height >= 1440)
 profile-restore=copy
+hwdec=vaapi
 vo=dmabuf-wayland,gpu
 ```
 
+（代码块里不带注释：**mpv.conf 只认行首 `#`，行内 `#` 会被当成值的一部分**，实际文件里
+这两行 `hwdec` 的解释写在文件头部的注释里。）
+
+小分辨率保留 `vaapi-copy` 的原因：那条路径走 `vo=gpu`，Mesa 在这块板子上导入不了解码
+dmabuf（`Failed to set BO metadata with DRM_MSM_GEM_INFO: -22`），反正都要下载，copy 只
+多花 CPU。`large-frames` 里改 `vaapi` 是直出，4K60 从 18.6fps 提到 46fps。
+
 实测（无任何命令行参数，只靠这个配置）：
 
-| 内容 | 掉帧 | 走的 vo |
-|------|------|--------|
-| 4K30 DJI | 0 / 2 / 0 | dmabuf-wayland |
-| 4K30 带 B 帧 | 12 / 1（不再卡死） | dmabuf-wayland |
-| 4K60 | ~180 | dmabuf-wayland（VPU 到顶，见上） |
-| 1080p | 0 / 1 / 0 | gpu（保留字幕/OSD） |
+| 内容 | 稳定期掉帧 | 走的 vo |
+|------|-----------|--------|
+| 4K30 DJI | 0 | dmabuf-wayland |
+| 4K60 H.264 | 170 帧 / 12s（45.9fps） | dmabuf-wayland |
+| 1080p60 | 145 帧 / 12s（48.1fps） | gpu（保留字幕/OSD） |
 
-两个坑：
+四个坑：
 - **`profile-cond` 必须判 nil**。`width`/`height` 在流信息就绪前是 nil，直接比较会抛
   Lua 错误，mpv 报 `Errors when loading file` 直接中止播放（4K60 就这样挂过）。
 - **mpv 默认 `hwdec=no`**，不写这个文件等于全程软解。
+- **改完要重新打包镜像才固化**，改板上的 `/etc/mpv/mpv.conf` 只是临时验证（镜像里那份是
+  从 `prebuild/` 铺进去的）。
 - 按分辨率分流的原因：`dmabuf-wayland` 只渲染视频，不支持 OSD/字幕；所以只在
   大分辨率时切过去，小分辨率留在 `vo=gpu`。
+
+### totem（GNOME 视频播放器）没有等价的配置项
+
+totem 走 `playbin`，没有 `hwdec`/`vo` 这类开关，等价维度是"元素选择"，而元素是写死在
+libtotem 里的。全部可改项只有三个：
+
+| 旋钮 | 位置 | 作用 |
+|------|------|------|
+| `force-software-decoders` | gsettings `org.gnome.totem` | **只能强制软解**（反方向），4K60 实测掉到 0.62x 实时、CPU 417% |
+| `TOTEM_USE_GST_GTKSINK` | 环境变量 | 强制走 `gtksink`（GdkTexture 上传），不走 `gtkglsink` |
+| `GST_PLUGIN_FEATURE_RANK` | 环境变量 | GStreamer 通用：换解码器（默认已选到 `vah264dec` 硬解） |
+
+硬件解码不用配也是开的：`playbin`→`decodebin3` 按 rank 自动选 `vah264dec`。sink 侧没有
+任何选项——libtotem 里写死顺序 `gtkglsink` →（检测到软件 GL 光栅化器）→ `gtksink`，
+没有 waylandsink/dmabuf 直通可选。`~/.config/totem/state.ini` 只记窗口大小，与播放无关。
+
+测 totem 的帧率/丢帧：它没有 mpv 那样的计数器，也没有 IPC，用 MPRIS 取播放位置，比
+"媒体时钟 vs 挂钟"（跟不上就会 <1.0x），同时用 QoS 丢帧（`gstvideodecoder` 的
+`Dropping frame due to QoS` 是 WARN，不需要开 GST_DEBUG）。脚本 `/var/tmp/t3.sh <片源> <标签>`。
+注意 totem 的 `Position` 返回 `(<int64 123>,)`——解析时先 `sed 's/int64//'`，否则
+grep 数字会命中 "64"。另外 totem 常在启动窗口期停在 Paused，需要显式
+`org.mpris.MediaPlayer2.Player.Play`。
+
+4K60 H.264 实测（面板 1920x1080@60）：
+
+| 配置 | 媒体时钟 | VPU 解码 | QoS 丢帧 | CPU |
+|------|---------|---------|---------|-----|
+| 默认（`gtkglsink`） | 1.00-1.03x | 62fps | 0 | 167% |
+| `TOTEM_USE_GST_GTKSINK=1` | 0.97x | 58fps | 0 | **122%** |
+| `force-software-decoders=true` | 0.62x | 0 | 0 | 417% |
+
+`gtkglsink` 那条路会打 `Failed to set BO metadata with DRM_MSM_GEM_INFO: -22`——和 mpv
+`vo=gpu` 撞的是同一个 Mesa 导入失败，所以它也是"下载再上传"，CPU 比 mpv 直出（76%）高一倍。
+想省 CPU 就把 `TOTEM_USE_GST_GTKSINK=1` 写进会话环境（`/etc/environment` 或 prebuild
+overlay），实测 4K60 照样 1x 实时且不报丢帧。
+
+**但 totem 的"0 丢帧"不能直接和 mpv 的读数比**：GStreamer 的 sink 不等 presentation
+反馈，帧画进 GL area 就算成功，合成器有多少帧没真正上屏它不知道；mpv 用显示时钟会把这类
+迟到计成丢帧（4K60 直出 46fps / 丢 14.1/s）。所以上屏天花板到底在哪，两边都给不出
+干净判词，要动的是合成器（见上节）。
 
 ### 怎么证明真走了 VPU（而不是偷偷软解）
 
@@ -360,7 +587,10 @@ ls -d /sys/kernel/debug/msm_vidc/core/inst_* 2>/dev/null | wc -l   # 应为 0
 
 ### 1. "Cannot allocate memory" 打开 /dev/video32
 
-原因: VPU 会话数超限（16/16）或 VPU 固件崩溃。
+原因: 4K 会话额度用尽（`MAX_NUM_4K_SESSIONS = 2`，被僵尸 CLOSE/ERROR 会话占掉）
+      或 VPU 固件崩溃。见上面「VPU 会话泄漏修复」。
+      **根因（关闭路径不停流 + 队列引用环）已由补丁治住 —— 见「治本」一节；
+      打了补丁的固件上正常杀播放器不再留死会话。**
 解决: unbind/rebind 重置 VPU，或重启设备。
 
 ### 2. "inst in error state"

@@ -1,0 +1,169 @@
+From: Igni Li <igni.li@quectel.com>
+Subject: [PATCH] vidc: stop streaming and release the queues when a session is closed
+
+A client that goes away while its session is streaming leaves the session
+behind, and that is the ordinary case rather than only a crash: closing the
+player's window does it too, because the player exits without tearing the
+stream down.  Only letting the clip play to its end (EOS) is clean.
+
+That session stays in core->instances in the CLOSE (4) state and is still
+charged for the load it used to run, so on QCM6490 (a 4K frame is 240 x 135 =
+32400 macroblocks and MAX_MBPF is 77522, i.e. room for two of them) two such
+events reject every later 4K session until the VPU is rebound or the board is
+rebooted:
+
+    msm_vidc: 7461afc0: avcD_0: msm_vidc_check_core_mbpf:
+      video overloaded. needed 97200, max 77522
+    msm_vidc: 7461afc0: avcD_0: msm_vidc_check_session_supported:
+      current session not supported
+    msm_vidc: 7461afc0: avcD_0: msm_vidc_streamon: vb2_streamon(10) failed, -12
+    msm_vidc: 7461afc0: avcD_0: msm_v4l2_reqbufs: inst in error state
+
+which is what makes 4K playback fall back to software decoding.
+
+Measured on QCM6490, clean boot, hwdec=vaapi, 4K H.264, sampled while the clip
+was still playing so that the verdict is the client's own report:
+
+    leaked sessions   decoder instances   mpv reported
+    0                 1                   Using hardware decoding (vaapi)
+    1                 2                   Using hardware decoding (vaapi)
+    2                 3                   none - fell back to software:
+                                          "Failed to create decode context:
+                                           2 (resource allocation failed)"
+
+Retrying at +15/+30/+60/+120 s was rejected every time.
+
+Simply not counting CLOSE/ERROR sessions in the load checks is not an option:
+those sessions do hold firmware heap, the leak is real.  Skipping them in
+msm_vidc_check_core_mbpf() lets the next session be started on top of a
+firmware that is genuinely out of memory, and the board hard resets.  Measured
+with a patch that ignored dead sessions in the load accounting, 4K H.264,
+killed midway once per round to leak one more session each time:
+
+    leaked sessions   result
+    0..4              Using hardware decoding (vaapi), no streamon failures
+    5                 board hard reset while playing
+
+So the leak has to be prevented, not discounted.  Two independent defects on
+the close path cause it.
+
+1) The firmware session is closed while the queues are still streaming.
+   msm_vidc_close() sends HFI_CMD_SESSION_CLOSE with both queues possibly
+   streaming; they are only stopped later, by the queue teardown in
+   msm_vidc_close_helper(), which runs after the firmware session is already
+   gone, and the firmware then reports:
+
+       VenusHostDriver_ParseC2Command(1229): Memory leak found:
+       current heap status: 126cd, expected heap status : 0
+
+   A client that does streamoff before close never hits this, which is why a
+   clip that plays to its end is clean and why an exiting player is not.  Stop
+   the queues first: output (frames) then input (bitstream), the same order the
+   queue teardown uses.  A client that already stopped them pays nothing, since
+   vb2_is_streaming() is false.
+
+2) The queues are released only once the instance reference count has reached
+   zero, but a buffer holds a reference on the instance: msm_vb2_alloc() takes
+   it and msm_vb2_put() drops it, and msm_vb2_put() runs when the queue is
+   released.  A client that exits without VIDIOC_REQBUFS(0) - killed while
+   playing - therefore keeps its instance alive forever: it stays in
+   core->instances in the CLOSE state, still charged for the load it used to
+   run, and every later 4K session is rejected.  Release the queues before
+   dropping the last reference; msm_vidc_vb2_queue_deinit() is idempotent (it
+   returns early once m2m_dev is NULL), so the call that close_helper() makes
+   afterwards turns into a no-op.
+
+Both changes are needed: 1) on its own still leaves the instance behind and 2)
+on its own still leaks the firmware heap.
+
+With both, closing or killing the player in the middle of playback leaves no
+session behind, so 4K playback keeps using the hardware decoder and no longer
+needs the VPU to be rebound or the board to be rebooted.
+
+Upstream-Status: Inappropriate [Qualcomm BSP specific]
+
+Signed-off-by: Igni Li <igni.li@quectel.com>
+---
+ vidc/src/msm_vidc.c | 55 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 55 insertions(+)
+--- a/vidc/src/msm_vidc.c
++++ b/vidc/src/msm_vidc.c
+@@ -921,6 +921,43 @@ fail_add_session:
+ 	return NULL;
+ }
+ 
++/*
++ * Stop the queues of a session that is about to be closed, while the firmware
++ * session still exists.
++ *
++ * A client that goes away without an explicit streamoff - mpv being closed or
++ * killed while it is playing, for instance - leaves the session with its ports
++ * still streaming.  The firmware cannot free such a session cleanly and reports
++ * "Memory leak found: current heap status: ..., expected heap status : 0"; that
++ * memory is never reclaimed, and the leaked instance still counts as a live 4K
++ * session, so after two of them every further 4K session is refused with
++ * -ENOMEM until the VPU is rebound or the board is rebooted - which is what
++ * makes 4K playback silently fall back to software decoding.  Stopping the
++ * queues first lets the firmware close the session properly.
++ *
++ * The queue teardown in msm_vidc_close_helper() does stop the queues as well,
++ * but only after msm_vidc_session_close() has already killed the firmware
++ * session, which is too late.  Output (frames) first, then input (bitstream):
++ * the same order the queue teardown uses.
++ */
++static void msm_vidc_stop_streaming_before_close(struct msm_vidc_inst *inst)
++{
++	enum msm_vidc_port_type ports[2] = { OUTPUT_PORT, INPUT_PORT };
++	struct vb2_queue *q;
++	int i, rc;
++
++	for (i = 0; i < 2; i++) {
++		q = inst->bufq[ports[i]].vb2q;
++		if (!q || !vb2_is_streaming(q))
++			continue;
++
++		rc = vb2_streamoff(q, q->type);
++		if (rc)
++			i_vpr_e(inst, "%s: streamoff(%d) failed: %d\n",
++				__func__, q->type, rc);
++	}
++}
++
+ int msm_vidc_close(struct msm_vidc_inst *inst)
+ {
+ 	int rc = 0;
+@@ -936,6 +973,7 @@ int msm_vidc_close(struct msm_vidc_inst
+ 	/* print internal buffer memory usage stats */
+ 	msm_vidc_print_memory_stats(inst);
+ 	msm_vidc_print_residency_stats(core);
++	msm_vidc_stop_streaming_before_close(inst);
+ 	msm_vidc_session_close(inst);
+ 	msm_vidc_change_state(inst, MSM_VIDC_CLOSE, __func__);
+ 	inst->sub_state = MSM_VIDC_SUB_STATE_NONE;
+@@ -945,6 +983,26 @@ int msm_vidc_close(struct msm_vidc_inst
+ 	cancel_stability_work_sync(inst);
+ 	cancel_stats_work_sync(inst);
+ 	msm_vidc_show_stats(inst);
++	/*
++	 * Release the queues before dropping the instance reference.
++	 *
++	 * A buffer allocated through msm_vb2_alloc() takes a reference on the
++	 * instance and drops it again from msm_vb2_put(), which runs when the
++	 * queue is released.  The queue used to be released only from
++	 * msm_vidc_close_helper(), i.e. after the reference count had already
++	 * reached zero, so a client that exits without VIDIOC_REQBUFS(0) - killed
++	 * while it was playing - kept its instance alive forever: the instance
++	 * stayed in core->instances in the CLOSE state and went on being charged
++	 * for the load it used to run.  Two such instances are enough to make
++	 * every further 4K session fail with -ENOMEM on QCM6490 until the VPU is
++	 * rebound or the board is rebooted.  Release the queues here instead;
++	 * msm_vidc_vb2_queue_deinit() is idempotent, so the call close_helper()
++	 * makes afterwards turns into a no-op, and for a client that did tear its
++	 * queues down the queues are already released and this costs nothing.
++	 */
++	inst_lock(inst, __func__);
++	msm_vidc_vb2_queue_deinit(inst);
++	inst_unlock(inst, __func__);
+ 	put_inst(inst);
+ 	msm_vidc_schedule_core_deinit(core);
+ 
