@@ -20,7 +20,7 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=ae5ae5eddeebed7d3d3b2f4b475bbfce"
 
 SRC_URI = "git://github.com/super617/venus-vaapi-driver.git;protocol=https;branch=qcm6490-msm-vidc-adapt"
-SRCREV = "a9e43baa05504388a87fad3dff34b9a79495ca92"
+SRCREV = "91aafb019c2a12fb998146ce2bbf2df30b5e940d"
 S = "${WORKDIR}/git"
 
 DEPENDS = "libva"

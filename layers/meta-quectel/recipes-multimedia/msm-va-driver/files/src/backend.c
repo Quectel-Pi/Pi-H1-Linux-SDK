@@ -59,33 +59,59 @@ VAStatus venus_backend_encode_status_from_errno(int status)
                : common;
 }
 
-bool venus_backend_h264_profile(VAProfile profile)
+/*
+ * The profiles this driver can decode or encode, and the codec each one
+ * feeds into.  Everything else about a profile (the V4L2 controls, the
+ * bitstream layout) follows from the codec, so this is the only place that
+ * has to know the VA-API profile names.
+ */
+static const struct venus_profile_map {
+    VAProfile profile;
+    enum venus_codec codec;
+} profile_map[] = {
+    { VAProfileH264ConstrainedBaseline, VENUS_CODEC_H264 },
+    { VAProfileH264Main, VENUS_CODEC_H264 },
+    { VAProfileH264High, VENUS_CODEC_H264 },
+    { VAProfileHEVCMain, VENUS_CODEC_HEVC },
+    { VAProfileVP9Profile0, VENUS_CODEC_VP9 },
+};
+
+bool venus_backend_profile_codec(VAProfile profile, enum venus_codec *codec)
 {
-    return profile == VAProfileH264ConstrainedBaseline ||
-           profile == VAProfileH264Main ||
-           profile == VAProfileH264High;
+    size_t index;
+
+    for (index = 0; index < sizeof(profile_map) / sizeof(profile_map[0]);
+         index++) {
+        if (profile_map[index].profile != profile)
+            continue;
+        if (codec)
+            *codec = profile_map[index].codec;
+        return true;
+    }
+
+    return false;
 }
 
-bool venus_backend_h264_vld_supported(const struct venus_backend *backend,
-                                      VAProfile profile,
-                                      VAEntrypoint entrypoint)
+bool venus_backend_entrypoint_supported(const struct venus_backend *backend,
+                                        VAProfile profile,
+                                        VAEntrypoint entrypoint)
 {
-    return backend && venus_backend_h264_profile(profile) &&
-           entrypoint == VAEntrypointVLD &&
-           venus_capabilities_has(&backend->capabilities,
-                                  VENUS_ROLE_DECODER,
-                                  VENUS_CODEC_H264);
-}
+    enum venus_codec codec;
+    enum venus_role role;
 
-bool venus_backend_h264_enc_supported(const struct venus_backend *backend,
-                                      VAProfile profile,
-                                      VAEntrypoint entrypoint)
-{
-    return backend && venus_backend_h264_profile(profile) &&
-           entrypoint == VAEntrypointEncSlice &&
-           venus_capabilities_has(&backend->capabilities,
-                                  VENUS_ROLE_ENCODER,
-                                  VENUS_CODEC_H264);
+    if (!backend || !venus_backend_profile_codec(profile, &codec))
+        return false;
+    if (entrypoint == VAEntrypointVLD)
+        role = VENUS_ROLE_DECODER;
+    else if (entrypoint == VAEntrypointEncSlice)
+        role = VENUS_ROLE_ENCODER;
+    else
+        return false;
+
+    /* The V4L2 device decides: VP9 is decoded but not encoded here, and
+     * H.264/HEVC are both.
+     */
+    return venus_capabilities_has(&backend->capabilities, role, codec);
 }
 
 struct venus_config *venus_backend_find_config(struct venus_backend *backend,
@@ -191,26 +217,27 @@ static VAStatus backend_query_profiles(VADriverContextP context,
                                        int *num_profiles)
 {
     struct venus_backend *backend = venus_backend_from_context(context);
+    size_t index;
+    int count = 0;
 
     if (!backend || !num_profiles)
         return VA_STATUS_ERROR_INVALID_PARAMETER;
 
     pthread_mutex_lock(&backend->mutex);
-    if (venus_capabilities_has(&backend->capabilities,
-                               VENUS_ROLE_DECODER,
-                               VENUS_CODEC_H264) ||
-        venus_capabilities_has(&backend->capabilities,
-                               VENUS_ROLE_ENCODER,
-                               VENUS_CODEC_H264)) {
-        if (profiles) {
-            profiles[0] = VAProfileH264ConstrainedBaseline;
-            profiles[1] = VAProfileH264Main;
-            profiles[2] = VAProfileH264High;
-        }
-        *num_profiles = 3;
-    } else {
-        *num_profiles = 0;
+    for (index = 0; index < sizeof(profile_map) / sizeof(profile_map[0]);
+         index++) {
+        enum venus_codec codec = profile_map[index].codec;
+
+        if (!venus_capabilities_has(&backend->capabilities,
+                                    VENUS_ROLE_DECODER, codec) &&
+            !venus_capabilities_has(&backend->capabilities,
+                                    VENUS_ROLE_ENCODER, codec))
+            continue;
+        if (profiles)
+            profiles[count] = profile_map[index].profile;
+        count++;
     }
+    *num_profiles = count;
     pthread_mutex_unlock(&backend->mutex);
     return VA_STATUS_SUCCESS;
 }
@@ -226,20 +253,20 @@ static VAStatus backend_query_entrypoints(VADriverContextP context,
         return VA_STATUS_ERROR_INVALID_PARAMETER;
 
     pthread_mutex_lock(&backend->mutex);
-    if (!venus_backend_h264_profile(profile)) {
+    if (!venus_backend_profile_codec(profile, NULL)) {
         pthread_mutex_unlock(&backend->mutex);
         *num_entrypoints = 0;
         return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
     }
 
     *num_entrypoints = 0;
-    if (venus_backend_h264_vld_supported(
+    if (venus_backend_entrypoint_supported(
             backend, profile, VAEntrypointVLD)) {
         if (entrypoints)
             entrypoints[*num_entrypoints] = VAEntrypointVLD;
         (*num_entrypoints)++;
     }
-    if (venus_backend_h264_enc_supported(
+    if (venus_backend_entrypoint_supported(
             backend, profile, VAEntrypointEncSlice)) {
         if (entrypoints)
             entrypoints[*num_entrypoints] = VAEntrypointEncSlice;
@@ -267,10 +294,7 @@ static VAStatus backend_get_config_attributes(
         return VA_STATUS_ERROR_INVALID_PARAMETER;
 
     pthread_mutex_lock(&backend->mutex);
-    if (!venus_backend_h264_vld_supported(
-            backend, profile, entrypoint) &&
-        !venus_backend_h264_enc_supported(
-            backend, profile, entrypoint)) {
+    if (!venus_backend_entrypoint_supported(backend, profile, entrypoint)) {
         pthread_mutex_unlock(&backend->mutex);
         return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
     }
@@ -337,10 +361,7 @@ static VAStatus backend_create_config(
         return VA_STATUS_ERROR_INVALID_PARAMETER;
 
     pthread_mutex_lock(&backend->mutex);
-    if (!venus_backend_h264_vld_supported(
-            backend, profile, entrypoint) &&
-        !venus_backend_h264_enc_supported(
-            backend, profile, entrypoint)) {
+    if (!venus_backend_entrypoint_supported(backend, profile, entrypoint)) {
         pthread_mutex_unlock(&backend->mutex);
         return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
     }

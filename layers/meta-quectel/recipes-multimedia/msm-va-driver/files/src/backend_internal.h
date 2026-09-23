@@ -2,6 +2,7 @@
 #ifndef VENUS_BACKEND_INTERNAL_H
 #define VENUS_BACKEND_INTERNAL_H
 
+#include "hevc_headers.h"
 #include "venus/capabilities.h"
 #include "v4l2_decoder.h"
 #include "v4l2_encoder.h"
@@ -125,6 +126,11 @@ struct venus_context {
     size_t encode_queue_head;
     size_t encode_queue_count;
     uint64_t encode_sequence;
+    /* HEVC parameter sets as they were last fed to the decoder, so they are
+     * only repeated when they change.
+     */
+    uint8_t hevc_headers[VENUS_HEVC_HEADERS_MAX];
+    size_t hevc_headers_size;
 };
 
 struct venus_backend {
@@ -143,13 +149,10 @@ struct venus_backend *venus_backend_from_context(VADriverContextP context);
 void venus_backend_log(const struct venus_backend *backend,
                        const char *format, ...);
 VAStatus venus_backend_status_from_errno(int status);
-bool venus_backend_h264_profile(VAProfile profile);
-bool venus_backend_h264_vld_supported(const struct venus_backend *backend,
-                                      VAProfile profile,
-                                      VAEntrypoint entrypoint);
-bool venus_backend_h264_enc_supported(const struct venus_backend *backend,
-                                      VAProfile profile,
-                                      VAEntrypoint entrypoint);
+bool venus_backend_profile_codec(VAProfile profile, enum venus_codec *codec);
+bool venus_backend_entrypoint_supported(const struct venus_backend *backend,
+                                        VAProfile profile,
+                                        VAEntrypoint entrypoint);
 VAStatus venus_backend_encode_status_from_errno(int status);
 
 struct venus_config *venus_backend_find_config(struct venus_backend *backend,

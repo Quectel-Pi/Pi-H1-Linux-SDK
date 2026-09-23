@@ -10,6 +10,7 @@
 #include <string.h>
 #include <time.h>
 #include <va/va_enc_h264.h>
+#include <va/va_enc_hevc.h>
 
 #define VENUS_ENCODE_OUTPUT_BUFFERS 4u
 #define VENUS_ENCODE_CAPTURE_BUFFERS 16u
@@ -17,13 +18,39 @@
 #define VENUS_ENCODE_DEFAULT_FPS 30u
 #define VENUS_ENCODE_DEFAULT_GOP 60u
 
-struct venus_h264_encode_parameters {
-    const VAEncSequenceParameterBufferH264 *sequence;
-    const VAEncPictureParameterBufferH264 *picture;
+/*
+ * What the encoder needs out of a picture, whichever codec described it.
+ * The sequence and picture parameter buffers are codec specific, so the
+ * fields used here are copied out of them when they are collected.
+ */
+struct venus_encode_parameters {
+    enum venus_codec codec;
+    const VAEncPictureParameterBufferH264 *h264_picture;
+    const VAEncPictureParameterBufferHEVC *hevc_picture;
+    uint32_t width;
+    uint32_t height;
+    uint32_t level_idc;
     uint32_t bitrate;
     uint32_t frames_per_second;
+    uint32_t gop_size;
     bool has_slice;
 };
+
+static bool encode_picture_present(
+    const struct venus_encode_parameters *parameters)
+{
+    return parameters->codec == VENUS_CODEC_HEVC
+               ? parameters->hevc_picture != NULL
+               : parameters->h264_picture != NULL;
+}
+
+static VABufferID encode_coded_buffer(
+    const struct venus_encode_parameters *parameters)
+{
+    if (parameters->codec == VENUS_CODEC_HEVC)
+        return parameters->hevc_picture->coded_buf;
+    return parameters->h264_picture->coded_buf;
+}
 
 static int64_t monotonic_milliseconds(void)
 {
@@ -64,7 +91,7 @@ static int parse_frame_rate(uint32_t value, uint32_t *result)
 
 static int parse_misc_parameter(
     const struct venus_buffer *buffer,
-    struct venus_h264_encode_parameters *parameters)
+    struct venus_encode_parameters *parameters)
 {
     const VAEncMiscParameterBuffer *header;
     size_t size = buffer_bytes(buffer);
@@ -98,13 +125,39 @@ static int parse_misc_parameter(
     case VAEncMiscParameterTypeHRD:
         return 0;
     default:
-        return -ENOTSUP;
+        /* The remaining misc parameters are hints the client hopes a driver
+         * will act on (quality level, temporal layers, region of interest).
+         * The V4L2 encoder has no equivalent, and refusing the picture over
+         * a hint the encoder never needed would be worse than ignoring it.
+         */
+        return 0;
     }
 }
 
-static int parse_slice_parameters(const struct venus_buffer *buffer)
+static int parse_slice_parameters(const struct venus_buffer *buffer,
+                                  enum venus_codec codec)
 {
     size_t index;
+
+    if (codec == VENUS_CODEC_HEVC) {
+        if (buffer->element_size <
+                sizeof(VAEncSliceParameterBufferHEVC))
+            return -EINVAL;
+
+        for (index = 0; index < buffer->num_elements; index++) {
+            const VAEncSliceParameterBufferHEVC *slice =
+                (const VAEncSliceParameterBufferHEVC *)
+                    (buffer->data + index * buffer->element_size);
+
+            /* HEVC numbers its slice types I = 2, P = 1, B = 0. */
+            if (slice->num_ctu_in_slice == 0 || slice->slice_type > 2)
+                return -EINVAL;
+            if (slice->slice_type == 0)
+                return -ENOTSUP;
+        }
+
+        return 0;
+    }
 
     if (buffer->element_size <
             sizeof(VAEncSliceParameterBufferH264))
@@ -127,13 +180,106 @@ static int parse_slice_parameters(const struct venus_buffer *buffer)
     return 0;
 }
 
+static int check_dimensions(uint32_t width, uint32_t height)
+{
+    if (width < VENUS_MIN_WIDTH || height < VENUS_MIN_HEIGHT ||
+        width > VENUS_MAX_WIDTH || height > VENUS_MAX_HEIGHT ||
+        (width & 1u) || (height & 1u))
+        return -EINVAL;
+    return 0;
+}
+
+/* The encoder encodes I and P pictures only; the periods arrive as the
+ * codec's own field, and both codecs leave them at zero to mean "let the
+ * driver choose".
+ */
+static uint32_t sequence_gop_size(uint32_t idr_period, uint32_t intra_period)
+{
+    if (idr_period)
+        return idr_period;
+    if (intra_period)
+        return intra_period;
+    return VENUS_ENCODE_DEFAULT_GOP;
+}
+
+static int parse_h264_sequence_parameters(
+    const struct venus_buffer *buffer,
+    struct venus_encode_parameters *parameters)
+{
+    const VAEncSequenceParameterBufferH264 *sequence;
+    int status;
+
+    if (buffer->element_size < sizeof(*sequence))
+        return -EINVAL;
+    sequence = (const VAEncSequenceParameterBufferH264 *)buffer->data;
+
+    status = venus_encode_h264_dimensions(
+        sequence, &parameters->width, &parameters->height);
+    if (status < 0)
+        return status;
+
+    parameters->level_idc = sequence->level_idc;
+    parameters->bitrate = sequence->bits_per_second;
+    parameters->gop_size = sequence_gop_size(
+        sequence->intra_idr_period, sequence->intra_period);
+    return 0;
+}
+
+static int parse_hevc_sequence_parameters(
+    const struct venus_buffer *buffer,
+    struct venus_encode_parameters *parameters)
+{
+    const VAEncSequenceParameterBufferHEVC *sequence;
+    int status;
+
+    if (buffer->element_size < sizeof(*sequence))
+        return -EINVAL;
+    sequence = (const VAEncSequenceParameterBufferHEVC *)buffer->data;
+
+    if (sequence->seq_fields.bits.chroma_format_idc != 1 ||
+        sequence->seq_fields.bits.bit_depth_luma_minus8 != 0 ||
+        sequence->seq_fields.bits.bit_depth_chroma_minus8 != 0 ||
+        sequence->pic_width_in_luma_samples == 0 ||
+        sequence->pic_height_in_luma_samples == 0)
+        return -ENOTSUP;
+
+    parameters->width = sequence->pic_width_in_luma_samples;
+    parameters->height = sequence->pic_height_in_luma_samples;
+    status = check_dimensions(parameters->width, parameters->height);
+    if (status < 0)
+        return status;
+
+    parameters->level_idc = sequence->general_level_idc;
+    parameters->bitrate = sequence->bits_per_second;
+    parameters->gop_size = sequence_gop_size(
+        sequence->intra_idr_period, sequence->intra_period);
+    return 0;
+}
+
+static int parse_sequence_parameters(
+    const struct venus_buffer *buffer,
+    struct venus_encode_parameters *parameters)
+{
+    if (buffer->num_elements != 1)
+        return -EINVAL;
+
+    if (parameters->codec == VENUS_CODEC_HEVC)
+        return parse_hevc_sequence_parameters(buffer, parameters);
+    if (parameters->codec == VENUS_CODEC_H264)
+        return parse_h264_sequence_parameters(buffer, parameters);
+
+    return -ENOTSUP;
+}
+
 static int collect_parameters(
     struct venus_backend *backend, struct venus_context *context,
-    struct venus_h264_encode_parameters *parameters)
+    enum venus_codec codec, struct venus_encode_parameters *parameters)
 {
+    bool has_sequence = false;
     size_t index;
 
     memset(parameters, 0, sizeof(*parameters));
+    parameters->codec = codec;
 
     for (index = 0; index < context->pending_count; index++) {
         struct venus_buffer *buffer = venus_backend_find_buffer(
@@ -145,25 +291,33 @@ static int collect_parameters(
 
         switch (buffer->type) {
         case VAEncSequenceParameterBufferType:
-            if (parameters->sequence ||
-                buffer->num_elements != 1 ||
-                buffer->element_size <
-                    sizeof(VAEncSequenceParameterBufferH264))
+            if (has_sequence)
                 return -EINVAL;
-            parameters->sequence =
-                (const VAEncSequenceParameterBufferH264 *)buffer->data;
+            status = parse_sequence_parameters(buffer, parameters);
+            if (status < 0)
+                return status;
+            has_sequence = true;
             break;
         case VAEncPictureParameterBufferType:
-            if (parameters->picture ||
-                buffer->num_elements != 1 ||
-                buffer->element_size <
-                    sizeof(VAEncPictureParameterBufferH264))
+            if (encode_picture_present(parameters) ||
+                buffer->num_elements != 1)
                 return -EINVAL;
-            parameters->picture =
-                (const VAEncPictureParameterBufferH264 *)buffer->data;
+            if (parameters->codec == VENUS_CODEC_HEVC) {
+                if (buffer->element_size <
+                    sizeof(VAEncPictureParameterBufferHEVC))
+                    return -EINVAL;
+                parameters->hevc_picture =
+                    (const VAEncPictureParameterBufferHEVC *)buffer->data;
+            } else {
+                if (buffer->element_size <
+                    sizeof(VAEncPictureParameterBufferH264))
+                    return -EINVAL;
+                parameters->h264_picture =
+                    (const VAEncPictureParameterBufferH264 *)buffer->data;
+            }
             break;
         case VAEncSliceParameterBufferType:
-            status = parse_slice_parameters(buffer);
+            status = parse_slice_parameters(buffer, parameters->codec);
             if (status < 0)
                 return status;
             parameters->has_slice = true;
@@ -180,7 +334,7 @@ static int collect_parameters(
         }
     }
 
-    if (!parameters->picture || !parameters->has_slice)
+    if (!encode_picture_present(parameters) || !parameters->has_slice)
         return -EINVAL;
     return 0;
 }
@@ -241,8 +395,13 @@ int venus_encode_h264_dimensions(
     return 0;
 }
 
-static uint32_t profile_to_v4l2(VAProfile profile)
+static uint32_t profile_to_v4l2(enum venus_codec codec, VAProfile profile)
 {
+    if (codec == VENUS_CODEC_HEVC)
+        return profile == VAProfileHEVCMain
+                   ? V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN
+                   : UINT32_MAX;
+
     switch (profile) {
     case VAProfileH264ConstrainedBaseline:
         return V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_BASELINE;
@@ -255,8 +414,39 @@ static uint32_t profile_to_v4l2(VAProfile profile)
     }
 }
 
-static uint32_t level_to_v4l2(uint8_t level_idc)
+/* HEVC signals its level as 30 times the level number, so 4.1 arrives as 123
+ * where H.264 writes 41 for the same level. The iris encoder takes HEVC
+ * levels up to 5.
+ */
+static uint32_t hevc_level_to_v4l2(uint32_t level_idc)
 {
+    switch (level_idc) {
+    case 30:
+        return V4L2_MPEG_VIDEO_HEVC_LEVEL_1;
+    case 60:
+        return V4L2_MPEG_VIDEO_HEVC_LEVEL_2;
+    case 63:
+        return V4L2_MPEG_VIDEO_HEVC_LEVEL_2_1;
+    case 90:
+        return V4L2_MPEG_VIDEO_HEVC_LEVEL_3;
+    case 93:
+        return V4L2_MPEG_VIDEO_HEVC_LEVEL_3_1;
+    case 120:
+        return V4L2_MPEG_VIDEO_HEVC_LEVEL_4;
+    case 123:
+        return V4L2_MPEG_VIDEO_HEVC_LEVEL_4_1;
+    case 150:
+        return V4L2_MPEG_VIDEO_HEVC_LEVEL_5;
+    default:
+        return UINT32_MAX;
+    }
+}
+
+static uint32_t level_to_v4l2(enum venus_codec codec, uint32_t level_idc)
+{
+    if (codec == VENUS_CODEC_HEVC)
+        return hevc_level_to_v4l2(level_idc);
+
     switch (level_idc) {
     case 9:
         return V4L2_MPEG_VIDEO_H264_LEVEL_1B;
@@ -399,37 +589,41 @@ static int store_packet(const struct venus_v4l2_packet *packet,
 static int open_encoder(
     struct venus_backend *backend, struct venus_context *context,
     const struct venus_config *config,
-    const struct venus_h264_encode_parameters *parameters,
+    const struct venus_encode_parameters *parameters,
     size_t coded_capacity)
 {
     struct venus_v4l2_encoder_config encoder_config;
     struct venus_v4l2_error error;
-    uint32_t profile = profile_to_v4l2(config->profile);
+    uint32_t profile = profile_to_v4l2(parameters->codec, config->profile);
+    uint32_t coded_format = venus_codec_fourcc(parameters->codec);
     uint32_t level;
     uint32_t bitrate = parameters->bitrate;
     uint32_t frames_per_second = parameters->frames_per_second;
     uint32_t encode_width;
     uint32_t encode_height;
-    uint32_t gop_size = 0;
+    uint32_t gop_size = parameters->gop_size;
     int status;
 
-    if (!parameters->sequence || profile == UINT32_MAX)
+    if (!encode_picture_present(parameters) || coded_format == 0 ||
+        !parameters->width || !parameters->height ||
+        profile == UINT32_MAX)
         return -EINVAL;
 
-    level = level_to_v4l2(parameters->sequence->level_idc);
+    level = level_to_v4l2(parameters->codec, parameters->level_idc);
     if (level == UINT32_MAX)
         return -ENOTSUP;
 
-    status = venus_encode_h264_dimensions(
-        parameters->sequence, &encode_width, &encode_height);
-    if (status < 0)
-        return status;
-    if ((encode_width + 15u) / 16u * 16u != context->width ||
-        (encode_height + 15u) / 16u * 16u != context->height)
+    encode_width = parameters->width;
+    encode_height = parameters->height;
+    /* H.264 pads to whole macroblocks, so the client is expected to have
+     * created the context at that padded size. HEVC works from the picture
+     * size the sequence parameters give.
+     */
+    if (parameters->codec == VENUS_CODEC_H264 &&
+        ((encode_width + 15u) / 16u * 16u != context->width ||
+         (encode_height + 15u) / 16u * 16u != context->height))
         return -EINVAL;
 
-    if (bitrate == 0)
-        bitrate = parameters->sequence->bits_per_second;
     if (bitrate == 0)
         bitrate = VENUS_ENCODE_DEFAULT_BITRATE;
     if (bitrate > INT_MAX)
@@ -437,31 +631,25 @@ static int open_encoder(
 
     if (frames_per_second == 0)
         frames_per_second = VENUS_ENCODE_DEFAULT_FPS;
-    if ((context->width / 16u) *
-            (context->height / 16u) >
-        VENUS_H264_MAX_MACROBLOCKS_PER_SECOND /
-            frames_per_second)
+    if (parameters->codec == VENUS_CODEC_H264 &&
+        (context->width / 16u) * (context->height / 16u) >
+            VENUS_H264_MAX_MACROBLOCKS_PER_SECOND /
+                frames_per_second)
         return -EINVAL;
-
-    gop_size = parameters->sequence->intra_idr_period;
-    if (gop_size == 0)
-        gop_size = parameters->sequence->intra_period;
-    if (gop_size == 0)
-        gop_size = VENUS_ENCODE_DEFAULT_GOP;
 
     context->encode_width = encode_width;
     context->encode_height = encode_height;
 
     encoder_config = (struct venus_v4l2_encoder_config) {
         .device = backend->capabilities.encoder_path,
-        .coded_format = V4L2_PIX_FMT_H264,
+        .coded_format = coded_format,
         .width = encode_width,
         .height = encode_height,
         .frames_per_second = frames_per_second,
         .bitrate = bitrate,
         .gop_size = gop_size,
-        .h264_profile = profile,
-        .h264_level = level,
+        .coded_profile = profile,
+        .coded_level = level,
         .capture_buffer_size = coded_capacity,
         .output_buffers = VENUS_ENCODE_OUTPUT_BUFFERS,
         .capture_buffers = VENUS_ENCODE_CAPTURE_BUFFERS,
@@ -480,9 +668,9 @@ static int open_encoder(
 
     venus_backend_log(
         backend,
-        "encoder-open context=0x%x profile=%d level=%u size=%ux%u fps=%u bitrate=%u gop=%u output=%u capture=%u",
-        context->id, config->profile,
-        parameters->sequence->level_idc,
+        "encoder-open context=0x%x codec=%s profile=%d level=%u size=%ux%u fps=%u bitrate=%u gop=%u output=%u capture=%u",
+        context->id, venus_codec_name(parameters->codec),
+        config->profile, parameters->level_idc,
         context->encode_width, context->encode_height,
         frames_per_second, bitrate, gop_size,
         venus_v4l2_encoder_output_count(context->encoder),
@@ -551,22 +739,26 @@ VAStatus venus_encode_end_picture_locked(
     struct venus_backend *backend, struct venus_context *context,
     const struct venus_config *config)
 {
-    struct venus_h264_encode_parameters parameters;
+    struct venus_encode_parameters parameters;
     struct venus_buffer *coded;
     struct venus_surface *surface;
     const uint8_t *frame_data;
     uint8_t *allocated_frame;
+    enum venus_codec codec;
     size_t coded_capacity;
     size_t expected_frame_size;
     uint64_t frame_tag;
     int status;
 
-    status = collect_parameters(backend, context, &parameters);
+    if (!venus_backend_profile_codec(config->profile, &codec))
+        return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
+
+    status = collect_parameters(backend, context, codec, &parameters);
     if (status < 0)
         return venus_backend_encode_status_from_errno(status);
 
     coded = venus_backend_find_buffer(
-        backend, parameters.picture->coded_buf);
+        backend, encode_coded_buffer(&parameters));
     surface = venus_backend_find_surface(backend, context->target);
     if (!coded || coded->context_id != context->id ||
         coded->type != VAEncCodedBufferType)
@@ -588,16 +780,10 @@ VAStatus venus_encode_end_picture_locked(
             coded_capacity);
         if (status < 0)
             return venus_backend_encode_status_from_errno(status);
-    } else if (parameters.sequence) {
-        uint32_t width;
-        uint32_t height;
-
-        status = venus_encode_h264_dimensions(
-            parameters.sequence, &width, &height);
-        if (status < 0 ||
-            width != context->encode_width ||
-            height != context->encode_height)
-            return VA_STATUS_ERROR_INVALID_PARAMETER;
+    } else if ((parameters.width && parameters.width != context->encode_width) ||
+               (parameters.height &&
+                parameters.height != context->encode_height)) {
+        return VA_STATUS_ERROR_INVALID_PARAMETER;
     }
 
     status = prepare_surface_frame(

@@ -1,8 +1,273 @@
+diff --git a/include/venus/capabilities.h b/include/venus/capabilities.h
+index 3576430..ea1c80e 100644
+--- a/include/venus/capabilities.h
++++ b/include/venus/capabilities.h
+@@ -31,6 +31,7 @@ bool venus_capabilities_add_fourcc(struct venus_capabilities *caps,
+ bool venus_capabilities_has(const struct venus_capabilities *caps,
+                             enum venus_role role, enum venus_codec codec);
+ const char *venus_codec_name(enum venus_codec codec);
++uint32_t venus_codec_fourcc(enum venus_codec codec);
+ size_t venus_capabilities_format(const struct venus_capabilities *caps,
+                                  enum venus_role role, char *buffer,
+                                  size_t buffer_size);
+diff --git a/src/annexb_split.c b/src/annexb_split.c
+index f6a6530..21d75a2 100644
+--- a/src/annexb_split.c
++++ b/src/annexb_split.c
+@@ -23,7 +23,26 @@ static bool start_code_at(const uint8_t *data, size_t size, size_t offset,
+     return false;
+ }
+ 
++static bool aud_at(const uint8_t *data, size_t size, size_t offset,
++                   enum venus_annexb_codec codec)
++{
++    if (offset >= size)
++        return false;
++
++    if (codec == VENUS_ANNEXB_HEVC) {
++        /* The AUD is nal_unit_type 35, which sits in bits 1..6 of the first
++         * header byte; the second byte holds nuh_layer_id in its top bits. */
++        if (offset + 1 >= size)
++            return false;
++        return ((data[offset] >> 1) & 0x3f) == 35 &&
++               (data[offset + 1] & 0xf8) == 0;
++    }
++
++    return (data[offset] & 0x1f) == 9;
++}
++
+ int venus_annexb_for_each_access_unit(const uint8_t *data, size_t size,
++                                      enum venus_annexb_codec codec,
+                                       venus_access_unit_callback callback,
+                                       void *opaque, size_t *num_units)
+ {
+@@ -36,9 +55,16 @@ int venus_annexb_for_each_access_unit(const uint8_t *data, size_t size,
+     if (!data || size == 0 || !callback)
+         return -EINVAL;
+ 
++    switch (codec) {
++    case VENUS_ANNEXB_H264:
++    case VENUS_ANNEXB_HEVC:
++        break;
++    default:
++        return -EINVAL;
++    }
++
+     for (offset = 0; offset + 3 <= size; offset++) {
+         size_t start_code_size;
+-        uint8_t nal_type;
+         int result;
+ 
+         if (!start_code_at(data, size, offset, &start_code_size))
+@@ -47,8 +73,7 @@ int venus_annexb_for_each_access_unit(const uint8_t *data, size_t size,
+             return -EINVAL;
+ 
+         saw_start_code = true;
+-        nal_type = data[offset + start_code_size] & 0x1f;
+-        if (nal_type != 9)
++        if (!aud_at(data, size, offset + start_code_size, codec))
+             continue;
+ 
+         if (saw_aud) {
+diff --git a/src/annexb_split.h b/src/annexb_split.h
+index 9e6fc4f..0a5b50e 100644
+--- a/src/annexb_split.h
++++ b/src/annexb_split.h
+@@ -8,7 +8,17 @@
+ typedef int (*venus_access_unit_callback)(const uint8_t *data, size_t size,
+                                           void *opaque);
+ 
++/* H.264 and HEVC both delimit NAL units with Annex-B start codes, but the
++ * picture delimiter is a different NAL header layout, so the caller has to say
++ * which codec the stream belongs to. VP9 has no start codes at all and cannot
++ * be split here. */
++enum venus_annexb_codec {
++    VENUS_ANNEXB_H264,
++    VENUS_ANNEXB_HEVC,
++};
++
+ int venus_annexb_for_each_access_unit(const uint8_t *data, size_t size,
++                                      enum venus_annexb_codec codec,
+                                       venus_access_unit_callback callback,
+                                       void *opaque, size_t *num_units);
+ 
 diff --git a/src/backend.c b/src/backend.c
-index 1fd8b7a..74e2efd 100644
+index 1fd8b7a..ae98d7b 100644
 --- a/src/backend.c
 +++ b/src/backend.c
-@@ -454,12 +454,10 @@ static VAStatus backend_query_config_attributes(
+@@ -59,33 +59,59 @@ VAStatus venus_backend_encode_status_from_errno(int status)
+                : common;
+ }
+ 
+-bool venus_backend_h264_profile(VAProfile profile)
++/*
++ * The profiles this driver can decode or encode, and the codec each one
++ * feeds into.  Everything else about a profile (the V4L2 controls, the
++ * bitstream layout) follows from the codec, so this is the only place that
++ * has to know the VA-API profile names.
++ */
++static const struct venus_profile_map {
++    VAProfile profile;
++    enum venus_codec codec;
++} profile_map[] = {
++    { VAProfileH264ConstrainedBaseline, VENUS_CODEC_H264 },
++    { VAProfileH264Main, VENUS_CODEC_H264 },
++    { VAProfileH264High, VENUS_CODEC_H264 },
++    { VAProfileHEVCMain, VENUS_CODEC_HEVC },
++    { VAProfileVP9Profile0, VENUS_CODEC_VP9 },
++};
++
++bool venus_backend_profile_codec(VAProfile profile, enum venus_codec *codec)
+ {
+-    return profile == VAProfileH264ConstrainedBaseline ||
+-           profile == VAProfileH264Main ||
+-           profile == VAProfileH264High;
+-}
++    size_t index;
+ 
+-bool venus_backend_h264_vld_supported(const struct venus_backend *backend,
+-                                      VAProfile profile,
+-                                      VAEntrypoint entrypoint)
+-{
+-    return backend && venus_backend_h264_profile(profile) &&
+-           entrypoint == VAEntrypointVLD &&
+-           venus_capabilities_has(&backend->capabilities,
+-                                  VENUS_ROLE_DECODER,
+-                                  VENUS_CODEC_H264);
++    for (index = 0; index < sizeof(profile_map) / sizeof(profile_map[0]);
++         index++) {
++        if (profile_map[index].profile != profile)
++            continue;
++        if (codec)
++            *codec = profile_map[index].codec;
++        return true;
++    }
++
++    return false;
+ }
+ 
+-bool venus_backend_h264_enc_supported(const struct venus_backend *backend,
+-                                      VAProfile profile,
+-                                      VAEntrypoint entrypoint)
++bool venus_backend_entrypoint_supported(const struct venus_backend *backend,
++                                        VAProfile profile,
++                                        VAEntrypoint entrypoint)
+ {
+-    return backend && venus_backend_h264_profile(profile) &&
+-           entrypoint == VAEntrypointEncSlice &&
+-           venus_capabilities_has(&backend->capabilities,
+-                                  VENUS_ROLE_ENCODER,
+-                                  VENUS_CODEC_H264);
++    enum venus_codec codec;
++    enum venus_role role;
++
++    if (!backend || !venus_backend_profile_codec(profile, &codec))
++        return false;
++    if (entrypoint == VAEntrypointVLD)
++        role = VENUS_ROLE_DECODER;
++    else if (entrypoint == VAEntrypointEncSlice)
++        role = VENUS_ROLE_ENCODER;
++    else
++        return false;
++
++    /* The V4L2 device decides: VP9 is decoded but not encoded here, and
++     * H.264/HEVC are both.
++     */
++    return venus_capabilities_has(&backend->capabilities, role, codec);
+ }
+ 
+ struct venus_config *venus_backend_find_config(struct venus_backend *backend,
+@@ -191,26 +217,27 @@ static VAStatus backend_query_profiles(VADriverContextP context,
+                                        int *num_profiles)
+ {
+     struct venus_backend *backend = venus_backend_from_context(context);
++    size_t index;
++    int count = 0;
+ 
+     if (!backend || !num_profiles)
+         return VA_STATUS_ERROR_INVALID_PARAMETER;
+ 
+     pthread_mutex_lock(&backend->mutex);
+-    if (venus_capabilities_has(&backend->capabilities,
+-                               VENUS_ROLE_DECODER,
+-                               VENUS_CODEC_H264) ||
+-        venus_capabilities_has(&backend->capabilities,
+-                               VENUS_ROLE_ENCODER,
+-                               VENUS_CODEC_H264)) {
+-        if (profiles) {
+-            profiles[0] = VAProfileH264ConstrainedBaseline;
+-            profiles[1] = VAProfileH264Main;
+-            profiles[2] = VAProfileH264High;
+-        }
+-        *num_profiles = 3;
+-    } else {
+-        *num_profiles = 0;
++    for (index = 0; index < sizeof(profile_map) / sizeof(profile_map[0]);
++         index++) {
++        enum venus_codec codec = profile_map[index].codec;
++
++        if (!venus_capabilities_has(&backend->capabilities,
++                                    VENUS_ROLE_DECODER, codec) &&
++            !venus_capabilities_has(&backend->capabilities,
++                                    VENUS_ROLE_ENCODER, codec))
++            continue;
++        if (profiles)
++            profiles[count] = profile_map[index].profile;
++        count++;
+     }
++    *num_profiles = count;
+     pthread_mutex_unlock(&backend->mutex);
+     return VA_STATUS_SUCCESS;
+ }
+@@ -226,20 +253,20 @@ static VAStatus backend_query_entrypoints(VADriverContextP context,
+         return VA_STATUS_ERROR_INVALID_PARAMETER;
+ 
+     pthread_mutex_lock(&backend->mutex);
+-    if (!venus_backend_h264_profile(profile)) {
++    if (!venus_backend_profile_codec(profile, NULL)) {
+         pthread_mutex_unlock(&backend->mutex);
+         *num_entrypoints = 0;
+         return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
+     }
+ 
+     *num_entrypoints = 0;
+-    if (venus_backend_h264_vld_supported(
++    if (venus_backend_entrypoint_supported(
+             backend, profile, VAEntrypointVLD)) {
+         if (entrypoints)
+             entrypoints[*num_entrypoints] = VAEntrypointVLD;
+         (*num_entrypoints)++;
+     }
+-    if (venus_backend_h264_enc_supported(
++    if (venus_backend_entrypoint_supported(
+             backend, profile, VAEntrypointEncSlice)) {
+         if (entrypoints)
+             entrypoints[*num_entrypoints] = VAEntrypointEncSlice;
+@@ -267,10 +294,7 @@ static VAStatus backend_get_config_attributes(
+         return VA_STATUS_ERROR_INVALID_PARAMETER;
+ 
+     pthread_mutex_lock(&backend->mutex);
+-    if (!venus_backend_h264_vld_supported(
+-            backend, profile, entrypoint) &&
+-        !venus_backend_h264_enc_supported(
+-            backend, profile, entrypoint)) {
++    if (!venus_backend_entrypoint_supported(backend, profile, entrypoint)) {
+         pthread_mutex_unlock(&backend->mutex);
+         return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
+     }
+@@ -337,10 +361,7 @@ static VAStatus backend_create_config(
+         return VA_STATUS_ERROR_INVALID_PARAMETER;
+ 
+     pthread_mutex_lock(&backend->mutex);
+-    if (!venus_backend_h264_vld_supported(
+-            backend, profile, entrypoint) &&
+-        !venus_backend_h264_enc_supported(
+-            backend, profile, entrypoint)) {
++    if (!venus_backend_entrypoint_supported(backend, profile, entrypoint)) {
+         pthread_mutex_unlock(&backend->mutex);
+         return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
+     }
+@@ -454,12 +475,10 @@ static VAStatus backend_query_config_attributes(
          pthread_mutex_unlock(&backend->mutex);
          return VA_STATUS_SUCCESS;
      }
@@ -20,10 +285,18 @@ index 1fd8b7a..74e2efd 100644
          .type = VAConfigAttribRTFormat,
          .value = VA_RT_FORMAT_YUV420,
 diff --git a/src/backend_internal.h b/src/backend_internal.h
-index 7081338..dd56817 100644
+index 7081338..8e475e9 100644
 --- a/src/backend_internal.h
 +++ b/src/backend_internal.h
-@@ -19,6 +19,11 @@
+@@ -2,6 +2,7 @@
+ #ifndef VENUS_BACKEND_INTERNAL_H
+ #define VENUS_BACKEND_INTERNAL_H
+ 
++#include "hevc_headers.h"
+ #include "venus/capabilities.h"
+ #include "v4l2_decoder.h"
+ #include "v4l2_encoder.h"
+@@ -19,6 +20,11 @@
  #define VENUS_MAX_BUFFERS 512
  #define VENUS_MAX_IMAGES 128
  #define VENUS_MAX_PENDING_BUFFERS 128
@@ -35,7 +308,7 @@ index 7081338..dd56817 100644
  
  #define VENUS_CONFIG_BASE 0x01000000u
  #define VENUS_CONTEXT_BASE 0x02000000u
-@@ -30,6 +35,14 @@
+@@ -30,6 +36,14 @@
  #define VENUS_MIN_HEIGHT 32u
  #define VENUS_MAX_WIDTH 4096u
  #define VENUS_MAX_HEIGHT 4096u
@@ -50,7 +323,7 @@ index 7081338..dd56817 100644
  #define VENUS_H264_MAX_MACROBLOCKS 36864u
  #define VENUS_H264_MAX_MACROBLOCKS_PER_SECOND 1036800u
  
-@@ -48,6 +61,7 @@ struct venus_surface {
+@@ -48,6 +62,7 @@ struct venus_surface {
      unsigned int height;
      uint32_t fourcc;
      uint8_t *data;
@@ -58,7 +331,7 @@ index 7081338..dd56817 100644
      size_t capacity;
      size_t data_size;
      bool ready;
-@@ -79,6 +93,15 @@ struct venus_image {
+@@ -79,6 +94,15 @@ struct venus_image {
      VASurfaceID surface_id;
  };
  
@@ -74,7 +347,7 @@ index 7081338..dd56817 100644
  struct venus_context {
      bool used;
      VAContextID id;
-@@ -92,6 +115,10 @@ struct venus_context {
+@@ -92,12 +116,21 @@ struct venus_context {
      struct venus_v4l2_encoder *encoder;
      bool in_picture;
      VASurfaceID target;
@@ -85,7 +358,18 @@ index 7081338..dd56817 100644
      VABufferID pending[VENUS_MAX_PENDING_BUFFERS];
      size_t pending_count;
      VABufferID encode_queue[VENUS_MAX_SURFACES];
-@@ -109,6 +136,7 @@ struct venus_backend {
+     size_t encode_queue_head;
+     size_t encode_queue_count;
+     uint64_t encode_sequence;
++    /* HEVC parameter sets as they were last fed to the decoder, so they are
++     * only repeated when they change.
++     */
++    uint8_t hevc_headers[VENUS_HEVC_HEADERS_MAX];
++    size_t hevc_headers_size;
+ };
+ 
+ struct venus_backend {
+@@ -109,19 +142,17 @@ struct venus_backend {
      struct venus_surface surfaces[VENUS_MAX_SURFACES];
      struct venus_buffer buffers[VENUS_MAX_BUFFERS];
      struct venus_image images[VENUS_MAX_IMAGES];
@@ -93,11 +377,57 @@ index 7081338..dd56817 100644
  };
  
  struct venus_backend *venus_backend_from_context(VADriverContextP context);
+ void venus_backend_log(const struct venus_backend *backend,
+                        const char *format, ...);
+ VAStatus venus_backend_status_from_errno(int status);
+-bool venus_backend_h264_profile(VAProfile profile);
+-bool venus_backend_h264_vld_supported(const struct venus_backend *backend,
+-                                      VAProfile profile,
+-                                      VAEntrypoint entrypoint);
+-bool venus_backend_h264_enc_supported(const struct venus_backend *backend,
+-                                      VAProfile profile,
+-                                      VAEntrypoint entrypoint);
++bool venus_backend_profile_codec(VAProfile profile, enum venus_codec *codec);
++bool venus_backend_entrypoint_supported(const struct venus_backend *backend,
++                                        VAProfile profile,
++                                        VAEntrypoint entrypoint);
+ VAStatus venus_backend_encode_status_from_errno(int status);
+ 
+ struct venus_config *venus_backend_find_config(struct venus_backend *backend,
+diff --git a/src/capabilities.c b/src/capabilities.c
+index ea2b775..b997d1b 100644
+--- a/src/capabilities.c
++++ b/src/capabilities.c
+@@ -82,6 +82,18 @@ const char *venus_codec_name(enum venus_codec codec)
+     return "unknown";
+ }
+ 
++uint32_t venus_codec_fourcc(enum venus_codec codec)
++{
++    size_t i;
++
++    for (i = 0; i < sizeof(codec_map) / sizeof(codec_map[0]); i++) {
++        if (codec_map[i].codec == codec)
++            return codec_map[i].fourcc;
++    }
++
++    return 0;
++}
++
+ size_t venus_capabilities_format(const struct venus_capabilities *caps,
+                                  enum venus_role role, char *buffer,
+                                  size_t buffer_size)
 diff --git a/src/decode.c b/src/decode.c
-index af35218..4586ba6 100644
+index af35218..ed620c6 100644
 --- a/src/decode.c
 +++ b/src/decode.c
-@@ -14,6 +14,11 @@
+@@ -10,10 +10,17 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <time.h>
++#include <va/va_dec_hevc.h>
++#include <va/va_dec_vp9.h>
+ 
  #define VENUS_MAX_SLICE_BATCHES 64
  #define VENUS_ACCESS_UNIT_OVERHEAD 4096u
  #define VENUS_SYNC_TIMEOUT_MS 30000
@@ -109,7 +439,7 @@ index af35218..4586ba6 100644
  
  static int64_t monotonic_milliseconds(void)
  {
-@@ -45,7 +50,8 @@ static void destroy_context_buffers(struct venus_backend *backend,
+@@ -45,7 +52,8 @@ static void destroy_context_buffers(struct venus_backend *backend,
  int venus_decode_store_frame_locked(
      const struct venus_v4l2_frame *frame, void *opaque)
  {
@@ -119,7 +449,7 @@ index af35218..4586ba6 100644
      struct venus_surface *surface;
      uint8_t *resized;
      uint32_t stride;
-@@ -55,7 +61,7 @@ int venus_decode_store_frame_locked(
+@@ -55,7 +63,7 @@ int venus_decode_store_frame_locked(
      size_t destination_size;
      unsigned int row;
  
@@ -128,7 +458,7 @@ index af35218..4586ba6 100644
          frame->width == 0 || frame->height == 0 ||
          (frame->width & 1u) || (frame->height & 1u))
          return -EINVAL;
-@@ -118,6 +124,8 @@ int venus_decode_store_frame_locked(
+@@ -118,6 +126,8 @@ int venus_decode_store_frame_locked(
  
      surface->data_size = destination_size;
      surface->ready = true;
@@ -137,8 +467,274 @@ index af35218..4586ba6 100644
      venus_backend_log(
          backend,
          "capture surface=0x%x tag=%llu bytes=%zu visible=%ux%u coded=%ux%u stride=%u",
-@@ -535,7 +543,15 @@ static VAStatus backend_end_picture(VADriverContextP driver_context,
-                       access_unit_size);
+@@ -139,6 +149,7 @@ static VAStatus backend_create_context(
+     struct venus_v4l2_error decoder_error;
+     struct venus_config *config;
+     struct venus_context *context = NULL;
++    enum venus_codec codec;
+     unsigned int index;
+     int status;
+ 
+@@ -184,9 +195,14 @@ static VAStatus backend_create_context(
+     }
+ 
+     if (config->entrypoint == VAEntrypointVLD) {
++        if (!venus_backend_profile_codec(config->profile, &codec)) {
++            pthread_mutex_unlock(&backend->mutex);
++            return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
++        }
++
+         decoder_config = (struct venus_v4l2_decoder_config) {
+             .device = backend->capabilities.decoder_path,
+-            .coded_format = V4L2_PIX_FMT_H264,
++            .coded_format = venus_codec_fourcc(codec),
+             .width = (uint32_t)picture_width,
+             .height = (uint32_t)picture_height,
+             .output_buffer_size = 2u * 1024u * 1024u,
+@@ -388,10 +404,28 @@ static VAStatus backend_render_picture(VADriverContextP driver_context,
+     return VA_STATUS_SUCCESS;
+ }
+ 
+-static int collect_h264_buffers(
++/* The parameter buffer the client sends for a codec, used to reject a buffer
++ * too small to be one.  VP9 and HEVC picture parameters are ignored beyond
++ * that: this decoder is handed a bitstream, not parsed fields.
++ */
++static size_t picture_parameter_size(enum venus_codec codec)
++{
++    switch (codec) {
++    case VENUS_CODEC_H264:
++        return sizeof(VAPictureParameterBufferH264);
++    case VENUS_CODEC_HEVC:
++        return sizeof(VAPictureParameterBufferHEVC);
++    case VENUS_CODEC_VP9:
++        return sizeof(VADecPictureParameterBufferVP9);
++    default:
++        return 0;
++    }
++}
++
++static int collect_frame_buffers(
+     struct venus_backend *backend, struct venus_context *context,
+-    const VAPictureParameterBufferH264 **picture,
+-    struct venus_h264_slice_batch *batches, size_t *num_batches,
++    enum venus_codec codec, const void **picture,
++    struct venus_slice_batch *batches, size_t *num_batches,
+     size_t *access_unit_capacity)
+ {
+     struct venus_buffer *slice_parameters = NULL;
+@@ -414,61 +448,158 @@ static int collect_h264_buffers(
+         switch (buffer->type) {
+         case VAPictureParameterBufferType:
+             if (*picture || buffer->num_elements != 1 ||
+-                buffer->element_size <
+-                    sizeof(VAPictureParameterBufferH264))
++                buffer->element_size < picture_parameter_size(codec))
+                 return -EINVAL;
+-            *picture =
+-                (const VAPictureParameterBufferH264 *)buffer->data;
++            if (codec == VENUS_CODEC_H264 || codec == VENUS_CODEC_HEVC)
++                *picture = buffer->data;
+             break;
+         case VAIQMatrixBufferType:
+             break;
+         case VASliceParameterBufferType:
+-            if (slice_parameters ||
++            if (slice_parameters || buffer->num_elements == 0 ||
+                 buffer->element_size <
+-                    sizeof(VASliceParameterBufferH264))
++                    sizeof(struct venus_slice_parameters))
+                 return -EINVAL;
+             slice_parameters = buffer;
+             break;
+-        case VASliceDataBufferType:
+-            if (!slice_parameters ||
+-                *num_batches >= VENUS_MAX_SLICE_BATCHES)
++        case VASliceDataBufferType: {
++            /* VP9 frames are not split into NAL units: the buffer is the
++             * frame, so any slice parameters are for the decoder's benefit
++             * and not for this assembly step.
++             */
++            bool with_slices = slice_parameters &&
++                               codec != VENUS_CODEC_VP9;
++
++            if (*num_batches >= VENUS_MAX_SLICE_BATCHES)
++                return -EINVAL;
++            if (codec == VENUS_CODEC_H264 && !slice_parameters)
+                 return -EINVAL;
+             batches[*num_batches] =
+-                (struct venus_h264_slice_batch) {
++                (struct venus_slice_batch) {
+                     .parameters =
+-                        (const VASliceParameterBufferH264 *)
+-                            slice_parameters->data,
++                        with_slices
++                            ? (const struct venus_slice_parameters *)
++                                  slice_parameters->data
++                            : NULL,
+                     .num_parameters =
+-                        slice_parameters->num_elements,
++                        with_slices ? slice_parameters->num_elements : 0,
+                     .data = buffer->data,
+                     .data_size = buffer_size,
+                 };
+             (*num_batches)++;
+             slice_parameters = NULL;
+-            if (buffer_size >
+-                SIZE_MAX - *access_unit_capacity)
++            if (buffer_size > SIZE_MAX - *access_unit_capacity)
+                 return -EOVERFLOW;
+             *access_unit_capacity += buffer_size;
+             break;
++        }
+         default:
+             return -ENOTSUP;
+         }
+     }
+ 
+-    if (!*picture || *num_batches == 0 || slice_parameters)
++    if (*num_batches == 0 || slice_parameters)
++        return -EINVAL;
++    if (codec == VENUS_CODEC_H264 && !*picture)
+         return -EINVAL;
+     return 0;
+ }
+ 
++/*
++ * The slice the decoder should be handed first, which is where the parameter
++ * set identifier of HEVC is read from.
++ */
++static const uint8_t *first_slice(
++    const struct venus_slice_batch *batches, size_t *size)
++{
++    if (batches->parameters && batches->num_parameters) {
++        *size = batches->parameters[0].slice_data_size;
++        return batches->data + batches->parameters[0].slice_data_offset;
++    }
++
++    *size = batches->data_size;
++    return batches->data;
++}
++
++/*
++ * Turn the buffers of one picture into the access unit the decoder wants.
++ * H.264 needs its parameter sets rebuilt from the parsed picture parameters
++ * (the client sends no raw headers); HEVC does too, but only once per
++ * sequence, since the decoder keeps them; VP9 and the HEVC slices carry
++ * everything else themselves.
++ */
++static int build_access_unit(
++    struct venus_context *context, enum venus_codec codec, VAProfile profile,
++    const void *picture, const struct venus_slice_batch *batches,
++    size_t num_batches, uint8_t *output, size_t output_capacity,
++    size_t *output_size)
++{
++    struct venus_annexb_writer writer = {
++        .data = output,
++        .capacity = output_capacity,
++    };
++    size_t index;
++    int status = 0;
++
++    if (codec == VENUS_CODEC_H264)
++        return venus_h264_build_access_unit(
++            profile, picture, batches, num_batches, output,
++            output_capacity, output_size);
++
++    if (codec == VENUS_CODEC_HEVC) {
++        const VAPictureParameterBufferHEVC *parameters = picture;
++        const struct venus_hevc_sequence sequence = {
++            .picture = parameters,
++            .coded_width = parameters->pic_width_in_luma_samples,
++            .coded_height = parameters->pic_height_in_luma_samples,
++            .visible_width = context->width,
++            .visible_height = context->height,
++        };
++        uint8_t headers[VENUS_HEVC_HEADERS_MAX];
++        struct venus_annexb_writer header_writer = {
++            .data = headers,
++            .capacity = sizeof(headers),
++        };
++        size_t slice_size;
++        const uint8_t *slice = first_slice(batches, &slice_size);
++        const unsigned int pps_id = venus_hevc_pps_id(
++            slice, slice_size,
++            parameters->slice_parsing_fields.bits.RapPicFlag != 0);
++
++        status = venus_hevc_write_parameter_sets(
++            &header_writer, &sequence, pps_id);
++        if (status < 0)
++            return status;
++
++        if (header_writer.length != context->hevc_headers_size ||
++            memcmp(headers, context->hevc_headers,
++                   header_writer.length) != 0) {
++            status = venus_annexb_write_bytes(
++                &writer, headers, header_writer.length);
++            if (status < 0)
++                return status;
++            memcpy(context->hevc_headers, headers, header_writer.length);
++            context->hevc_headers_size = header_writer.length;
++        }
++    }
++
++    for (index = 0; index < num_batches && status == 0; index++)
++        status = venus_annexb_write_batch(&writer, &batches[index]);
++
++    *output_size = writer.length;
++    return status;
++}
++
+ static VAStatus backend_end_picture(VADriverContextP driver_context,
+                                     VAContextID context_id)
+ {
+-    struct venus_h264_slice_batch batches[VENUS_MAX_SLICE_BATCHES];
+-    const VAPictureParameterBufferH264 *picture;
++    struct venus_slice_batch batches[VENUS_MAX_SLICE_BATCHES];
++    const void *picture;
+     struct venus_backend *backend =
+         venus_backend_from_context(driver_context);
+     struct venus_context *context;
+     struct venus_config *config;
++    enum venus_codec codec;
+     uint8_t *access_unit = NULL;
+     size_t access_unit_capacity;
+     size_t access_unit_size = 0;
+@@ -511,8 +642,13 @@ static VAStatus backend_end_picture(VADriverContextP driver_context,
+         goto finish;
+     }
+ 
+-    status = collect_h264_buffers(
+-        backend, context, &picture, batches, &num_batches,
++    if (!venus_backend_profile_codec(config->profile, &codec)) {
++        status = -EINVAL;
++        goto finish;
++    }
++
++    status = collect_frame_buffers(
++        backend, context, codec, &picture, batches, &num_batches,
+         &access_unit_capacity);
+     if (status < 0)
+         goto finish;
+@@ -523,19 +659,27 @@ static VAStatus backend_end_picture(VADriverContextP driver_context,
+         goto finish;
+     }
+ 
+-    status = venus_h264_build_access_unit(
+-        config->profile, picture, batches, num_batches,
++    status = build_access_unit(
++        context, codec, config->profile, picture, batches, num_batches,
+         access_unit, access_unit_capacity, &access_unit_size);
+     if (status < 0)
+         goto finish;
+ 
+     venus_backend_log(backend,
+-                      "end-picture context=0x%x surface=0x%x batches=%zu access-unit=%zu",
+-                      context_id, context->target, num_batches,
+-                      access_unit_size);
++                      "end-picture context=0x%x surface=0x%x codec=%s batches=%zu access-unit=%zu",
++                      context_id, context->target, venus_codec_name(codec),
++                      num_batches, access_unit_size);
      status = venus_v4l2_decoder_submit(
          context->decoder, access_unit, access_unit_size,
 -        context->target, venus_decode_store_frame_locked, backend);
@@ -154,7 +750,7 @@ index af35218..4586ba6 100644
  
  finish:
      free(access_unit);
-@@ -551,6 +567,45 @@ finish:
+@@ -551,6 +695,45 @@ finish:
                        : VA_STATUS_SUCCESS;
  }
  
@@ -200,7 +796,7 @@ index af35218..4586ba6 100644
  static VAStatus sync_surface_locked(struct venus_backend *backend,
                                      struct venus_surface *surface,
                                      int timeout_ms)
-@@ -574,14 +629,50 @@ static VAStatus sync_surface_locked(struct venus_backend *backend,
+@@ -574,14 +757,50 @@ static VAStatus sync_surface_locked(struct venus_backend *backend,
             monotonic_milliseconds() < deadline) {
          int status = venus_v4l2_decoder_pump(
              context->decoder, 1000,
@@ -255,6 +851,1282 @@ index af35218..4586ba6 100644
      return surface->ready ? VA_STATUS_SUCCESS
                            : VA_STATUS_ERROR_HW_BUSY;
  }
+diff --git a/src/encode.c b/src/encode.c
+index ca9d34c..15008b3 100644
+--- a/src/encode.c
++++ b/src/encode.c
+@@ -10,6 +10,7 @@
+ #include <string.h>
+ #include <time.h>
+ #include <va/va_enc_h264.h>
++#include <va/va_enc_hevc.h>
+ 
+ #define VENUS_ENCODE_OUTPUT_BUFFERS 4u
+ #define VENUS_ENCODE_CAPTURE_BUFFERS 16u
+@@ -17,14 +18,40 @@
+ #define VENUS_ENCODE_DEFAULT_FPS 30u
+ #define VENUS_ENCODE_DEFAULT_GOP 60u
+ 
+-struct venus_h264_encode_parameters {
+-    const VAEncSequenceParameterBufferH264 *sequence;
+-    const VAEncPictureParameterBufferH264 *picture;
++/*
++ * What the encoder needs out of a picture, whichever codec described it.
++ * The sequence and picture parameter buffers are codec specific, so the
++ * fields used here are copied out of them when they are collected.
++ */
++struct venus_encode_parameters {
++    enum venus_codec codec;
++    const VAEncPictureParameterBufferH264 *h264_picture;
++    const VAEncPictureParameterBufferHEVC *hevc_picture;
++    uint32_t width;
++    uint32_t height;
++    uint32_t level_idc;
+     uint32_t bitrate;
+     uint32_t frames_per_second;
++    uint32_t gop_size;
+     bool has_slice;
+ };
+ 
++static bool encode_picture_present(
++    const struct venus_encode_parameters *parameters)
++{
++    return parameters->codec == VENUS_CODEC_HEVC
++               ? parameters->hevc_picture != NULL
++               : parameters->h264_picture != NULL;
++}
++
++static VABufferID encode_coded_buffer(
++    const struct venus_encode_parameters *parameters)
++{
++    if (parameters->codec == VENUS_CODEC_HEVC)
++        return parameters->hevc_picture->coded_buf;
++    return parameters->h264_picture->coded_buf;
++}
++
+ static int64_t monotonic_milliseconds(void)
+ {
+     struct timespec timestamp;
+@@ -64,7 +91,7 @@ static int parse_frame_rate(uint32_t value, uint32_t *result)
+ 
+ static int parse_misc_parameter(
+     const struct venus_buffer *buffer,
+-    struct venus_h264_encode_parameters *parameters)
++    struct venus_encode_parameters *parameters)
+ {
+     const VAEncMiscParameterBuffer *header;
+     size_t size = buffer_bytes(buffer);
+@@ -98,14 +125,40 @@ static int parse_misc_parameter(
+     case VAEncMiscParameterTypeHRD:
+         return 0;
+     default:
+-        return -ENOTSUP;
++        /* The remaining misc parameters are hints the client hopes a driver
++         * will act on (quality level, temporal layers, region of interest).
++         * The V4L2 encoder has no equivalent, and refusing the picture over
++         * a hint the encoder never needed would be worse than ignoring it.
++         */
++        return 0;
+     }
+ }
+ 
+-static int parse_slice_parameters(const struct venus_buffer *buffer)
++static int parse_slice_parameters(const struct venus_buffer *buffer,
++                                  enum venus_codec codec)
+ {
+     size_t index;
+ 
++    if (codec == VENUS_CODEC_HEVC) {
++        if (buffer->element_size <
++                sizeof(VAEncSliceParameterBufferHEVC))
++            return -EINVAL;
++
++        for (index = 0; index < buffer->num_elements; index++) {
++            const VAEncSliceParameterBufferHEVC *slice =
++                (const VAEncSliceParameterBufferHEVC *)
++                    (buffer->data + index * buffer->element_size);
++
++            /* HEVC numbers its slice types I = 2, P = 1, B = 0. */
++            if (slice->num_ctu_in_slice == 0 || slice->slice_type > 2)
++                return -EINVAL;
++            if (slice->slice_type == 0)
++                return -ENOTSUP;
++        }
++
++        return 0;
++    }
++
+     if (buffer->element_size <
+             sizeof(VAEncSliceParameterBufferH264))
+         return -EINVAL;
+@@ -127,13 +180,106 @@ static int parse_slice_parameters(const struct venus_buffer *buffer)
+     return 0;
+ }
+ 
++static int check_dimensions(uint32_t width, uint32_t height)
++{
++    if (width < VENUS_MIN_WIDTH || height < VENUS_MIN_HEIGHT ||
++        width > VENUS_MAX_WIDTH || height > VENUS_MAX_HEIGHT ||
++        (width & 1u) || (height & 1u))
++        return -EINVAL;
++    return 0;
++}
++
++/* The encoder encodes I and P pictures only; the periods arrive as the
++ * codec's own field, and both codecs leave them at zero to mean "let the
++ * driver choose".
++ */
++static uint32_t sequence_gop_size(uint32_t idr_period, uint32_t intra_period)
++{
++    if (idr_period)
++        return idr_period;
++    if (intra_period)
++        return intra_period;
++    return VENUS_ENCODE_DEFAULT_GOP;
++}
++
++static int parse_h264_sequence_parameters(
++    const struct venus_buffer *buffer,
++    struct venus_encode_parameters *parameters)
++{
++    const VAEncSequenceParameterBufferH264 *sequence;
++    int status;
++
++    if (buffer->element_size < sizeof(*sequence))
++        return -EINVAL;
++    sequence = (const VAEncSequenceParameterBufferH264 *)buffer->data;
++
++    status = venus_encode_h264_dimensions(
++        sequence, &parameters->width, &parameters->height);
++    if (status < 0)
++        return status;
++
++    parameters->level_idc = sequence->level_idc;
++    parameters->bitrate = sequence->bits_per_second;
++    parameters->gop_size = sequence_gop_size(
++        sequence->intra_idr_period, sequence->intra_period);
++    return 0;
++}
++
++static int parse_hevc_sequence_parameters(
++    const struct venus_buffer *buffer,
++    struct venus_encode_parameters *parameters)
++{
++    const VAEncSequenceParameterBufferHEVC *sequence;
++    int status;
++
++    if (buffer->element_size < sizeof(*sequence))
++        return -EINVAL;
++    sequence = (const VAEncSequenceParameterBufferHEVC *)buffer->data;
++
++    if (sequence->seq_fields.bits.chroma_format_idc != 1 ||
++        sequence->seq_fields.bits.bit_depth_luma_minus8 != 0 ||
++        sequence->seq_fields.bits.bit_depth_chroma_minus8 != 0 ||
++        sequence->pic_width_in_luma_samples == 0 ||
++        sequence->pic_height_in_luma_samples == 0)
++        return -ENOTSUP;
++
++    parameters->width = sequence->pic_width_in_luma_samples;
++    parameters->height = sequence->pic_height_in_luma_samples;
++    status = check_dimensions(parameters->width, parameters->height);
++    if (status < 0)
++        return status;
++
++    parameters->level_idc = sequence->general_level_idc;
++    parameters->bitrate = sequence->bits_per_second;
++    parameters->gop_size = sequence_gop_size(
++        sequence->intra_idr_period, sequence->intra_period);
++    return 0;
++}
++
++static int parse_sequence_parameters(
++    const struct venus_buffer *buffer,
++    struct venus_encode_parameters *parameters)
++{
++    if (buffer->num_elements != 1)
++        return -EINVAL;
++
++    if (parameters->codec == VENUS_CODEC_HEVC)
++        return parse_hevc_sequence_parameters(buffer, parameters);
++    if (parameters->codec == VENUS_CODEC_H264)
++        return parse_h264_sequence_parameters(buffer, parameters);
++
++    return -ENOTSUP;
++}
++
+ static int collect_parameters(
+     struct venus_backend *backend, struct venus_context *context,
+-    struct venus_h264_encode_parameters *parameters)
++    enum venus_codec codec, struct venus_encode_parameters *parameters)
+ {
++    bool has_sequence = false;
+     size_t index;
+ 
+     memset(parameters, 0, sizeof(*parameters));
++    parameters->codec = codec;
+ 
+     for (index = 0; index < context->pending_count; index++) {
+         struct venus_buffer *buffer = venus_backend_find_buffer(
+@@ -145,25 +291,33 @@ static int collect_parameters(
+ 
+         switch (buffer->type) {
+         case VAEncSequenceParameterBufferType:
+-            if (parameters->sequence ||
+-                buffer->num_elements != 1 ||
+-                buffer->element_size <
+-                    sizeof(VAEncSequenceParameterBufferH264))
++            if (has_sequence)
+                 return -EINVAL;
+-            parameters->sequence =
+-                (const VAEncSequenceParameterBufferH264 *)buffer->data;
++            status = parse_sequence_parameters(buffer, parameters);
++            if (status < 0)
++                return status;
++            has_sequence = true;
+             break;
+         case VAEncPictureParameterBufferType:
+-            if (parameters->picture ||
+-                buffer->num_elements != 1 ||
+-                buffer->element_size <
+-                    sizeof(VAEncPictureParameterBufferH264))
++            if (encode_picture_present(parameters) ||
++                buffer->num_elements != 1)
+                 return -EINVAL;
+-            parameters->picture =
+-                (const VAEncPictureParameterBufferH264 *)buffer->data;
++            if (parameters->codec == VENUS_CODEC_HEVC) {
++                if (buffer->element_size <
++                    sizeof(VAEncPictureParameterBufferHEVC))
++                    return -EINVAL;
++                parameters->hevc_picture =
++                    (const VAEncPictureParameterBufferHEVC *)buffer->data;
++            } else {
++                if (buffer->element_size <
++                    sizeof(VAEncPictureParameterBufferH264))
++                    return -EINVAL;
++                parameters->h264_picture =
++                    (const VAEncPictureParameterBufferH264 *)buffer->data;
++            }
+             break;
+         case VAEncSliceParameterBufferType:
+-            status = parse_slice_parameters(buffer);
++            status = parse_slice_parameters(buffer, parameters->codec);
+             if (status < 0)
+                 return status;
+             parameters->has_slice = true;
+@@ -180,7 +334,7 @@ static int collect_parameters(
+         }
+     }
+ 
+-    if (!parameters->picture || !parameters->has_slice)
++    if (!encode_picture_present(parameters) || !parameters->has_slice)
+         return -EINVAL;
+     return 0;
+ }
+@@ -241,8 +395,13 @@ int venus_encode_h264_dimensions(
+     return 0;
+ }
+ 
+-static uint32_t profile_to_v4l2(VAProfile profile)
++static uint32_t profile_to_v4l2(enum venus_codec codec, VAProfile profile)
+ {
++    if (codec == VENUS_CODEC_HEVC)
++        return profile == VAProfileHEVCMain
++                   ? V4L2_MPEG_VIDEO_HEVC_PROFILE_MAIN
++                   : UINT32_MAX;
++
+     switch (profile) {
+     case VAProfileH264ConstrainedBaseline:
+         return V4L2_MPEG_VIDEO_H264_PROFILE_CONSTRAINED_BASELINE;
+@@ -255,8 +414,39 @@ static uint32_t profile_to_v4l2(VAProfile profile)
+     }
+ }
+ 
+-static uint32_t level_to_v4l2(uint8_t level_idc)
++/* HEVC signals its level as 30 times the level number, so 4.1 arrives as 123
++ * where H.264 writes 41 for the same level. The iris encoder takes HEVC
++ * levels up to 5.
++ */
++static uint32_t hevc_level_to_v4l2(uint32_t level_idc)
++{
++    switch (level_idc) {
++    case 30:
++        return V4L2_MPEG_VIDEO_HEVC_LEVEL_1;
++    case 60:
++        return V4L2_MPEG_VIDEO_HEVC_LEVEL_2;
++    case 63:
++        return V4L2_MPEG_VIDEO_HEVC_LEVEL_2_1;
++    case 90:
++        return V4L2_MPEG_VIDEO_HEVC_LEVEL_3;
++    case 93:
++        return V4L2_MPEG_VIDEO_HEVC_LEVEL_3_1;
++    case 120:
++        return V4L2_MPEG_VIDEO_HEVC_LEVEL_4;
++    case 123:
++        return V4L2_MPEG_VIDEO_HEVC_LEVEL_4_1;
++    case 150:
++        return V4L2_MPEG_VIDEO_HEVC_LEVEL_5;
++    default:
++        return UINT32_MAX;
++    }
++}
++
++static uint32_t level_to_v4l2(enum venus_codec codec, uint32_t level_idc)
+ {
++    if (codec == VENUS_CODEC_HEVC)
++        return hevc_level_to_v4l2(level_idc);
++
+     switch (level_idc) {
+     case 9:
+         return V4L2_MPEG_VIDEO_H264_LEVEL_1B;
+@@ -399,37 +589,41 @@ static int store_packet(const struct venus_v4l2_packet *packet,
+ static int open_encoder(
+     struct venus_backend *backend, struct venus_context *context,
+     const struct venus_config *config,
+-    const struct venus_h264_encode_parameters *parameters,
++    const struct venus_encode_parameters *parameters,
+     size_t coded_capacity)
+ {
+     struct venus_v4l2_encoder_config encoder_config;
+     struct venus_v4l2_error error;
+-    uint32_t profile = profile_to_v4l2(config->profile);
++    uint32_t profile = profile_to_v4l2(parameters->codec, config->profile);
++    uint32_t coded_format = venus_codec_fourcc(parameters->codec);
+     uint32_t level;
+     uint32_t bitrate = parameters->bitrate;
+     uint32_t frames_per_second = parameters->frames_per_second;
+     uint32_t encode_width;
+     uint32_t encode_height;
+-    uint32_t gop_size = 0;
++    uint32_t gop_size = parameters->gop_size;
+     int status;
+ 
+-    if (!parameters->sequence || profile == UINT32_MAX)
++    if (!encode_picture_present(parameters) || coded_format == 0 ||
++        !parameters->width || !parameters->height ||
++        profile == UINT32_MAX)
+         return -EINVAL;
+ 
+-    level = level_to_v4l2(parameters->sequence->level_idc);
++    level = level_to_v4l2(parameters->codec, parameters->level_idc);
+     if (level == UINT32_MAX)
+         return -ENOTSUP;
+ 
+-    status = venus_encode_h264_dimensions(
+-        parameters->sequence, &encode_width, &encode_height);
+-    if (status < 0)
+-        return status;
+-    if ((encode_width + 15u) / 16u * 16u != context->width ||
+-        (encode_height + 15u) / 16u * 16u != context->height)
++    encode_width = parameters->width;
++    encode_height = parameters->height;
++    /* H.264 pads to whole macroblocks, so the client is expected to have
++     * created the context at that padded size. HEVC works from the picture
++     * size the sequence parameters give.
++     */
++    if (parameters->codec == VENUS_CODEC_H264 &&
++        ((encode_width + 15u) / 16u * 16u != context->width ||
++         (encode_height + 15u) / 16u * 16u != context->height))
+         return -EINVAL;
+ 
+-    if (bitrate == 0)
+-        bitrate = parameters->sequence->bits_per_second;
+     if (bitrate == 0)
+         bitrate = VENUS_ENCODE_DEFAULT_BITRATE;
+     if (bitrate > INT_MAX)
+@@ -437,31 +631,25 @@ static int open_encoder(
+ 
+     if (frames_per_second == 0)
+         frames_per_second = VENUS_ENCODE_DEFAULT_FPS;
+-    if ((context->width / 16u) *
+-            (context->height / 16u) >
+-        VENUS_H264_MAX_MACROBLOCKS_PER_SECOND /
+-            frames_per_second)
++    if (parameters->codec == VENUS_CODEC_H264 &&
++        (context->width / 16u) * (context->height / 16u) >
++            VENUS_H264_MAX_MACROBLOCKS_PER_SECOND /
++                frames_per_second)
+         return -EINVAL;
+ 
+-    gop_size = parameters->sequence->intra_idr_period;
+-    if (gop_size == 0)
+-        gop_size = parameters->sequence->intra_period;
+-    if (gop_size == 0)
+-        gop_size = VENUS_ENCODE_DEFAULT_GOP;
+-
+     context->encode_width = encode_width;
+     context->encode_height = encode_height;
+ 
+     encoder_config = (struct venus_v4l2_encoder_config) {
+         .device = backend->capabilities.encoder_path,
+-        .coded_format = V4L2_PIX_FMT_H264,
++        .coded_format = coded_format,
+         .width = encode_width,
+         .height = encode_height,
+         .frames_per_second = frames_per_second,
+         .bitrate = bitrate,
+         .gop_size = gop_size,
+-        .h264_profile = profile,
+-        .h264_level = level,
++        .coded_profile = profile,
++        .coded_level = level,
+         .capture_buffer_size = coded_capacity,
+         .output_buffers = VENUS_ENCODE_OUTPUT_BUFFERS,
+         .capture_buffers = VENUS_ENCODE_CAPTURE_BUFFERS,
+@@ -480,9 +668,9 @@ static int open_encoder(
+ 
+     venus_backend_log(
+         backend,
+-        "encoder-open context=0x%x profile=%d level=%u size=%ux%u fps=%u bitrate=%u gop=%u output=%u capture=%u",
+-        context->id, config->profile,
+-        parameters->sequence->level_idc,
++        "encoder-open context=0x%x codec=%s profile=%d level=%u size=%ux%u fps=%u bitrate=%u gop=%u output=%u capture=%u",
++        context->id, venus_codec_name(parameters->codec),
++        config->profile, parameters->level_idc,
+         context->encode_width, context->encode_height,
+         frames_per_second, bitrate, gop_size,
+         venus_v4l2_encoder_output_count(context->encoder),
+@@ -551,22 +739,26 @@ VAStatus venus_encode_end_picture_locked(
+     struct venus_backend *backend, struct venus_context *context,
+     const struct venus_config *config)
+ {
+-    struct venus_h264_encode_parameters parameters;
++    struct venus_encode_parameters parameters;
+     struct venus_buffer *coded;
+     struct venus_surface *surface;
+     const uint8_t *frame_data;
+     uint8_t *allocated_frame;
++    enum venus_codec codec;
+     size_t coded_capacity;
+     size_t expected_frame_size;
+     uint64_t frame_tag;
+     int status;
+ 
+-    status = collect_parameters(backend, context, &parameters);
++    if (!venus_backend_profile_codec(config->profile, &codec))
++        return VA_STATUS_ERROR_UNSUPPORTED_PROFILE;
++
++    status = collect_parameters(backend, context, codec, &parameters);
+     if (status < 0)
+         return venus_backend_encode_status_from_errno(status);
+ 
+     coded = venus_backend_find_buffer(
+-        backend, parameters.picture->coded_buf);
++        backend, encode_coded_buffer(&parameters));
+     surface = venus_backend_find_surface(backend, context->target);
+     if (!coded || coded->context_id != context->id ||
+         coded->type != VAEncCodedBufferType)
+@@ -588,16 +780,10 @@ VAStatus venus_encode_end_picture_locked(
+             coded_capacity);
+         if (status < 0)
+             return venus_backend_encode_status_from_errno(status);
+-    } else if (parameters.sequence) {
+-        uint32_t width;
+-        uint32_t height;
+-
+-        status = venus_encode_h264_dimensions(
+-            parameters.sequence, &width, &height);
+-        if (status < 0 ||
+-            width != context->encode_width ||
+-            height != context->encode_height)
+-            return VA_STATUS_ERROR_INVALID_PARAMETER;
++    } else if ((parameters.width && parameters.width != context->encode_width) ||
++               (parameters.height &&
++                parameters.height != context->encode_height)) {
++        return VA_STATUS_ERROR_INVALID_PARAMETER;
+     }
+ 
+     status = prepare_surface_frame(
+diff --git a/src/h264_annexb.c b/src/h264_annexb.c
+index 0da40a7..11fd348 100644
+--- a/src/h264_annexb.c
++++ b/src/h264_annexb.c
+@@ -7,14 +7,8 @@
+ #include <stdbool.h>
+ #include <string.h>
+ 
+-struct byte_writer {
+-    uint8_t *data;
+-    size_t capacity;
+-    size_t length;
+-};
+-
+-static int append_bytes(struct byte_writer *writer, const void *data,
+-                        size_t size)
++int venus_annexb_write_bytes(struct venus_annexb_writer *writer,
++                             const void *data, size_t size)
+ {
+     if (size > writer->capacity - writer->length)
+         return -ENOSPC;
+@@ -24,11 +18,12 @@ static int append_bytes(struct byte_writer *writer, const void *data,
+     return 0;
+ }
+ 
+-static int append_start_code(struct byte_writer *writer)
++static int append_start_code(struct venus_annexb_writer *writer)
+ {
+     static const uint8_t start_code[] = { 0, 0, 0, 1 };
+ 
+-    return append_bytes(writer, start_code, sizeof(start_code));
++    return venus_annexb_write_bytes(writer, start_code,
++                                    sizeof(start_code));
+ }
+ 
+ static int profile_idc(VAProfile profile)
+@@ -54,18 +49,19 @@ static uint8_t constraint_flags(int profile)
+     return 0;
+ }
+ 
+-static int append_escaped_nal(struct byte_writer *output, uint8_t nal_header,
+-                              const uint8_t *rbsp, size_t rbsp_size)
++int venus_annexb_write_nal(struct venus_annexb_writer *writer,
++                           const uint8_t *header, size_t header_size,
++                           const uint8_t *rbsp, size_t rbsp_size)
+ {
+     size_t index;
+     unsigned int zero_count = 0;
+     int result;
+ 
+-    result = append_start_code(output);
++    result = append_start_code(writer);
+     if (result < 0)
+         return result;
+ 
+-    result = append_bytes(output, &nal_header, sizeof(nal_header));
++    result = venus_annexb_write_bytes(writer, header, header_size);
+     if (result < 0)
+         return result;
+ 
+@@ -75,13 +71,13 @@ static int append_escaped_nal(struct byte_writer *output, uint8_t nal_header,
+         if (zero_count >= 2 && byte <= 3) {
+             static const uint8_t prevention = 3;
+ 
+-            result = append_bytes(output, &prevention, sizeof(prevention));
++            result = venus_annexb_write_bytes(writer, &prevention, sizeof(prevention));
+             if (result < 0)
+                 return result;
+             zero_count = 0;
+         }
+ 
+-        result = append_bytes(output, &byte, sizeof(byte));
++        result = venus_annexb_write_bytes(writer, &byte, sizeof(byte));
+         if (result < 0)
+             return result;
+ 
+@@ -91,6 +87,13 @@ static int append_escaped_nal(struct byte_writer *output, uint8_t nal_header,
+     return 0;
+ }
+ 
++static int append_escaped_nal(struct venus_annexb_writer *output, uint8_t nal_header,
++                              const uint8_t *rbsp, size_t rbsp_size)
++{
++    return venus_annexb_write_nal(output, &nal_header, sizeof(nal_header),
++                                  rbsp, rbsp_size);
++}
++
+ #pragma GCC diagnostic push
+ #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+ static bool picture_uses_fmo(const VAPictureParameterBufferH264 *picture)
+@@ -99,7 +102,7 @@ static bool picture_uses_fmo(const VAPictureParameterBufferH264 *picture)
+ }
+ #pragma GCC diagnostic pop
+ 
+-static int append_sps(struct byte_writer *output, VAProfile profile,
++static int append_sps(struct venus_annexb_writer *output, VAProfile profile,
+                       const VAPictureParameterBufferH264 *picture)
+ {
+     struct venus_bit_writer bits;
+@@ -164,7 +167,7 @@ static int append_sps(struct byte_writer *output, VAProfile profile,
+     return append_escaped_nal(output, 0x67, rbsp, venus_bits_size(&bits));
+ }
+ 
+-static int append_pps(struct byte_writer *output,
++static int append_pps(struct venus_annexb_writer *output,
+                       const VAPictureParameterBufferH264 *picture,
+                       const VASliceParameterBufferH264 *first_slice)
+ {
+@@ -226,65 +229,84 @@ static bool has_start_code(const uint8_t *data, size_t size)
+            data[2] == 0 && data[3] == 1;
+ }
+ 
+-static int append_slices(struct byte_writer *output,
+-                         const struct venus_h264_slice_batch *batches,
+-                         size_t num_batches)
++int venus_annexb_write_slice(struct venus_annexb_writer *writer,
++                             const uint8_t *slice, size_t size)
+ {
+-    size_t batch_index;
++    int result;
+ 
+-    for (batch_index = 0; batch_index < num_batches; batch_index++) {
+-        const struct venus_h264_slice_batch *batch =
+-            &batches[batch_index];
+-        size_t parameter_index;
++    if (!writer || !slice || size == 0)
++        return -EINVAL;
++
++    if (!has_start_code(slice, size)) {
++        result = append_start_code(writer);
++        if (result < 0)
++            return result;
++    }
++
++    return venus_annexb_write_bytes(writer, slice, size);
++}
++
++int venus_annexb_write_slices(struct venus_annexb_writer *writer,
++                              const struct venus_slice_parameters *parameters,
++                              size_t num_parameters, const uint8_t *data,
++                              size_t data_size)
++{
++    size_t index;
++
++    if (!writer || !parameters || !data || num_parameters == 0)
++        return -EINVAL;
+ 
+-        if (!batch->parameters || !batch->data ||
+-            batch->num_parameters == 0)
++    for (index = 0; index < num_parameters; index++) {
++        const struct venus_slice_parameters *parameter =
++            &parameters[index];
++        int result;
++
++        if (parameter->slice_data_flag != VA_SLICE_DATA_FLAG_ALL ||
++            parameter->slice_data_offset > data_size ||
++            parameter->slice_data_size >
++                data_size - parameter->slice_data_offset ||
++            parameter->slice_data_size == 0)
+             return -EINVAL;
+ 
+-        for (parameter_index = 0;
+-             parameter_index < batch->num_parameters;
+-             parameter_index++) {
+-            const VASliceParameterBufferH264 *parameter =
+-                &batch->parameters[parameter_index];
+-            const uint8_t *slice;
+-            size_t slice_size;
+-            int result;
+-
+-            if (parameter->slice_data_flag != VA_SLICE_DATA_FLAG_ALL ||
+-                parameter->slice_data_offset > batch->data_size ||
+-                parameter->slice_data_size >
+-                    batch->data_size - parameter->slice_data_offset ||
+-                parameter->slice_data_size == 0)
+-                return -EINVAL;
+-
+-            slice = batch->data + parameter->slice_data_offset;
+-            slice_size = parameter->slice_data_size;
+-
+-            if (!has_start_code(slice, slice_size)) {
+-                result = append_start_code(output);
+-                if (result < 0)
+-                    return result;
+-            }
+-
+-            result = append_bytes(output, slice, slice_size);
+-            if (result < 0)
+-                return result;
+-        }
++        result = venus_annexb_write_slice(
++            writer, data + parameter->slice_data_offset,
++            parameter->slice_data_size);
++        if (result < 0)
++            return result;
+     }
+ 
+     return 0;
+ }
+ 
++int venus_annexb_write_batch(struct venus_annexb_writer *writer,
++                             const struct venus_slice_batch *batch)
++{
++    if (!writer || !batch || !batch->data || batch->data_size == 0)
++        return -EINVAL;
++
++    /* A batch the client did not describe with slice parameters is a
++     * complete frame in one buffer, start codes and all (VP9).
++     */
++    if (!batch->parameters || batch->num_parameters == 0)
++        return venus_annexb_write_bytes(writer, batch->data,
++                                        batch->data_size);
++
++    return venus_annexb_write_slices(writer, batch->parameters,
++                                     batch->num_parameters, batch->data,
++                                     batch->data_size);
++}
++
+ int venus_h264_build_access_unit(
+     VAProfile profile, const VAPictureParameterBufferH264 *picture,
+-    const struct venus_h264_slice_batch *batches, size_t num_batches,
++    const struct venus_slice_batch *batches, size_t num_batches,
+     uint8_t *output, size_t output_capacity, size_t *output_size)
+ {
+-    struct byte_writer writer = {
++    struct venus_annexb_writer writer = {
+         .data = output,
+         .capacity = output_capacity,
+     };
+     const VASliceParameterBufferH264 *first_slice;
++    size_t batch_index;
+     int result;
+ 
+     if (!picture || !batches || num_batches == 0 || !output ||
+@@ -293,7 +315,10 @@ int venus_h264_build_access_unit(
+         return -EINVAL;
+ 
+     *output_size = 0;
+-    first_slice = &batches[0].parameters[0];
++    /* H.264 slice parameters are a superset of the common base, so the
++     * pointer the batch carries is also a full H.264 one.
++     */
++    first_slice = (const VASliceParameterBufferH264 *)batches[0].parameters;
+ 
+     result = append_sps(&writer, profile, picture);
+     if (result < 0)
+@@ -303,9 +328,11 @@ int venus_h264_build_access_unit(
+     if (result < 0)
+         return result;
+ 
+-    result = append_slices(&writer, batches, num_batches);
+-    if (result < 0)
+-        return result;
++    for (batch_index = 0; batch_index < num_batches; batch_index++) {
++        result = venus_annexb_write_batch(&writer, &batches[batch_index]);
++        if (result < 0)
++            return result;
++    }
+ 
+     *output_size = writer.length;
+     return 0;
+diff --git a/src/h264_annexb.h b/src/h264_annexb.h
+index 730b502..0011fa4 100644
+--- a/src/h264_annexb.h
++++ b/src/h264_annexb.h
+@@ -6,16 +6,61 @@
+ #include <stdint.h>
+ #include <va/va.h>
+ 
+-struct venus_h264_slice_batch {
+-    const VASliceParameterBufferH264 *parameters;
++/*
++ * VA-API puts the same three members first in every codec's slice parameter
++ * buffer (it calls this the codec-independent slice parameter buffer base),
++ * so one description walks H.264, HEVC and VP9 slices.
++ */
++struct venus_slice_parameters {
++    uint32_t slice_data_size;
++    uint32_t slice_data_offset;
++    uint32_t slice_data_flag;
++};
++
++/*
++ * One VASliceDataBufferType and the slice parameters that go with it.  A
++ * batch without parameters is a whole buffer that is a frame on its own,
++ * which is what VP9 sends.
++ */
++struct venus_slice_batch {
++    const struct venus_slice_parameters *parameters;
+     size_t num_parameters;
+     const uint8_t *data;
+     size_t data_size;
+ };
+ 
++struct venus_annexb_writer {
++    uint8_t *data;
++    size_t capacity;
++    size_t length;
++};
++
++int venus_annexb_write_bytes(struct venus_annexb_writer *writer,
++                             const void *data, size_t size);
++
++/* Appends one NAL unit, adding a start code when the bytes lack one. */
++int venus_annexb_write_slice(struct venus_annexb_writer *writer,
++                             const uint8_t *slice, size_t size);
++
++/* Appends a NAL unit built from header + payload, escaping emulation
++ * prevention bytes in the payload.
++ */
++int venus_annexb_write_nal(struct venus_annexb_writer *writer,
++                           const uint8_t *header, size_t header_size,
++                           const uint8_t *rbsp, size_t rbsp_size);
++
++/* Appends the slices a slice parameter buffer describes out of data. */
++int venus_annexb_write_slices(struct venus_annexb_writer *writer,
++                              const struct venus_slice_parameters *parameters,
++                              size_t num_parameters, const uint8_t *data,
++                              size_t data_size);
++
++int venus_annexb_write_batch(struct venus_annexb_writer *writer,
++                             const struct venus_slice_batch *batch);
++
+ int venus_h264_build_access_unit(
+     VAProfile profile, const VAPictureParameterBufferH264 *picture,
+-    const struct venus_h264_slice_batch *batches, size_t num_batches,
++    const struct venus_slice_batch *batches, size_t num_batches,
+     uint8_t *output, size_t output_capacity, size_t *output_size);
+ 
+ #endif
+diff --git a/src/hevc_headers.c b/src/hevc_headers.c
+new file mode 100644
+index 0000000..5d34672
+--- /dev/null
++++ b/src/hevc_headers.c
+@@ -0,0 +1,396 @@
++// SPDX-License-Identifier: MIT
++#include "hevc_headers.h"
++
++#include <errno.h>
++#include <limits.h>
++#include <string.h>
++
++#include "bit_writer.h"
++
++/* H.265 table 7-1, NAL unit types. */
++#define VENUS_HEVC_NAL_VPS 32u
++#define VENUS_HEVC_NAL_SPS 33u
++#define VENUS_HEVC_NAL_PPS 34u
++
++#define VENUS_HEVC_LEVEL_4 120u
++#define VENUS_HEVC_LEVEL_5 150u
++#define VENUS_HEVC_LEVEL_5_1 153u
++
++/* H.265 A.4.1: the largest luma picture size each level allows. */
++#define VENUS_HEVC_LEVEL_4_MAX_LUMA 2228224u
++#define VENUS_HEVC_LEVEL_5_MAX_LUMA 8912896u
++
++/*
++ * Picture parameters that mirror an SPS or a PPS are copied across, and the
++ * values this interface does not carry are given the setting an encoder
++ * leaves behind: a single temporal sub layer, no VUI, flat scaling lists.
++ */
++static void write_profile_tier_level(struct venus_bit_writer *bits,
++                                     uint32_t luma_samples)
++{
++    uint32_t level = VENUS_HEVC_LEVEL_5_1;
++
++    if (luma_samples <= VENUS_HEVC_LEVEL_4_MAX_LUMA)
++        level = VENUS_HEVC_LEVEL_4;
++    else if (luma_samples <= VENUS_HEVC_LEVEL_5_MAX_LUMA)
++        level = VENUS_HEVC_LEVEL_5;
++
++    venus_bits_write(bits, 0, 2);         /* general_profile_space */
++    venus_bits_write(bits, 0, 1);         /* general_tier_flag */
++    venus_bits_write(bits, 1, 5);         /* general_profile_idc: Main */
++    venus_bits_write(bits, 0x40000000u, 32); /* ...compatibility: Main */
++    venus_bits_write(bits, 1, 1);         /* progressive_source */
++    venus_bits_write(bits, 0, 1);         /* interlaced_source */
++    venus_bits_write(bits, 1, 1);         /* non_packed_constraint */
++    venus_bits_write(bits, 1, 1);         /* frame_only_constraint */
++    venus_bits_write(bits, 0, 9);         /* max_12bit ... lower_bit_rate */
++    venus_bits_write(bits, 0, 32);        /* general_reserved_zero_34bits */
++    venus_bits_write(bits, 0, 2);
++    venus_bits_write(bits, 0, 1);         /* general_inbld_flag */
++    venus_bits_write(bits, level, 8);     /* general_level_idc */
++}
++
++static void write_nal_header(uint8_t *header, uint32_t nal_type)
++{
++    /* forbidden_zero_bit: 0, nuh_layer_id: 0, nuh_temporal_id_plus1: 1 */
++    header[0] = (uint8_t)(nal_type << 1);
++    header[1] = 1;
++}
++
++static int build_vps(const struct venus_hevc_sequence *sequence,
++                     uint8_t *rbsp, size_t capacity, size_t *size)
++{
++    const VAPictureParameterBufferHEVC *picture = sequence->picture;
++    struct venus_bit_writer bits;
++    uint32_t buffering = picture->sps_max_dec_pic_buffering_minus1;
++
++    venus_bits_init(&bits, rbsp, capacity);
++    venus_bits_write(&bits, 0, 4);        /* vps_video_parameter_set_id */
++    venus_bits_write(&bits, 1, 1);        /* vps_base_layer_internal_flag */
++    venus_bits_write(&bits, 1, 1);        /* vps_base_layer_available_flag */
++    venus_bits_write(&bits, 0, 6);        /* vps_max_layers_minus1 */
++    venus_bits_write(&bits, 0, 3);        /* vps_max_sub_layers_minus1 */
++    venus_bits_write(&bits, 1, 1);        /* vps_temporal_id_nesting_flag */
++    venus_bits_write(&bits, 0xffff, 16);  /* vps_reserved_0xffff_16bits */
++    write_profile_tier_level(
++        &bits, sequence->coded_width * sequence->coded_height);
++    venus_bits_write(&bits, 0, 1);        /* sub_layer_ordering_info */
++    venus_bits_write_ue(&bits, buffering);
++    venus_bits_write_ue(&bits, buffering); /* num_reorder_pics */
++    venus_bits_write_ue(&bits, 0);         /* max_latency_increase_plus1 */
++    venus_bits_write(&bits, 0, 6);        /* vps_max_layer_id */
++    venus_bits_write_ue(&bits, 0);        /* vps_num_layer_sets_minus1 */
++    venus_bits_write(&bits, 0, 1);        /* vps_timing_info_present_flag */
++    venus_bits_write(&bits, 0, 1);        /* vps_extension_flag */
++    venus_bits_finish_rbsp(&bits);
++
++    if (!venus_bits_ok(&bits))
++        return -ENOSPC;
++    *size = venus_bits_size(&bits);
++    return 0;
++}
++
++static int build_sps(const struct venus_hevc_sequence *sequence,
++                     uint8_t *rbsp, size_t capacity, size_t *size)
++{
++    const VAPictureParameterBufferHEVC *picture = sequence->picture;
++    struct venus_bit_writer bits;
++    uint32_t chroma = picture->pic_fields.bits.chroma_format_idc;
++    uint32_t width = picture->pic_width_in_luma_samples;
++    uint32_t height = picture->pic_height_in_luma_samples;
++    uint32_t right_crop = 0;
++    uint32_t bottom_crop = 0;
++    uint32_t buffering = picture->sps_max_dec_pic_buffering_minus1;
++
++    if (!width || !height)
++        return -EINVAL;
++    /* Reference picture sets living in the SPS are not part of the VA-API
++     * picture parameters, and neither are the long term reference picture
++     * POC values; a stream that uses them cannot be described here.
++     */
++    if (picture->num_short_term_ref_pic_sets ||
++        picture->num_long_term_ref_pic_sps)
++        return -ENOTSUP;
++
++    if (width > sequence->visible_width && height > sequence->visible_height &&
++        !((width - sequence->visible_width) & 1u) &&
++        !((height - sequence->visible_height) & 1u)) {
++        /* 4:2:0: the conformance window counts chroma samples. */
++        right_crop = (width - sequence->visible_width) / 2u;
++        bottom_crop = (height - sequence->visible_height) / 2u;
++    }
++
++    venus_bits_init(&bits, rbsp, capacity);
++    venus_bits_write(&bits, 0, 4);        /* sps_video_parameter_set_id */
++    venus_bits_write(&bits, 0, 3);        /* sps_max_sub_layers_minus1 */
++    venus_bits_write(&bits, 1, 1);        /* sps_temporal_id_nesting_flag */
++    write_profile_tier_level(&bits, width * height);
++    venus_bits_write_ue(&bits, 0);        /* sps_seq_parameter_set_id */
++    venus_bits_write_ue(&bits, chroma);
++    if (chroma == 3)
++        venus_bits_write(&bits, 0, 1);    /* separate_colour_plane_flag */
++    venus_bits_write_ue(&bits, width);
++    venus_bits_write_ue(&bits, height);
++    venus_bits_write(&bits, right_crop || bottom_crop ? 1 : 0, 1);
++    if (right_crop || bottom_crop) {
++        venus_bits_write_ue(&bits, 0);            /* conf_win_left_offset */
++        venus_bits_write_ue(&bits, right_crop);
++        venus_bits_write_ue(&bits, 0);            /* conf_win_top_offset */
++        venus_bits_write_ue(&bits, bottom_crop);
++    }
++    venus_bits_write_ue(&bits, picture->bit_depth_luma_minus8);
++    venus_bits_write_ue(&bits, picture->bit_depth_chroma_minus8);
++    venus_bits_write_ue(&bits, picture->log2_max_pic_order_cnt_lsb_minus4);
++    venus_bits_write(&bits, 0, 1);        /* sub_layer_ordering_info */
++    venus_bits_write_ue(&bits, buffering);
++    venus_bits_write_ue(&bits, buffering); /* sps_max_num_reorder_pics */
++    venus_bits_write_ue(&bits, 0);         /* max_latency_increase_plus1 */
++    venus_bits_write_ue(
++        &bits, picture->log2_min_luma_coding_block_size_minus3);
++    venus_bits_write_ue(
++        &bits, picture->log2_diff_max_min_luma_coding_block_size);
++    venus_bits_write_ue(
++        &bits, picture->log2_min_transform_block_size_minus2);
++    venus_bits_write_ue(
++        &bits, picture->log2_diff_max_min_transform_block_size);
++    venus_bits_write_ue(&bits, picture->max_transform_hierarchy_depth_inter);
++    venus_bits_write_ue(&bits, picture->max_transform_hierarchy_depth_intra);
++    venus_bits_write(
++        &bits, picture->pic_fields.bits.scaling_list_enabled_flag, 1);
++    if (picture->pic_fields.bits.scaling_list_enabled_flag)
++        venus_bits_write(&bits, 0, 1);    /* sps_scaling_list_data: default */
++    venus_bits_write(&bits, picture->pic_fields.bits.amp_enabled_flag, 1);
++    venus_bits_write(
++        &bits,
++        picture->slice_parsing_fields.bits.sample_adaptive_offset_enabled_flag,
++        1);
++    venus_bits_write(&bits, picture->pic_fields.bits.pcm_enabled_flag, 1);
++    if (picture->pic_fields.bits.pcm_enabled_flag) {
++        venus_bits_write(&bits, picture->pcm_sample_bit_depth_luma_minus1, 4);
++        venus_bits_write(&bits, picture->pcm_sample_bit_depth_chroma_minus1, 4);
++        venus_bits_write_ue(
++            &bits, picture->log2_min_pcm_luma_coding_block_size_minus3);
++        venus_bits_write_ue(
++            &bits, picture->log2_diff_max_min_pcm_luma_coding_block_size);
++        venus_bits_write(
++            &bits, picture->pic_fields.bits.pcm_loop_filter_disabled_flag, 1);
++    }
++    venus_bits_write_ue(&bits, picture->num_short_term_ref_pic_sets);
++    venus_bits_write(
++        &bits,
++        picture->slice_parsing_fields.bits.long_term_ref_pics_present_flag, 1);
++    if (picture->slice_parsing_fields.bits.long_term_ref_pics_present_flag)
++        venus_bits_write_ue(&bits, picture->num_long_term_ref_pic_sps);
++    venus_bits_write(
++        &bits, picture->slice_parsing_fields.bits.sps_temporal_mvp_enabled_flag,
++        1);
++    venus_bits_write(
++        &bits,
++        picture->pic_fields.bits.strong_intra_smoothing_enabled_flag, 1);
++    venus_bits_write(&bits, 0, 1);        /* vui_parameters_present_flag */
++    venus_bits_write(&bits, 0, 1);        /* sps_extension_present_flag */
++    venus_bits_finish_rbsp(&bits);
++
++    if (!venus_bits_ok(&bits))
++        return -ENOSPC;
++    *size = venus_bits_size(&bits);
++    return 0;
++}
++
++static int build_pps(const struct venus_hevc_sequence *sequence,
++                     unsigned int pps_id, uint8_t *rbsp, size_t capacity,
++                     size_t *size)
++{
++    const VAPictureParameterBufferHEVC *picture = sequence->picture;
++    struct venus_bit_writer bits;
++
++    if (picture->num_tile_columns_minus1 >=
++            sizeof(picture->column_width_minus1) /
++                sizeof(picture->column_width_minus1[0]) ||
++        picture->num_tile_rows_minus1 >=
++            sizeof(picture->row_height_minus1) /
++                sizeof(picture->row_height_minus1[0]))
++        return -EINVAL;
++
++    venus_bits_init(&bits, rbsp, capacity);
++    venus_bits_write_ue(&bits, pps_id);
++    venus_bits_write_ue(&bits, 0);        /* pps_seq_parameter_set_id */
++    venus_bits_write(
++        &bits,
++        picture->slice_parsing_fields.bits.dependent_slice_segments_enabled_flag,
++        1);
++    venus_bits_write(
++        &bits, picture->slice_parsing_fields.bits.output_flag_present_flag, 1);
++    venus_bits_write(&bits, picture->num_extra_slice_header_bits, 3);
++    venus_bits_write(&bits, picture->pic_fields.bits.sign_data_hiding_enabled_flag, 1);
++    venus_bits_write(
++        &bits, picture->slice_parsing_fields.bits.cabac_init_present_flag, 1);
++    venus_bits_write_ue(&bits, picture->num_ref_idx_l0_default_active_minus1);
++    venus_bits_write_ue(&bits, picture->num_ref_idx_l1_default_active_minus1);
++    venus_bits_write_se(&bits, picture->init_qp_minus26);
++    venus_bits_write(&bits, picture->pic_fields.bits.constrained_intra_pred_flag, 1);
++    venus_bits_write(&bits, picture->pic_fields.bits.transform_skip_enabled_flag, 1);
++    venus_bits_write(&bits, picture->pic_fields.bits.cu_qp_delta_enabled_flag, 1);
++    if (picture->pic_fields.bits.cu_qp_delta_enabled_flag)
++        venus_bits_write_ue(&bits, picture->diff_cu_qp_delta_depth);
++    venus_bits_write_se(&bits, picture->pps_cb_qp_offset);
++    venus_bits_write_se(&bits, picture->pps_cr_qp_offset);
++    venus_bits_write(
++        &bits,
++        picture->slice_parsing_fields.bits
++            .pps_slice_chroma_qp_offsets_present_flag,
++        1);
++    venus_bits_write(&bits, picture->pic_fields.bits.weighted_pred_flag, 1);
++    venus_bits_write(&bits, picture->pic_fields.bits.weighted_bipred_flag, 1);
++    venus_bits_write(
++        &bits, picture->pic_fields.bits.transquant_bypass_enabled_flag, 1);
++    venus_bits_write(&bits, picture->pic_fields.bits.tiles_enabled_flag, 1);
++    venus_bits_write(
++        &bits, picture->pic_fields.bits.entropy_coding_sync_enabled_flag, 1);
++    if (picture->pic_fields.bits.tiles_enabled_flag) {
++        uint32_t index;
++
++        venus_bits_write_ue(&bits, picture->num_tile_columns_minus1);
++        venus_bits_write_ue(&bits, picture->num_tile_rows_minus1);
++        venus_bits_write(&bits, 0, 1);    /* uniform_spacing_flag */
++        for (index = 0;
++             index < picture->num_tile_columns_minus1; index++)
++            venus_bits_write_ue(&bits, picture->column_width_minus1[index]);
++        for (index = 0; index < picture->num_tile_rows_minus1; index++)
++            venus_bits_write_ue(&bits, picture->row_height_minus1[index]);
++        venus_bits_write(
++            &bits, picture->pic_fields.bits.loop_filter_across_tiles_enabled_flag,
++            1);
++    }
++    venus_bits_write(
++        &bits, picture->pic_fields.bits.pps_loop_filter_across_slices_enabled_flag,
++        1);
++    /* The slice headers of a stream that signals deblocking parameters need
++     * this flag set, and VA-API reports the parameters themselves.
++     */
++    venus_bits_write(&bits, 1, 1);        /* deblocking_filter_control */
++    venus_bits_write(
++        &bits,
++        picture->slice_parsing_fields.bits
++            .deblocking_filter_override_enabled_flag,
++        1);
++    venus_bits_write(
++        &bits,
++        picture->slice_parsing_fields.bits.pps_disable_deblocking_filter_flag,
++        1);
++    if (!picture->slice_parsing_fields.bits.pps_disable_deblocking_filter_flag) {
++        venus_bits_write_se(&bits, picture->pps_beta_offset_div2);
++        venus_bits_write_se(&bits, picture->pps_tc_offset_div2);
++    }
++    venus_bits_write(&bits, 0, 1);        /* pps_scaling_list_data_present */
++    venus_bits_write(
++        &bits, picture->slice_parsing_fields.bits.lists_modification_present_flag,
++        1);
++    venus_bits_write_ue(&bits, picture->log2_parallel_merge_level_minus2);
++    venus_bits_write(
++        &bits,
++        picture->slice_parsing_fields.bits
++            .slice_segment_header_extension_present_flag,
++        1);
++    venus_bits_write(&bits, 0, 1);        /* pps_extension_present_flag */
++    venus_bits_finish_rbsp(&bits);
++
++    if (!venus_bits_ok(&bits))
++        return -ENOSPC;
++    *size = venus_bits_size(&bits);
++    return 0;
++}
++
++static int append_set(struct venus_annexb_writer *writer, uint32_t nal_type,
++                      const uint8_t *rbsp, size_t size)
++{
++    uint8_t header[2];
++
++    write_nal_header(header, nal_type);
++    return venus_annexb_write_nal(writer, header, sizeof(header), rbsp, size);
++}
++
++int venus_hevc_write_parameter_sets(struct venus_annexb_writer *writer,
++                                    const struct venus_hevc_sequence *sequence,
++                                    unsigned int pps_id)
++{
++    uint8_t rbsp[VENUS_HEVC_HEADERS_MAX];
++    size_t size;
++    int status;
++
++    if (!writer || !sequence || !sequence->picture)
++        return -EINVAL;
++
++    status = build_vps(sequence, rbsp, sizeof(rbsp), &size);
++    if (status < 0)
++        return status;
++    status = append_set(writer, VENUS_HEVC_NAL_VPS, rbsp, size);
++    if (status < 0)
++        return status;
++
++    status = build_sps(sequence, rbsp, sizeof(rbsp), &size);
++    if (status < 0)
++        return status;
++    status = append_set(writer, VENUS_HEVC_NAL_SPS, rbsp, size);
++    if (status < 0)
++        return status;
++
++    status = build_pps(sequence, pps_id, rbsp, sizeof(rbsp), &size);
++    if (status < 0)
++        return status;
++    return append_set(writer, VENUS_HEVC_NAL_PPS, rbsp, size);
++}
++
++static unsigned int read_bit(const uint8_t *data, size_t bit_offset)
++{
++    return (data[bit_offset / 8] >> (7u - bit_offset % 8)) & 1u;
++}
++
++/* Exp-Golomb, the code the parameter set identifiers use.  UINT_MAX means
++ * the bits ran out.
++ */
++static uint32_t read_ue(const uint8_t *data, size_t size, size_t *bit_offset)
++{
++    unsigned int leading = 0;
++    unsigned int index;
++    uint32_t value = 0;
++
++    while (*bit_offset < size * 8 && read_bit(data, *bit_offset) == 0) {
++        if (++leading > 16)
++            return UINT_MAX;
++        (*bit_offset)++;
++    }
++    if (*bit_offset < size * 8)
++        (*bit_offset)++; /* the '1' that closes the prefix */
++
++    for (index = 0; index < leading; index++) {
++        if (*bit_offset >= size * 8)
++            return UINT_MAX;
++        value = (value << 1) | read_bit(data, *bit_offset);
++        (*bit_offset)++;
++    }
++
++    return value + ((1u << leading) - 1u);
++}
++
++unsigned int venus_hevc_pps_id(const uint8_t *nal, size_t size, bool rap_pic)
++{
++    size_t bit_offset = 16; /* the two NAL unit header bytes */
++    uint32_t value;
++
++    if (!nal || size < 4)
++        return 0;
++
++    if (read_bit(nal, bit_offset) != 1) {
++        /* Not a first slice segment: the parameter set id sits behind a
++         * segment address whose length this parser would have to derive.
++         */
++        return 0;
++    }
++    bit_offset++;
++    if (rap_pic)
++        bit_offset++; /* no_output_of_prior_pics_flag */
++
++    value = read_ue(nal, size, &bit_offset);
++    return value < 64 ? value : 0;
++}
+diff --git a/src/hevc_headers.h b/src/hevc_headers.h
+new file mode 100644
+index 0000000..9324273
+--- /dev/null
++++ b/src/hevc_headers.h
+@@ -0,0 +1,52 @@
++// SPDX-License-Identifier: MIT
++#ifndef VENUS_HEVC_HEADERS_H
++#define VENUS_HEVC_HEADERS_H
++
++#include <stdbool.h>
++#include <stddef.h>
++#include <stdint.h>
++#include <va/va.h>
++#include <va/va_dec_hevc.h>
++
++#include "h264_annexb.h"
++
++/* Enough for a VPS, an SPS and a PPS of a normal stream, escaping
++ * included.
++ */
++#define VENUS_HEVC_HEADERS_MAX 256
++
++/*
++ * A VA-API HEVC client hands the driver parsed fields, never the raw
++ * VPS/SPS/PPS NAL units, while the firmware this driver talks to parses a
++ * bitstream.  The parameter sets are therefore built back from
++ * VAPictureParameterBufferHEVC, which mirrors most of what an SPS and a PPS
++ * carry.  Both are rebuilt with the picture set identifiers a normal encoder
++ * uses (0), and the coded size is cropped down to the size the client asked
++ * for so the decoder reports the same visible picture.
++ */
++struct venus_hevc_sequence {
++    const VAPictureParameterBufferHEVC *picture;
++    uint32_t coded_width;
++    uint32_t coded_height;
++    uint32_t visible_width;
++    uint32_t visible_height;
++};
++
++/*
++ * Picture parameter set id the first slice of a picture uses.  A first slice
++ * carries it a fixed number of bits in; anything else (a picture that starts
++ * with a dependent slice, or garbage) reports 0, which is what encoders use.
++ */
++unsigned int venus_hevc_pps_id(const uint8_t *nal, size_t size, bool rap_pic);
++
++/*
++ * Appends VPS, SPS and PPS for the picture, with start codes.
++ * Returns -ENOTSUP for streams that need parameter set contents this
++ * interface does not carry (short term reference picture sets in the SPS,
++ * long term reference pictures).
++ */
++int venus_hevc_write_parameter_sets(struct venus_annexb_writer *writer,
++                                    const struct venus_hevc_sequence *sequence,
++                                    unsigned int pps_id);
++
++#endif
 diff --git a/src/objects.c b/src/objects.c
 index 9ec30d8..4bff11f 100644
 --- a/src/objects.c
@@ -933,7 +2805,7 @@ index 92ff905..af124df 100644
  
  const char *venus_v4l2_decoder_last_operation(
 diff --git a/src/v4l2_encoder.c b/src/v4l2_encoder.c
-index aeac60e..81bcfd5 100644
+index aeac60e..90477b0 100644
 --- a/src/v4l2_encoder.c
 +++ b/src/v4l2_encoder.c
 @@ -1,5 +1,6 @@
@@ -952,6 +2824,58 @@ index aeac60e..81bcfd5 100644
          !strstr((const char *)capability.card, "encoder") ||
          !(caps & V4L2_CAP_VIDEO_M2M_MPLANE) ||
          !(caps & V4L2_CAP_STREAMING)) {
+@@ -157,6 +158,7 @@ static int set_parameters(
+     struct v4l2_streamparm parameters = {
+         .type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
+     };
++    const bool hevc = config->coded_format == V4L2_PIX_FMT_HEVC;
+     int status;
+ 
+     parameters.parm.output.timeperframe.numerator = 1;
+@@ -184,15 +186,20 @@ static int set_parameters(
+         return status;
+ 
+     status = set_control(
+-        encoder, V4L2_CID_MPEG_VIDEO_H264_PROFILE,
+-        (int32_t)config->h264_profile, "S_CTRL(H264_PROFILE)");
++        encoder,
++        hevc ? V4L2_CID_MPEG_VIDEO_HEVC_PROFILE
++             : V4L2_CID_MPEG_VIDEO_H264_PROFILE,
++        (int32_t)config->coded_profile,
++        hevc ? "S_CTRL(HEVC_PROFILE)" : "S_CTRL(H264_PROFILE)");
+     if (status < 0)
+         return status;
+ 
+     return set_control(
+-        encoder, V4L2_CID_MPEG_VIDEO_H264_LEVEL,
+-        (int32_t)config->h264_level,
+-        "S_CTRL(H264_LEVEL)");
++        encoder,
++        hevc ? V4L2_CID_MPEG_VIDEO_HEVC_LEVEL
++             : V4L2_CID_MPEG_VIDEO_H264_LEVEL,
++        (int32_t)config->coded_level,
++        hevc ? "S_CTRL(HEVC_LEVEL)" : "S_CTRL(H264_LEVEL)");
+ }
+ 
+ static int request_and_map(struct venus_v4l2_encoder *encoder,
+diff --git a/src/v4l2_encoder.h b/src/v4l2_encoder.h
+index 9126500..6fda137 100644
+--- a/src/v4l2_encoder.h
++++ b/src/v4l2_encoder.h
+@@ -18,8 +18,11 @@ struct venus_v4l2_encoder_config {
+     uint32_t frames_per_second;
+     uint32_t bitrate;
+     uint32_t gop_size;
+-    uint32_t h264_profile;
+-    uint32_t h264_level;
++    /* Profile and level are applied through the control that matches
++     * coded_format: the H.264 pair for H.264, the HEVC pair for HEVC. The iris
++     * encoder rejects an HEVC level above 5. */
++    uint32_t coded_profile;
++    uint32_t coded_level;
+     size_t capture_buffer_size;
+     unsigned int output_buffers;
+     unsigned int capture_buffers;
 diff --git a/src/v4l2_probe.c b/src/v4l2_probe.c
 index 7d92048..709a2df 100644
 --- a/src/v4l2_probe.c

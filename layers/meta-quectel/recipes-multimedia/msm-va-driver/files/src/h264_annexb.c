@@ -7,14 +7,8 @@
 #include <stdbool.h>
 #include <string.h>
 
-struct byte_writer {
-    uint8_t *data;
-    size_t capacity;
-    size_t length;
-};
-
-static int append_bytes(struct byte_writer *writer, const void *data,
-                        size_t size)
+int venus_annexb_write_bytes(struct venus_annexb_writer *writer,
+                             const void *data, size_t size)
 {
     if (size > writer->capacity - writer->length)
         return -ENOSPC;
@@ -24,11 +18,12 @@ static int append_bytes(struct byte_writer *writer, const void *data,
     return 0;
 }
 
-static int append_start_code(struct byte_writer *writer)
+static int append_start_code(struct venus_annexb_writer *writer)
 {
     static const uint8_t start_code[] = { 0, 0, 0, 1 };
 
-    return append_bytes(writer, start_code, sizeof(start_code));
+    return venus_annexb_write_bytes(writer, start_code,
+                                    sizeof(start_code));
 }
 
 static int profile_idc(VAProfile profile)
@@ -54,18 +49,19 @@ static uint8_t constraint_flags(int profile)
     return 0;
 }
 
-static int append_escaped_nal(struct byte_writer *output, uint8_t nal_header,
-                              const uint8_t *rbsp, size_t rbsp_size)
+int venus_annexb_write_nal(struct venus_annexb_writer *writer,
+                           const uint8_t *header, size_t header_size,
+                           const uint8_t *rbsp, size_t rbsp_size)
 {
     size_t index;
     unsigned int zero_count = 0;
     int result;
 
-    result = append_start_code(output);
+    result = append_start_code(writer);
     if (result < 0)
         return result;
 
-    result = append_bytes(output, &nal_header, sizeof(nal_header));
+    result = venus_annexb_write_bytes(writer, header, header_size);
     if (result < 0)
         return result;
 
@@ -75,13 +71,13 @@ static int append_escaped_nal(struct byte_writer *output, uint8_t nal_header,
         if (zero_count >= 2 && byte <= 3) {
             static const uint8_t prevention = 3;
 
-            result = append_bytes(output, &prevention, sizeof(prevention));
+            result = venus_annexb_write_bytes(writer, &prevention, sizeof(prevention));
             if (result < 0)
                 return result;
             zero_count = 0;
         }
 
-        result = append_bytes(output, &byte, sizeof(byte));
+        result = venus_annexb_write_bytes(writer, &byte, sizeof(byte));
         if (result < 0)
             return result;
 
@@ -89,6 +85,13 @@ static int append_escaped_nal(struct byte_writer *output, uint8_t nal_header,
     }
 
     return 0;
+}
+
+static int append_escaped_nal(struct venus_annexb_writer *output, uint8_t nal_header,
+                              const uint8_t *rbsp, size_t rbsp_size)
+{
+    return venus_annexb_write_nal(output, &nal_header, sizeof(nal_header),
+                                  rbsp, rbsp_size);
 }
 
 #pragma GCC diagnostic push
@@ -99,7 +102,7 @@ static bool picture_uses_fmo(const VAPictureParameterBufferH264 *picture)
 }
 #pragma GCC diagnostic pop
 
-static int append_sps(struct byte_writer *output, VAProfile profile,
+static int append_sps(struct venus_annexb_writer *output, VAProfile profile,
                       const VAPictureParameterBufferH264 *picture)
 {
     struct venus_bit_writer bits;
@@ -164,7 +167,7 @@ static int append_sps(struct byte_writer *output, VAProfile profile,
     return append_escaped_nal(output, 0x67, rbsp, venus_bits_size(&bits));
 }
 
-static int append_pps(struct byte_writer *output,
+static int append_pps(struct venus_annexb_writer *output,
                       const VAPictureParameterBufferH264 *picture,
                       const VASliceParameterBufferH264 *first_slice)
 {
@@ -226,65 +229,84 @@ static bool has_start_code(const uint8_t *data, size_t size)
            data[2] == 0 && data[3] == 1;
 }
 
-static int append_slices(struct byte_writer *output,
-                         const struct venus_h264_slice_batch *batches,
-                         size_t num_batches)
+int venus_annexb_write_slice(struct venus_annexb_writer *writer,
+                             const uint8_t *slice, size_t size)
 {
-    size_t batch_index;
+    int result;
 
-    for (batch_index = 0; batch_index < num_batches; batch_index++) {
-        const struct venus_h264_slice_batch *batch =
-            &batches[batch_index];
-        size_t parameter_index;
+    if (!writer || !slice || size == 0)
+        return -EINVAL;
 
-        if (!batch->parameters || !batch->data ||
-            batch->num_parameters == 0)
+    if (!has_start_code(slice, size)) {
+        result = append_start_code(writer);
+        if (result < 0)
+            return result;
+    }
+
+    return venus_annexb_write_bytes(writer, slice, size);
+}
+
+int venus_annexb_write_slices(struct venus_annexb_writer *writer,
+                              const struct venus_slice_parameters *parameters,
+                              size_t num_parameters, const uint8_t *data,
+                              size_t data_size)
+{
+    size_t index;
+
+    if (!writer || !parameters || !data || num_parameters == 0)
+        return -EINVAL;
+
+    for (index = 0; index < num_parameters; index++) {
+        const struct venus_slice_parameters *parameter =
+            &parameters[index];
+        int result;
+
+        if (parameter->slice_data_flag != VA_SLICE_DATA_FLAG_ALL ||
+            parameter->slice_data_offset > data_size ||
+            parameter->slice_data_size >
+                data_size - parameter->slice_data_offset ||
+            parameter->slice_data_size == 0)
             return -EINVAL;
 
-        for (parameter_index = 0;
-             parameter_index < batch->num_parameters;
-             parameter_index++) {
-            const VASliceParameterBufferH264 *parameter =
-                &batch->parameters[parameter_index];
-            const uint8_t *slice;
-            size_t slice_size;
-            int result;
-
-            if (parameter->slice_data_flag != VA_SLICE_DATA_FLAG_ALL ||
-                parameter->slice_data_offset > batch->data_size ||
-                parameter->slice_data_size >
-                    batch->data_size - parameter->slice_data_offset ||
-                parameter->slice_data_size == 0)
-                return -EINVAL;
-
-            slice = batch->data + parameter->slice_data_offset;
-            slice_size = parameter->slice_data_size;
-
-            if (!has_start_code(slice, slice_size)) {
-                result = append_start_code(output);
-                if (result < 0)
-                    return result;
-            }
-
-            result = append_bytes(output, slice, slice_size);
-            if (result < 0)
-                return result;
-        }
+        result = venus_annexb_write_slice(
+            writer, data + parameter->slice_data_offset,
+            parameter->slice_data_size);
+        if (result < 0)
+            return result;
     }
 
     return 0;
 }
 
+int venus_annexb_write_batch(struct venus_annexb_writer *writer,
+                             const struct venus_slice_batch *batch)
+{
+    if (!writer || !batch || !batch->data || batch->data_size == 0)
+        return -EINVAL;
+
+    /* A batch the client did not describe with slice parameters is a
+     * complete frame in one buffer, start codes and all (VP9).
+     */
+    if (!batch->parameters || batch->num_parameters == 0)
+        return venus_annexb_write_bytes(writer, batch->data,
+                                        batch->data_size);
+
+    return venus_annexb_write_slices(writer, batch->parameters,
+                                     batch->num_parameters, batch->data,
+                                     batch->data_size);
+}
+
 int venus_h264_build_access_unit(
     VAProfile profile, const VAPictureParameterBufferH264 *picture,
-    const struct venus_h264_slice_batch *batches, size_t num_batches,
+    const struct venus_slice_batch *batches, size_t num_batches,
     uint8_t *output, size_t output_capacity, size_t *output_size)
 {
-    struct byte_writer writer = {
+    struct venus_annexb_writer writer = {
         .data = output,
         .capacity = output_capacity,
     };
     const VASliceParameterBufferH264 *first_slice;
+    size_t batch_index;
     int result;
 
     if (!picture || !batches || num_batches == 0 || !output ||
@@ -293,7 +315,10 @@ int venus_h264_build_access_unit(
         return -EINVAL;
 
     *output_size = 0;
-    first_slice = &batches[0].parameters[0];
+    /* H.264 slice parameters are a superset of the common base, so the
+     * pointer the batch carries is also a full H.264 one.
+     */
+    first_slice = (const VASliceParameterBufferH264 *)batches[0].parameters;
 
     result = append_sps(&writer, profile, picture);
     if (result < 0)
@@ -303,9 +328,11 @@ int venus_h264_build_access_unit(
     if (result < 0)
         return result;
 
-    result = append_slices(&writer, batches, num_batches);
-    if (result < 0)
-        return result;
+    for (batch_index = 0; batch_index < num_batches; batch_index++) {
+        result = venus_annexb_write_batch(&writer, &batches[batch_index]);
+        if (result < 0)
+            return result;
+    }
 
     *output_size = writer.length;
     return 0;

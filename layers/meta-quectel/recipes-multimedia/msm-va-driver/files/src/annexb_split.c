@@ -23,7 +23,26 @@ static bool start_code_at(const uint8_t *data, size_t size, size_t offset,
     return false;
 }
 
+static bool aud_at(const uint8_t *data, size_t size, size_t offset,
+                   enum venus_annexb_codec codec)
+{
+    if (offset >= size)
+        return false;
+
+    if (codec == VENUS_ANNEXB_HEVC) {
+        /* The AUD is nal_unit_type 35, which sits in bits 1..6 of the first
+         * header byte; the second byte holds nuh_layer_id in its top bits. */
+        if (offset + 1 >= size)
+            return false;
+        return ((data[offset] >> 1) & 0x3f) == 35 &&
+               (data[offset + 1] & 0xf8) == 0;
+    }
+
+    return (data[offset] & 0x1f) == 9;
+}
+
 int venus_annexb_for_each_access_unit(const uint8_t *data, size_t size,
+                                      enum venus_annexb_codec codec,
                                       venus_access_unit_callback callback,
                                       void *opaque, size_t *num_units)
 {
@@ -36,9 +55,16 @@ int venus_annexb_for_each_access_unit(const uint8_t *data, size_t size,
     if (!data || size == 0 || !callback)
         return -EINVAL;
 
+    switch (codec) {
+    case VENUS_ANNEXB_H264:
+    case VENUS_ANNEXB_HEVC:
+        break;
+    default:
+        return -EINVAL;
+    }
+
     for (offset = 0; offset + 3 <= size; offset++) {
         size_t start_code_size;
-        uint8_t nal_type;
         int result;
 
         if (!start_code_at(data, size, offset, &start_code_size))
@@ -47,8 +73,7 @@ int venus_annexb_for_each_access_unit(const uint8_t *data, size_t size,
             return -EINVAL;
 
         saw_start_code = true;
-        nal_type = data[offset + start_code_size] & 0x1f;
-        if (nal_type != 9)
+        if (!aud_at(data, size, offset + start_code_size, codec))
             continue;
 
         if (saw_aud) {

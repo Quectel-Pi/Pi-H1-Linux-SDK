@@ -158,6 +158,7 @@ static int set_parameters(
     struct v4l2_streamparm parameters = {
         .type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
     };
+    const bool hevc = config->coded_format == V4L2_PIX_FMT_HEVC;
     int status;
 
     parameters.parm.output.timeperframe.numerator = 1;
@@ -185,15 +186,20 @@ static int set_parameters(
         return status;
 
     status = set_control(
-        encoder, V4L2_CID_MPEG_VIDEO_H264_PROFILE,
-        (int32_t)config->h264_profile, "S_CTRL(H264_PROFILE)");
+        encoder,
+        hevc ? V4L2_CID_MPEG_VIDEO_HEVC_PROFILE
+             : V4L2_CID_MPEG_VIDEO_H264_PROFILE,
+        (int32_t)config->coded_profile,
+        hevc ? "S_CTRL(HEVC_PROFILE)" : "S_CTRL(H264_PROFILE)");
     if (status < 0)
         return status;
 
     return set_control(
-        encoder, V4L2_CID_MPEG_VIDEO_H264_LEVEL,
-        (int32_t)config->h264_level,
-        "S_CTRL(H264_LEVEL)");
+        encoder,
+        hevc ? V4L2_CID_MPEG_VIDEO_HEVC_LEVEL
+             : V4L2_CID_MPEG_VIDEO_H264_LEVEL,
+        (int32_t)config->coded_level,
+        hevc ? "S_CTRL(HEVC_LEVEL)" : "S_CTRL(H264_LEVEL)");
 }
 
 static int request_and_map(struct venus_v4l2_encoder *encoder,

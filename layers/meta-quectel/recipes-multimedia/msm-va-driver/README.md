@@ -27,7 +27,7 @@ nothing is checked in as a binary:
 ```
 SRC_URI = git://github.com/super617/venus-vaapi-driver.git \
           ;protocol=https;branch=qcm6490-msm-vidc-adapt
-SRCREV  = 095cf6aa4cc73bfe68f41b17ef39c7b8182d5fdc   # pinned on purpose
+SRCREV  = 91aafb019c2a12fb998146ce2bbf2df30b5e940d   # pinned on purpose
 ```
 
 `quecpi-image.bb` lists the package in `IMAGE_INSTALL`, and the recipe is the
@@ -115,6 +115,27 @@ The fixes it contains, i.e. what makes this board work at all:
    returns one layer per plane unless `VA_EXPORT_SURFACE_COMPOSED_LAYERS` is
    explicitly requested, which is also the layout `VA_EXPORT_SURFACE_SEPARATE_LAYERS`
    documents for NV12. mpv/ffmpeg are unaffected (verified on screen).
+9. **HEVC and VP9, as codecs and not just as formats.** Every codec-dependent
+   choice now follows one profile-to-codec table: which profile/entrypoint pair
+   `vaQueryConfigEntrypoints` answers with, which fourcc the V4L2 session opens,
+   which control pair carries the profile and level on the encoder, and how an
+   access unit is assembled. VP9 needs nothing beyond that — its frames carry
+   their own headers, so the buffers the client sends go in as they are.
+   HEVC needs one thing more than H.264 did: a VA-API client hands over parsed
+   fields, never the VPS/SPS/PPS NAL units, while the firmware parses a
+   bitstream (without them it fails every slice with
+   `H265_CONFIG_FLAG_MISSING`). `src/hevc_headers.c` therefore builds the three
+   parameter sets back out of `VAPictureParameterBufferHEVC`, which mirrors an
+   SPS and a PPS almost field for field, crops the coded size down to the size
+   the client asked for, and reads the picture parameter set id from the slice.
+   They are emitted once per sequence, because the decoder keeps them.
+   Streams whose SPS carries short term reference picture sets, or long term
+   reference pictures, are refused with an unsupported status instead of being
+   decoded against parameter sets that would not match their slice headers:
+   those contents are not part of the VA-API picture parameters, so there is
+   nothing to rebuild them from. Software-encoded HEVC (x265 and friends) is
+   fine; the board's own hardware encoder writes SPS reference picture sets,
+   and such files are the ones that get refused.
 
 ## Status (measured on the board, kernel 6.6.116-qli-1.7-ver.1.1)
 
@@ -128,6 +149,20 @@ Works:
   (`5a5aa547019fe1c8e33bf682a619c24562efc370ceee31b3d93be2fa22c70cb8`);
 - `ffmpeg -hwaccel vaapi -vaapi_device /dev/dri/renderD128` decodes to the end
   of a stream and downloads NV12 through `hwdownload`;
+- **HEVC and VP9 decode on the VPU, bit-exact.** With this driver the three
+  formats the board exposes were each decoded through `-hwaccel vaapi` and
+  compared against the software decoder byte for byte: 1280x720 and 1920x1080
+  HEVC (58 and 60 frames), 1280x720 VP9 (300 frames), H.264 as before. Any
+  frame this driver returns has been through the VPU — it has no software
+  decoder behind it, only `/dev/video32`;
+- **HEVC encodes on the VPU.** `ffmpeg -vaapi_device /dev/dri/renderD128
+  -vf format=nv12,hwupload -c:v hevc_vaapi -rc_mode CBR -b:v 4M` wrote 60
+  frames of 1280x720 NV12 in 1,019 KiB (~3x realtime), decoding back at MAE
+  0.46 against the source. `-rc_mode CBR` is not optional: CBR is the only rate
+  control the V4L2 encoder offers, for HEVC as for H.264. `-vf
+  format=nv12,hwupload` is not optional either — the graph ffmpeg inserts by
+  itself starts with `scale_vaapi`, and this driver has no VPP entry point, so
+  the filter fails to initialise;
 - **mpv plays with hardware decoding, zero-copy.** `mpv --hwdec=vaapi` (direct,
   auto-inserted by default) reports `Using hardware decoding (vaapi)` and
   `[vo/gpu/vaapi] Using EGL dmabuf interop via GL_EXT_EGL_image_storage`, i.e.

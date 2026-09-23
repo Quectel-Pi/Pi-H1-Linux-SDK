@@ -18,8 +18,11 @@ struct venus_v4l2_encoder_config {
     uint32_t frames_per_second;
     uint32_t bitrate;
     uint32_t gop_size;
-    uint32_t h264_profile;
-    uint32_t h264_level;
+    /* Profile and level are applied through the control that matches
+     * coded_format: the H.264 pair for H.264, the HEVC pair for HEVC. The iris
+     * encoder rejects an HEVC level above 5. */
+    uint32_t coded_profile;
+    uint32_t coded_level;
     size_t capture_buffer_size;
     unsigned int output_buffers;
     unsigned int capture_buffers;

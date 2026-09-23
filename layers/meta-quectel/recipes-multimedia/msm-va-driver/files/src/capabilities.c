@@ -82,6 +82,18 @@ const char *venus_codec_name(enum venus_codec codec)
     return "unknown";
 }
 
+uint32_t venus_codec_fourcc(enum venus_codec codec)
+{
+    size_t i;
+
+    for (i = 0; i < sizeof(codec_map) / sizeof(codec_map[0]); i++) {
+        if (codec_map[i].codec == codec)
+            return codec_map[i].fourcc;
+    }
+
+    return 0;
+}
+
 size_t venus_capabilities_format(const struct venus_capabilities *caps,
                                  enum venus_role role, char *buffer,
                                  size_t buffer_size)
