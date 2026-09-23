@@ -1845,7 +1845,8 @@ static void l2cap_sock_init(struct sock *sk, struct sock *parent)
 			break;
 		}
 
-		chan->imtu = L2CAP_DEFAULT_MTU;
+		/* 接收方向放宽到 3-DH5 顶格值，宏 L2CAP_DEFAULT_MTU(672) 保持不动 */
+		chan->imtu = L2CAP_DEFAULT_RX_MTU;
 		chan->omtu = 0;
 		if (!disable_ertm && sk->sk_type == SOCK_STREAM) {
 			chan->mode = L2CAP_MODE_ERTM;
