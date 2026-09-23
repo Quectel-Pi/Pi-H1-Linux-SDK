@@ -31,6 +31,7 @@
 import fcntl
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -38,6 +39,12 @@ import time
 
 DEV_INPUT_DIR = "/dev/input"
 POLL_INTERVAL = 1.0
+
+# 写完默认通道后盯多久的回读窗口: cover 开机时和 wireplumber 抢默认值的那几秒
+# (它启动时会把持久化的默认值写回 metadata, 也会等 PAL 节点注册出来才认这个选择)。
+# 窗口内被改掉就重设; 窗口过了不管, 免得跟用户在设置里的手动选择对着干。
+SETTLE_WINDOW = 30.0
+PW_TIMEOUT = 5.0                # 单次 pw-metadata 调用的超时, 防止它卡住把守护进程拖死
 
 EVIOCGNAME = lambda n: (2 << 30) | (n << 16) | (0x45 << 8) | 0x06
 EVIOCGSW = (2 << 30) | (8 << 16) | (0x45 << 8) | 0x1B
@@ -106,11 +113,46 @@ def desired(switches):
             pick(SOURCES, SOURCE_FALLBACK, switches))
 
 
+def parse_default(out):
+    """从 pw-metadata 的输出里取节点名, 没写就 None。"""
+    match = re.search(r'"name"\s*:\s*"([^"]*)"', out)
+    return match.group(1) if match else None
+
+
+def pw_metadata_read(key):
+    """pw-metadata 查当前值的原始输出; 连不上/超时返回 None。"""
+    try:
+        out = subprocess.run(["pw-metadata", "-n", "default", "0", key],
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             timeout=PW_TIMEOUT).stdout
+    except subprocess.TimeoutExpired:
+        # 卡住不能把守护进程一起卡住: 它崩了 systemd 会拉起(Restart=always), 挂住不会。
+        return None
+    return out.decode("utf-8", "replace")
+
+
+def read_default(key):
+    """metadata 里当前生效的节点名; 读不到(pipewire 还没起来/不是会话用户)返回 None。"""
+    out = pw_metadata_read(key)
+    return parse_default(out) if out is not None else None
+
+
+def verify_defaults(sink, source):
+    return (read_default("default.configured.audio.sink") == sink and
+            read_default("default.configured.audio.source") == source)
+
+
 def apply_defaults(sink, source):
+    """写默认通道。写完不代表生效, 由 main() 在 SETTLE_WINDOW 内回读确认。"""
     for key, name in (("sink", sink), ("source", source)):
-        subprocess.run(["pw-metadata", "-n", "default", "0",
-                        "default.configured.audio." + key, json.dumps({"name": name})],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        mdkey = "default.configured.audio." + key
+        try:
+            subprocess.run(["pw-metadata", "-n", "default", "0", mdkey,
+                            json.dumps({"name": name})],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=PW_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            print("警告: 写 %s 超时, pw-metadata 无响应" % mdkey, flush=True)
     print("切换默认通道: output=%s input=%s" % (sink, source), flush=True)
 
 
@@ -127,6 +169,16 @@ def show_status():
                                     "  [%s]" % ",".join(extra) if extra else ""))
     sink, source = desired(switches)
     print("当前应选: output=%s input=%s" % (sink, source))
+    # 实际生效值: 跟上面不一样就是没切过去(每次插拔后应该只差一两秒)。
+    # pw-metadata 要连 pipewire 会话, root/adb shell 直接跑会读不到 —— 那就把原因打出来,
+    # 别让"读不到"看起来像"没切过去"。
+    raw = pw_metadata_read("default.configured.audio.sink")
+    actual = parse_default(raw) if raw is not None else None
+    print("实际生效: output=%s input=%s%s"
+          % (actual, read_default("default.configured.audio.source"),
+             "" if raw is not None and actual else
+             "   <- 读不到, 要以桌面用户跑: sudo -u p XDG_RUNTIME_DIR=/run/user/1001 %s --status"
+             % os.path.basename(__file__)))
 
 
 def self_test():
@@ -160,7 +212,13 @@ def self_test():
     for switches, want in cases:
         got = desired(switches)
         assert got == want, "%r -> %r, 期望 %r" % (switches, got, want)
-    print("self-test ok (%d cases)" % len(cases))
+    # 回读解析: pw-metadata 查当前值时的输出格式
+    assert parse_default("update: id:0 key:'default.audio.sink' "
+                         "value:'{\"name\":\"pal_sink_headset\"}' type:''") == "pal_sink_headset"
+    # pipewire 还没起来 / key 没设过 -> 读不到, 不能当成"写成功"
+    assert parse_default("") is None
+    assert parse_default('Found "default" metadata 57') is None
+    print("self-test ok (%d cases)" % (len(cases) + 3))
 
 
 def main():
@@ -172,14 +230,20 @@ def main():
         return 0
 
     last = None
+    settle_until = 0
     while True:
         want = desired(read_switches())
         if want != last:
-            # 启动后第一轮无条件设一次, 包括"什么都没插 -> 喇叭": 否则接 MIPI 屏
-            # 时默认设备由 wireplumber 按 priority 自己猜, 可能落到耳机。之后只在
-            # 插拔导致的跳变时设, 不跟用户的手动选择对着干。
+            # 插拔导致的跳变(含启动后第一轮: 包括"什么都没插 -> 喇叭", 否则接 MIPI 屏
+            # 时默认设备由 wireplumber 按 priority 自己猜, 可能落到耳机)。
             apply_defaults(*want)
             last = want
+            settle_until = time.time() + SETTLE_WINDOW
+        elif time.time() < settle_until and not verify_defaults(*want):
+            # 写下去的那次被盖掉了(开机时 wireplumber 拿自己持久化的默认值写回
+            # metadata, 跟这里的写入赛跑, 输的那次以前没人发现 -> 一直错到下次插拔)。
+            print("默认通道被外部改掉, 重设:", flush=True)
+            apply_defaults(*want)
         time.sleep(POLL_INTERVAL)
 
 
