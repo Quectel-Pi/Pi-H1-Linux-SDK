@@ -6,7 +6,9 @@
 # itself "msm_vidc_driver" instead of "qcom-venus", surfaces may be as small as
 # 16x16, surfaces are allocated from a DMA-BUF heap so vaExportSurfaceHandle()
 # works (mpv's --hwdec=vaapi requires it), vaSyncSurface drains the decoder when
-# the client's own surface pool stalls, and decoder stop/start are paired.
+# the client's own surface pool stalls, the encoder waits for a decoded surface
+# instead of failing the encode when its picture is still in the decoder's
+# reorder buffer, and decoder stop/start are paired.
 # SRCREV is pinned on purpose: the branch is the tested revision, and a floating
 # rev could silently ship a driver without those fixes.
 #
@@ -20,7 +22,7 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=ae5ae5eddeebed7d3d3b2f4b475bbfce"
 
 SRC_URI = "git://github.com/super617/venus-vaapi-driver.git;protocol=https;branch=qcm6490-msm-vidc-adapt"
-SRCREV = "91aafb019c2a12fb998146ce2bbf2df30b5e940d"
+SRCREV = "aa851445e0b2b5e40e36b24402aebb5b4a9b8f21"
 S = "${WORKDIR}/git"
 
 DEPENDS = "libva"

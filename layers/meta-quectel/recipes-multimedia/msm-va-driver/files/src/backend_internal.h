@@ -188,6 +188,15 @@ int venus_encode_h264_dimensions(
 VAStatus venus_encode_sync_surface_locked(
     struct venus_backend *backend, struct venus_surface *surface,
     int timeout_ms);
+/* How long the encoder side waits for a surface the decoder has not handed
+ * over yet, i.e. a picture still in the decoder's reorder buffer.  Long enough
+ * for sync_surface_locked() to give up and drain a stalled decoder once (see
+ * VENUS_QUIET_MS_BEFORE_DRAIN in decode.c).
+ */
+#define VENUS_SURFACE_WAIT_TIMEOUT_MS 3000
+VAStatus venus_wait_surface_locked(
+    struct venus_backend *backend, struct venus_surface *surface,
+    int timeout_ms);
 VAStatus venus_encode_sync_buffer_locked(
     struct venus_backend *backend, struct venus_buffer *buffer,
     int timeout_ms);

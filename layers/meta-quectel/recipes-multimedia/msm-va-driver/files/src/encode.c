@@ -763,6 +763,11 @@ VAStatus venus_encode_end_picture_locked(
     if (!coded || coded->context_id != context->id ||
         coded->type != VAEncCodedBufferType)
         return VA_STATUS_ERROR_INVALID_BUFFER;
+    if (surface && !surface->ready)
+        /* The decoder can re-target the surface between begin and end
+         * picture; the frame being encoded is the one still in flight. */
+        (void)venus_wait_surface_locked(
+            backend, surface, VENUS_SURFACE_WAIT_TIMEOUT_MS);
     if (!surface || !surface->ready)
         return VA_STATUS_ERROR_INVALID_SURFACE;
 

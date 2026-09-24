@@ -333,6 +333,14 @@ static VAStatus backend_begin_picture(VADriverContextP driver_context,
          (surface->width > context->width ||
           surface->height > context->height))) {
         pthread_mutex_unlock(&backend->mutex);
+        venus_backend_log(
+            backend,
+            "begin-picture REJECT unknown/oversize surface=0x%x found=%d "
+            "surf=%ux%u ctx=%ux%u entrypoint=%d backend=%p",
+            render_target, surface != NULL,
+            surface ? surface->width : 0, surface ? surface->height : 0,
+            context->width, context->height, config->entrypoint,
+            (void *)backend);
         return VA_STATUS_ERROR_INVALID_SURFACE;
     }
     if (context->in_picture || surface->encode_pending) {
@@ -341,7 +349,31 @@ static VAStatus backend_begin_picture(VADriverContextP driver_context,
     }
     if (config->entrypoint == VAEntrypointEncSlice &&
         (!surface->ready || surface->data_size == 0)) {
+        /*
+         * The client can reach the encoder before the picture being encoded
+         * has left the decoder's reorder buffer - ffmpeg hands the surface
+         * straight from vaEndPicture() to the encoder without a sync.  The
+         * frame is on its way, so wait for it (see
+         * venus_wait_surface_locked()) instead of failing the encode; the
+         * log below then only fires when the data really is not coming.
+         */
+        (void)venus_wait_surface_locked(
+            backend, surface, VENUS_SURFACE_WAIT_TIMEOUT_MS);
+        venus_backend_log(
+            backend,
+            "begin-picture wait surface=0x%x ready=%d data_size=%zu",
+            render_target, surface->ready, surface->data_size);
+    }
+    if (config->entrypoint == VAEntrypointEncSlice &&
+        (!surface->ready || surface->data_size == 0)) {
         pthread_mutex_unlock(&backend->mutex);
+        venus_backend_log(
+            backend,
+            "begin-picture REJECT %s surface=0x%x ready=%d data_size=%zu "
+            "encode_pending=%d surf_ctx=0x%x ctx=0x%x backend=%p",
+            surface->ready ? "empty-data" : "not-ready", render_target,
+            surface->ready, surface->data_size, surface->encode_pending,
+            surface->context_id, context_id, (void *)backend);
         return VA_STATUS_ERROR_INVALID_SURFACE;
     }
 
@@ -805,6 +837,22 @@ static VAStatus sync_surface_locked(struct venus_backend *backend,
                           : VA_STATUS_ERROR_HW_BUSY;
 }
 
+/*
+ * An encoder reads a surface the decoder filled, and ffmpeg does not
+ * vaSyncSurface() a decoded surface: it hands the surface to the encoder as
+ * soon as its decoder emits the frame, which can happen while the picture is
+ * still sitting in the decoder's reorder buffer.  The data is on its way and
+ * nothing else can take the surface over (the client still holds the surface
+ * in its pool, the decoder cannot re-target a surface with encode_pending
+ * set), so wait for it like a sync would instead of failing the client.
+ */
+VAStatus venus_wait_surface_locked(struct venus_backend *backend,
+                                   struct venus_surface *surface,
+                                   int timeout_ms)
+{
+    return sync_surface_locked(backend, surface, timeout_ms);
+}
+
 static VAStatus backend_sync_surface(VADriverContextP driver_context,
                                      VASurfaceID surface_id)
 {
@@ -826,8 +874,8 @@ static VAStatus backend_sync_surface(VADriverContextP driver_context,
     status = sync_surface_locked(
         backend, surface, VENUS_SYNC_TIMEOUT_MS);
     venus_backend_log(backend,
-                      "sync-surface id=0x%x status=%d bytes=%zu",
-                      surface_id, status, surface->data_size);
+                      "sync-surface id=0x%x status=%d bytes=%zu ready=%d",
+                      surface_id, status, surface->data_size, surface->ready);
     pthread_mutex_unlock(&backend->mutex);
     return status;
 }

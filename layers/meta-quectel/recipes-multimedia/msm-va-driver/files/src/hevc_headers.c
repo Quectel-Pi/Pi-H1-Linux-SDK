@@ -25,6 +25,23 @@
  * values this interface does not carry are given the setting an encoder
  * leaves behind: a single temporal sub layer, no VUI, flat scaling lists.
  */
+/*
+ * sps_max_num_reorder_pics for both the VPS and the SPS.  A VA-API HEVC
+ * client reports whether the stream reorders pictures (NoPicReorderingFlag)
+ * but never how far; stamping the whole DPB size in instead makes the decoder
+ * lag that many pictures behind its input, and a client that stops submitting
+ * once it wants a frame back can no longer make progress at all.  The smallest
+ * lag that keeps the reordering the client asked for is used.
+ */
+static uint32_t venus_hevc_reorder_pics(
+    const VAPictureParameterBufferHEVC *picture)
+{
+    if (picture->pic_fields.bits.NoPicReorderingFlag)
+        return 0;
+
+    return 1;
+}
+
 static void write_profile_tier_level(struct venus_bit_writer *bits,
                                      uint32_t luma_samples)
 {
@@ -63,6 +80,7 @@ static int build_vps(const struct venus_hevc_sequence *sequence,
     const VAPictureParameterBufferHEVC *picture = sequence->picture;
     struct venus_bit_writer bits;
     uint32_t buffering = picture->sps_max_dec_pic_buffering_minus1;
+    uint32_t reorder = venus_hevc_reorder_pics(picture);
 
     venus_bits_init(&bits, rbsp, capacity);
     venus_bits_write(&bits, 0, 4);        /* vps_video_parameter_set_id */
@@ -76,7 +94,7 @@ static int build_vps(const struct venus_hevc_sequence *sequence,
         &bits, sequence->coded_width * sequence->coded_height);
     venus_bits_write(&bits, 0, 1);        /* sub_layer_ordering_info */
     venus_bits_write_ue(&bits, buffering);
-    venus_bits_write_ue(&bits, buffering); /* num_reorder_pics */
+    venus_bits_write_ue(&bits, reorder);   /* num_reorder_pics */
     venus_bits_write_ue(&bits, 0);         /* max_latency_increase_plus1 */
     venus_bits_write(&bits, 0, 6);        /* vps_max_layer_id */
     venus_bits_write_ue(&bits, 0);        /* vps_num_layer_sets_minus1 */
@@ -101,6 +119,7 @@ static int build_sps(const struct venus_hevc_sequence *sequence,
     uint32_t right_crop = 0;
     uint32_t bottom_crop = 0;
     uint32_t buffering = picture->sps_max_dec_pic_buffering_minus1;
+    uint32_t reorder = venus_hevc_reorder_pics(picture);
 
     if (!width || !height)
         return -EINVAL;
@@ -143,7 +162,7 @@ static int build_sps(const struct venus_hevc_sequence *sequence,
     venus_bits_write_ue(&bits, picture->log2_max_pic_order_cnt_lsb_minus4);
     venus_bits_write(&bits, 0, 1);        /* sub_layer_ordering_info */
     venus_bits_write_ue(&bits, buffering);
-    venus_bits_write_ue(&bits, buffering); /* sps_max_num_reorder_pics */
+    venus_bits_write_ue(&bits, reorder);   /* sps_max_num_reorder_pics */
     venus_bits_write_ue(&bits, 0);         /* max_latency_increase_plus1 */
     venus_bits_write_ue(
         &bits, picture->log2_min_luma_coding_block_size_minus3);

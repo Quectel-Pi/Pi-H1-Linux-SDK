@@ -285,7 +285,7 @@ index 1fd8b7a..ae98d7b 100644
          .type = VAConfigAttribRTFormat,
          .value = VA_RT_FORMAT_YUV420,
 diff --git a/src/backend_internal.h b/src/backend_internal.h
-index 7081338..8e475e9 100644
+index 7081338..56cd94e 100644
 --- a/src/backend_internal.h
 +++ b/src/backend_internal.h
 @@ -2,6 +2,7 @@
@@ -394,6 +394,22 @@ index 7081338..8e475e9 100644
  VAStatus venus_backend_encode_status_from_errno(int status);
  
  struct venus_config *venus_backend_find_config(struct venus_backend *backend,
+@@ -157,6 +188,15 @@ int venus_encode_h264_dimensions(
+ VAStatus venus_encode_sync_surface_locked(
+     struct venus_backend *backend, struct venus_surface *surface,
+     int timeout_ms);
++/* How long the encoder side waits for a surface the decoder has not handed
++ * over yet, i.e. a picture still in the decoder's reorder buffer.  Long enough
++ * for sync_surface_locked() to give up and drain a stalled decoder once (see
++ * VENUS_QUIET_MS_BEFORE_DRAIN in decode.c).
++ */
++#define VENUS_SURFACE_WAIT_TIMEOUT_MS 3000
++VAStatus venus_wait_surface_locked(
++    struct venus_backend *backend, struct venus_surface *surface,
++    int timeout_ms);
+ VAStatus venus_encode_sync_buffer_locked(
+     struct venus_backend *backend, struct venus_buffer *buffer,
+     int timeout_ms);
 diff --git a/src/capabilities.c b/src/capabilities.c
 index ea2b775..b997d1b 100644
 --- a/src/capabilities.c
@@ -418,7 +434,7 @@ index ea2b775..b997d1b 100644
                                   enum venus_role role, char *buffer,
                                   size_t buffer_size)
 diff --git a/src/decode.c b/src/decode.c
-index af35218..ed620c6 100644
+index af35218..f7098db 100644
 --- a/src/decode.c
 +++ b/src/decode.c
 @@ -10,10 +10,17 @@
@@ -491,7 +507,55 @@ index af35218..ed620c6 100644
              .width = (uint32_t)picture_width,
              .height = (uint32_t)picture_height,
              .output_buffer_size = 2u * 1024u * 1024u,
-@@ -388,10 +404,28 @@ static VAStatus backend_render_picture(VADriverContextP driver_context,
+@@ -317,15 +333,47 @@ static VAStatus backend_begin_picture(VADriverContextP driver_context,
+          (surface->width > context->width ||
+           surface->height > context->height))) {
+         pthread_mutex_unlock(&backend->mutex);
++        venus_backend_log(
++            backend,
++            "begin-picture REJECT unknown/oversize surface=0x%x found=%d "
++            "surf=%ux%u ctx=%ux%u entrypoint=%d backend=%p",
++            render_target, surface != NULL,
++            surface ? surface->width : 0, surface ? surface->height : 0,
++            context->width, context->height, config->entrypoint,
++            (void *)backend);
+         return VA_STATUS_ERROR_INVALID_SURFACE;
+     }
+     if (context->in_picture || surface->encode_pending) {
+         pthread_mutex_unlock(&backend->mutex);
+         return VA_STATUS_ERROR_OPERATION_FAILED;
+     }
++    if (config->entrypoint == VAEntrypointEncSlice &&
++        (!surface->ready || surface->data_size == 0)) {
++        /*
++         * The client can reach the encoder before the picture being encoded
++         * has left the decoder's reorder buffer - ffmpeg hands the surface
++         * straight from vaEndPicture() to the encoder without a sync.  The
++         * frame is on its way, so wait for it (see
++         * venus_wait_surface_locked()) instead of failing the encode; the
++         * log below then only fires when the data really is not coming.
++         */
++        (void)venus_wait_surface_locked(
++            backend, surface, VENUS_SURFACE_WAIT_TIMEOUT_MS);
++        venus_backend_log(
++            backend,
++            "begin-picture wait surface=0x%x ready=%d data_size=%zu",
++            render_target, surface->ready, surface->data_size);
++    }
+     if (config->entrypoint == VAEntrypointEncSlice &&
+         (!surface->ready || surface->data_size == 0)) {
+         pthread_mutex_unlock(&backend->mutex);
++        venus_backend_log(
++            backend,
++            "begin-picture REJECT %s surface=0x%x ready=%d data_size=%zu "
++            "encode_pending=%d surf_ctx=0x%x ctx=0x%x backend=%p",
++            surface->ready ? "empty-data" : "not-ready", render_target,
++            surface->ready, surface->data_size, surface->encode_pending,
++            surface->context_id, context_id, (void *)backend);
+         return VA_STATUS_ERROR_INVALID_SURFACE;
+     }
+ 
+@@ -388,10 +436,28 @@ static VAStatus backend_render_picture(VADriverContextP driver_context,
      return VA_STATUS_SUCCESS;
  }
  
@@ -523,7 +587,7 @@ index af35218..ed620c6 100644
      size_t *access_unit_capacity)
  {
      struct venus_buffer *slice_parameters = NULL;
-@@ -414,61 +448,158 @@ static int collect_h264_buffers(
+@@ -414,61 +480,158 @@ static int collect_h264_buffers(
          switch (buffer->type) {
          case VAPictureParameterBufferType:
              if (*picture || buffer->num_elements != 1 ||
@@ -700,7 +764,7 @@ index af35218..ed620c6 100644
      uint8_t *access_unit = NULL;
      size_t access_unit_capacity;
      size_t access_unit_size = 0;
-@@ -511,8 +642,13 @@ static VAStatus backend_end_picture(VADriverContextP driver_context,
+@@ -511,8 +674,13 @@ static VAStatus backend_end_picture(VADriverContextP driver_context,
          goto finish;
      }
  
@@ -716,7 +780,7 @@ index af35218..ed620c6 100644
          &access_unit_capacity);
      if (status < 0)
          goto finish;
-@@ -523,19 +659,27 @@ static VAStatus backend_end_picture(VADriverContextP driver_context,
+@@ -523,19 +691,27 @@ static VAStatus backend_end_picture(VADriverContextP driver_context,
          goto finish;
      }
  
@@ -750,7 +814,7 @@ index af35218..ed620c6 100644
  
  finish:
      free(access_unit);
-@@ -551,6 +695,45 @@ finish:
+@@ -551,6 +727,45 @@ finish:
                        : VA_STATUS_SUCCESS;
  }
  
@@ -796,7 +860,7 @@ index af35218..ed620c6 100644
  static VAStatus sync_surface_locked(struct venus_backend *backend,
                                      struct venus_surface *surface,
                                      int timeout_ms)
-@@ -574,14 +757,50 @@ static VAStatus sync_surface_locked(struct venus_backend *backend,
+@@ -574,18 +789,70 @@ static VAStatus sync_surface_locked(struct venus_backend *backend,
             monotonic_milliseconds() < deadline) {
          int status = venus_v4l2_decoder_pump(
              context->decoder, 1000,
@@ -851,8 +915,39 @@ index af35218..ed620c6 100644
      return surface->ready ? VA_STATUS_SUCCESS
                            : VA_STATUS_ERROR_HW_BUSY;
  }
+ 
++/*
++ * An encoder reads a surface the decoder filled, and ffmpeg does not
++ * vaSyncSurface() a decoded surface: it hands the surface to the encoder as
++ * soon as its decoder emits the frame, which can happen while the picture is
++ * still sitting in the decoder's reorder buffer.  The data is on its way and
++ * nothing else can take the surface over (the client still holds the surface
++ * in its pool, the decoder cannot re-target a surface with encode_pending
++ * set), so wait for it like a sync would instead of failing the client.
++ */
++VAStatus venus_wait_surface_locked(struct venus_backend *backend,
++                                   struct venus_surface *surface,
++                                   int timeout_ms)
++{
++    return sync_surface_locked(backend, surface, timeout_ms);
++}
++
+ static VAStatus backend_sync_surface(VADriverContextP driver_context,
+                                      VASurfaceID surface_id)
+ {
+@@ -607,8 +874,8 @@ static VAStatus backend_sync_surface(VADriverContextP driver_context,
+     status = sync_surface_locked(
+         backend, surface, VENUS_SYNC_TIMEOUT_MS);
+     venus_backend_log(backend,
+-                      "sync-surface id=0x%x status=%d bytes=%zu",
+-                      surface_id, status, surface->data_size);
++                      "sync-surface id=0x%x status=%d bytes=%zu ready=%d",
++                      surface_id, status, surface->data_size, surface->ready);
+     pthread_mutex_unlock(&backend->mutex);
+     return status;
+ }
 diff --git a/src/encode.c b/src/encode.c
-index ca9d34c..15008b3 100644
+index ca9d34c..f18e008 100644
 --- a/src/encode.c
 +++ b/src/encode.c
 @@ -10,6 +10,7 @@
@@ -1286,7 +1381,7 @@ index ca9d34c..15008b3 100644
          context->encode_width, context->encode_height,
          frames_per_second, bitrate, gop_size,
          venus_v4l2_encoder_output_count(context->encoder),
-@@ -551,22 +739,26 @@ VAStatus venus_encode_end_picture_locked(
+@@ -551,26 +739,35 @@ VAStatus venus_encode_end_picture_locked(
      struct venus_backend *backend, struct venus_context *context,
      const struct venus_config *config)
  {
@@ -1316,7 +1411,16 @@ index ca9d34c..15008b3 100644
      surface = venus_backend_find_surface(backend, context->target);
      if (!coded || coded->context_id != context->id ||
          coded->type != VAEncCodedBufferType)
-@@ -588,16 +780,10 @@ VAStatus venus_encode_end_picture_locked(
+         return VA_STATUS_ERROR_INVALID_BUFFER;
++    if (surface && !surface->ready)
++        /* The decoder can re-target the surface between begin and end
++         * picture; the frame being encoded is the one still in flight. */
++        (void)venus_wait_surface_locked(
++            backend, surface, VENUS_SURFACE_WAIT_TIMEOUT_MS);
+     if (!surface || !surface->ready)
+         return VA_STATUS_ERROR_INVALID_SURFACE;
+ 
+@@ -588,16 +785,10 @@ VAStatus venus_encode_end_picture_locked(
              coded_capacity);
          if (status < 0)
              return venus_backend_encode_status_from_errno(status);
@@ -1669,10 +1773,10 @@ index 730b502..0011fa4 100644
  #endif
 diff --git a/src/hevc_headers.c b/src/hevc_headers.c
 new file mode 100644
-index 0000000..5d34672
+index 0000000..9c352fb
 --- /dev/null
 +++ b/src/hevc_headers.c
-@@ -0,0 +1,396 @@
+@@ -0,0 +1,415 @@
 +// SPDX-License-Identifier: MIT
 +#include "hevc_headers.h"
 +
@@ -1700,6 +1804,23 @@ index 0000000..5d34672
 + * values this interface does not carry are given the setting an encoder
 + * leaves behind: a single temporal sub layer, no VUI, flat scaling lists.
 + */
++/*
++ * sps_max_num_reorder_pics for both the VPS and the SPS.  A VA-API HEVC
++ * client reports whether the stream reorders pictures (NoPicReorderingFlag)
++ * but never how far; stamping the whole DPB size in instead makes the decoder
++ * lag that many pictures behind its input, and a client that stops submitting
++ * once it wants a frame back can no longer make progress at all.  The smallest
++ * lag that keeps the reordering the client asked for is used.
++ */
++static uint32_t venus_hevc_reorder_pics(
++    const VAPictureParameterBufferHEVC *picture)
++{
++    if (picture->pic_fields.bits.NoPicReorderingFlag)
++        return 0;
++
++    return 1;
++}
++
 +static void write_profile_tier_level(struct venus_bit_writer *bits,
 +                                     uint32_t luma_samples)
 +{
@@ -1738,6 +1859,7 @@ index 0000000..5d34672
 +    const VAPictureParameterBufferHEVC *picture = sequence->picture;
 +    struct venus_bit_writer bits;
 +    uint32_t buffering = picture->sps_max_dec_pic_buffering_minus1;
++    uint32_t reorder = venus_hevc_reorder_pics(picture);
 +
 +    venus_bits_init(&bits, rbsp, capacity);
 +    venus_bits_write(&bits, 0, 4);        /* vps_video_parameter_set_id */
@@ -1751,7 +1873,7 @@ index 0000000..5d34672
 +        &bits, sequence->coded_width * sequence->coded_height);
 +    venus_bits_write(&bits, 0, 1);        /* sub_layer_ordering_info */
 +    venus_bits_write_ue(&bits, buffering);
-+    venus_bits_write_ue(&bits, buffering); /* num_reorder_pics */
++    venus_bits_write_ue(&bits, reorder);   /* num_reorder_pics */
 +    venus_bits_write_ue(&bits, 0);         /* max_latency_increase_plus1 */
 +    venus_bits_write(&bits, 0, 6);        /* vps_max_layer_id */
 +    venus_bits_write_ue(&bits, 0);        /* vps_num_layer_sets_minus1 */
@@ -1776,6 +1898,7 @@ index 0000000..5d34672
 +    uint32_t right_crop = 0;
 +    uint32_t bottom_crop = 0;
 +    uint32_t buffering = picture->sps_max_dec_pic_buffering_minus1;
++    uint32_t reorder = venus_hevc_reorder_pics(picture);
 +
 +    if (!width || !height)
 +        return -EINVAL;
@@ -1818,7 +1941,7 @@ index 0000000..5d34672
 +    venus_bits_write_ue(&bits, picture->log2_max_pic_order_cnt_lsb_minus4);
 +    venus_bits_write(&bits, 0, 1);        /* sub_layer_ordering_info */
 +    venus_bits_write_ue(&bits, buffering);
-+    venus_bits_write_ue(&bits, buffering); /* sps_max_num_reorder_pics */
++    venus_bits_write_ue(&bits, reorder);   /* sps_max_num_reorder_pics */
 +    venus_bits_write_ue(&bits, 0);         /* max_latency_increase_plus1 */
 +    venus_bits_write_ue(
 +        &bits, picture->log2_min_luma_coding_block_size_minus3);

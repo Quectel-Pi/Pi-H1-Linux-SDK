@@ -27,7 +27,7 @@ nothing is checked in as a binary:
 ```
 SRC_URI = git://github.com/super617/venus-vaapi-driver.git \
           ;protocol=https;branch=qcm6490-msm-vidc-adapt
-SRCREV  = 91aafb019c2a12fb998146ce2bbf2df30b5e940d   # pinned on purpose
+SRCREV  = aa851445e0b2b5e40e36b24402aebb5b4a9b8f21   # pinned on purpose
 ```
 
 `quecpi-image.bb` lists the package in `IMAGE_INSTALL`, and the recipe is the
