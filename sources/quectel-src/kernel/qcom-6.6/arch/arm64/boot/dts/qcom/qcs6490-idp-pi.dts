@@ -1041,7 +1041,19 @@
 };
 
 &pmk8350_rtc {
+	/* RTC 时间偏移保存到 sdam_2，使内核可回写 RTC（配合 chrony rtcsync） */
+	nvmem-cells = <&rtc_offset>;
+	nvmem-cell-names = "offset";
+
 	status = "okay";
+};
+
+&pmk8350_sdam_2 {
+	status = "okay";
+
+	rtc_offset: rtc-offset@bc {
+		reg = <0xbc 0x4>;
+	};
 };
 
 &pmk8350_vadc {
