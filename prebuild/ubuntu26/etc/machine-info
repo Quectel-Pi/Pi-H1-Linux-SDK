@@ -1,0 +1,17 @@
+# The board runs under the Gunyah hypervisor, so systemd's virt detection
+# (systemd-detect-virt -> vm-other) makes hostnamed report Chassis=vm even
+# though there is no DMI and the hardware is an embedded SBC. GNOME reads that
+# chassis type and hides the power-panel's automatic-suspend group and the
+# power-button-behaviour row on anything it thinks is a VM, so both were
+# missing from Settings on the QuecPi Alpha.
+#
+# CHASSIS is hostnamed's highest-priority source, so this overrides the
+# detected value with no change to the hypervisor detection itself.
+#
+# embedded, not desktop: it is neither in the vm/tablet/handset exclusion
+# list (so the suspend rows stay) nor in the tablet/watch/handset list that
+# switches the delay dropdown to the short mobile times.
+#
+# Keep in step with prebuild/gnome/etc/machine-info: the two files serve the
+# Ubuntu (ubuntu26) and Debian (gnome) rootfs overlays respectively.
+CHASSIS=embedded
