@@ -94,6 +94,8 @@
 		#size-cells = <0>;
 		orientation-gpios = <&tlmm 140 GPIO_ACTIVE_HIGH>;
 		qcom,thermal-mitigation = <3000000 1500000 1000000 500000>;
+		/* No battery on this board: don't advertise a battery power supply */
+		qcom,battery-absent;
 
 		connector@0 {
 			compatible = "usb-c-connector";

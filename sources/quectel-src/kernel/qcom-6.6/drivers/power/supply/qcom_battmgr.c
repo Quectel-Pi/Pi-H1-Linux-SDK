@@ -1126,7 +1126,8 @@ static void qcom_battmgr_notification(struct qcom_battmgr *battmgr,
 		fallthrough;
 	case NOTIF_BAT_STATUS:
 	case NOTIF_BAT_PROPERTY:
-		power_supply_changed(battmgr->bat_psy);
+		if (battmgr->bat_psy)
+			power_supply_changed(battmgr->bat_psy);
 		break;
 	case NOTIF_USB_PROPERTY:
 		power_supply_changed(battmgr->usb_psy);
@@ -1535,6 +1536,10 @@ static int qcom_battmgr_register_thermal_cooling_device(struct qcom_battmgr *bat
 	if (battmgr->thermal_dev_registered)
 		return 0;
 
+	/* No battery supply -> nothing to limit charge current for */
+	if (!battmgr->bat_psy)
+		return 0;
+
 	mutex_lock(&battmgr->lock);
 	rc = qcom_battmgr_request_property(battmgr, BATTMGR_BAT_PROPERTY_GET,
 					   BATT_CHG_CTRL_LIM_MAX, 0);
@@ -1672,6 +1677,7 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 	const struct of_device_id *match;
 	struct qcom_battmgr *battmgr;
 	struct device *dev = &adev->dev;
+	bool has_battery;
 	int ret;
 
 	battmgr = devm_kzalloc(dev, sizeof(*battmgr), GFP_KERNEL);
@@ -1698,11 +1704,22 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 	else
 		battmgr->variant = QCOM_BATTMGR_SM8350;
 
+	/*
+	 * Some boards (e.g. plug-in boxes) have no battery at all, yet the
+	 * firmware still reports one over PMIC GLINK. Do not expose a bogus
+	 * battery power supply for those, otherwise userspace (UPower/GNOME)
+	 * shows a battery that can never discharge.
+	 * USB/wireless line supplies and thermal mitigation stay enabled.
+	 */
+	has_battery = !of_property_read_bool(dev->of_node, "qcom,battery-absent");
+
 	if (battmgr->variant == QCOM_BATTMGR_SC8280XP) {
-		battmgr->bat_psy = devm_power_supply_register(dev, &sc8280xp_bat_psy_desc, &psy_cfg);
-		if (IS_ERR(battmgr->bat_psy))
-			return dev_err_probe(dev, PTR_ERR(battmgr->bat_psy),
-					     "failed to register battery power supply\n");
+		if (has_battery) {
+			battmgr->bat_psy = devm_power_supply_register(dev, &sc8280xp_bat_psy_desc, &psy_cfg);
+			if (IS_ERR(battmgr->bat_psy))
+				return dev_err_probe(dev, PTR_ERR(battmgr->bat_psy),
+						     "failed to register battery power supply\n");
+		}
 
 		battmgr->ac_psy = devm_power_supply_register(dev, &sc8280xp_ac_psy_desc, &psy_cfg_supply);
 		if (IS_ERR(battmgr->ac_psy))
@@ -1725,10 +1742,12 @@ static int qcom_battmgr_probe(struct auxiliary_device *adev,
 			return ret;
 		}
 
-		battmgr->bat_psy = devm_power_supply_register(dev, &sm8350_bat_psy_desc, &psy_cfg);
-		if (IS_ERR(battmgr->bat_psy))
-			return dev_err_probe(dev, PTR_ERR(battmgr->bat_psy),
-					     "failed to register battery power supply\n");
+		if (has_battery) {
+			battmgr->bat_psy = devm_power_supply_register(dev, &sm8350_bat_psy_desc, &psy_cfg);
+			if (IS_ERR(battmgr->bat_psy))
+				return dev_err_probe(dev, PTR_ERR(battmgr->bat_psy),
+						     "failed to register battery power supply\n");
+		}
 
 		battmgr->usb_psy = devm_power_supply_register(dev, &sm8350_usb_psy_desc, &psy_cfg_supply);
 		if (IS_ERR(battmgr->usb_psy))
