@@ -151,7 +151,9 @@ echo "===============copy image begin=============="
  
 rm -f $AP_VERSION_FILE/prog_firehose*
 
-rsync -av "$AP_VERSION_FILE"/* "$TARGET_DIR"
+# UFS 的 rawprogram/patch XML 与固件根目录下的同名文件逐字节相同，打包时不再
+# 拷贝 partition_ufs/；flash.sh 直接从根目录读。eMMC 同样不打包（本板无 eMMC 存储）。
+rsync -av --exclude='partition_ufs' --exclude='partition_emmc' "$AP_VERSION_FILE"/* "$TARGET_DIR"
 if [[ $? -eq 0 ]];
 then 
    echo "copy ap version scuessful" 

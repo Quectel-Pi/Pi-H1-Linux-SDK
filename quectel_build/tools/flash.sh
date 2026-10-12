@@ -32,6 +32,13 @@ else
 fi
 
 STORAGE="${1:-ufs}"           # 默认 UFS，可传 emmc
+# UFS 的 rawprogram/patch XML 与固件根目录下的同名文件逐字节相同，且 qdl 用 -i 指定的
+# 目录优先解析 XML 里的裸文件名，所以下面的 .bin 实际一直是从固件根目录取的
+# （partition_ufs/*.bin 从未被读到）。打包时不再带 partition_ufs/，UFS 直接从根目录读。
+PART_DIR="$FW_DIR"
+if [[ "$STORAGE" != "ufs" ]]; then
+    PART_DIR="$FW_DIR/partition_${STORAGE}"
+fi
 EDL_TIMEOUT=30               # 等待 9008 设备的超时秒数
 SKIP_ENTER_EDL=0             # 已在 EDL 模式时跳过 adb shell reboot edl
 
@@ -123,7 +130,7 @@ check_fw_dir() {
         exit 1
     fi
 
-    local partition_dir="$FW_DIR/partition_${STORAGE}"
+    local partition_dir="$PART_DIR"
     if [[ ! -d "$partition_dir" ]]; then
         error "分区目录不存在: $partition_dir"
         exit 1
@@ -221,7 +228,7 @@ wait_for_edl() {
 
 # ===== 执行烧录 =====
 do_flash() {
-    local partition_dir="$FW_DIR/partition_${STORAGE}"
+    local partition_dir="$PART_DIR"
     local prog="$FW_DIR/prog_firehose_Qcm6490_ddr.elf"
 
     info "===== 开始烧录 ====="

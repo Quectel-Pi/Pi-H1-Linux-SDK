@@ -98,7 +98,7 @@ lsusb | grep 05c6:9008
 # 执行烧录
 cd quectel_build/QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01
 qdl -s ufs -i . prog_firehose_Qcm6490_ddr.elf \
-  partition_ufs/rawprogram[0-5].xml partition_ufs/patch[0-5].xml
+  rawprogram[0-5].xml patch[0-5].xml
 ```
 
 ## 项目结构
@@ -119,7 +119,7 @@ qdl -s ufs -i . prog_firehose_Qcm6490_ddr.elf \
 │   │       └── quectel-buildconfig-gen.h  # 编译配置 (含版本号)
 │   └── <版本号>/                     # 由 buildconfig 第二个参数决定
 │       ├── prog_firehose_Qcm6490_ddr.elf
-│       └── partition_ufs/
+│       └── rawprogram[0-5].xml patch[0-5].xml  # UFS 分区表 (烧录用)
 ```
 
 ## 快速开始

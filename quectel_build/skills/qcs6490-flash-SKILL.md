@@ -45,7 +45,7 @@ quectel_build/
 │   └── quectel-buildconfig-gen.h  # 固件版本配置
 └── <固件目录>/                     # 从配置文件自动读取
     ├── prog_firehose_Qcm6490_ddr.elf
-    └── partition_ufs/
+    └── rawprogram[0-5].xml patch[0-5].xml   # UFS 分区表 (烧录用)
 ```
 
 固件目录名从 `quectel-buildconfig-gen.h` 中的 `QUECTEL_PROJECT_REV` 自动读取，无需硬编码。
@@ -83,8 +83,8 @@ lsusb | grep 05c6:9008
 cd quectel_build/QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01
 qdl -s ufs -i . \
   prog_firehose_Qcm6490_ddr.elf \
-  partition_ufs/rawprogram[0-5].xml \
-  partition_ufs/patch[0-5].xml
+  rawprogram[0-5].xml \
+  patch[0-5].xml
 ```
 
 ## 关键参数
