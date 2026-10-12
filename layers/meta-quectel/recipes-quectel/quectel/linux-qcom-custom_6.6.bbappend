@@ -11,6 +11,7 @@ SRC_URI += "file://kernel-cfg-for-qmi_wwan_q.cfg \
             file://kernel-cfg-for-debian.cfg \
             file://kernel-cfg-joydev.cfg \
             file://kernel-cfg-display.cfg \
+            file://kernel-cfg-filesystem.cfg \
             "
 
 KERNEL_CONFIG_FRAGMENTS:append = " ${WORKDIR}/kernel-cfg-for-qmi_wwan_q.cfg"
@@ -18,6 +19,7 @@ KERNEL_CONFIG_FRAGMENTS:append = " ${WORKDIR}/kernel-cfg-for-wlan.cfg"
 KERNEL_CONFIG_FRAGMENTS:append = " ${WORKDIR}/kernel-cfg-for-debian.cfg"
 KERNEL_CONFIG_FRAGMENTS:append = " ${WORKDIR}/kernel-cfg-joydev.cfg"
 KERNEL_CONFIG_FRAGMENTS:append = " ${WORKDIR}/kernel-cfg-display.cfg"
+KERNEL_CONFIG_FRAGMENTS:append = " ${WORKDIR}/kernel-cfg-filesystem.cfg"
 
 
 # STD/WESTON模式(SKIP=1)保留base recipe的msm黑名单配置，其他情况移除
