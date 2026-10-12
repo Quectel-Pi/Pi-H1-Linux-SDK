@@ -105,6 +105,7 @@ struct lt9611uxc_mode {
  */
 static struct lt9611uxc_mode lt9611uxc_modes[] = {
 	{ 3840, 4400, 2160, 2250, 30 },
+	{ 2560, 2720, 1440, 1481, 60 },
 	{ 1920, 2200, 1080, 1125, 60 },
 	{ 1920, 2200, 1080, 1125, 30 },
 	{ 1920, 2640, 1080, 1125, 25 },
@@ -347,6 +348,8 @@ static struct mipi_dsi_device *lt9611uxc_attach_dsi(struct lt9611uxc *lt9611uxc,
 	return dsi;
 }
 
+static int lt9611uxc_add_default_mode(struct drm_connector *connector);
+
 static int lt9611uxc_connector_get_modes(struct drm_connector *connector)
 {
 	struct lt9611uxc *lt9611uxc = connector_to_lt9611uxc(connector);
@@ -360,6 +363,10 @@ static int lt9611uxc_connector_get_modes(struct drm_connector *connector)
 	edid = lt9611uxc->bridge.funcs->get_edid(&lt9611uxc->bridge, connector);
 	drm_connector_update_edid_property(connector, edid);
 	count = drm_add_edid_modes(connector, edid);
+	if (!count && lt9611uxc->hdmi_connected) {
+		if (!lt9611uxc_add_default_mode(connector))
+			count = 1;
+	}
 
 	/* Check if EDID advertises any 4K (3840x2160) mode */
 	list_for_each_entry(mode, &connector->probed_modes, head) {
@@ -623,18 +630,57 @@ static int lt9611uxc_get_edid_block(void *data, u8 *buf, unsigned int block, siz
 
 	lt9611uxc_lock(lt9611uxc);
 
-	regmap_write(lt9611uxc->regmap, 0xb00b, 0x10);
+	ret = regmap_write(lt9611uxc->regmap, 0xb00b, 0x10);
+	if (ret)
+		goto unlock;
 
-	regmap_write(lt9611uxc->regmap, 0xb00a, block * EDID_BLOCK_SIZE);
+	ret = regmap_write(lt9611uxc->regmap, 0xb00a, block * EDID_BLOCK_SIZE);
+	if (ret)
+		goto unlock;
 
 	ret = regmap_noinc_read(lt9611uxc->regmap, 0xb0b0, buf, len);
+
+unlock:
 	if (ret)
 		dev_err(lt9611uxc->dev, "edid read failed: %d\n", ret);
 
 	lt9611uxc_unlock(lt9611uxc);
 
-	return 0;
+	return ret;
 };
+
+static int lt9611uxc_get_two_block_edid(void *data, u8 *buf,
+					unsigned int block, size_t len)
+{
+	u8 checksum = 0;
+	size_t i;
+	int ret;
+
+	ret = lt9611uxc_get_edid_block(data, buf, block, len);
+	if (ret || len != EDID_BLOCK_SIZE)
+		return ret ? ret : -EINVAL;
+
+	if (block == 0)
+		return buf[126] == 1 ? 0 : -EINVAL;
+
+	/* Recover only the CTA extension with the observed HF-EEODB count. */
+	if (block != 1 || buf[0] != CEA_EXT || buf[1] < 3 ||
+	    buf[4] != 0xe2 || buf[5] != 0x78 || buf[6] != 2)
+		return -EINVAL;
+
+	for (i = 0; i < EDID_BLOCK_SIZE; i++)
+		checksum += buf[i];
+	if (checksum)
+		return -EINVAL;
+
+	buf[6] = 1;
+	checksum = 0;
+	for (i = 0; i < EDID_BLOCK_SIZE - 1; i++)
+		checksum += buf[i];
+	buf[EDID_BLOCK_SIZE - 1] = -checksum;
+
+	return 0;
+}
 
 static struct edid *lt9611uxc_bridge_get_edid(struct drm_bridge *bridge,
 					      struct drm_connector *connector)
@@ -650,15 +696,6 @@ static struct edid *lt9611uxc_bridge_get_edid(struct drm_bridge *bridge,
 		return NULL;
 	} else if (ret == 0) {
 		dev_err(lt9611uxc->dev, "wait for EDID timeout\n");
-
-		/*
-		 * If HDMI is connected but EDID read timed out (e.g. at boot
-		 * with cable already plugged in), add a default 1080p mode so
-		 * the display pipeline has something to work with.
-		 */
-		if (lt9611uxc->hdmi_connected && lt9611uxc->connector.dev)
-			lt9611uxc_add_default_mode(&lt9611uxc->connector);
-
 		return NULL;
 	}
 
@@ -681,10 +718,17 @@ static struct edid *lt9611uxc_bridge_get_edid(struct drm_bridge *bridge,
 	}
 
 	if (!edid) {
+		/* The MCU exposes only two blocks; this sink advertises a third. */
+		edid = drm_do_get_edid(connector,
+					lt9611uxc_get_two_block_edid, lt9611uxc);
+		if (edid)
+			dev_warn(lt9611uxc->dev,
+				 "third EDID block unavailable; using first two blocks\n");
+	}
+
+	if (!edid) {
 		dev_err(lt9611uxc->dev, "EDID read failed after %d retries\n",
 			EDID_READ_RETRIES);
-		if (lt9611uxc->hdmi_connected && lt9611uxc->connector.dev)
-			lt9611uxc_add_default_mode(&lt9611uxc->connector);
 		return NULL;
 	}
 

@@ -47,6 +47,7 @@
 	 struct mipi_dsi_device *dsi2;
 	 struct platform_device *audio_pdev;
 	 struct gpio_desc *reset_gpio;
+	 struct gpio_desc *enable_gpio;
 	 struct regulator_bulk_data supplies[2];
 	 struct device *codec_dev;
 	 struct task_struct *kthread;
@@ -607,6 +608,15 @@
 	 msleep(400);
  }
  
+ static void lt9611uxd_assert_5v(struct lt9611uxd *lt9611uxd)
+ {
+	 if (!lt9611uxd->enable_gpio)
+		 return;
+
+	 gpiod_set_value_cansleep(lt9611uxd->enable_gpio, 1);
+	 msleep(20);
+ }
+
  static int lt9611uxd_regulator_init(struct lt9611uxd *lt9611uxd)
  {
 	 struct device *dev = lt9611uxd->dev;
@@ -933,6 +943,42 @@
  
 	 return 0;
  }
+
+/* The MCU can return a corrupt third block even when the first two are valid. */
+static const struct drm_edid *lt9611uxd_recover_two_block_edid(
+						const struct drm_edid *drm_edid)
+{
+	const struct edid *raw = drm_edid_raw(drm_edid);
+	const struct drm_edid *recovered;
+	u8 edid[2 * EDID_LENGTH];
+	u8 checksum = 0;
+	size_t i;
+
+	/* Only handle the HF-EEODB mismatch left after DRM drops block 2. */
+	if (!raw || raw->extensions != 1)
+		return NULL;
+
+	memcpy(edid, raw, sizeof(edid));
+	if (edid[EDID_LENGTH] != 0x02 || edid[EDID_LENGTH + 1] < 3 ||
+	    edid[EDID_LENGTH + 4] != 0xe2 ||
+	    edid[EDID_LENGTH + 5] != 0x78 ||
+	    edid[EDID_LENGTH + 6] != 2)
+		return NULL;
+
+	/* Advertise only the two valid blocks and update the CTA checksum. */
+	edid[EDID_LENGTH + 6] = 1;
+	for (i = EDID_LENGTH; i < sizeof(edid) - 1; i++)
+		checksum += edid[i];
+	edid[sizeof(edid) - 1] = -checksum;
+
+	recovered = drm_edid_alloc(edid, sizeof(edid));
+	if (!drm_edid_valid(recovered)) {
+		drm_edid_free(recovered);
+		return NULL;
+	}
+
+	return recovered;
+}
  
  static int lt9611uxd_poll_hpd_ready(struct lt9611uxd *lt9611uxd)
  {
@@ -964,6 +1010,7 @@
  {
 	 struct lt9611uxd *lt9611uxd = bridge_to_lt9611uxd(bridge);
 	 const struct drm_edid *drm_edid;
+	 const struct drm_edid *fallback = NULL;
 	 int retry;
 
 	 /* Poll MCU HPD status first to ensure it's ready for EDID read */
@@ -972,10 +1019,22 @@
 	 /* Try reading EDID with retries */
 	 for (retry = 0; retry < 3; retry++) {
 		 drm_edid = drm_edid_read_custom(connector, lt9611uxd_get_edid_block, lt9611uxd);
-		 if (drm_edid)
+		 if (drm_edid_valid(drm_edid)) {
+			 drm_edid_free(fallback);
 			 return drm_edid;
+		 }
+		 if (drm_edid) {
+			 if (!fallback)
+				 fallback = lt9611uxd_recover_two_block_edid(drm_edid);
+			 drm_edid_free(drm_edid);
+		 }
 		 dev_dbg(lt9611uxd->dev, "EDID read retry %d\n", retry);
 		 msleep(100);
+	 }
+	 if (fallback) {
+		 dev_warn(lt9611uxd->dev,
+			  "invalid third EDID block; using first two blocks\n");
+		 return fallback;
 	 }
 
 	 dev_err(lt9611uxd->dev, "EDID read failed after retries\n");
@@ -1014,6 +1073,12 @@
 		 return PTR_ERR(lt9611uxd->reset_gpio);
 	 }
  
+	 lt9611uxd->enable_gpio = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_LOW);
+	 if (IS_ERR(lt9611uxd->enable_gpio)) {
+		 dev_err(dev, "failed to acquire enable gpio\n");
+		 return PTR_ERR(lt9611uxd->enable_gpio);
+	 }
+
 	 return 0;
  }
  
@@ -1465,6 +1530,8 @@
 	 if (ret < 0)
 		 goto err_of_put;
  
+	 lt9611uxd_assert_5v(lt9611uxd);
+
 	 ret = lt9611uxd_regulator_enable(lt9611uxd);
 	 if (ret)
 		 goto err_of_put;
@@ -1687,4 +1754,4 @@
  MODULE_LICENSE("GPL v2");
  
  MODULE_FIRMWARE(FW_FILE);
- 
+
