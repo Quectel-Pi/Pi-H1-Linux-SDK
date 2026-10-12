@@ -4383,6 +4383,31 @@ static void fxgmac_reset_phy(struct fxgmac_pdata *pdata)
 	usleep_range_ex(pdata->pAdapter, 1500, 1500);
 }
 
+/*
+ * Quectel PI H1: RJ45 双色 LED 配置值.
+ *
+ * 位定义 (与 mainline drivers/net/phy/motorcomm.c 的 YT8521/YT8531 一致;
+ * 已在 YT6801 板级逐位实测确认, 经 PHY ext reg 0xA00C/0xA00E 写入并肉眼核对):
+ *   bit4 = 10M 链路     bit5 = 100M 链路    bit6 = 1000M 链路
+ *   bit9 = RX 活动      bit10 = TX 活动     bit13 = 活动闪烁指示(ACT_BLK_IND)
+ *   bit11|12 = HDX/FDX
+ *
+ * 两类编码, 语义完全不同 (关键!):
+ *   1) 链路编码 = 链路位(bit4/5/6)           -> 常亮
+ *   2) 活动编码 = bit13|bit10|bit9 = 0x2600  -> 空闲灭, 有收发才闪
+ * 只写 bit9/bit10 而漏掉 bit13 (例如 0x600) 不会闪;
+ * 活动位 + 链路位 (例如 0x640/0x670) 会空闲常亮、有流量闪 —— 不是纯活动灯.
+ *
+ * 期望行为在两个速率下"角色互换", 故按 speed 分支:
+ *   100M/10M -> 绿灯常亮(链路), 黄灯闪(活动)
+ *   1000M    -> 黄灯常亮(千兆链路), 绿灯闪(活动)
+ *
+ * 灯-引脚: 绿灯 = LED0(0xA00C), 黄灯 = LED2(0xA00E), LED1 板上未接.
+ */
+#define FXGMAC_LED_LINK_10_100  0x70	/* 10/100/1000 链路常亮 (作常亮灯) */
+#define FXGMAC_LED_LINK_1000    0x40	/* 仅千兆链路常亮 */
+#define FXGMAC_LED_ACTIVITY     0x2600	/* 纯收发活动: 空闲灭, 有流量闪 */
+
 void fxgmac_release_phy(struct fxgmac_pdata *pdata)
 {
 	u32 value = 0;
@@ -4429,24 +4454,20 @@ void fxgmac_release_phy(struct fxgmac_pdata *pdata)
 		 * into the default (SOLUTION0) branch where LED2_CFG=0x00
 		 * disables the yellow LED, so the RJ45 LEDs stay dark.
 		 *
-		 * Board-verified register encoding (tested on hardware via
-		 * PHY ext reg 0xA00C/0xA00E with a gigabit link):
-		 *   0x1800 = gigabit match (solid on)
-		 *   0x2600 = non-gigabit (100M/10M) match
-		 * RJ45 green LED is driven by LED0, yellow LED by LED2.
-		 * So: green LED0 -> 0x1800 (gigabit), yellow LED2 -> 0x2600
-		 * (100M/10M). LED1 is not routed to any visible LED on this
-		 * board, keep it off.
+		 * 位定义与取值见 FXGMAC_LED_* 上方注释. 此处尚无链路速率,
+		 * 先写 10/100M 默认 (绿灯常亮/黄灯活动), link up 后再按速率修正.
 		 */
 		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
 				      REG_MII_EXT_COMMON_LED0_CFG);
-		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x1800);
+		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA,
+				      FXGMAC_LED_LINK_10_100);
 		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
 				      REG_MII_EXT_COMMON_LED1_CFG);
 		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x00);
 		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
 				      REG_MII_EXT_COMMON_LED2_CFG);
-		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x2600);
+		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA,
+				      FXGMAC_LED_ACTIVITY);
 		goto led_done;
 		fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
 				      REG_MII_EXT_COMMON_LED0_CFG);
@@ -4642,34 +4663,22 @@ static void fxgmac_close_phy_led(struct fxgmac_pdata *pdata)
 	fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x00);
 }
 
-/*
- * Quectel PI H1: 按链路速率动态配置 RJ45 双色 LED.
- * 板上实测编码 (经 PHY ext reg 0xA00C/0xA00E 验证):
- *   0x1800 = 千兆匹配 (常亮)
- *   0x2600 = 非千兆(100M/10M)匹配 (常亮)
- *   0x06   = 活动闪烁 (bit1 收发闪烁, 无常亮)
- * 灯-引脚映射: 绿灯 = LED0, 黄灯 = LED2, LED1 板上未接.
- * 目标行为:
- *   千兆: 黄灯常亮 + 绿灯随数据闪
- *   百兆: 绿灯常亮 + 黄灯随数据闪
- */
-#define FXGMAC_LED_VAL_GIGA    0x1800
-#define FXGMAC_LED_VAL_OTHER   0x2600
-#define FXGMAC_LED_VAL_ACTIVITY 0x06
-
 static void fxgmac_config_led_under_speed(struct fxgmac_pdata *pdata,
 					  int speed)
 {
-	u32 green, yellow;
+	u16 green, yellow;
 
-	if (speed == SPEED_1000) {
-		/* 千兆: 黄灯常亮, 绿灯活动闪 */
-		green = FXGMAC_LED_VAL_ACTIVITY;
-		yellow = FXGMAC_LED_VAL_GIGA;
+	/*
+	 * 两个速率下灯角色互换 (见上方 FXGMAC_LED_* 注释):
+	 *   1000M    -> 黄灯常亮(千兆链路), 绿灯闪(活动)
+	 *   100M/10M -> 绿灯常亮(链路), 黄灯闪(活动)
+	 */
+	if (speed >= SPEED_1000M) {
+		green = FXGMAC_LED_ACTIVITY;    /* 0x2600 闪 */
+		yellow = FXGMAC_LED_LINK_1000;  /* 0x40 常亮 */
 	} else {
-		/* 百兆/10M: 绿灯常亮, 黄灯活动闪 */
-		green = FXGMAC_LED_VAL_OTHER;
-		yellow = FXGMAC_LED_VAL_ACTIVITY;
+		green = FXGMAC_LED_LINK_10_100; /* 0x70 常亮 */
+		yellow = FXGMAC_LED_ACTIVITY;   /* 0x2600 闪 */
 	}
 
 	fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
@@ -4682,7 +4691,7 @@ static void fxgmac_config_led_under_speed(struct fxgmac_pdata *pdata,
 			      REG_MII_EXT_COMMON_LED2_CFG);
 	fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, yellow);
 
-	DPRINTK("fxgmac led under speed %d: led0=0x%04x led2=0x%04x\n",
+	DPRINTK("fxgmac led cfg (speed %d): led0=0x%04x led2=0x%04x\n",
 		speed, green, yellow);
 }
 

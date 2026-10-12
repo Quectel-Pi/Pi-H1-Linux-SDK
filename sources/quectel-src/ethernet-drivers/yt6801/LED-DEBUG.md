@@ -3,205 +3,176 @@
 > 板卡：Quectel PI H1 (QCS6490)
 > 驱动：`sources/quectel-src/ethernet-drivers/yt6801`（裕太微 YT6801SH，v1.0.27）
 > 原理图：`quectel_build/doc/Quectel-Pi-H1_SCH_V1.3_20251128.pdf` 第 12 页
-> 日期：2026-08-05
+> 初稿：2026-08-05 　重写：2026-10-12（板级逐位实测，推翻初稿的反推结论）
 
 ---
 
 ## 1. 问题现象
 
-RJ45 网口指示灯完全不亮。网线插好、千兆协商成功（`ethtool` 显示 1000Mb/s, Link detected: yes），
-但黄灯、绿灯均不亮。
+RJ45 双色灯行为与预期不符。**最终确认的预期**（用户口径）：
+
+| 速率 | 绿灯 | 黄灯 |
+|------|------|------|
+| 1000M 已连接 | 闪烁 | 常亮 |
+| 100M 已连接 | 常亮 | 闪烁 |
+
+即两个速率下**角色互换**：千兆黄常亮+绿闪，百兆绿常亮+黄闪。
+
+初始实测：**黄灯闪、绿灯不亮**（初稿记录为千兆下"全灭"）。
 
 ---
 
 ## 2. 硬件信息（原理图确认）
 
-### 2.1 芯片与 LED 引脚
+| 芯片引脚 | 信号名 | RJ45 灯 |
+|---------|--------|---------|
+| LED0 (PIN28) | RTL&YT_LED0 | **绿灯** |
+| LED1 (PIN29) | RTL&YT_LED1 | 未接任何可见灯 |
+| LED2 (PIN30) | RTL&YT_LED2 | **黄灯** |
 
-YT6801SH（U1301，QFN32，PCIe 千兆网卡）提供 3 路可编程 LED 引脚：
-
-| 芯片引脚 | 信号名 | 原理图电阻 | RJ45 灯 |
-|---------|--------|-----------|---------|
-| LED0 (PIN28) | RTL&YT_LED0 | R1351 330R（已贴） | GREEN 绿灯 |
-| LED1 (PIN29) | RTL&YT_LED1 | R1326 330R | YELLOW（板上实际未接灯） |
-| LED2 (PIN30) | RTL&YT_LED2 | R1350 330R | YELLOW 黄灯 |
-
-> 注意：R1325（NM-470R）是连到 ETH33 的备用支路，不贴片，不影响绿灯通路。
-> 板上 RJ45 实际只有**一绿一黄**两个可见灯：绿灯由 LED0 驱动，黄灯由 LED2 驱动，
-> **LED1 引脚未连接到任何可见灯**。
-
-### 2.2 LED 极性
-
-灯阴极经电阻接地，芯片输出电平点亮（拉电流）。实测确认芯片 LED 引脚极性正常，
-0x07/0x1800 等值能点亮对应灯。
+灯阴极经电阻接地，芯片输出高电平点亮。板级实测 0x1800 等值可点亮，极性正常。
 
 ---
 
 ## 3. 根因分析
 
-### 3.1 LED 配置机制（驱动代码）
+### 3.1 LED 配置机制
 
-YT6801 的 LED 行为由 **PHY 扩展寄存器**控制（经 MDIO 0x1E/0x1F 间接访问）：
+LED 行为由 **PHY 扩展寄存器**控制（MDIO 0x1E/0x1F 间接访问）：
 
 | 寄存器 | 地址 | 说明 |
 |-------|------|------|
-| LED_CFG（公共） | 0xA00B | 公共配置（实测默认 0xe000） |
+| LED_CFG（公共） | 0xA00B | 公共配置（实测 0xE000） |
 | LED0_CFG | 0xA00C | 绿灯配置 |
-| LED1_CFG | 0xA00D | 黄灯（未接）配置 |
+| LED1_CFG | 0xA00D | 未接 |
 | LED2_CFG | 0xA00E | 黄灯配置 |
-| LED_BLINK | 0xA00F | 闪烁配置 |
+| LED_BLINK_CFG | 0xA00F | 闪烁配置（实测 0x0006） |
 
-驱动启动时从 **eFuse Byte0（EFUSE_LED_ADDR=0x00）** 读 5bit LED 方案索引
-（`EFUSE_LED_POS=0, EFUSE_LED_LEN=5`），然后：
+驱动启动从 **eFuse Byte0（EFUSE_LED_ADDR=0x00）** 读 5bit LED 方案索引：
+`0x1F`→用 eFuse 存值；`0~4`→硬编码 SOLUTION0~4；**其他值→fallback SOLUTION0**。
+对应 `fuxi-gmac-hw.c` → `fxgmac_release_phy()`（约 4415 行）。
 
-- `0x1F` → COMMON_SOLUTION：用 eFuse 里存的 20 个寄存器值配置
-- `0~4` → 用硬编码 SOLUTION0~4 表
-- **其他值（无效）→ fallback 到 SOLUTION0**
-
-对应代码：`fuxi-gmac-hw.c` → `fxgmac_release_phy()`（约 4415 行起）。
-
-### 3.2 板上实测数据
-
-用自写 ioctl 工具读取 eFuse：
+### 3.2 板上实测
 
 ```
-eFuse[0x00] = 0xaa  -> LED solution index = 10 (0x0A)
+eFuse[0x00] = 0xaa  -> LED solution index = 0x0A
 ```
 
-**0x0A 不在 0~4 也不等于 0x1F → 无效值 → 驱动落入 SOLUTION0 分支**。
+**0x0A 不在 0~4 也不等于 0x1F → 无效 → 落入 SOLUTION0**（LED0=0x2600 / LED2=0x00），
+即初始的"黄灯闪、绿灯不亮 / 全灭"。
 
-SOLUTION0 写入值（`fuxi-gmac-reg.h`）：
+### 3.3 寄存器位定义（★ 修正初稿）
 
-| 寄存器 | SOLUTION0 值 | 后果 |
-|-------|-------------|------|
-| LED0_CFG | 0x2600 | 非千兆编码，**千兆下不亮** |
-| LED1_CFG | 0x1800 | 板上未接灯，无影响 |
-| LED2_CFG | 0x00 | **黄灯被禁用** |
+初稿把 `0x1800/0x2600` 当作"千兆/非千兆匹配编码"，是**错误反推**：本板实测
+`0x2600` 在任何速率下都不亮。真实编码与 **mainline `drivers/net/phy/motorcomm.c`
+的 YT8521/YT8531 逐位定义一致**（同门 PHY，同地址 0xA00C/0xA00D/0xA00E）：
 
-→ 所以千兆下：绿灯（0x2600 不匹配千兆）+ 黄灯（0x00 禁用）= 全灭。
+```c
+/* drivers/net/phy/motorcomm.c */
+#define YT8521_LED_FDX_ON_EN     BIT(12)
+#define YT8521_LED_HDX_ON_EN     BIT(11)
+#define YT8521_LED_TXACT_BLK_EN  BIT(10)
+#define YT8521_LED_RXACT_BLK_EN  BIT(9)
+#define YT8521_LED_1000_ON_EN    BIT(6)
+#define YT8521_LED_100_ON_EN     BIT(5)
+#define YT8521_LED_10_ON_EN      BIT(4)
+```
 
-### 3.3 寄存器编码实测结论（本板硬件验证）
+**关键结论 1：速率由 PHY 硬件按位门控**（bit4/5/6 只在对应速率下有效）。
 
-在硬件上逐个写值、肉眼观察灯，最终确认编码语义：
+**关键结论 2：活动位（bit9/10）单独写不闪，必须搭配一个当前速率成立的链路位。**
+实测：100M 下 `0x600`（纯活动）不亮；加上 bit5 成 `0x670` 才闪。千兆下
+`0x600` 不亮，加 bit6 成 `0x640` 才闪。即链路灯位是"底座"。
 
-| 值 | 行为 | 语义 |
-|----|------|------|
-| 0x07 | 全速率常亮+闪烁 | bit0=链路常亮, bit1=活动闪, bit2=基础位(必须) |
-| 0x06 | 有流量才闪，无流量灭 | 纯活动闪烁（bit1+bit2，无常亮） |
-| **0x1800** | **千兆下常亮** | **千兆匹配编码** |
-| **0x2600** | **非千兆(百兆/10M)下常亮** | **非千兆匹配编码** |
-| 0x00 | 灭 | 关闭 |
+### 3.4 板级逐位实测（本次验证）
 
-关键调试过程：
-1. eFuse=0x0A 无效 → 原 SOLUTION0 全灭
-2. 重映射到 SOLUTION2（0x20/0x40/0x07）→ 黄灯闪（LED2 被点亮），绿灯不亮（0x20 非千兆）
-3. 试 0x86/0x46/0x06 等低字节值 → 都能亮（bit0=1 时速率位被忽略）
-4. 试官方高字节值 → **0x1800 千兆亮、0x2600 千兆灭**
-5. 交叉验证：LED0=0x1800 千兆绿灯常亮 + LED2=0x2600 黄灯灭 → 编码锁定
+经 `/tmp/ytled`（see §7）逐位写入 `0xA00C` / `0xA00E`，肉眼观察：
+
+链路 100M 时：
+
+| 写入值 | 位 | 观察结果 | 结论 |
+|--------|-----|---------|------|
+| 0x00 | — | 灭 | 基线 |
+| 0x20 | BIT5 | 常亮 | 100M 链路位 ✅ |
+| 0x40 | BIT6 | 灭 | 1000M 链路位（100M 下门控关）✅ |
+| 0x70 | BIT4\|5\|6 | 常亮 | 10/100/1000 链路位并集 ✅ |
+| 0x1800 | BIT11\|12 | 常亮 | HDX/FDX 链路位 ✅ |
+| 0x600 | BIT9\|10 | **不亮** | 纯活动位无链路底座，不工作 |
+| 0x670 | BIT4\|5\|6\|9\|10 | 空闲常亮、有流量闪 | 绿灯(百兆)终值 ✅ |
+| 0x2600 | — | 灭 | 初稿反推值，**废弃** |
+
+链路 1000M 时：
+
+| 写入值 | 位 | 观察结果 | 结论 |
+|--------|-----|---------|------|
+| 0x40 | BIT6 | 常亮 | 1000M 链路位 ✅ |
+| 0x600 | BIT9\|10 | **不亮** | 同上：缺链路底座 |
+| 0x640 | BIT6\|9\|10 | 空闲常亮、有流量闪 | 绿灯(千兆)终值 ✅ |
+
+100M 下 `0x40` 灭、`0x20` 亮 → 证明 bit 是**速率门控**的，与 mainline 定义吻合。
 
 ---
 
 ## 4. 代码修改
 
-### 4.1 修复文件清单
+### 4.1 修复无效 eFuse fallback（`fuxi-gmac-hw.c` ~4445 行）
 
-| 文件 | 改动 |
-|------|------|
-| `fuxi-gmac-hw.c` | +71 行：修复无效 eFuse 值 fallback + 新增按速率配置函数 |
-| `fuxi-gmac-net.c` | +3 行：link up 时调用 `led_under_speed` |
-| `fuxi-gmac.h` | +1 行：hw_ops 新增 `led_under_speed` 声明 |
-
-### 4.2 修改点 1：修复无效 eFuse 方案值（fuxi-gmac-hw.c ~4425 行）
-
-eFuse 方案值 > SOLUTION4（无效）时，不再走 SOLUTION0，直接写本板验证过的编码：
+eFuse 方案值无效（>4 且 !=0x1F）时直接写本板值，不再走 SOLUTION0。
+此处尚无链路速率，先写 10/100M 默认（link up 后由 4.2 按速率修正）：
 
 ```c
-if (EFUSE_LED_COMMON_SOLUTION != value) {
-    /*
-     * Quectel PI H1: eFuse LED solution index = 0x0A (invalid)
-     * Board-verified: 0x1800 = gigabit, 0x2600 = non-gigabit
-     */
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
-                          REG_MII_EXT_COMMON_LED0_CFG);
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x1800);   /* 绿灯: 千兆 */
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
-                          REG_MII_EXT_COMMON_LED1_CFG);
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x00);     /* LED1 未接 */
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR,
-                          REG_MII_EXT_COMMON_LED2_CFG);
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x2600);   /* 黄灯: 非千兆 */
-    goto led_done;
-    ...原 SOLUTION switch 保留（有效 eFuse 方案值仍走原逻辑）...
-led_done:
-    }
+/* 位定义与取值见 FXGMAC_LED_* 上方注释. 此处尚无链路速率,
+ * 先写 10/100M 默认 (绿灯常亮/黄灯闪), link up 后再按速率修正. */
+fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR, REG_MII_EXT_COMMON_LED0_CFG);
+fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, FXGMAC_LED_GREEN_10_100);
+fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR, REG_MII_EXT_COMMON_LED1_CFG);
+fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x00);
+fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR, REG_MII_EXT_COMMON_LED2_CFG);
+fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, FXGMAC_LED_YELLOW_10_100);
+goto led_done;
 ```
 
 > 有效方案值（0~4 / 0x1F）仍走原逻辑，不影响其他板型。
 
-### 4.3 修改点 2：按速率动态配置 LED（fuxi-gmac-hw.c ~4645 行）
+### 4.2 按速率配置函数（`fuxi-gmac-hw.c` ~4667 行）
 
-新增 `fxgmac_config_led_under_speed(pdata, speed)`：
+期望行为在两个速率下**角色互换**（谁常亮、谁闪），所以按 speed 分支：
 
 ```c
-#define FXGMAC_LED_VAL_GIGA     0x1800   /* 千兆匹配, 常亮 */
-#define FXGMAC_LED_VAL_OTHER    0x2600   /* 非千兆(百兆/10M)匹配, 常亮 */
-#define FXGMAC_LED_VAL_ACTIVITY 0x06     /* 活动闪烁: bit1+bit2, 无常亮 */
+#define FXGMAC_LED_GREEN_10_100   0x70  /* 10/100M 绿灯: 链路常亮 (不含活动位) */
+#define FXGMAC_LED_YELLOW_10_100  0x670 /* 10/100M 黄灯: 100M 链路 + 收发活动闪 */
+#define FXGMAC_LED_YELLOW_1000    0x40  /* 1000M 黄灯: 仅千兆链路常亮 */
+#define FXGMAC_LED_GREEN_1000     0x640 /* 1000M 绿灯: 千兆链路 + 收发活动闪 */
 
 static void fxgmac_config_led_under_speed(struct fxgmac_pdata *pdata, int speed)
 {
-    u32 green, yellow;
+    u16 green, yellow;
 
-    if (speed == SPEED_1000) {
-        /* 千兆: 黄灯常亮 + 绿灯随数据闪 */
-        green  = FXGMAC_LED_VAL_ACTIVITY;
-        yellow = FXGMAC_LED_VAL_GIGA;
+    if (speed >= SPEED_1000M) {
+        green  = FXGMAC_LED_GREEN_1000;   /* 0x640 */
+        yellow = FXGMAC_LED_YELLOW_1000;  /* 0x40  */
     } else {
-        /* 百兆/10M: 绿灯常亮 + 黄灯随数据闪 */
-        green  = FXGMAC_LED_VAL_OTHER;
-        yellow = FXGMAC_LED_VAL_ACTIVITY;
+        green  = FXGMAC_LED_GREEN_10_100;   /* 0x70  */
+        yellow = FXGMAC_LED_YELLOW_10_100;  /* 0x670 */
     }
-
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR, REG_MII_EXT_COMMON_LED0_CFG);
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, green);
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR, REG_MII_EXT_COMMON_LED1_CFG);
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, 0x00);
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_ADDR, REG_MII_EXT_COMMON_LED2_CFG);
-    fxgmac_write_ephy_reg(pdata, REG_MII_EXT_DATA, yellow);
-
-    DPRINTK("fxgmac led under speed %d: led0=0x%04x led2=0x%04x\n",
-            speed, green, yellow);
+    /* ... 依次写 LED0/LED1/LED2 ... */
 }
 ```
 
-hw_ops 注册（~6272 行）：
-
-```c
-hw_ops->led_under_active = fxmgac_config_led_under_active;
-hw_ops->led_under_speed  = fxgmac_config_led_under_speed;   /* 新增 */
-```
-
-### 4.4 修改点 3：link up 时触发（fuxi-gmac-net.c ~375 行）
-
-在 `fxgmac_phy_process()` 中，link up 且拿到 `phy_speed` 后调用：
-
-```c
-hw_ops->config_mac_speed(pdata);
-
-/* 按协商速率配置 RJ45 双色 LED (千兆黄/百兆绿) */
-hw_ops->led_under_speed(pdata, pdata->phy_speed);
-
-hw_ops->enable_rx(pdata);
-```
+hw_ops 注册见 `fuxi-gmac-hw.c` ~6282 行（`led_under_speed`），link up 调用见
+`fuxi-gmac-net.c` ~378 行。
 
 ---
 
 ## 5. 最终行为
 
-| 协商速率 | 绿灯 (LED0) | 黄灯 (LED2) |
-|---------|------------|------------|
-| 1000M | 随数据闪烁 | 常亮 |
-| 100M / 10M | 常亮 | 随数据闪烁 |
-| 断开 | 灭 | 灭 |
+| 协商速率 | 绿灯 LED0 | 黄灯 LED2 | 现象 |
+|---------|-----------|-----------|------|
+| 1000M | `0x640` | `0x40`  | **黄灯常亮 + 绿灯闪** |
+| 100M / 10M | `0x70` | `0x670` | **绿灯常亮 + 黄灯闪** |
+| 断开 | — | — | 两灯灭（链路灯位被 PHY 门控关掉） |
+
+绿灯空闲时是常亮（链路底座），有流量才闪；闪烁频率由 `0xA00F`(LED_BLINK_CFG, 实测 0x0006) 决定。
 
 ---
 
@@ -210,102 +181,94 @@ hw_ops->enable_rx(pdata);
 ### 6.1 交叉编译 .ko（无需全量烧录）
 
 ```bash
-# 主机交叉编译（模拟 bitbake 构建路径）
 ROOT=/home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01
-SRC="$ROOT/sources/quectel-src/ethernet-drivers/yt6801"
-KBUILD="$ROOT/build-qcom-wayland/tmp-glibc/work/qcm6490_idp-qcom-linux/linux-qcom-custom/6.6/build"
-CROSS_PREFIX="$ROOT/build-qcom-wayland/tmp-glibc/work/qcm6490-qcom-linux/qcom-gen-partition-bins/1.0/recipe-sysroot-native/usr/bin/aarch64-qcom-linux/aarch64-qcom-linux-"
+W=$ROOT/build-qcom-wayland/tmp-glibc/work/qcm6490_idp-qcom-linux
+SC=$ROOT/build-qcom-wayland/tmp-glibc/sysroots-components/x86_64
+KDIR=$W/linux-qcom-custom/6.6/build
+SRC=$ROOT/sources/quectel-src/ethernet-drivers/yt6801
 
-WORK=$(mktemp -d /tmp/yt6801-build.XXXXXX)
-cp -r "$SRC"/. "$WORK/"
-cd "$WORK"
-make ARCH=arm64 CROSS_COMPILE="$CROSS_PREFIX" -C "$KBUILD" M="$WORK" modules
-# 产物: $WORK/yt6801.ko
+# 交叉工具链: gcc 与 binutils 分处两个 sysroot-components, 且 gcc 会 exec 裸 `as`
+# （落到 host /usr/bin/as → "as: unrecognized option '-EL'"）。
+# 用 COMPILER_PATH 强制 gcc 在交叉 binutils 目录里找 as/ld/objcopy...
+ASBIN=/home/igni/.hermes/cache/scratch/asbin   # 里面放 as/ld/ar/nm/objcopy... 的软链
+mkdir -p $ASBIN
+for t in as ld ar nm objcopy objdump strip ranlib; do
+  ln -sf $SC/binutils-cross-aarch64/usr/bin/aarch64-qcom-linux/aarch64-qcom-linux-$t $ASBIN/$t
+done
+export PATH=$SC/binutils-cross-aarch64/usr/bin/aarch64-qcom-linux:$SC/gcc-cross-aarch64/usr/bin/aarch64-qcom-linux:$PATH
+export COMPILER_PATH=$ASBIN
+
+BUILD=/home/igni/.hermes/cache/scratch/yt6801-build
+rm -rf $BUILD && mkdir -p $BUILD && cp $SRC/*.c $SRC/*.h $SRC/Makefile $BUILD/
+make -C $BUILD ARCH=arm64 CROSS_COMPILE=aarch64-qcom-linux- KDIR=$KDIR modules
+# 产物: $BUILD/yt6801.ko  (vermagic 6.6.116-qli-1.7-ver.1.1)
 ```
 
-### 6.2 adb 替换 + 热加载
+### 6.2 adb 替换 + 重启
 
 ```bash
-ADB=./quectel_build/tools/adb
-MOD=/lib/modules/$(adb shell uname -r)/updates/yt6801.ko
-
-adb push yt6801.ko /tmp/yt6801.ko.new
-adb shell "cp $MOD /tmp/yt6801.ko.orig"          # 备份
-adb shell "cp /tmp/yt6801.ko.new $MOD"            # 替换
-adb shell "rmmod yt6801 && modprobe yt6801"       # 热加载
-adb shell "ethtool eth0 | grep -E 'Speed|Link detected'"
+A=./quectel_build/tools/adb
+M=/lib/modules/6.6.116-qli-1.7-ver.1.1/updates/yt6801.ko
+$A push yt6801.ko /tmp/yt6801.ko
+$A shell "cp -f $M /tmp/yt6801.ko.prev && cp -f /tmp/yt6801.ko $M && sync"
+$A shell "reboot"          # ⚠ 必须 `adb shell reboot`, `adb reboot` 在本板无效
 ```
 
-### 6.3 验证结果（实测）
+### 6.3 验证结果（本次实测）
 
 ```
-# dmesg 确认动态配置触发
-fxgmac led under speed 1000: led0=0x0006 led2=0x1800
+$ adb shell dmesg | grep 'fxgmac led cfg'
+fxgmac led cfg (speed 1000): led0=0x0640 led2=0x0040     # 千兆链路
+fxgmac led cfg (speed 100):  led0=0x0070 led2=0x0670     # 百兆链路
 
-# 寄存器实测
-LED_CFG   [0xA00B] = 0xe000
-LED0_CFG  [0xA00C] = 0x0006   (绿灯: 千兆活动闪)
-LED1_CFG  [0xA00D] = 0x0000   (未接)
-LED2_CFG  [0xA00E] = 0x1800   (黄灯: 千兆常亮)
-LED_BLINK [0xA00F] = 0x0006
+$ adb shell ethtool eth0 | grep -E 'Speed|Link'
+Speed: 1000Mb/s   Duplex: Full   Link detected: yes
+# 30s 内 carrier_changes 19 -> 19 (稳定, 无 flap)
 
-# 肉眼观察（千兆）
-黄灯常亮 + 绿灯随数据闪烁  ✅
+肉眼 (1000M): 黄灯常亮 + 绿灯闪            ✅ 符合预期
+肉眼 (100M):  绿灯常亮 + 黄灯闪            ✅ 符合预期
+# 闪 = 收发活动; 空口时对应灯常亮. 用 ping -f 打流量即可复现.
 ```
+
+> 交叉编译脚本见 `log/yt6801-led/build-ko.sh`（一键出 .ko）。
 
 ---
 
 ## 7. 运行时调试工具（ioctl）
 
-驱动 debugfs 暴露了 PHY 寄存器读写 ioctl（`FXGMAC_SET_PHY_REG` 0x10018 /
-`FXGMAC_GET_PHY_REG` 0x10017），可在运行时直接改 LED 寄存器，无需反复编译：
+`log/yt6801-led/ytled.c`：通过驱动 debugfs 调试口 ioctl 读写 PHY 扩展寄存器，
+免编译改灯（源码与说明见 `log/yt6801-led/README.md`）。
 
-```c
-/* 写 LED 扩展寄存器 = 先写地址 0x1E 再写数据 0x1F */
-phy_write(0x1E, 0xA00C);   /* 选 LED0_CFG */
-phy_write(0x1F, 0x1800);   /* 写值 */
-
-/* 读 = 写地址后读数据 */
-phy_write(0x1E, 0xA00C);
-phy_read(0x1F, &val);
+```bash
+adb push log/yt6801-led/ytled.c /tmp/ && adb shell "cd /tmp && gcc -O1 -o ytled ytled.c"
+/tmp/ytled read a00c / write a00c 670 / led 0 670
 ```
 
-ioctl 结构（与内核 `fuxi-os.h` 一致）：
-
-```c
-struct ext_ioctl_data {
-    unsigned int cmd_type;
-    struct ext_command_buf cmd_buf;  /* { void *buf; u32 size_in; u32 size_out; } */
-};
-/* CMD_DATA: { u32 val0; u32 val1; u32 val2; }
- * SET_PHY_REG: val0=reg_id, val1=data
- * GET_PHY_REG: val0=reg_id, 返回 val1 */
-```
+原理：打开 `/sys/kernel/debug/fuxi_0/yt6801/netdev_ops`，ioctl
+`FXGMAC_SET_PHY_REG(0x10018)` / `FXGMAC_GET_PHY_REG(0x10017)`，扩展寄存器
+先写 `0x1E`(EXT_ADDR) 再读写 `0x1F`(EXT_DATA)。
 
 ---
 
 ## 8. 遗留事项 / 注意
 
-1. **百兆场景未实测**：动态逻辑已编译通过，但只在千兆下验证过。百兆口实测预期：
-   绿灯常亮 + 黄灯闪。若行为不符，检查 `fxgmac_phy_process()` 中 `cur_speed` 解码
-   （`cur_speed==2 → SPEED_1000, ==1 → SPEED_100, else SPEED_10`）。
-2. **当前修改对无效 eFuse 方案值（>4 且 !=0x1F）生效**；有效方案值走原逻辑，不影响其他板型。
-3. **0x1800/0x2600 为高字节编码，自带"无闪烁"**；活动闪烁用低字节 0x06（bit1+bit2）。
-4. 若后续需要精确 bit 级定义（如速率选择位、极性位），需向裕太微索取 YT6801 datasheet
-   （A00B~A00F 寄存器位定义），本记录为纯硬件实测反推，未依赖 datasheet。
-5. **固化到固件**（当前 adb 替换为临时验证，重启还原）：
+1. **千兆/百兆均已实测**：换用稳定千兆网线后协商到 `1000Mb/s` 并保持稳定
+   （30s 内 `carrier_changes` 无变化），"黄灯常亮 + 绿灯闪" 与 "绿灯常亮 + 黄灯闪"
+   两个场景都肉眼确认。
+   > 首次换线前遇到过旧网线引发的链路 flap（约 10s 一次 up/down，`carrier_changes=17`），
+   > 属线材/对端问题，与 LED 及本驱动改动无关。
+2. **0x2600 已废弃**：初稿（commit `db48675ed4`）用 0x1800/0x2600 按速率分支的思路
+   是本板反推误值，本次以 mainline 位定义 + 逐位实测取代。
+3. **datasheet 不可得**：YT6801 datasheet 需向裕太微索取（官网下载中心需登录），
+   1.0.27~1.0.34 驱动包均不含 A00B~A00F 位定义，只有不透明 SOLUTION0~4 常量。
+   本次改用公开的 mainline `motorcomm.c`（同门 PHY 同地址逐位定义）作依据。
+4. **固件默认是别的灯效？**：本改动同时兜住了 eFuse 无效值（0x0A）的情况；若日后
+   eFuse 烧成有效方案值（0~4/0x1F），会回到厂商 SOLUTION 表（可能重新不一致）。
+5. **固化到固件**：当前为 adb 临时替换，重启即还原（但 `updates/yt6801.ko` 已替换，
+   重启不还原——注意：adb push 进 `/lib/modules/.../updates/` 是持久化的）。
+   正式出固件：
    ```bash
    source quectel_build/compile/build.sh
-   buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 <定制类型>
-   bitbake yt6801 -c compile -f && bitbake quecpi-image && buildpackage
+   buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 <系统> <版本>
+   bitbake quecpi-image && buildpackage
    ```
-6. QCS6490 重启必须用 `adb shell reboot`（`adb reboot` 无效）。
-
----
-
-## 9. 相关提交
-
-```
-db48675ed4 <master_r02><Feature><Igni>:YT6801网卡RJ45双色LED按速率动态指示
-  (千兆黄灯常亮绿灯闪/百兆绿灯常亮黄灯闪)
-```
