@@ -1971,7 +1971,27 @@
 };
 
 &uart12 { //PIN8_UART_TXD PIN10_UART_RXD PIN29_GPIO49 PIN31_GPIO48
-	status = "disabled";
+	status = "okay";
+};
+
+&qup_uart12_rx {
+	drive-strength = <2>;
+	bias-pull-up;
+};
+
+&qup_uart12_tx {
+	drive-strength = <2>;
+	bias-disable;
+};
+
+&spi10 { //PIN19_SPI_MOSI PIN21_SPI_MISO PIN23_SPI_SCLK PIN24_SPI_CS
+	status = "okay";
+
+	spidev@0 {
+		compatible = "rohm,dh2228fv";
+		spi-max-frequency = <10000000>;
+		reg = <0>;
+	};
 };
 
 &tlmm {
