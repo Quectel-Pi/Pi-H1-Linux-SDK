@@ -1986,11 +1986,19 @@
 
 &spi10 { //PIN19_SPI_MOSI PIN21_SPI_MISO PIN23_SPI_SCLK PIN24_SPI_CS
 	status = "okay";
+	//CS0: PIN24 native(GPIO_43), CS1: PIN26(GPIO_80)
+	cs-gpios = <0>, <&tlmm 80 GPIO_ACTIVE_LOW>;
 
 	spidev@0 {
 		compatible = "rohm,dh2228fv";
 		spi-max-frequency = <10000000>;
 		reg = <0>;
+	};
+
+	spidev@1 {
+		compatible = "rohm,dh2228fv";
+		spi-max-frequency = <10000000>;
+		reg = <1>;
 	};
 };
 
