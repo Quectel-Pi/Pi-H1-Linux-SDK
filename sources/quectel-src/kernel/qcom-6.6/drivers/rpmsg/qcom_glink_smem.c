@@ -327,7 +327,26 @@ struct qcom_glink_smem *qcom_glink_smem_register(struct device *parent,
 		goto err_put_dev;
 	}
 
-	enable_irq_wake(smem->irq);
+	/*
+	 * Do not put the GLINK interrupt into the always-on wakeup path.
+	 *
+	 * Arming it here keeps the IRQ live across suspend_device_irqs(), so
+	 * any message the remote processor sends while the AP is suspending
+	 * (the 1 Hz PMIC pdcharger ulog reply on the ADSP edge, the CDSP
+	 * fastrpc traffic, ...) is reported as a wakeup event and aborts the
+	 * suspend before the SoC ever reaches machine_suspend.
+	 *
+	 * Only opt in when the remoteproc edge is explicitly marked as a
+	 * wakeup source in firmware. RTC and the power key stay usable as
+	 * wakeup sources either way.
+	 */
+	if (of_property_read_bool(dev->of_node, "wakeup-source")) {
+		dev_info(dev, "glink IRQ %d armed as wakeup source\n", smem->irq);
+		enable_irq_wake(smem->irq);
+	} else {
+		dev_info(dev, "glink IRQ %d left out of the wakeup path\n",
+			 smem->irq);
+	}
 
 	smem->mbox_client.dev = &smem->dev;
 	smem->mbox_client.knows_txdone = true;
