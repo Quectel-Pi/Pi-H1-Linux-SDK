@@ -1066,6 +1066,8 @@ struct dwc3_glue_data {
  * @phys_ready: flag to indicate that PHYs are ready
  * @ulpi: pointer to ulpi interface
  * @ulpi_ready: flag to indicate that ULPI is initialized
+ * @core_inited: dwc3_core_init() has run since the controller was last torn
+ *	down (dwc3_core_exit()) or handed over to the xHCI host role
  * @u2sel: parameter from Set SEL request.
  * @u2pel: parameter from Set SEL request.
  * @u1sel: parameter from Set SEL request.
@@ -1216,6 +1218,15 @@ struct dwc3 {
 
 	struct ulpi		*ulpi;
 	bool			ulpi_ready;
+
+	/*
+	 * True once dwc3_core_init() has rebuilt the controller and false
+	 * again as soon as it is torn down (dwc3_core_exit()) or handed to
+	 * the xHCI host role.  A device-mode cable attach that finds this
+	 * clear has to rebuild the core before arming the gadget, otherwise
+	 * the stale DWC3 device state machine never raises connect-done.
+	 */
+	bool			core_inited;
 
 	void __iomem		*regs;
 	size_t			regs_size;

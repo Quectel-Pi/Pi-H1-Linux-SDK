@@ -800,6 +800,18 @@ static int dwc3_qcom_handle_cable_disconnect(void *data)
 		dwc3_qcom_vbus_override_enable(qcom, false);
 		pm_runtime_put_autosuspend(qcom->dev);
 	} else if (qcom->current_role == USB_ROLE_HOST) {
+		/*
+		 * The OTG_VBUS_VALID override is already clear when we get
+		 * here: dwc3_qcom_handle_set_mode() drops it on the
+		 * NONE -> HOST transition that started this session.
+		 *
+		 * Do not write it again. qscratch sits behind the wrapper's
+		 * clocks and interconnect, and xHCI autosuspend leaves the
+		 * wrapper runtime suspended (dwc3_qcom_suspend() gates the
+		 * clocks and calls dwc3_qcom_interconnect_disable()), so a
+		 * register write at this point stalls the bus - the device
+		 * branch above resumes the wrapper for exactly that reason.
+		 */
 		dwc3_qcom_vbus_regulator_enable(qcom, false);
 		usb_unregister_notify(&qcom->xhci_nb);
 	}
@@ -827,6 +839,16 @@ static void dwc3_qcom_handle_set_mode(void *data, u32 desired_dr_role)
 		qcom->current_role = USB_ROLE_DEVICE;
 	} else if ((desired_dr_role == DWC3_GCTL_PRTCAP_HOST) &&
 		   (qcom->current_role != USB_ROLE_HOST)) {
+		/*
+		 * Entering host mode must drop the OTG_VBUS_VALID override left
+		 * behind by an earlier device session: the override is an
+		 * input that only makes sense while we are a device. Keeping it
+		 * set makes the next NONE -> DEVICE transition a no-op write,
+		 * so the wrapper never sees the 0 -> 1 edge that arms the
+		 * connect-done generation. Mirrors dwc3_qcom_host_notifier()
+		 * in the 6.12.y vendor driver.
+		 */
+		dwc3_qcom_vbus_override_enable(qcom, false);
 		qcom->xhci_nb.notifier_call = dwc3_xhci_event_notifier;
 		usb_register_notify(&qcom->xhci_nb);
 		qcom->current_role = USB_ROLE_HOST;

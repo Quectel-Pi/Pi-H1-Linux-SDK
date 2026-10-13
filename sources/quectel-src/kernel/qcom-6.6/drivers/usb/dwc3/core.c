@@ -150,6 +150,14 @@ void dwc3_set_prtcap(struct dwc3 *dwc, u32 mode, bool ignore_susphy)
 	dwc->current_dr_role = mode;
 }
 
+/*
+ * Both live further down, but __dwc3_set_mode() has to rebuild the controller
+ * on a device-mode attach that finds the core stale, exactly the way the
+ * runtime suspend/resume pair does for DWC3_GCTL_PRTCAP_DEVICE.
+ */
+static void dwc3_core_exit(struct dwc3 *dwc);
+static int dwc3_core_init_for_resume(struct dwc3 *dwc);
+
 static void __dwc3_set_mode(struct work_struct *work)
 {
 	struct dwc3 *dwc = work_to_dwc(work);
@@ -174,6 +182,88 @@ static void __dwc3_set_mode(struct work_struct *work)
 	if (!dwc->cable_disconnected)
 		dwc3_notify_set_mode(dwc, desired_dr_role);
 
+	/*
+	 * Cable (re-)attached while the core already sits in device mode: the
+	 * desired role equals the current one, so the early-out below would
+	 * leave the core untouched.
+	 *
+	 * Whether that is harmless depends on how the controller got here:
+	 *
+	 *  - Runtime suspended before the plug (idle gadget, more than the 3s
+	 *    autosuspend delay since the last activity): the attach wakes the
+	 *    wrapper, dwc3_resume_common() runs dwc3_core_init_for_resume()
+	 *    and dwc3_core_init() rebuilds the whole controller - PHY
+	 *    init/power-on, GCTL, FIFOs, event buffers - before the gadget is
+	 *    re-armed. dwc3_gadget_soft_connect() then issues the DCTL.CSftRst
+	 *    that DWC_usb31 1.90a (4.1.9) requires, which is also the UDC write
+	 *    the QSCRATCH wrapper needs *after* VBUS_VALID is asserted to
+	 *    raise connect-done. Enumeration works.
+	 *
+	 *  - Still runtime active: the normal case when the cable is plugged
+	 *    back in before the autosuspend delay elapsed, or right after a
+	 *    host session (UCSI hands the port back with the gadget armed).
+	 *    Nothing runs the suspend/resume pair, so the DWC3 device state
+	 *    machine keeps the link state of the previous session, no UDC
+	 *    write follows the VBUS_VALID assertion and the wrapper never
+	 *    raises connect-done: the host's bus reset times out and the
+	 *    device is dropped again.
+	 *
+	 * Repair the second case by mirroring the runtime PM pair for
+	 * DWC3_GCTL_PRTCAP_DEVICE:
+	 *
+	 *     dwc3_gadget_suspend(); dwc3_core_exit();      (suspend_common)
+	 *     dwc3_core_init_for_resume();                  (resume_common)
+	 *     dwc3_set_prtcap(DEVICE, true);                (resume_common)
+	 *     dwc3_gadget_resume();                         (resume_common)
+	 *
+	 * NOTE: neither dwc->connected nor dwc->core_inited is a usable gate
+	 * here. dwc->connected is set by the connect-done handler *and* by
+	 * the bus-reset interrupt, so it is already true for a session that
+	 * never enumerated; dwc->core_inited is still true after a raw
+	 * device-mode detach, because dwc3_qcom_handle_cable_disconnect()
+	 * only drops the wrapper's VBUS_VALID override - it does not tear the
+	 * core down. That is exactly the stale case above, and it is why the
+	 * earlier "!dwc->core_inited" gate let the second plug go unhandled.
+	 * What is left is "device mode re-entered with the gadget armed",
+	 * which is cheap to repair: no session is live yet at that point.
+	 */
+	if (!dwc->cable_disconnected &&
+	    desired_dr_role == DWC3_GCTL_PRTCAP_DEVICE &&
+	    dwc->current_dr_role == DWC3_GCTL_PRTCAP_DEVICE &&
+	    dwc->gadget_driver &&
+	    (dwc->pullups_connected || dwc->softconnect)) {
+		ret = dwc3_gadget_suspend(dwc);
+		if (ret) {
+			/*
+			 * The gadget would not go down. The core is still
+			 * intact in that case, so just re-arm it and leave
+			 * the rebuild to the next runtime resume.
+			 */
+			dwc3_gadget_resume(dwc);
+			ret = 0;
+		} else {
+			synchronize_irq(dwc->irq_gadget);
+			dwc3_core_exit(dwc);
+
+			ret = dwc3_core_init_for_resume(dwc);
+			if (ret) {
+				dev_err(dwc->dev,
+					"failed to rebuild core on device re-attach: %d\n",
+					ret);
+			} else {
+				dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_DEVICE, true);
+				dwc3_gadget_resume(dwc);
+			}
+		}
+	}
+
+	/*
+	 * Do not widen this early-out with "&& !dwc->cable_disconnected":
+	 * drd.c clears cable_disconnected at the *entry* of
+	 * dwc3_usb_role_switch_set(), while this work item runs later, so
+	 * the flag is already false here and the widened condition would
+	 * always hold.
+	 */
 	if (desired_dr_role == dwc->current_dr_role)
 		goto out;
 
@@ -240,6 +330,14 @@ static void __dwc3_set_mode(struct work_struct *work)
 		if (ret) {
 			dev_err(dwc->dev, "failed to initialize host\n");
 		} else {
+			/*
+			 * The xHCI host role has taken the controller over,
+			 * so the DWC3 device state machine is no longer
+			 * usable as-is: a later device-mode attach has to
+			 * rebuild the core before it can enumerate again.
+			 */
+			dwc->core_inited = false;
+
 			if (dwc->usb2_phy)
 				otg_set_vbus(dwc->usb2_phy->otg, true);
 			phy_set_mode(dwc->usb2_generic_phy, PHY_MODE_USB_HOST);
@@ -252,6 +350,32 @@ static void __dwc3_set_mode(struct work_struct *work)
 		}
 		break;
 	case DWC3_GCTL_PRTCAP_DEVICE:
+		/*
+		 * Handing the port back to device mode: if the controller was
+		 * taken over by the xHCI host role (or otherwise torn down)
+		 * since it was last initialized, its device state machine is
+		 * stale and the next cable attach will never raise a
+		 * connect-done event - the host sees the bus reset time out
+		 * and drops the device again.
+		 *
+		 * Rebuild the core before the gadget is (re-)armed, exactly
+		 * like the runtime resume path does for
+		 * DWC3_GCTL_PRTCAP_DEVICE.  dwc3_core_init() redoes the PHY
+		 * init/power-on and the GCTL programming that the plain
+		 * GCTL.CORESOFTRESET below does not.
+		 *
+		 * On failure core_inited stays false, so the device-mode
+		 * attach path in __dwc3_set_mode() retries the rebuild.
+		 */
+		if (!dwc->core_inited) {
+			dwc3_core_exit(dwc);
+			ret = dwc3_core_init_for_resume(dwc);
+			if (ret)
+				dev_err(dwc->dev,
+					"failed to rebuild stale core on device hand-over: %d\n",
+					ret);
+		}
+
 		dwc3_core_soft_reset(dwc);
 
 		dwc3_event_buffers_setup(dwc);
@@ -890,6 +1014,12 @@ static void dwc3_clk_disable(struct dwc3 *dwc)
 
 static void dwc3_core_exit(struct dwc3 *dwc)
 {
+	/*
+	 * The controller is being torn down; whatever the device state
+	 * machine holds is gone, so a later device-mode attach must rebuild
+	 * the core before it can raise a connect-done event again.
+	 */
+	dwc->core_inited = false;
 	dwc3_event_buffers_cleanup(dwc);
 	dwc3_phy_power_off(dwc);
 	dwc3_phy_exit(dwc);
@@ -1388,6 +1518,8 @@ static int dwc3_core_init(struct dwc3 *dwc)
 	}
 
 	dwc3_config_threshold(dwc);
+
+	dwc->core_inited = true;
 
 	return 0;
 
@@ -2144,7 +2276,14 @@ static void dwc3_plat_remove(struct platform_device *pdev)
 	dwc3_remove(platform_get_drvdata(pdev));
 }
 
-#ifdef CONFIG_PM
+/*
+ * Rebuild the controller the way the runtime resume path does: deassert the
+ * reset, re-enable the clocks and run dwc3_core_init().  Used by
+ * dwc3_resume_common() below and by the device-mode attach paths in
+ * __dwc3_set_mode(), which find the core stale but have no runtime PM
+ * transition to piggyback on - hence the function lives outside the
+ * CONFIG_PM block.
+ */
 static int dwc3_core_init_for_resume(struct dwc3 *dwc)
 {
 	int ret;
@@ -2171,6 +2310,7 @@ assert_reset:
 	return ret;
 }
 
+#ifdef CONFIG_PM
 static int dwc3_suspend_common(struct dwc3 *dwc, pm_message_t msg)
 {
 	u32 reg;
