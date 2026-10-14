@@ -1,0 +1,24 @@
+# NetworkManager owns every wired, wireless and USB netdev on this image.
+#
+# dhcpcd is kept off them by /etc/dhcpcd.conf (denyinterfaces eth* wlan* usb*),
+# but systemd-networkd still ran its own DHCP on the same links: the image
+# rootfs is the Yocto rootfs with the Debian/Ubuntu rootfs rsynced ON TOP of
+# it, so poky's systemd-conf installs /usr/lib/systemd/network/80-wired.network
+# ([Match] Type=ether, DHCP=yes) and the overlay never deletes it. Two DHCP
+# clients on one link renew the same lease, the router NAKs one of them, and
+# the link sits for tens of seconds looking "slow to get an IP".
+#
+# For .network files the link picks the first match in alphanumeric order, so
+# the name must sort BELOW 80-wired.network, and below 70- where
+# systemd-network-generator puts its own files (systemd.network(5) recommends
+# a prefix smaller than "70"). 10- wins over both.
+#
+# Unmanaged=yes (a [Link] key, not [Network]) makes networkd drop the link
+# entirely - no DHCP, no link-local address, no carrier handling - instead of
+# merely skipping DHCP, so NM takes clean ownership rather than seeing another
+# manager's configuration as "external".
+[Match]
+Name=eth* wlan* usb*
+
+[Link]
+Unmanaged=yes
