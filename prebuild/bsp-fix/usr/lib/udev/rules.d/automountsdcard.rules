@@ -1,0 +1,24 @@
+# Disable the /usr/lib/udev/rules.d/automountsdcard.rules shipped by
+# meta-qcom-hwe, which contains:
+#   ACTION=="add|change", KERNEL=="mmcblk[0-9]p1", SUBSYSTEM=="block",
+#     RUN+="/bin/systemctl start sdcard-mount@%k.service"
+#   ACTION=="remove",      KERNEL=="mmcblk[0-9]p1", SUBSYSTEM=="block",
+#     RUN+="/bin/systemctl stop sdcard-mount@%k.service"
+#
+# Why: that rule mounts the card at /media/sdcard (root:root 0755), which the
+# desktop user cannot write to, while this image also ships udisks2 + gvfs,
+# which mount the same card at /media/<user>/<label> with the logged-in user's
+# uid/gid -- visible and writable in Nautilus. Two mounters race for one block
+# device and whichever arrives first wins, so as soon as the udev rule gets
+# there first the file manager shows the read-only /media/sdcard and copying
+# anything onto the card needs sudo. Hand the card to udisks2 instead.
+#
+# Why "same path, comment-only" instead of deleting the file: bsp-fix is an
+# rsync overlay (quecpi-image.bb deploy_debian_gnome_rootfs) and rsync runs
+# without --delete, so the original cannot be removed -- overwriting the same
+# path is what neutralises it. sdcard-mount@.service and automountsdcard.sh
+# stay installed, they simply never get triggered.
+#
+# Only images that consume bsp-fix are affected (DEBIAN / UBUNTU, see
+# prebuild/sync-list); Linux/Weston images never read it and keep the old
+# /media/sdcard behaviour.
