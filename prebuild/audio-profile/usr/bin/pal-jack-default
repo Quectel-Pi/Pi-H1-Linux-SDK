@@ -19,7 +19,7 @@
 # 覆盖的四种场景(见 SINKS/SOURCES 的顺序):
 #   接 MIPI 屏        -> pal_sink_speaker  + 板载 mic
 #   接 HDMI 或 DP      -> pal_sink_hdmi_out / pal_sink_dp_out + 板载 mic
-#                        两个显示器都接着 -> 用 HDMI(SINKS 里排在 DP 前面)
+#                        两个显示器都接着 -> 不干预, 由用户在 GNOME 设置里手动选
 #   插耳机(不论上面)  -> pal_sink_headset  + pal_source_headset_mic
 #   拔耳机            -> 回落到上面那行
 # 板载 mic 这个节点叫 pal_source_speaker_mic, 但它的 description 是
@@ -57,15 +57,22 @@ HDMI_JACK = "HDMI/DP1 Jack"     # LT9611UXC 桥, 物理 HDMI 口
 DP_JACK = "HDMI/DP0 Jack"       # mdss_dp, 物理 DP 口
 
 # 输出通道优先级, 从上往下第一个插着的胜出; 都没插就回板载喇叭(MIPI 屏场景)。
-# HDMI 排在 DP 前面: 两个显示器都接入时用 HDMI(PAL 里 HDMI 走 DeviceRX_HDMI_Rx,
-# DP 那路是原生 DP, 见 HDMI-Audio-Path.md)。想改"耳机优先还是显示器优先"就调
-# 这里的顺序 —— pick() 只认这个顺序, 跟 /dev/input/eventN 的枚举顺序无关。
+# 想改"耳机优先还是显示器优先"就调这里的顺序 —— pick() 只认这个顺序,
+# 跟 /dev/input/eventN 的枚举顺序无关。HDMI 和 DP 之间的取舍不在这里:
+# 见下面 desired() 的 DISPLAY_SINKS。
 SINKS = (
     (HEADSET_JACK, SW_HEADPHONE_INSERT, "pal_sink_headset"),
     (HDMI_JACK, SW_LINEOUT_INSERT, "pal_sink_hdmi_out"),
     (DP_JACK, SW_LINEOUT_INSERT, "pal_sink_dp_out"),
 )
 SINK_FALLBACK = "pal_sink_speaker"
+
+# HDMI 和 DP 同时插着时两个显示器都有声音出口, 谁优先是用户的选择: sink 不表态
+# (不写默认值, 也不回读纠偏), 由用户在 GNOME 设置里手动选。
+# 之前这里按 SINKS 顺序固定选 HDMI, 于是手选 DP 会在 SETTLE_WINDOW 内被回读
+# 窗口抢回 HDMI(实机复现: 设成 DP 后 2s 内变回 HDMI 并保持), 看起来就像
+# "选 DP 自动切到 HDMI"。插耳机时 sink 是耳机, 不走这个分支。
+DISPLAY_SINKS = ("pal_sink_hdmi_out", "pal_sink_dp_out")
 
 # 输入通道: 插上耳机就用耳机麦克风, 否则板载(handset)麦克风。
 SOURCES = (
@@ -99,18 +106,27 @@ def read_switches():
     return state
 
 
+def plugged(switches, device, bit):
+    """这个插孔当前是否插着(设备不存在 = 没插)。"""
+    return any(device in name and bits & (1 << bit) for name, bits in switches.items())
+
+
 def pick(jacks, fallback, switches):
     """jacks 里第一个插着的通道名, 都没有就 fallback。"""
     for device, bit, node in jacks:
-        for name, bits in switches.items():
-            if device in name and bits & (1 << bit):
-                return node
+        if plugged(switches, device, bit):
+            return node
     return fallback
 
 
 def desired(switches):
-    return (pick(SINKS, SINK_FALLBACK, switches),
-            pick(SOURCES, SOURCE_FALLBACK, switches))
+    sink = pick(SINKS, SINK_FALLBACK, switches)
+    # 两个显示器都插着 -> sink 不干预(None), 用户手动选。耳机插着时 sink 是耳机,
+    # 不在 DISPLAY_SINKS 里, 照旧自动切。
+    if sink in DISPLAY_SINKS and plugged(switches, HDMI_JACK, SW_LINEOUT_INSERT) \
+            and plugged(switches, DP_JACK, SW_LINEOUT_INSERT):
+        sink = None
+    return sink, pick(SOURCES, SOURCE_FALLBACK, switches)
 
 
 def parse_default(out):
@@ -138,13 +154,19 @@ def read_default(key):
 
 
 def verify_defaults(sink, source):
-    return (read_default("default.configured.audio.sink") == sink and
-            read_default("default.configured.audio.source") == source)
+    """要管的键(read_default 少一个就 False)。值为 None 的键表示不干预, 跳过。"""
+    for key, name in (("sink", sink), ("source", source)):
+        if name is not None and read_default("default.configured.audio." + key) != name:
+            return False
+    return True
 
 
 def apply_defaults(sink, source):
-    """写默认通道。写完不代表生效, 由 main() 在 SETTLE_WINDOW 内回读确认。"""
+    """写默认通道。None 的键不写(两个显示器都插着时 sink 就是 None, 留给用户手动选)。
+    写完不代表生效, 由 main() 在 SETTLE_WINDOW 内回读确认。"""
     for key, name in (("sink", sink), ("source", source)):
+        if name is None:
+            continue
         mdkey = "default.configured.audio." + key
         try:
             subprocess.run(["pw-metadata", "-n", "default", "0", mdkey,
@@ -153,7 +175,8 @@ def apply_defaults(sink, source):
                            timeout=PW_TIMEOUT)
         except subprocess.TimeoutExpired:
             print("警告: 写 %s 超时, pw-metadata 无响应" % mdkey, flush=True)
-    print("切换默认通道: output=%s input=%s" % (sink, source), flush=True)
+    print("切换默认通道: output=%s input=%s"
+          % (sink if sink else "(不干预, 手动选)", source), flush=True)
 
 
 def show_status():
@@ -163,12 +186,12 @@ def show_status():
         if not seen:
             print("%-14s 无此设备 -> %s" % (device, node))
             continue
-        plugged = any(switches[n] & (1 << bit) for n in seen)
+        plugged_now = any(switches[n] & (1 << bit) for n in seen)
         extra = [SW_CODE.get(i, str(i)) for n in seen for i in range(64) if switches[n] & (1 << i)]
-        print("%-14s %s -> %s%s" % (device, "已插入" if plugged else "未插入", node,
+        print("%-14s %s -> %s%s" % (device, "已插入" if plugged_now else "未插入", node,
                                     "  [%s]" % ",".join(extra) if extra else ""))
     sink, source = desired(switches)
-    print("当前应选: output=%s input=%s" % (sink, source))
+    print("当前应选: output=%s input=%s" % (sink if sink else "(不干预, 手动选)", source))
     # 实际生效值: 跟上面不一样就是没切过去(每次插拔后应该只差一两秒)。
     # pw-metadata 要连 pipewire 会话, root/adb shell 直接跑会读不到 —— 那就把原因打出来,
     # 别让"读不到"看起来像"没切过去"。
@@ -197,17 +220,21 @@ def self_test():
         (dp, ("pal_sink_dp_out", SOURCE_FALLBACK)),
         # 耳机 -> 耳机通道 + 耳机 mic
         (headset, ("pal_sink_headset", "pal_source_headset_mic")),
-        # 耳机优先于显示器, 两个显示器都插时 HDMI 优先(顺序见 SINKS)
+        # 耳机优先于显示器, mic 同时回耳机
         (dict(headset, **hdmi), ("pal_sink_headset", "pal_source_headset_mic")),
         (dict(headset, **dp), ("pal_sink_headset", "pal_source_headset_mic")),
-        (dict(hdmi, **dp), ("pal_sink_hdmi_out", SOURCE_FALLBACK)),
-        # 枚举顺序反过来(DP 设备先出现)也还是 HDMI: 优先级只由 SINKS 顺序决定,
-        # 而 switches 的顺序来自 /dev/input/eventN, 不能依赖
-        (dict(dp, **hdmi), ("pal_sink_hdmi_out", SOURCE_FALLBACK)),
+        # 两个显示器都插着 -> sink 不干预(None), 用户手动选; mic 仍走板载
+        (dict(hdmi, **dp), (None, SOURCE_FALLBACK)),
+        # 枚举顺序反过来(DP 设备先出现)也一样不干预: 只看插没插, 不看设备顺序
+        (dict(dp, **hdmi), (None, SOURCE_FALLBACK)),
+        # 耳机 + 两个显示器 -> 还是耳机(只有两个显示器之间才交给用户)
+        (dict(headset, **{**hdmi, **dp}), ("pal_sink_headset", "pal_source_headset_mic")),
         # HDMI 掉了而 DP 还插着 -> 落到 DP
         ({**{k: 0 for k in hdmi}, **dp}, ("pal_sink_dp_out", SOURCE_FALLBACK)),
         # 拔耳机后回落到当前接着的显示器, mic 同时回板载
         (dict(dp, **{k: 0 for k in headset}), ("pal_sink_dp_out", SOURCE_FALLBACK)),
+        # 两个显示器都插着时拔耳机 -> 不干预(不是回落到 HDMI)
+        (dict(**{**hdmi, **dp}, **{k: 0 for k in headset}), (None, SOURCE_FALLBACK)),
     ]
     for switches, want in cases:
         got = desired(switches)
@@ -236,12 +263,14 @@ def main():
         if want != last:
             # 插拔导致的跳变(含启动后第一轮: 包括"什么都没插 -> 喇叭", 否则接 MIPI 屏
             # 时默认设备由 wireplumber 按 priority 自己猜, 可能落到耳机)。
+            # want 里为 None 的键不写(两个显示器都插着时的 sink), 留给用户手动选。
             apply_defaults(*want)
             last = want
             settle_until = time.time() + SETTLE_WINDOW
         elif time.time() < settle_until and not verify_defaults(*want):
             # 写下去的那次被盖掉了(开机时 wireplumber 拿自己持久化的默认值写回
             # metadata, 跟这里的写入赛跑, 输的那次以前没人发现 -> 一直错到下次插拔)。
+            # sink 为 None 时不回读(没什么可校验的), 自然也不会跟用户手选对着干。
             print("默认通道被外部改掉, 重设:", flush=True)
             apply_defaults(*want)
         time.sleep(POLL_INTERVAL)
