@@ -1,0 +1,14 @@
+[Unit]
+Description=Refresh file manager view after a removable filesystem is mounted
+Documentation=file:/usr/lib/quectel/sdcard-refresh.sh
+# Started by the udev rule 92-quectel-sdcard-refresh.rules via
+# ENV{SYSTEMD_WANTS}; no enable needed. See sdcard-refresh.sh for background.
+ConditionPathIsDirectory=/media
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/quectel/sdcard-refresh.sh
+# The script itself watches for up to 180s (REFRESH_WINDOW)
+TimeoutStartSec=240
+Nice=10
+IOSchedulingClass=idle

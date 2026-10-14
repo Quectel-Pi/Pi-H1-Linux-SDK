@@ -1,0 +1,11 @@
+# Refresh the file manager's view of a removable mount root after it is
+# mounted. Background and implementation: /usr/lib/quectel/sdcard-refresh.sh.
+#
+# Why: when a card is unmounted or yanked, udisks2 removes the mount point
+# directory (/media/<user>/<label>). A Nautilus window showing that directory
+# at that moment caches "not writable" and never re-checks, so Paste / New
+# Folder / Create Link stay greyed out on the card root even after the card is
+# back and writable. Subdirectories are unaffected. Touching the mount root
+# while a view is showing it makes Nautilus re-read the attributes and clears
+# the stale state.
+ACTION=="add|change", SUBSYSTEM=="block", ENV{ID_FS_USAGE}=="filesystem", TAG+="systemd", ENV{SYSTEMD_WANTS}+="quectel-sdcard-refresh.service"
