@@ -1,0 +1,17 @@
+# AX88179B (0b95:1790): the 6.6 ax88179_178a has no support for the AX88179A/B
+# (that landed upstream after 6.8), so the kernel hands this dongle to the
+# cdc_ncm shim instead. The shim does not drive the PHY itself -- carrier is
+# whatever link notification the device pushes -- and
+# layers/meta-qcom-hwe/recipes-bsp/usb/files/usb-autosuspend.rules turns USB
+# autosuspend on for the whole tree. The device is autosuspended ~2.4s after
+# the interface comes up, the notifications stop, and carrier never arrives
+# until stray router traffic happens to wake it: 47-53 seconds, at random.
+# Keep this one device out of autosuspend.
+#
+# RUN+ rather than ATTR{power/control}="on": an ATTR{} assignment is written
+# while rules are being evaluated, while usb-autosuspend.rules uses RUN+,
+# which runs only after every rule has been evaluated -- so the ATTR write
+# gets overwritten back to auto (measured: "on" at 2.45s, back to "auto" at
+# 2.67s). RUN+ actions run in rule order, so this file has to sort after
+# usb-autosuspend.rules -- hence the zz- prefix.
+ACTION=="bind", SUBSYSTEM=="usb", ATTR{idVendor}=="0b95", ATTR{idProduct}=="1790", RUN+="/bin/sh -c 'echo on > /sys/bus/usb/devices/%k/power/control'"
