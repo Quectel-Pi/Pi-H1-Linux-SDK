@@ -339,6 +339,43 @@ satisfiable, and the deadlock — and the drain workaround with it — would
 disappear. That is a change in the vendor kernel driver or its platform data,
 not in this library.
 
+**Update: the driver now asks for decode order itself**, so no kernel change is
+needed. The vendor kernel exposes the property as a V4L2 control on the
+decoder (`V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY_ENABLE`, `display_delay_enable`
+in `v4l2-ctl -l`; `1` means decode order, despite the name — measured, not
+guessed). `set_output_order()` in `files/src/v4l2_decoder.c` sets it while the
+session is being opened, and a decoder that refuses the ioctl just keeps the
+old behaviour.
+
+Measured on the QCS6490 board, same binary, only the control differs — a
+960x544 H.264 clip whose only unusual property is `pic_order_cnt_type=0` (every
+other sample here is `=2`), 20 s of input, `VENUS_VAAPI_LOG=1`:
+
+| | display order | decode order |
+|---|---|---|
+| frames decoded | 93 | 360 (= 18 fps, real time) |
+| drain runs | 10 | 0 |
+| firmware concealments | 9 | 0 |
+| wait in `end-picture` / `vaSyncSurface` | 6.2 s / 2.9 s | 0.9 s / 0.8 s |
+
+At the client level, 180 frames of the same file with
+`--vo=gpu --hwdec=vaapi-copy`: 92 s before (killed by the 90 s timeout, ~2 fps)
+against 10.8 s after; `--vo=dmabuf-wayland --hwdec=vaapi-copy` moves the same
+way. Zero-copy (`--hwdec=vaapi`) is unchanged at ~10.4 s, as are the samples
+that never failed (BBB 1080p30, all `pic_order_cnt_type=2` clips, and the
+`pic_order_cnt_type=0` clip with B-frames). `VENUS_VAAPI_OUTPUT_ORDER` overrides
+the default: `display` restores the old behaviour, `leave` does not touch the
+control.
+
+On the Debian rootfs the package unpacks but does not configure: its `Depends`
+carries Yocto's `libva` package name, while Debian provides that ABI as
+`libva2` (`Provides: libva-driver-abi-1.22`), so `dpkg -i` stops at
+`dependency problems - leaving unconfigured`. The files are already in place at
+that point; `dpkg -i --ignore-depends=libva msm-va-driver_*.deb` configures it.
+Nothing in the firmware flow is affected — the Debian rootfs this SDK ships
+gets the driver as an image file, not through dpkg (which is why `dpkg -S` on
+the stock board reports the file as unowned).
+
 ## Testing
 
 `./verify.sh` does all of the below on a board that `adb` can reach, building

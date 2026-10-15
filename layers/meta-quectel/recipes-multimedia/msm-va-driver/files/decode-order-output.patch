@@ -1,0 +1,79 @@
+diff --git a/src/v4l2_decoder.c b/src/v4l2_decoder.c
+index 3534b42cb7..09d6bbe3c6 100644
+--- a/src/v4l2_decoder.c
++++ b/src/v4l2_decoder.c
+@@ -86,6 +86,65 @@ static int set_output_format(
+     return 0;
+ }
+ 
++/* msm_vidc emits capture frames in display order by default, i.e. a decoded
++ * frame stays in the decoder until the next picture arrives.  A client that
++ * waits for that frame before submitting the next picture - anything reading
++ * the surface back, vaSyncSurface + vaDeriveImage most of all, which is what
++ * --hwdec=vaapi-copy and the GL path do - then deadlocks against the decoder:
++ * the surface is not released, no further picture is submitted, and the sync
++ * only returns after a drain that throws the decoder's reference frames away.
++ * That is what makes mpv ghost and fall back on reordered content.
++ *
++ * The decoder can be asked for decode order output instead, which releases a
++ * frame as soon as it is decoded and makes the sync always satisfiable.  The
++ * kernel driver exposes it as HFI_PROP_DECODE_ORDER_OUTPUT, driven by
++ * V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY_ENABLE (1 = decode order, despite the
++ * name; measured, not guessed).  VENUS_VAAPI_OUTPUT_ORDER overrides the
++ * default, which is decode order:
++ *
++ *   unset   - decode order (the default, what VA-API clients expect)
++ *   decode  - the same, spelled out
++ *   display - leave the platform default, display order: the behaviour before
++ *             this change, kept for comparing and as an escape hatch
++ *   leave   - do not touch the control at all
++ *
++ * A decoder that refuses the control (an older kernel without it, another
++ * vendor's kernel) is not an error: the session just keeps the old behaviour.
++ */
++static void set_output_order(struct venus_v4l2_decoder *decoder)
++{
++    const char *request = getenv("VENUS_VAAPI_OUTPUT_ORDER");
++    struct v4l2_control control;
++    int value = 1;
++
++    if (request) {
++        if (strcmp(request, "display") == 0)
++            value = 0;
++        else if (strcmp(request, "leave") == 0)
++            return;
++        else if (strcmp(request, "decode") != 0) {
++            fprintf(stderr,
++                    "venus-vaapi: unknown VENUS_VAAPI_OUTPUT_ORDER \"%s\"\n",
++                    request);
++            return;
++        }
++    }
++
++    memset(&control, 0, sizeof(control));
++    control.id = V4L2_CID_MPEG_VIDEO_DEC_DISPLAY_DELAY_ENABLE;
++    control.value = value;
++
++    if (xioctl(decoder->fd, VIDIOC_S_CTRL, &control) < 0) {
++        fprintf(stderr,
++                "venus-vaapi: VIDIOC_S_CTRL(id=0x%x value=%d) failed: %s\n",
++                control.id, control.value, strerror(errno));
++    } else if (request) {
++        fprintf(stderr,
++                "venus-vaapi: output order \"%s\": ctrl 0x%x = %d\n",
++                request, control.id, control.value);
++    }
++}
++
+ static int set_capture_format(struct venus_v4l2_decoder *decoder)
+ {
+     struct v4l2_format format = {
+@@ -379,6 +438,8 @@ int venus_v4l2_decoder_open(
+     if (status < 0)
+         goto fail;
+ 
++    set_output_order(decoder);
++
+     status = request_and_map(
+         decoder, V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE,
+         config->output_buffers, &decoder->output,

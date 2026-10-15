@@ -22,6 +22,10 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=ae5ae5eddeebed7d3d3b2f4b475bbfce"
 
 SRC_URI = "git://github.com/super617/venus-vaapi-driver.git;protocol=https;branch=qcm6490-msm-vidc-adapt"
+# Asks msm_vidc for decode-order output, which is what keeps the decoder out of
+# the reorder-hold deadlock the drain workaround above papers over. See the
+# "Where the reordering problem really is" section of README.md.
+SRC_URI += "file://decode-order-output.patch"
 SRCREV = "aa851445e0b2b5e40e36b24402aebb5b4a9b8f21"
 S = "${WORKDIR}/git"
 
