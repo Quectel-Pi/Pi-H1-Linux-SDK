@@ -1,0 +1,14 @@
+[Unit]
+Description=Reconnect paired Bluetooth audio devices
+Documentation=man:bluetoothctl(1)
+After=bluetooth.service
+Wants=bluetooth.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bt-autoconnect
+# Script itself retries for at most 100 s.
+TimeoutStartSec=150
+
+[Install]
+WantedBy=multi-user.target
