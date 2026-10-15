@@ -409,8 +409,35 @@ static int pmic_glink_altmode_attach(struct drm_bridge *bridge,
 	return flags & DRM_BRIDGE_ATTACH_NO_CONNECTOR ? 0 : -EINVAL;
 }
 
+static void pmic_glink_altmode_bridge_hpd_enable(struct drm_bridge *bridge)
+{
+	struct pmic_glink_altmode_port *port =
+		container_of(bridge, struct pmic_glink_altmode_port, bridge);
+
+	/*
+	 * 2026 quecpi: 修复"重启后需重新插拔才亮屏"。冷启动时固件对已插着的
+	 * 显示器只发一次 DP 连接通知 (USBC_NOTIFY_IND, hpd_state=1), 该通知
+	 * 常早于 DP 侧 drm_bridge_hpd_enable() 注册 hpd_cb (尤其 next_bridge
+	 * 改异步轮询后挂载更晚), 于是被 drm_bridge_hpd_notify() 静默丢弃,
+	 * DP 一直 disconnected, 直到物理插拔产生新 cable 事件才点亮。
+	 *
+	 * port->hpd_state 在固件通知到达时即已缓存 (与 drm 投递解耦), 此处
+	 * 在 hpd_cb 刚注册时补发一次缓存状态, 把丢失的连接事件重放给 DRM。
+	 * 本函数由 drm_bridge_hpd_enable() 在持有 bridge->hpd_mutex 且 hpd_cb
+	 * 已赋值后调用, 故直接调 hpd_cb 安全, 不可改用会再次加锁的
+	 * drm_bridge_hpd_notify() (死锁)。
+	 */
+	if (port->hpd_state && bridge->hpd_cb) {
+		dev_dbg(port->altmode->dev,
+			"replaying cached HPD (connected) on port %u\n",
+			port->index);
+		bridge->hpd_cb(bridge->hpd_data, connector_status_connected);
+	}
+}
+
 static const struct drm_bridge_funcs pmic_glink_altmode_bridge_funcs = {
 	.attach = pmic_glink_altmode_attach,
+	.hpd_enable = pmic_glink_altmode_bridge_hpd_enable,
 };
 
 static void pmic_glink_altmode_put_retimer(void *data)
