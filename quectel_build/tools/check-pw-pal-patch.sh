@@ -1,19 +1,22 @@
 #!/bin/bash
-# Verify the pw-pal-plugin patch the way bitbake will: without building.
+# Verify the pw-pal-plugin patch series the way bitbake will: without building.
 #
 # Two things are checked, and both matter:
-#   1. do_patch: quilt/git apply the patch *inside* S (the dir that holds
-#      pw-pal-plugin.c), so the diff paths must be relative to S. Getting this
+#   1. do_patch: quilt/git apply the patches *inside* S (the dir that holds
+#      pw-pal-plugin.c), in filename order, so the diff paths must be relative
+#      to S and each patch must apply on top of the ones before it. Getting this
 #      wrong only shows up as a bitbake do_patch failure after a long build.
-#   2. do_compile: the patched source type-checks against the real cross
+#   2. do_compile: the fully patched source type-checks against the real cross
 #      toolchain and headers this SDK already built (sysroots-components).
 #
-# S is taken from the recipe itself, not guessed.
+# S is taken from the recipe itself, not guessed. Every patch in the series is
+# checked -- a recipe-local patch that nobody verifies is a build break waiting
+# for the next full build.
 # Usage: quectel_build/tools/check-pw-pal-patch.sh [sdk-root]
 set -u
 
 SDK=${1:-$(cd "$(dirname "$0")/../.." && pwd)}
-PATCH="$SDK/layers/meta-quectel/recipes-quectel/quectel/qcom-pw-pal-plugin/0001-pw-pal-plugin-retry-stream-start-until-ADSP-ready.patch"
+PATCHDIR="$SDK/layers/meta-quectel/recipes-quectel/quectel/qcom-pw-pal-plugin"
 BB="$SDK/layers/meta-quectel/recipes-quectel/quectel/qcom-pw-pal-plugin_git.bbappend"
 SRC="$SDK/layers/meta-qcom-hwe/recipes-multimedia/audio/qcom-pw-pal-plugin_git.bb"
 GITDIR="$SDK/downloads/git2/git.codelinaro.org.clo.le.platform.vendor.qcom-opensource.pipewire-plugin"
@@ -26,9 +29,19 @@ bad()  { echo "FAIL  $1"; fail=1; }
 skip() { echo "SKIP  $1"; }
 want() { if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (got '$2', want '$3')"; fi; }
 
-[ -f "$PATCH" ] && ok "patch file present" || bad "patch file present"
-grep -qF "file://$(basename "$PATCH")" "$BB" \
-    && ok "patch listed in SRC_URI (bbappend)" || bad "patch listed in SRC_URI (bbappend)"
+PATCHES=$(ls "$PATCHDIR"/[0-9][0-9][0-9][0-9]-*.patch 2>/dev/null | sort)
+if [ -z "$PATCHES" ]; then
+    bad "no patch files in $(basename "$PATCHDIR")"
+else
+    ok "$(echo "$PATCHES" | wc -l) patch files in $(basename "$PATCHDIR")"
+fi
+
+# Every patch file must be in SRC_URI, or bitbake will not apply it at all.
+for p in $PATCHES; do
+    b=$(basename "$p")
+    grep -qF "file://$b" "$BB" \
+        && ok "SRC_URI lists $b" || bad "SRC_URI lists $b"
+done
 
 SRCREV=$(sed -n 's/^SRCREV *= *"\(.*\)"/\1/p' "$SRC")
 [ -n "$SRCREV" ] || { bad "could not read SRCREV from $(basename "$SRC")"; SRCREV=HEAD; }
@@ -65,24 +78,33 @@ if [ -n "$SRC_DIR" ]; then
     # bitbake's quilt wrapper shells out to patch(1), which resolves hunks from
     # the ---/+++ lines (-p1 inside S). Use patch(1) too: git apply would follow
     # the "diff --git" header instead and pass patches that do_patch rejects.
-    if [ -f "$S/pw-pal-plugin.c" ]; then
-        if ( cd "$S" && patch -p1 --dry-run --forward < "$PATCH" ) >"$WORK/apply.out" 2>&1; then
-            ok "applies inside S with patch -p1 (as quilt/do_patch will)"
-            ( cd "$S" && patch -p1 --forward < "$PATCH" ) >/dev/null 2>&1
-        else
-            bad "applies inside S with patch -p1 (as quilt/do_patch will)"
-            head -6 "$WORK/apply.out" | sed 's/^/      /'
-            echo "      hint: patch paths must be relative to S, not to the repo root"
-            grep -m2 '^--- a/' "$PATCH" | sed 's/^/      /'
+    # The series is applied in the same order bitbake applies it, so a patch
+    # that only applies on top of an earlier one is verified in place.
+    for p in $PATCHES; do
+        b=$(basename "$p")
+        if [ -f "$S/pw-pal-plugin.c" ]; then
+            if ( cd "$S" && patch -p1 --dry-run --forward < "$p" ) >"$WORK/apply.out" 2>&1; then
+                ok "$b applies inside S with patch -p1 (as quilt/do_patch will)"
+                ( cd "$S" && patch -p1 --forward < "$p" ) >/dev/null 2>&1
+            else
+                bad "$b applies inside S with patch -p1 (as quilt/do_patch will)"
+                head -6 "$WORK/apply.out" | sed 's/^/      /'
+                echo "      hint: patch paths must be relative to S, not to the repo root"
+                grep -m2 '^--- a/' "$p" | sed 's/^/      /'
+            fi
+            # The paths S expects, independent of any patch tool's header preference.
+            want_rel=$(grep -m1 '^+++ b/' "$p" | sed 's|^+++ b/||')
+            [ -f "$S/$want_rel" ] && ok "$b target exists under S: $want_rel" \
+                || bad "$b target exists under S (looked for $want_rel)"
+            # And the git header must agree, since git-based appliers read it
+            # first. Patches written as an email have no "diff --git" line; there
+            # is nothing to disagree with then.
+            git_rel=$(grep -m1 '^diff --git ' "$p" | sed 's|^diff --git a/||; s| b/.*||')
+            if [ -n "$git_rel" ]; then
+                want "$b diff-git header agrees with ---/+++ paths" "$git_rel" "$want_rel"
+            fi
         fi
-        # The paths S expects, independent of any patch tool's header preference.
-        want_rel=$(grep -m1 '^+++ b/' "$PATCH" | sed 's|^+++ b/||')
-        [ -f "$S/$want_rel" ] && ok "patch target exists under S: $want_rel" \
-            || bad "patch target exists under S (looked for $want_rel)"
-        # And the git header must agree, since git-based appliers read it first.
-        git_rel=$(grep -m1 '^diff --git ' "$PATCH" | sed 's|^diff --git a/||; s| b/.*||')
-        want "diff-git header agrees with ---/+++ paths" "$git_rel" "$want_rel"
-    fi
+    done
 
     # --- 2. do_compile ------------------------------------------------------
     if [ -x "$GCC" ] && [ -f "$S/pw-pal-plugin.c" ]; then
@@ -101,9 +123,9 @@ if [ -n "$SRC_DIR" ]; then
                 -I "$SR/usr/include/pipewire-0.3" \
                 -I "$SR/usr/include/pal" \
                 "$S/pw-pal-plugin.c" > "$WORK/cc.log" 2>&1; then
-            ok "patched source compiles (cross gcc -fsyntax-only, $(grep -c 'warning:' "$WORK/cc.log") warnings, 0 errors)"
+            ok "fully patched source compiles (cross gcc -fsyntax-only, $(grep -c 'warning:' "$WORK/cc.log") warnings, 0 errors)"
         else
-            bad "patched source compiles:"
+            bad "fully patched source compiles:"
             grep -m5 'error:' "$WORK/cc.log" | sed 's/^/      /'
         fi
     else

@@ -1,0 +1,74 @@
+From: Igni <igni.li@quectel.com>
+Subject: [PATCH] pw-pal-plugin: release the PAL handle on stream destroy, give up at once on -ENODEV
+
+Two fixes for the same failure, found by replaying "insert the headset while
+playing, pull it out, plug it back in" on the board.
+
+1. pw_pal_userdata_destroy() dropped udata->stream without closing the PAL
+   handle. PAL derives the ACDB graph instance from the number of streams
+   still registered on the device, and acdb_cal.acdb only has
+   StreamRX_PCM_Deep_Buffer_DeviceRX_Headphones_Instance_1 (plus a second
+   instance for the generic/ULL families, none for deep buffer or LL). A
+   handle leaked on this path therefore pins deviceCount at 1 for
+   PAL_DEVICE_OUT_WIRED_HEADSET for the rest of the boot, every later headset
+   stream is handed Instance_2, gsl_get_graph_alias reports
+   "Unable to find the graph key vector" (-19) and the sink is silent while
+   the node, the pw-link graph and the desktop channel list all look fine.
+
+   Measured on the board: device 4 enters at deviceCount 0 until 14:55:41,
+   then at 1 for every single open afterwards (deviceCount 0 at 14:55:41 was
+   the last one, see the pal_stream_open at 14:55:41 whose handle is never
+   closed again), and `pw-play --target=pal_sink_headset tone.wav` then
+   reproduces "Instance: 2 -> graph_open ret -19" 100% of the time and never
+   outputs a sample. The visibility, PAUSED and open/start-cleanup teardown
+   paths already call close_pal_stream(); this one did not.
+
+2. PAL_START_RETRY_ATTEMPTS treats every start failure as "the ADSP is not
+   ready yet" and retries every 2 s for 3 minutes. -ENODEV is not that: the
+   ACDB lookup is a local static table and retrying cannot create the missing
+   entry. It only turned a fast failure into 3 minutes of silence and 90
+   open/close cycles on the ADSP before giving up just as silently.
+
+Signed-off-by: Igni <igni.li@quectel.com>
+---
+--- a/pw-pal-plugin.c
++++ b/pw-pal-plugin.c
+@@ -387,6 +387,17 @@
+         pw_log_info("pal_stream_start succeeded on retry, %u attempts left",
+                 udata->retry_left);
+         pw_pal_retry_disarm(udata);
++    } else if (rc == -ENODEV) {
++        /*
++         * -19 from gsl_get_graph_alias is the ACDB saying "no graph for this
++         * stream type / device / instance", a static table lookup that no
++         * amount of waiting can fix -- unlike the not-yet-ready ADSP this
++         * retry was written for. Give up at once with a reason instead of
++         * hammering the ADSP for 3 min and then going quiet.
++         */
++        pw_log_error("pal_stream_start failed (%d), no ACDB graph for this device/instance, giving up",
++                rc);
++        pw_pal_retry_disarm(udata);
+     } else if (udata->retry_left == 0) {
+         pw_log_error("pal_stream_start still failing (%d) after %d attempts, giving up",
+                 rc, PAL_START_RETRY_ATTEMPTS);
+@@ -642,6 +653,20 @@
+             pw_loop_destroy_source(loop, udata->jack_timer);
+         udata->jack_timer = NULL;
+     }
++    /*
++     * Every teardown path has to release the PAL handle. PAL picks the ACDB
++     * graph instance from the number of streams still registered on the
++     * device, and the headphones have a graph for Instance_1 only: a handle
++     * leaked here leaves deviceCount stuck at 1 for
++     * PAL_DEVICE_OUT_WIRED_HEADSET for the rest of the boot, so every later
++     * headset stream asks for Instance_2, gsl_get_graph_alias fails with
++     * -ENODEV (-19), and the sink stays silent while the node, the link graph
++     * and the desktop picker all still look healthy. This is the
++     * ERROR/UNCONNECTED -> pw_impl_module_schedule_destroy path; the
++     * visibility, PAUSED and open/start-cleanup paths already close.
++     */
++    if (close_pal_stream(udata))
++        pw_log_warn("could not release the PAL handle while destroying the stream");
+     if (udata->stream)
+         pw_stream_destroy(udata->stream);
+     if(fcntl(udata->jack_fd, F_GETFD) != 1 || errno != EBADF)
