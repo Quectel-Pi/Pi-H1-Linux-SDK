@@ -54,6 +54,10 @@ struct wcd_mbhc {
 	struct delayed_work mbhc_btn_dwork;
 	/* Work to correct accessory type */
 	struct work_struct correct_plug_swch;
+	/* Fallback hot-plug poll for boards without a usable jack switch IRQ */
+	struct delayed_work plug_poll_dwork;
+	bool plug_poll_prev;
+	int plug_poll_dbnc;
 	struct mutex lock;
 	int buttons_pressed;
 	u32 hph_status; /* track headhpone status */
@@ -1369,21 +1373,139 @@ int wcd_mbhc_get_hph_type(struct wcd_mbhc *mbhc)
 }
 EXPORT_SYMBOL(wcd_mbhc_get_hph_type);
 
+/*
+ * Hot-plug fallback for boards where the headset jack is not wired to the MBHC
+ * mechanical/electrical detection inputs: SW_DET and ELECT_INS_REM never fire,
+ * so the driver never notices the plug.  On those boards the codec's moisture
+ * detection FSM status is the only register that follows the jack, so poll it
+ * and synthesise the jack report the IRQ handler would have made.
+ *
+ * ponytail: 200 ms period burns well under 0.1% of one CPU - measured on
+ * hardware at ~37 us of CPU per poll (416 us wall clock; the rest is sleeping
+ * on the SoundWire completion), i.e. ~0.18 ms/s.  The read goes through
+ * regmap's _no_pm path so it never wakes the codec, and a suspended codec
+ * short-circuits before any bus traffic.  Raise WCD_MBHC_PLUG_POLL_MS if idle
+ * CPU matters more than plug latency.
+ */
+#define WCD_MBHC_PLUG_POLL_MS		200
+#define WCD_MBHC_PLUG_POLL_DEBOUNCE	3
+
+/*
+ * Report a plug/unplug discovered by polling.  Deliberately does not go
+ * through wcd_mbhc_find_plug_and_report(): that path measures the plug
+ * impedance and reclassifies a low-impedance headphone as LINEOUT, which would
+ * leave the "Headphone Jack" pin (SND_JACK_HEADPHONE) off and hide the event
+ * from userspace.  A jack that cannot be electrically classified is reported
+ * as a plain headphone, which is what turns the pin and the evdev switch on.
+ */
+static void wcd_mbhc_plug_poll_report(struct wcd_mbhc *mbhc, bool present)
+{
+	enum snd_jack_types jack_type;
+
+	mutex_lock(&mbhc->lock);
+
+	if (present) {
+		mbhc->current_plug = MBHC_PLUG_TYPE_HEADPHONE;
+		mbhc->hph_status |= SND_JACK_HEADPHONE;
+		snd_soc_jack_report(mbhc->jack,
+				    mbhc->hph_status | SND_JACK_MECHANICAL,
+				    WCD_MBHC_JACK_MASK);
+		mutex_unlock(&mbhc->lock);
+		return;
+	}
+
+	switch (mbhc->current_plug) {
+	case MBHC_PLUG_TYPE_HEADPHONE:
+		jack_type = SND_JACK_HEADPHONE;
+		break;
+	case MBHC_PLUG_TYPE_HEADSET:
+		jack_type = SND_JACK_HEADSET;
+		break;
+	case MBHC_PLUG_TYPE_HIGH_HPH:
+		jack_type = SND_JACK_LINEOUT;
+		break;
+	default:
+		jack_type = 0;
+		break;
+	}
+
+	/* Same sequence as the switch-detect IRQ handler's removal branch. */
+	if (jack_type)
+		wcd_mbhc_report_plug(mbhc, 0, jack_type);
+
+	mutex_unlock(&mbhc->lock);
+}
+
+static void wcd_mbhc_plug_poll_fn(struct work_struct *work)
+{
+	struct wcd_mbhc *mbhc = container_of(work, struct wcd_mbhc,
+					     plug_poll_dwork.work);
+	int present;
+
+	if (!mbhc->mbhc_cb->mbhc_plug_state)
+		return;
+
+	present = mbhc->mbhc_cb->mbhc_plug_state(mbhc->component);
+	/*
+	 * The codec can be runtime suspended, in which case there is no
+	 * readable plug state - keep the last known one.  The first poll after
+	 * it resumes picks up whatever changed meanwhile.
+	 */
+	if (present < 0)
+		goto requeue;
+
+	if (present == mbhc->plug_poll_prev) {
+		mbhc->plug_poll_dbnc = 0;
+		goto requeue;
+	}
+
+	/* Ride out contact bounce on both edges. */
+	if (++mbhc->plug_poll_dbnc < WCD_MBHC_PLUG_POLL_DEBOUNCE)
+		goto requeue;
+
+	mbhc->plug_poll_dbnc = 0;
+	mbhc->plug_poll_prev = present;
+
+	wcd_mbhc_plug_poll_report(mbhc, present);
+
+requeue:
+	schedule_delayed_work(&mbhc->plug_poll_dwork,
+			      msecs_to_jiffies(WCD_MBHC_PLUG_POLL_MS));
+}
+
 int wcd_mbhc_start(struct wcd_mbhc *mbhc, struct wcd_mbhc_config *cfg,
 		   struct snd_soc_jack *jack)
 {
+	int ret;
+
 	if (!mbhc || !cfg || !jack)
 		return -EINVAL;
 
 	mbhc->cfg = cfg;
 	mbhc->jack = jack;
 
-	return wcd_mbhc_initialise(mbhc);
+	ret = wcd_mbhc_initialise(mbhc);
+	if (ret)
+		return ret;
+
+	/*
+	 * plug_poll_prev starts at "unplugged", so a jack that is already
+	 * occupied at probe/resume still gets reported after the debounce.
+	 */
+	mbhc->plug_poll_prev = false;
+	mbhc->plug_poll_dbnc = 0;
+	if (mbhc->mbhc_cb->mbhc_plug_state)
+		schedule_delayed_work(&mbhc->plug_poll_dwork, 0);
+
+	return 0;
 }
 EXPORT_SYMBOL(wcd_mbhc_start);
 
 void wcd_mbhc_stop(struct wcd_mbhc *mbhc)
 {
+	cancel_delayed_work_sync(&mbhc->plug_poll_dwork);
+	mbhc->plug_poll_prev = false;
+	mbhc->plug_poll_dbnc = 0;
 	mbhc->current_plug = MBHC_PLUG_TYPE_NONE;
 	mbhc->hph_status = 0;
 	disable_irq_nosync(mbhc->intr_ids->hph_left_ocp);
@@ -1473,6 +1595,7 @@ struct wcd_mbhc *wcd_mbhc_init(struct snd_soc_component *component,
 	mutex_init(&mbhc->lock);
 
 	INIT_WORK(&mbhc->correct_plug_swch, wcd_correct_swch_plug);
+	INIT_DELAYED_WORK(&mbhc->plug_poll_dwork, wcd_mbhc_plug_poll_fn);
 
 	ret = request_threaded_irq(mbhc->intr_ids->mbhc_sw_intr, NULL,
 					wcd_mbhc_mech_plug_detect_irq,

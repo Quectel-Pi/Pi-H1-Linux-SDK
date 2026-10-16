@@ -2077,6 +2077,34 @@ static void wcd937x_mbhc_moisture_polling_ctrl(struct snd_soc_component *compone
 			      WCD937X_MOISTURE_EN_POLLING_MASK, enable);
 }
 
+/*
+ * On this board the jack is not wired to the MBHC mechanical and electrical
+ * detection inputs, so SW_DET/ELECT_INS_REM never fire.  The moisture
+ * detection FSM status is the only register that follows the plug: bit 4 is
+ * set while a plug is in (0x10/0x12/0x30) and clear when the jack is empty
+ * (0x00/0x02).
+ */
+static int wcd937x_mbhc_plug_state(struct snd_soc_component *component)
+{
+	struct wcd937x_priv *wcd937x = snd_soc_component_get_drvdata(component);
+	unsigned int val;
+	int ret;
+
+	/*
+	 * Go through the regmap directly instead of snd_soc_component_read():
+	 * the codec regmap lives on the SoundWire TX slave, whose runtime
+	 * suspend puts it in cache-only mode, so every read then returns
+	 * -EBUSY - which the ASoC core would log on every poll tick.  A miss
+	 * here simply leaves the jack state as it was.
+	 */
+	ret = regmap_read(wcd937x->regmap, WCD937X_MBHC_MOISTURE_DET_FSM_STATUS,
+			  &val);
+	if (ret)
+		return ret;
+
+	return (val & 0x10) ? 1 : 0;
+}
+
 static const struct wcd_mbhc_cb mbhc_cb = {
 	.clk_setup = wcd937x_mbhc_clk_setup,
 	.mbhc_bias = wcd937x_mbhc_mbhc_bias_control,
@@ -2093,6 +2121,7 @@ static const struct wcd_mbhc_cb mbhc_cb = {
 	.mbhc_get_moisture_status = wcd937x_mbhc_get_moisture_status,
 	.mbhc_moisture_polling_ctrl = wcd937x_mbhc_moisture_polling_ctrl,
 	.mbhc_moisture_detect_en = wcd937x_mbhc_moisture_detect_en,
+	.mbhc_plug_state = wcd937x_mbhc_plug_state,
 };
 
 static int wcd937x_get_hph_type(struct snd_kcontrol *kcontrol,

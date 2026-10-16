@@ -264,6 +264,12 @@ struct wcd_mbhc_cb {
 	bool (*mbhc_get_moisture_status)(struct snd_soc_component *component);
 	void (*mbhc_moisture_polling_ctrl)(struct snd_soc_component *component, bool enable);
 	void (*mbhc_moisture_detect_en)(struct snd_soc_component *component, bool enable);
+	/*
+	 * Reports whether something is plugged into the jack, for boards whose
+	 * jack is not wired to the MBHC switch/electric detection inputs.
+	 * Returns 1 plugged, 0 unplugged, -errno if the codec could not be read.
+	 */
+	int (*mbhc_plug_state)(struct snd_soc_component *component);
 };
 
 #if IS_ENABLED(CONFIG_SND_SOC_WCD_MBHC)
