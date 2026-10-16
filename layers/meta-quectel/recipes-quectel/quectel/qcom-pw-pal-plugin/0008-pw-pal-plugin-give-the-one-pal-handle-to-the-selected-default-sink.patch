@@ -1,0 +1,304 @@
+From: Igni <igni.li@quectel.com>
+Subject: [PATCH] pw-pal-plugin: give the one PAL handle to the selected default sink
+
+0007 hands the one deep-buffer handle of a direction to whichever instance
+reaches STREAMING first, and that is not necessarily the sink the user is
+listening to. Every pal_sink_* node is held in the running state by whoever
+records its monitor, and the GNOME sound picker records all six at once:
+measured, six links pal_sink_speaker -> gnome-control-center, and node 44 went
+back to "suspended" the moment that client was killed. So all six instances ask
+for the handle together, the first one scheduled takes it, and the others retry
+against a slot the winner has no reason to release. Measured: the speaker held
+it while the headset sink -- the default, with the player's stream open on it --
+burned all 90 attempts in 3 min and stayed silent with its node, its links and
+its entry in the picker all showing as healthy.
+
+Follow default.audio.sink / default.audio.source instead: only the selected
+instance may open a handle, the others close theirs as soon as the selection
+moves, and the newly selected one is started from the selection callback.
+pal-jack-default writes those keys on a jack event and the shell writes them on
+a manual switch, so a handover is that metadata change plus one graph open, in
+either direction.
+
+A start that comes back -EAGAIN is that handover in flight -- a direction-mate
+still holds the handle -- and not a failure: keep the timer armed and reset the
+budget, otherwise the instance that is about to be selected gives up on it.
+
+Checked: series 0001-0008 applies in bitbake's order and the patched source
+compiles with 0 errors.
+
+Signed-off-by: Igni <igni.li@quectel.com>
+---
+--- a/pw-pal-plugin.c
++++ b/pw-pal-plugin.c
+@@ -29,6 +29,7 @@
+ #include <spa/param/audio/raw.h>
+ #include <spa/param/buffers.h>
+ #include <pipewire/impl.h>
++#include <pipewire/extensions/metadata.h>
+ #include <pipewire/i18n.h>
+ #include <pipewire/loop.h>
+ #include <PalApi.h>
+@@ -51,6 +52,7 @@
+ #define PW_DEFAULT_SAMPLE_CHANNELS 2
+ #define PW_DEFAULT_SAMPLE_POSITION "[ FL FR ]"
+ #define MAX_NAME_LENGTH 20
++#define PAL_NODE_NAME_MAX 64
+ #define DEV_INPUT_DIR "/dev/input"
+ #define FILE_PREFIX "event"
+ 
+@@ -261,6 +263,7 @@
+ 
+     int jack_fd;
+     char jack_name[MAX_NAME_LENGTH];
++    char node_name[PAL_NODE_NAME_MAX];
+ 
+     struct spa_source *retry_timer;
+     unsigned int retry_left;
+@@ -404,6 +407,173 @@
+     return 0;
+ }
+ 
++/*
++ * ...and that one instance goes to the sink/source the session picked as
++ * default, not to whoever woke up first.
++ *
++ * Every pal_sink_* node is kept in the running state by whoever records its
++ * monitor: the GNOME sound panel records all six at once (measured: 6 links
++ * pal_sink_speaker -> gnome-control-center, and node 44 dropped to "suspended"
++ * the second the panel was killed). So all of them ask for the instance at
++ * once, the first one to be scheduled takes it, and the others -- including
++ * the one the user is listening to -- retry against a slot that the winner has
++ * no reason to release (measured: speaker held it, the selected headset sink
++ * burned all 90 attempts in 3 min and stayed silent with its node, its links
++ * and its desktop entry all looking fine).
++ *
++ * So follow default.audio.sink / default.audio.source: the selected instance
++ * holds the instance, the others release it as soon as the selection moves.
++ * pal-jack-default writes those keys on jack events and the shell writes them
++ * on a manual switch, so the handover in both directions is the metadata
++ * change plus one graph open.
++ *
++ * ponytail: an app that pins its stream to a non-default sink is not covered,
++ * the selection is the only input here. Add link tracking if that matters.
++ */
++static char pal_default_sink[PAL_NODE_NAME_MAX];
++static char pal_default_source[PAL_NODE_NAME_MAX];
++static bool pal_default_known;
++static struct pw_registry *pal_registry;
++static struct spa_hook pal_registry_listener;
++static struct pw_metadata *pal_metadata;
++static struct spa_hook pal_metadata_listener;
++
++static void pw_pal_stream_start(struct pw_userdata *udata);
++
++static const struct pw_registry_events pw_pal_registry_events;
++static const struct pw_metadata_events pw_pal_metadata_events;
++
++static bool pw_pal_is_selected(struct pw_userdata *udata)
++{
++    const char *dflt;
++
++    if (!pal_default_known)
++        return true;    /* no selection heard of yet: keep the old behaviour */
++    dflt = udata->isplayback ? pal_default_sink : pal_default_source;
++    if (dflt[0] == '\0')
++        return true;    /* nothing selected for this direction: do not starve it */
++    return strcmp(dflt, udata->node_name) == 0;
++}
++
++static void pw_pal_default_changed(void)
++{
++    int i;
++
++    /* Release first: the new owner must not open against a held slot. */
++    for (i = 0; i < PAL_MAX_INSTANCES; i++) {
++        struct pw_userdata *udata = pal_instances[i];
++
++        if (udata == NULL || udata->stream_handle == NULL || pw_pal_is_selected(udata))
++            continue;
++        pw_log_info("%s: no longer the default %s, releasing the ACDB instance",
++                udata->node_name, udata->isplayback ? "sink" : "source");
++        pw_pal_retry_disarm(udata);
++        close_pal_stream(udata);
++    }
++
++    for (i = 0; i < PAL_MAX_INSTANCES; i++) {
++        struct pw_userdata *udata = pal_instances[i];
++
++        if (udata == NULL || udata->stream_handle != NULL || !pw_pal_is_selected(udata))
++            continue;
++        if (udata->stream == NULL ||
++                pw_stream_get_state(udata->stream, NULL) != PW_STREAM_STATE_STREAMING)
++            continue;
++        pw_log_info("%s: became the default %s, taking the ACDB instance",
++                udata->node_name, udata->isplayback ? "sink" : "source");
++        pw_pal_stream_start(udata);
++    }
++}
++
++static int pw_pal_metadata_property(void *data, uint32_t subject, const char *key,
++        const char *type, const char *value)
++{
++    struct spa_json it[2];
++    char field[PAL_NODE_NAME_MAX] = { 0, };
++    char name[PAL_NODE_NAME_MAX] = { 0, };
++    char *dst;
++
++    if (key == NULL)
++        return 0;
++    if (spa_streq(key, "default.audio.sink"))
++        dst = pal_default_sink;
++    else if (spa_streq(key, "default.audio.source"))
++        dst = pal_default_source;
++    else
++        return 0;
++
++    /* {"name":"pal_sink_headset"}, or NULL/"" when nothing is selected. */
++    if (value != NULL) {
++        const char *skip;
++
++        spa_json_init(&it[0], value, strlen(value));
++        if (spa_json_enter_object(&it[0], &it[1]) > 0) {
++            while (spa_json_get_string(&it[1], field, sizeof(field)) > 0) {
++                if (spa_streq(field, "name")) {
++                    spa_json_get_string(&it[1], name, sizeof(name));
++                    break;
++                }
++                if (spa_json_next(&it[1], &skip) <= 0)
++                    break;
++            }
++        }
++    }
++    if (spa_streq(dst, name))
++        return;
++
++    snprintf(dst, PAL_NODE_NAME_MAX, "%s", name);
++    pal_default_known = true;
++    pw_log_info("default.audio.%s is now '%s'",
++            dst == pal_default_sink ? "sink" : "source", name);
++    pw_pal_default_changed();
++    return 0;
++}
++
++static void pw_pal_registry_global(void *data, uint32_t id, uint32_t permissions,
++        const char *type, uint32_t version, const struct spa_dict *props)
++{
++    const char *name;
++
++    if (props == NULL || pal_metadata != NULL || !spa_streq(type, PW_TYPE_INTERFACE_Metadata))
++        return;
++    name = spa_dict_lookup(props, PW_KEY_METADATA_NAME);
++    if (name == NULL || !spa_streq(name, "default"))
++        return;
++
++    pal_metadata = pw_registry_bind(pal_registry, id, PW_TYPE_INTERFACE_Metadata,
++            PW_VERSION_METADATA, 0);
++    if (pal_metadata == NULL) {
++        pw_log_error("could not bind the 'default' metadata");
++        return;
++    }
++    pw_metadata_add_listener(pal_metadata, &pal_metadata_listener,
++            &pw_pal_metadata_events, NULL);
++}
++
++static const struct pw_registry_events pw_pal_registry_events = {
++    PW_VERSION_REGISTRY_EVENTS,
++    .global = pw_pal_registry_global,
++};
++
++static const struct pw_metadata_events pw_pal_metadata_events = {
++    PW_VERSION_METADATA_EVENTS,
++    .property = pw_pal_metadata_property,
++};
++
++/* Once per process: the six module instances share the one selection. */
++static void pw_pal_watch_default(struct pw_userdata *udata)
++{
++    if (pal_registry != NULL || pal_metadata != NULL)
++        return;
++    pal_registry = pw_core_get_registry(udata->core, PW_VERSION_REGISTRY, 0);
++    if (pal_registry == NULL) {
++        pw_log_error("no registry: cannot follow the default sink");
++        return;
++    }
++    pw_registry_add_listener(pal_registry, &pal_registry_listener,
++            &pw_pal_registry_events, NULL);
++}
++
+ static int pw_pal_stream_open_start(struct pw_userdata *udata)
+ {
+     int rc = 0;
+@@ -482,6 +652,12 @@
+         return;
+     }
+ 
++    /* The selection moved elsewhere: its change callback drives us from now on. */
++    if (!pw_pal_is_selected(udata)) {
++        pw_pal_retry_disarm(udata);
++        return;
++    }
++
+     rc = pw_pal_stream_open_start(udata);
+     if (rc == 0) {
+         pw_log_info("pal_stream_start succeeded on retry, %u attempts left",
+@@ -498,6 +674,16 @@
+         pw_log_error("pal_stream_start failed (%d), no ACDB graph for this device/instance, giving up",
+                 rc);
+         pw_pal_retry_disarm(udata);
++    } else if (rc == -EAGAIN) {
++        /*
++         * Another direction-mate still holds the one instance. That is the
++         * handover in flight, not a failure: keep the timer armed and never let
++         * the budget run out on it, or the sink that is about to be selected
++         * gives up and stays silent (measured: 90 attempts burned in 3 min
++         * while the old owner was still holding the slot).
++         */
++        udata->retry_left = PAL_START_RETRY_ATTEMPTS;
++        pw_log_info("%s: ACDB instance still held, waiting", udata->node_name);
+     } else if (udata->retry_left == 0) {
+         pw_log_error("pal_stream_start still failing (%d) after %d attempts, giving up",
+                 rc, PAL_START_RETRY_ATTEMPTS);
+@@ -532,7 +718,21 @@
+ 
+ static void pw_pal_stream_start(struct pw_userdata *udata)
+ {
+-    int rc = pw_pal_stream_open_start(udata);
++    int rc;
++
++    /*
++     * Only the selected instance may ask for the process-wide instance, and it
++     * waits here instead of burning the retry budget: see
++     * pw_pal_default_changed(). Without this a monitor-only node (all six are
++     * kept awake by the shell's level meters) grabs the slot, or the one the
++     * user is listening to gives up after 3 min.
++     */
++    if (!pw_pal_is_selected(udata)) {
++        close_pal_stream(udata);
++        return;
++    }
++
++    rc = pw_pal_stream_open_start(udata);
+ 
+     if (rc) {
+         pw_log_error("stream start failed (%d), retrying every %d ms (up to %d attempts)",
+@@ -1445,6 +1645,10 @@
+     if (pw_properties_get(props, PW_KEY_NODE_NAME) == NULL)
+         pw_properties_setf(props, PW_KEY_NODE_NAME, "example-sink-%u-%u", pid, id);
+ 
++    value = pw_properties_get(props, PW_KEY_NODE_NAME);
++    if (value)
++        snprintf(udata->node_name, sizeof(udata->node_name), "%s", value);
++
+     if (pw_properties_get(props, PW_KEY_NODE_DESCRIPTION) == NULL)
+         pw_properties_set(props, PW_KEY_NODE_DESCRIPTION,
+         pw_properties_get(props, PW_KEY_NODE_NAME));
+@@ -1504,6 +1708,8 @@
+      * module's .destroy is what runs pw_pal_userdata_destroy(). */
+     pw_impl_module_add_listener(module, &udata->module_listener, &pw_pal_events_module, udata);
+     pw_pal_register_instance(udata);
++    /* After the registration: the replayed selection pokes this instance too. */
++    pw_pal_watch_default(udata);
+     if (udata->jack_name[0] != '\0') {
+         /*
+          * A jacked instance gets its stream from the jack state instead of
