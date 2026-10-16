@@ -55,11 +55,15 @@ pal_sink_dp_out_db    → jack-name = "HDMI/DP0 Jack"  (深缓冲, music)
 
 | 字段 | 作用 |
 |---|---|
-| `jack-name` | 关联内核 ALSA jack 控制，决定 sink 何时可用 |
+| `jack-name` | 匹配 `/dev/input/event*` 里的 jack 设备名，插件据此跟踪该插孔插拔 |
 | `media.role` | `music` = 深缓冲, `notification` = 低延迟 |
 | `media.class` | `Audio/Sink` = 播放, `Audio/Source` = 录音 |
 
-**工作原理:** 有 `jack-name` 的 sink 只在对应显示器连接时可用。没有 `jack-name` 的 sink（speaker、headset）始终可用。
+**工作原理:** `jack-name` 匹配 `/dev/input/event*` 的设备名，插件据此跟踪该插孔。**未插入时根本不创建该节点**（`handle_jack_boot_event()` 开机查询、`on_jack_event()` 热插拔；见 0003 patch 的 `pw_pal_set_stream_visible()`），所以拔掉显示器后在声音面板里不会出现对应通道。没有 `jack-name` 的 sink（speaker、headset）始终存在。
+
+这是上游没有的行为：上游 `module_init` 无条件 `pw_pal_create_stream()`，节点开机就在，插拔只改 PAL 侧连接状态，节点不消失。pipewire 本身没有"隐藏节点"属性，wireplumber 的 disable 键只对 monitor 建的节点生效，所以只能靠建/销毁自己的流来控制节点有无。
+
+已知边界：隐藏依赖开机时 jack 设备节点已存在。实测 pipewire 起于 boot+9.0s，而 `/dev/input/event10-12` 是 boot+9.902s 才由 udev 建出 —— 那次 `jack_register()` 失败、`EVIOCGSW` 查不到状态，走 "showing the node anyway" 兜底，该实例的节点会一直显到热插拔一次为止。
 
 ---
 

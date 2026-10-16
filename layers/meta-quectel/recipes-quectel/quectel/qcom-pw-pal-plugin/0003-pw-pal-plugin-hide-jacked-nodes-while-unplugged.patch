@@ -1,0 +1,193 @@
+diff --git a/pw-pal-plugin.c b/pw-pal-plugin.c
+--- a/pw-pal-plugin.c
++++ b/pw-pal-plugin.c
+@@ -516,8 +516,15 @@
+     struct spa_pod_builder b;
+ 
+     spa_pod_builder_init(&b, buffer, sizeof(buffer));
++    /*
++     * pw_stream_new() takes ownership of the properties and frees them in
++     * pw_stream_destroy(), so hand it a copy: udata->stream_props is kept
++     * alive for the whole lifetime of the module and must stay valid when a
++     * second stream is created after the first one was destroyed.
++     */
+     if (udata->isplayback) {
+-        udata->stream = pw_stream_new(udata->core, "example sink", udata->stream_props);
++        udata->stream = pw_stream_new(udata->core, "example sink",
++                        pw_properties_copy(udata->stream_props));
+         params[n_params++] = spa_pod_builder_add_object(&b,
+                         SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers,
+                         SPA_PARAM_BUFFERS_buffers, SPA_POD_Int(4),
+@@ -525,7 +532,8 @@
+                         SPA_PARAM_BUFFERS_size,    SPA_POD_Int(1024),
+                         SPA_PARAM_BUFFERS_stride,  SPA_POD_Int(16));
+     } else {
+-        udata->stream = pw_stream_new(udata->core, "example source", udata->stream_props);
++        udata->stream = pw_stream_new(udata->core, "example source",
++                        pw_properties_copy(udata->stream_props));
+         params[n_params++] = spa_pod_builder_add_object(&b,
+                         SPA_TYPE_OBJECT_ParamBuffers, SPA_PARAM_Buffers,
+                         SPA_PARAM_BUFFERS_buffers, SPA_POD_Int(8),
+@@ -830,6 +838,70 @@
+ }
+ 
+ 
++/*
++ * Which evdev switch bit means "this jack is plugged". The headset jack is an
++ * SND_JACK_HEADSET device (SW_HEADPHONE_INSERT | SW_MICROPHONE_INSERT), the
++ * HDMI/DP jacks are SND_JACK_AVOUT (SW_LINEOUT_INSERT) -- see
++ * jack_switch_types[] in sound/core/jack.c and qcm6490_dai_* in
++ * sound/soc/qcom/qcm6490.c. Each input device only ever reports its own jack's
++ * bits, so reading "any of them set" here is unambiguous.
++ */
++#define JACK_SWITCH_BITS \
++    ((1u << SW_HEADPHONE_INSERT) | (1u << SW_MICROPHONE_INSERT) | (1u << SW_LINEOUT_INSERT))
++#define IS_JACK_SWITCH(code) \
++    (code < 32 && (((JACK_SWITCH_BITS) >> (code)) & 1u))
++
++static bool jack_plugged(const uint8_t *sw_bitmask)
++{
++    return BIT_VALUE(SW_LINEOUT_INSERT, sw_bitmask) ||
++        BIT_VALUE(SW_HEADPHONE_INSERT, sw_bitmask) ||
++        BIT_VALUE(SW_MICROPHONE_INSERT, sw_bitmask);
++}
++
++/*
++ * Show/hide the node of a jacked instance. Upstream created one stream per
++ * module instance at module_init, so every sink/source showed up in the session
++ * manager whether or not its device was plugged in. Nothing can hide a node
++ * from outside: pipewire has no "hidden" property, wireplumber's disable keys
++ * only apply to monitor-created nodes, and destroying an instance's module at
++ * runtime takes the module (and its jack fd) with it, so the node never came
++ * back. Owning the stream here is the only place that can do it.
++ *
++ * The stream is cheap to create late: it is just pw_stream_new() + connect(),
++ * the PAL graph is only opened on the first STREAMING, which already retries
++ * until the ADSP answers.
++ */
++static int pw_pal_set_stream_visible(struct pw_userdata *udata, bool visible)
++{
++    int res;
++
++    if (visible) {
++        if (udata->stream)
++            return 0;
++        if ((res = pw_pal_create_stream(udata)) < 0) {
++            pw_log_error("%s: could not create the stream (%d)",
++                    udata->jack_name, res);
++            return res;
++        }
++        pw_log_info("%s: node created", udata->jack_name);
++        return 0;
++    }
++
++    if (udata->stream == NULL)
++        return 0;
++
++    pw_pal_retry_disarm(udata);
++    close_pal_stream(udata);
++    /*
++     * pw_stream_destroy() emits .destroy (which clears udata->stream) but no
++     * state change, so the UNCONNECTED branch in pw_pal_change_stream_state()
++     * does not fire and the module survives with its jack fd intact.
++     */
++    pw_stream_destroy(udata->stream);
++    pw_log_info("%s: node destroyed", udata->jack_name);
++    return 0;
++}
++
+ static void handle_jack_boot_event(struct pw_userdata *udata)
+ {
+     int fd = udata->jack_fd;
+@@ -839,18 +911,24 @@
+     memset(sw_bitmask, 0, sizeof(sw_bitmask));
+     // Query current switch state
+     if (ioctl(fd, EVIOCGSW(sizeof(sw_bitmask)), sw_bitmask) >= 0) {
+-        // Check for HDMI/DP jack state
+-        if (BIT_VALUE(SW_LINEOUT_INSERT, sw_bitmask))
+-            connected = 1;
+-
+-        if (connected) {
+-            pw_log_info("%s: Connected (boot time)", udata->jack_name);
+-            if(handle_device_connection(udata, true))
+-                pw_log_error("Failed to handle device connection");
+-        }
++        connected = jack_plugged(sw_bitmask);
++
++        pw_log_info("%s: %s (boot time)", udata->jack_name,
++                connected ? "Connected" : "Disconnected");
++
++        if (connected && handle_device_connection(udata, true))
++            pw_log_error("Failed to handle device connection");
+     } else {
+-        pw_log_error("Failed to query initial jack state");
++        /*
++         * No idea whether anything is plugged: show the node rather than hiding
++         * it, otherwise a jack input device that fails to answer means the sink
++         * disappears for good.
++         */
++        pw_log_error("Failed to query initial jack state, showing the node anyway");
++        connected = 1;
+     }
++
++    pw_pal_set_stream_visible(udata, connected);
+ }
+ 
+ static void on_jack_event(void *userdata, int fd, uint32_t mask)
+@@ -871,11 +949,21 @@
+     ssize_t ret = read(fd, &ev, sizeof(ev));
+ 
+     if (ret == sizeof(ev)) {
+-        if (ev.type == EV_SW) {
+-            if (ev.code == SW_LINEOUT_INSERT) {
+-                const char *state = ev.value ? "Connected" : "Disconnected";
+-                pw_log_info("%s: %s", udata->jack_name, state);
+-                if(handle_device_connection(udata, ev.value ? true : false))
++        if (ev.type == EV_SW && IS_JACK_SWITCH(ev.code)) {
++            const char *state = ev.value ? "Connected" : "Disconnected";
++            pw_log_info("%s: %s", udata->jack_name, state);
++            if (ev.value) {
++                if (handle_device_connection(udata, true))
++                    pw_log_error("Failed to handle device connection");
++                pw_pal_set_stream_visible(udata, true);
++            } else {
++                /*
++                 * Hide first: stopping our PAL stream while PAL still thinks
++                 * the device is there is a no-op, the other way round the node
++                 * keeps playing into a device that is gone.
++                 */
++                pw_pal_set_stream_visible(udata, false);
++                if (handle_device_connection(udata, false))
+                     pw_log_error("Failed to handle device connection");
+             }
+         }
+@@ -1098,15 +1186,24 @@
+             &udata->core_listener,
+             &pw_pal_events_core, udata);
+     pw_pal_fill_stream_info(udata);
+-    if ((res = pw_pal_create_stream(udata)) < 0)
+-        goto error;
++    /* Before anything can fail into pw_impl_module_schedule_destroy(): the
++     * module's .destroy is what runs pw_pal_userdata_destroy(). */
+     pw_impl_module_add_listener(module, &udata->module_listener, &pw_pal_events_module, udata);
+-    if (udata->jack_name && udata->jack_name[0] != '\0') {
+-        if(jack_register(udata))
++    if (udata->jack_name[0] != '\0') {
++        /*
++         * A jacked instance gets its stream from the jack state instead of
++         * unconditionally here, so its node only exists while the device is
++         * plugged in (handle_jack_boot_event() and on_jack_event()).
++         */
++        if (jack_register(udata)) {
+             pw_log_error("failed to register jack event for %s", udata->jack_name);
+-        else {
++            if ((res = pw_pal_set_stream_visible(udata, true)) < 0)
++                goto error;
++        } else {
+             handle_jack_boot_event(udata);
+         }
++    } else if ((res = pw_pal_create_stream(udata)) < 0) {
++        goto error;
+     }
+     return 0;
+ 
