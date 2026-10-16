@@ -1,0 +1,179 @@
+From: Igni <igni.li@quectel.com>
+Subject: [PATCH] pw-pal-plugin: retry the jack input device lookup at boot
+
+jack_open_fd() scanned /dev/input once, before udev had created the
+jack nodes, so the plugin fell back to showing the sink until the
+first hotplug. Retry every 250 ms for up to 5 s and hand over to the
+real jack state as soon as the device shows up.
+---
+--- a/pw-pal-plugin.c
++++ b/pw-pal-plugin.c
+@@ -68,6 +68,22 @@
+ #define PAL_START_RETRY_ATTEMPTS    90      /* 3 min, ADSP was ready in <= 2.5 */
+ 
+ /*
++ * jack_open_fd() is a one-shot scan at boot, and the jack input device is
++ * created by udev after the display driver probes -- later than the plugin
++ * starts. Measured on this board: the first scan runs at boot+9.398 s (only
++ * /dev/input/event0-9 exist) while the jack nodes event1{0,1,2} are born at
++ * boot+9.788 s, so the first scan always loses that race, falls back to
++ * "showing the node anyway" and leaves the sink visible until the first
++ * hotplug. Android's InputReader rescans /dev/input when a device arrives;
++ * this is the same thing without the inotify machinery.
++ *
++ * ponytail: fixed retry window, 10x the measured ~0.4 s gap. Watch /dev/input
++ * with a pw_loop source instead if the gap ever grows past it.
++ */
++#define JACK_RETRY_INTERVAL_MS 250
++#define JACK_RETRY_ATTEMPTS    20      /* 5 s */
++
++/*
+  * The ADSP audio path (GPR -> GSL -> AGM/PAL) is single-owner, but every user
+  * session runs its own pipewire, and this module is loaded six times in each
+  * (4 sinks + 2 sources). Calling agm_init()/pal_init() from a second instance
+@@ -230,6 +246,9 @@
+ 
+     struct spa_source *retry_timer;
+     unsigned int retry_left;
++
++    struct spa_source *jack_timer;
++    unsigned int jack_retry_left;
+ };
+ 
+ static void pw_pal_destroy_stream(void *d)
+@@ -616,6 +635,13 @@
+             pw_loop_destroy_source(loop, udata->retry_timer);
+         udata->retry_timer = NULL;
+     }
++    if (udata->jack_timer) {
++        struct pw_loop *loop = pw_context_get_main_loop(udata->context);
++
++        if (loop)
++            pw_loop_destroy_source(loop, udata->jack_timer);
++        udata->jack_timer = NULL;
++    }
+     if (udata->stream)
+         pw_stream_destroy(udata->stream);
+     if(fcntl(udata->jack_fd, F_GETFD) != 1 || errno != EBADF)
+@@ -977,6 +1003,7 @@
+ static int jack_open_fd(struct pw_userdata *udata)
+ {
+     int ret = 0;
++    int denied = 0;
+     DIR *d = opendir(DEV_INPUT_DIR);
+     if (d == NULL) {
+         pw_log_error("opendir() failed");
+@@ -998,6 +1025,13 @@
+             DEV_INPUT_DIR, dir->d_name);
+         int fd = open(filepath, O_RDONLY);
+         if (fd < 0) {
++            /*
++             * Remember a permission failure: the node exists, so waiting for
++             * it to show up is pointless (a session that is not in the input
++             * group, e.g. the gdm greeter, keeps failing here forever).
++             */
++            if (errno == EACCES || errno == EPERM)
++                denied = 1;
+             pw_log_error("open() failed %s", filepath);
+             continue;
+         }
+@@ -1015,7 +1049,7 @@
+     }
+ 
+     closedir(d);
+-    ret = -EINVAL;
++    ret = denied ? -EACCES : -EINVAL;
+ exit:
+     pw_log_error("No jack input device found in %s", DEV_INPUT_DIR);
+     return ret;
+@@ -1026,7 +1060,7 @@
+     int ret = 0;
+     udata->jack_fd = jack_open_fd(udata);
+     if (udata->jack_fd < 0) {
+-        ret = -EBADFD;
++        ret = udata->jack_fd;
+         goto exit;
+     }
+ 
+@@ -1042,6 +1076,73 @@
+     return ret;
+ }
+ 
++static void jack_retry_disarm(struct pw_userdata *udata)
++{
++    struct timespec zero = { 0, 0 };
++
++    udata->jack_retry_left = 0;
++    if (udata->jack_timer)
++        pw_loop_update_timer(pw_context_get_main_loop(udata->context),
++                udata->jack_timer, &zero, &zero, false);
++}
++
++static void jack_retry_timer_func(void *data, uint64_t expirations)
++{
++    struct pw_userdata *udata = data;
++    int ret;
++
++    if (udata->jack_retry_left == 0) {
++        jack_retry_disarm(udata);
++        return;
++    }
++    udata->jack_retry_left--;
++
++    ret = jack_register(udata);
++    if (ret == 0) {
++        /*
++         * warn, not info: pipewire's default log.level is 2, so an info line
++         * here would never reach the journal. Recovery is worth seeing once.
++         */
++        pw_log_warn("%s: jack device appeared after %u attempts",
++                udata->jack_name, JACK_RETRY_ATTEMPTS - udata->jack_retry_left);
++        jack_retry_disarm(udata);
++        /*
++         * Take over from the show-anyway guess module_init made when the
++         * device did not exist yet: now the real jack state decides whether
++         * the node has any business being there.
++         */
++        handle_jack_boot_event(udata);
++    } else if (ret == -EACCES) {
++        pw_log_warn("%s: %s is not readable by this session, not retrying",
++                udata->jack_name, DEV_INPUT_DIR);
++        jack_retry_disarm(udata);
++    } else if (udata->jack_retry_left == 0) {
++        pw_log_error("%s: no jack input device after %d attempts, node stays visible",
++                udata->jack_name, JACK_RETRY_ATTEMPTS);
++    }
++}
++
++static void jack_retry_arm(struct pw_userdata *udata)
++{
++    struct timespec interval = {
++        JACK_RETRY_INTERVAL_MS / 1000,
++        (JACK_RETRY_INTERVAL_MS % 1000) * 1000000,
++    };
++    struct pw_loop *loop = pw_context_get_main_loop(udata->context);
++
++    if (loop == NULL)
++        return;
++    if (udata->jack_timer == NULL) {
++        udata->jack_timer = pw_loop_add_timer(loop, jack_retry_timer_func, udata);
++        if (udata->jack_timer == NULL) {
++            pw_log_error("could not create the jack device retry timer");
++            return;
++        }
++    }
++    udata->jack_retry_left = JACK_RETRY_ATTEMPTS;
++    pw_loop_update_timer(loop, udata->jack_timer, &interval, &interval, false);
++}
++
+ SPA_EXPORT
+ int pipewire__module_init(struct pw_impl_module *module, const char *args)
+ {
+@@ -1199,6 +1300,7 @@
+             pw_log_error("failed to register jack event for %s", udata->jack_name);
+             if ((res = pw_pal_set_stream_visible(udata, true)) < 0)
+                 goto error;
++            jack_retry_arm(udata);
+         } else {
+             handle_jack_boot_event(udata);
+         }

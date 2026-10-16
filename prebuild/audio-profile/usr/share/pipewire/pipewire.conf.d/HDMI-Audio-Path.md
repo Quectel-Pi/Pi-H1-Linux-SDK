@@ -63,7 +63,7 @@ pal_sink_dp_out_db    → jack-name = "HDMI/DP0 Jack"  (深缓冲, music)
 
 这是上游没有的行为：上游 `module_init` 无条件 `pw_pal_create_stream()`，节点开机就在，插拔只改 PAL 侧连接状态，节点不消失。pipewire 本身没有"隐藏节点"属性，wireplumber 的 disable 键只对 monitor 建的节点生效，所以只能靠建/销毁自己的流来控制节点有无。
 
-已知边界：隐藏依赖开机时 jack 设备节点已存在。实测 pipewire 起于 boot+9.0s，而 `/dev/input/event10-12` 是 boot+9.902s 才由 udev 建出 —— 那次 `jack_register()` 失败、`EVIOCGSW` 查不到状态，走 "showing the node anyway" 兜底，该实例的节点会一直显到热插拔一次为止。
+jack 设备节点晚于 pipewire 出现：实测 pipewire 起于 boot+9.0s，而 `/dev/input/event10-12` 是 boot+9.902s 才由 udev 建出。首次 `jack_register()` 会失败，此时先按 "showing the node anyway" 兜底把节点显出来，并由 0004 的 `jack_retry_arm()` 每 250ms 重试一次（共 20 次），设备一到就用真实的 jack 状态覆盖掉那个兜底判断。Android 侧等价机制是 InputReader 对 `/dev/input` 的设备到达重扫。
 
 ---
 
