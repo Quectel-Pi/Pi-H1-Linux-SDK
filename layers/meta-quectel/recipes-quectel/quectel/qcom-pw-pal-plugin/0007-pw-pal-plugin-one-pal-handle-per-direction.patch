@@ -1,0 +1,148 @@
+From: Igni <igni.li@quectel.com>
+Subject: [PATCH] pw-pal-plugin: hold one PAL handle per direction, PAL hands out one graph instance per process
+
+PAL does not pick the ACDB graph instance from the device. For every stream
+that is not voice-UI, non-tunnel or sensor-PCM it is the first free bit of a
+per-direction bitmask in the process -- ResourceManager::getStreamInstanceID()
+sets stream_instances[PAL_STREAM_DEEP_BUFFER - 1] for output and
+in_stream_instances[] for input, and frees the bit when the stream is
+destroyed. The ACDB tables this board ships only carry Instance_1 for the deep
+buffer graphs, so the second deep-buffer stream of a direction can never
+start: gsl_get_graph_alias returns -ENODEV, graph_open exits -19, and the sink
+stays silent while its node, its port and its entry in the desktop picker all
+still look healthy.
+
+Two of the six instances reaching STREAMING together is enough, and a single
+jack event does it: plugging the headset moves the default input to the
+headset mic while the speaker-mic stream is still open. Measured at 16:39:25
+-- the headset mic gets "Instance: 2", graph_open exits -19, and the
+speaker-mic handle closes 100 ms later, so the retry would have gone straight
+in. What is left behind is worse than the one failed open: PAL had already
+switched a stream onto the headset output during that open, so device id 4
+stays at deviceCount 1 for the rest of the boot and every later headset stream
+asks for Instance_2 again. That is the "no sound, but everything looks
+connected" state which only a pipewire restart cleared, and why pulling and
+re-inserting the jack a few times is enough to kill a channel for good.
+
+Keep one handle per direction in the process and let the other instance wait
+on the existing 2 s retry instead of opening a handle that cannot work: the
+bit is freed by whoever holds it as soon as that stream closes, and every
+teardown path closes (PAUSED, hidden node, module destroy, failed open). The
+six instances share one process, so the registry is a file-static array of the
+live userdata, registered next to the module listener and dropped again in
+pw_pal_userdata_destroy().
+
+Checked: series 0001-0007 applies in bitbake's order and the patched source
+compiles with 0 errors.
+
+Signed-off-by: Igni <igni.li@quectel.com>
+---
+--- a/pw-pal-plugin.c
++++ b/pw-pal-plugin.c
+@@ -335,6 +335,75 @@
+                 udata->retry_timer, &zero, &zero, false);
+ }
+ 
++/*
++ * One deep-buffer handle per direction, process-wide.
++ *
++ * PAL does not take the ACDB graph instance from the device: for everything
++ * that is not voice-UI / non-tunnel / sensor-PCM it is the first free bit of a
++ * per-direction, per-stream-type bitmask held by the process
++ * (ResourceManager::getStreamInstanceID(), stream_instances[PAL_STREAM_DEEP_BUFFER - 1]
++ * for output and in_stream_instances[] for input), released again when the
++ * stream is destroyed. The ACDB tables only carry Instance_1 for the deep
++ * buffer graphs this board uses, so the second deep-buffer stream in the
++ * process asks for a graph that does not exist: gsl_get_graph_alias answers
++ * -ENODEV (-19), the stream never starts, and the module keeps its node, its
++ * port and its place in the desktop picker -- the sink looks healthy and is
++ * silent, and restarting pipewire is the only way back.
++ *
++ * Two of the six instances reaching STREAMING at once is all it takes, and a
++ * jack event does that by itself: plugging the headset moves the default input
++ * to the headset mic while the speaker-mic stream is still open (measured:
++ * "Instance: 2" on the headset mic, graph_open -19, the speaker-mic handle
++ * closing 100 ms later -- the retry would have been in).
++ *
++ * So hold one handle per direction and let the other instance wait instead of
++ * opening a doomed one every time: the slot frees as soon as the current owner
++ * closes, which every teardown path does (PAUSED, hidden node, module destroy,
++ * failed open).
++ */
++#define PAL_MAX_INSTANCES       16
++
++static struct pw_userdata *pal_instances[PAL_MAX_INSTANCES];
++
++static void pw_pal_register_instance(struct pw_userdata *udata)
++{
++    int i;
++
++    for (i = 0; i < PAL_MAX_INSTANCES; i++) {
++        if (pal_instances[i] == NULL) {
++            pal_instances[i] = udata;
++            return;
++        }
++    }
++    pw_log_error("%s: no free instance slot", udata->jack_name);
++}
++
++static void pw_pal_unregister_instance(struct pw_userdata *udata)
++{
++    int i;
++
++    for (i = 0; i < PAL_MAX_INSTANCES; i++)
++        if (pal_instances[i] == udata)
++            pal_instances[i] = NULL;
++}
++
++static int pw_pal_instance_busy(struct pw_userdata *udata)
++{
++    int i;
++
++    for (i = 0; i < PAL_MAX_INSTANCES; i++) {
++        struct pw_userdata *other = pal_instances[i];
++
++        if (other == NULL || other == udata)
++            continue;
++        if (other->isplayback != udata->isplayback)
++            continue;
++        if (other->stream_handle != NULL)
++            return -EAGAIN;
++    }
++    return 0;
++}
++
+ static int pw_pal_stream_open_start(struct pw_userdata *udata)
+ {
+     int rc = 0;
+@@ -345,6 +414,14 @@
+         pw_log_error("no audio path yet (%d)", rc);
+         return rc;      /* pw_pal_stream_start() arms the retry timer on this */
+     }
++
++    rc = pw_pal_instance_busy(udata);
++    if (rc) {
++        pw_log_info("%s: another %s stream holds the ACDB instance, waiting",
++                udata->jack_name, udata->isplayback ? "playback" : "capture");
++        return rc;      /* retryable: the owner frees the bit when it closes */
++    }
++
+     rc = pal_stream_open(udata->stream_attributes, 1, udata->pal_device, 0, NULL, pa_pal_out_cb, udata,
+             &udata->stream_handle);
+ 
+@@ -718,6 +795,7 @@
+     pw_properties_free(udata->stream_props);
+     pw_properties_free(udata->props);
+ 
++    pw_pal_unregister_instance(udata);
+     free(udata);
+ }
+ 
+@@ -1425,6 +1503,7 @@
+     /* Before anything can fail into pw_impl_module_schedule_destroy(): the
+      * module's .destroy is what runs pw_pal_userdata_destroy(). */
+     pw_impl_module_add_listener(module, &udata->module_listener, &pw_pal_events_module, udata);
++    pw_pal_register_instance(udata);
+     if (udata->jack_name[0] != '\0') {
+         /*
+          * A jacked instance gets its stream from the jack state instead of

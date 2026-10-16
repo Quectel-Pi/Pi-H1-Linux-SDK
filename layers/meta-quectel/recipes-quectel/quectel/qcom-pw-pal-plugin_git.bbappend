@@ -8,6 +8,7 @@ SRC_URI += " \
     file://0004-pw-pal-plugin-retry-jack-device-lookup.patch \
     file://0005-pw-pal-plugin-close-pal-handle-on-destroy-and-fail-fast-on-enodev.patch \
     file://0006-pw-pal-plugin-rebuild-the-stream-instead-of-destroying-the-module-on-error.patch \
+    file://0007-pw-pal-plugin-one-pal-handle-per-direction.patch \
     file://usr/share/pipewire/pipewire.conf.d/pw-pal-plugin.conf \
     file://usr/share/pipewire/pipewire.conf.d/HDMI-Audio-Path.md \
     file://zz-audio-dmaheap-perm.rules \
