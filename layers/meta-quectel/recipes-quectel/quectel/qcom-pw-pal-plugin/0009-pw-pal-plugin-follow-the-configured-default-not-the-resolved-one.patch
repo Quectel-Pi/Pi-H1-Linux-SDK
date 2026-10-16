@@ -1,0 +1,193 @@
+From: Igni <igni.li@quectel.com>
+Subject: [PATCH] pw-pal-plugin: follow the configured default, not the resolved one
+
+0008 gives the one deep-buffer handle of a direction to the default sink, and
+reads that default from default.audio.sink / default.audio.source -- the key
+WirePlumber resolves. WirePlumber resolves it once, when
+default.configured.audio.sink/source is written, and only if the node it names
+is available at that instant. A jack event writes the key while the node it
+names is still coming up: measured, pal-jack-default wrote pal_sink_headset and
+the pal_sink_headset node appeared in the same second, WirePlumber left
+default.audio.sink on pal_sink_speaker, and it stayed there for the rest of the
+session. The headset node came up, had its links and was the default in the
+picker -- and the first STREAMING closed its handle, because the plugin still
+believed the speaker was the selection. So plugging the headset at runtime left
+it silent until the same key was written a second time by hand, while a headset
+that was already in place when pipewire started worked: this only shows up on a
+plug.
+
+Read the configured key instead. It is what the picker and pal-jack-default
+write, it is written on the event itself, and it does not depend on the node
+being up at that moment. A configured name is followed only while its node is
+up, so a key left naming a headset that has just been unplugged does not take
+the direction down with it: WirePlumber's resolved name is used then, and when
+neither of the two names a node that is up the selection is empty and the nodes
+that are up settle it between themselves as in 0007.
+
+A node coming up or going away re-runs the handover, because the write that
+selected it can be older than the node.
+
+Checked: series 0001-0009 applies in bitbake's order and the patched source
+compiles with 0 errors.
+
+Signed-off-by: Igni <igni.li@quectel.com>
+---
+--- a/pw-pal-plugin.c
++++ b/pw-pal-plugin.c
+@@ -421,15 +421,32 @@
+  * burned all 90 attempts in 3 min and stayed silent with its node, its links
+  * and its desktop entry all looking fine).
+  *
+- * So follow default.audio.sink / default.audio.source: the selected instance
+- * holds the instance, the others release it as soon as the selection moves.
+- * pal-jack-default writes those keys on jack events and the shell writes them
+- * on a manual switch, so the handover in both directions is the metadata
+- * change plus one graph open.
++ * So follow the selection: the selected instance holds the instance, the
++ * others release it as soon as the selection moves. pal-jack-default writes it
++ * on jack events and the shell writes it on a manual switch, so the handover
++ * in both directions is the metadata change plus one graph open.
++ *
++ * The selection is default.configured.audio.sink/source -- the key the picker
++ * and pal-jack-default write -- and not the default.audio.sink/source that
++ * WirePlumber resolves from it. That resolution happens once, on the write,
++ * and only if the named node is available at that moment; a jack event writes
++ * the key while the node it names is still "creating" (measured: the key
++ * became pal_sink_headset and the node appeared in the same second). The
++ * resolved key then stayed on the old sink for the rest of the session, and
++ * the headset -- node up, links up, selected in the picker -- closed its
++ * handle on the first STREAMING and stayed silent until the same key was
++ * written a second time by hand.
++ *
++ * A configured name is followed only while its node is up: with both displays
++ * plugged pal-jack-default deliberately leaves the key alone (user picks), so
++ * it can still name a headset that has just been unplugged, and then nothing
++ * would hold the direction at all. WirePlumber's resolved name covers that.
+  *
+  * ponytail: an app that pins its stream to a non-default sink is not covered,
+  * the selection is the only input here. Add link tracking if that matters.
+  */
++static char pal_configured_sink[PAL_NODE_NAME_MAX];
++static char pal_configured_source[PAL_NODE_NAME_MAX];
+ static char pal_default_sink[PAL_NODE_NAME_MAX];
+ static char pal_default_source[PAL_NODE_NAME_MAX];
+ static bool pal_default_known;
+@@ -443,16 +460,50 @@
+ static const struct pw_registry_events pw_pal_registry_events;
+ static const struct pw_metadata_events pw_pal_metadata_events;
+ 
++/* The instance of this direction that goes by that name, if its node is up. */
++static struct pw_userdata *pw_pal_node_up(bool playback, const char *node_name)
++{
++    int i;
++
++    if (node_name == NULL || node_name[0] == '\0')
++        return NULL;
++    for (i = 0; i < PAL_MAX_INSTANCES; i++) {
++        struct pw_userdata *udata = pal_instances[i];
++
++        if (udata == NULL || udata->isplayback != playback || udata->stream == NULL)
++            continue;
++        if (spa_streq(udata->node_name, node_name))
++            return udata;
++    }
++    return NULL;
++}
++
++/*
++ * The node that may hold the handle of this direction, or NULL when the
++ * selection names nothing that is up: the nodes that are up then settle it
++ * between themselves in pw_pal_instance_busy(), instead of every one of them
++ * releasing and the direction going silent.
++ */
++static const char *pw_pal_selection(bool playback)
++{
++    const char *configured = playback ? pal_configured_sink : pal_configured_source;
++    const char *dflt = playback ? pal_default_sink : pal_default_source;
++
++    if (pw_pal_node_up(playback, configured) != NULL)
++        return configured;
++    if (pw_pal_node_up(playback, dflt) != NULL)
++        return dflt;
++    return NULL;
++}
++
+ static bool pw_pal_is_selected(struct pw_userdata *udata)
+ {
+     const char *dflt;
+ 
+     if (!pal_default_known)
+         return true;    /* no selection heard of yet: keep the old behaviour */
+-    dflt = udata->isplayback ? pal_default_sink : pal_default_source;
+-    if (dflt[0] == '\0')
+-        return true;    /* nothing selected for this direction: do not starve it */
+-    return strcmp(dflt, udata->node_name) == 0;
++    dflt = pw_pal_selection(udata->isplayback);
++    return dflt == NULL || spa_streq(dflt, udata->node_name);
+ }
+ 
+ static void pw_pal_default_changed(void)
+@@ -495,7 +546,11 @@
+ 
+     if (key == NULL)
+         return 0;
+-    if (spa_streq(key, "default.audio.sink"))
++    if (spa_streq(key, "default.configured.audio.sink"))
++        dst = pal_configured_sink;
++    else if (spa_streq(key, "default.configured.audio.source"))
++        dst = pal_configured_source;
++    else if (spa_streq(key, "default.audio.sink"))
+         dst = pal_default_sink;
+     else if (spa_streq(key, "default.audio.source"))
+         dst = pal_default_source;
+@@ -523,8 +578,7 @@
+ 
+     snprintf(dst, PAL_NODE_NAME_MAX, "%s", name);
+     pal_default_known = true;
+-    pw_log_info("default.audio.%s is now '%s'",
+-            dst == pal_default_sink ? "sink" : "source", name);
++    pw_log_info("%s is now '%s'", key, name);
+     pw_pal_default_changed();
+     return 0;
+ }
+@@ -1254,21 +1308,29 @@
+             return res;
+         }
+         pw_log_info("%s: node created", udata->jack_name);
+-        return 0;
+-    }
++    } else {
++        if (udata->stream == NULL)
++            return 0;
+ 
+-    if (udata->stream == NULL)
+-        return 0;
++        pw_pal_retry_disarm(udata);
++        close_pal_stream(udata);
++        /*
++         * pw_stream_destroy() emits .destroy (which clears udata->stream) but no
++         * state change, so the UNCONNECTED branch in pw_pal_change_stream_state()
++         * does not fire and the module survives with its jack fd intact.
++         */
++        pw_stream_destroy(udata->stream);
++        pw_log_info("%s: node destroyed", udata->jack_name);
++    }
+ 
+-    pw_pal_retry_disarm(udata);
+-    close_pal_stream(udata);
+     /*
+-     * pw_stream_destroy() emits .destroy (which clears udata->stream) but no
+-     * state change, so the UNCONNECTED branch in pw_pal_change_stream_state()
+-     * does not fire and the module survives with its jack fd intact.
++     * A node coming up or going away changes what the selection resolves to:
++     * the key can have been written while the node it names was not up yet, and
++     * it can outlive the node it names. Re-run the handover here instead of
++     * waiting for the next metadata write -- for the node that just appeared
++     * the write that selected it is already in the past.
+      */
+-    pw_stream_destroy(udata->stream);
+-    pw_log_info("%s: node destroyed", udata->jack_name);
++    pw_pal_default_changed();
+     return 0;
+ }
+ 
