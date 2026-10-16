@@ -258,6 +258,7 @@ def main():
 
     last = None
     settle_until = 0
+    confirmed = False
     while True:
         want = desired(read_switches())
         if want != last:
@@ -267,12 +268,21 @@ def main():
             apply_defaults(*want)
             last = want
             settle_until = time.time() + SETTLE_WINDOW
-        elif time.time() < settle_until and not verify_defaults(*want):
-            # 写下去的那次被盖掉了(开机时 wireplumber 拿自己持久化的默认值写回
-            # metadata, 跟这里的写入赛跑, 输的那次以前没人发现 -> 一直错到下次插拔)。
-            # sink 为 None 时不回读(没什么可校验的), 自然也不会跟用户手选对着干。
-            print("默认通道被外部改掉, 重设:", flush=True)
-            apply_defaults(*want)
+            confirmed = False
+        elif not confirmed and time.time() < settle_until:
+            if verify_defaults(*want):
+                # 我们写的值生效了: 从此不再回读纠偏, 只认后面的插拔事件。
+                # 以前只按 SETTLE_WINDOW 截断, 于是插拔后 30s 内用户在 GNOME 设置里
+                # 手选别的通道(实机: 插着 HDMI 时手选喇叭)会被这里抢回去, 反复重设
+                # 十几次 —— 看着就像"有个服务一直在切通道", 而且每次重设都会让
+                # 正在播的那路 sink 丢掉 PAL 实例(单实例槽), 声音就断了。
+                confirmed = True
+            else:
+                # 写下去的那次被盖掉了(开机时 wireplumber 拿自己持久化的默认值写回
+                # metadata, 跟这里的写入赛跑, 输的那次以前没人发现 -> 一直错到下次插拔)。
+                # sink 为 None 时不回读(没什么可校验的), 自然也不会跟用户手选对着干。
+                print("默认通道被外部改掉, 重设:", flush=True)
+                apply_defaults(*want)
         time.sleep(POLL_INTERVAL)
 
 
