@@ -1,0 +1,200 @@
+From: Igni <igni.li@quectel.com>
+Subject: [PATCH] pw-pal-plugin: rebuild the stream on error instead of destroying the module
+
+PW_STREAM_STATE_ERROR / UNCONNECTED was handled by destroying the whole
+module, which is permanent for the channel: no pal module is ever
+re-instantiated, and pw_pal_userdata_destroy() closes the jack fd, so the
+node could not come back on a hotplug either. One transient error was
+therefore enough to lose a sink until pipewire was restarted.
+
+Measured on the board: the restart at 15:53:58 raised the two only
+"error id:2 ... res:-32 (Broken pipe): Buffer allocation failed" of the
+whole boot right after "mod.client-node: port ...: use_buffers(0:0:0):
+-5 Input/output error" on the pal sinks, and pal_sink_hdmi_out was gone
+from wpctl for the rest of that session (all streams stayed on the old
+sink when HDMI was picked). The next restart, with the same binaries,
+loaded all six instances again, so it is the error path and not the
+build: the node had nothing wrong with it a moment later.
+
+Rebuild the stream instead, from the main loop and not from
+.state_changed -- pw_stream_destroy() there would free the stream while
+PipeWire is still walking it, which is why the destroy was deferred in
+the first place. The module, and with it the jack fd, stays alive, so a
+jacked channel keeps its node on the next jack event, and a jacked
+instance that failed while unplugged stays hidden as 0003 intends. Give
+up after STREAM_RECOVER_ATTEMPTS rebuilds and hide the node rather than
+deleting it, and restore the budget once a stream opens and starts.
+
+Signed-off-by: Igni <igni.li@quectel.com>
+---
+diff --git a/pw-pal-plugin.c b/pw-pal-plugin.c
+--- a/pw-pal-plugin.c
++++ b/pw-pal-plugin.c
+@@ -68,6 +68,24 @@
+ #define PAL_START_RETRY_ATTEMPTS    90      /* 3 min, ADSP was ready in <= 2.5 */
+ 
+ /*
++ * A stream that reaches PW_STREAM_STATE_ERROR never comes back: PipeWire hands
++ * it to us as "Buffer allocation failed" (-EPIPE, from use_buffers failing on
++ * the node's ports with -EIO) when another stream on the same device is torn
++ * down, and there is no state transition out of ERROR. Destroying the module
++ * there is permanent for the channel: nothing re-instantiates a pal module,
++ * and pw_pal_userdata_destroy() closes the jack fd, so the node cannot come
++ * back on a hotplug either. Measured on this board: one such error while a
++ * headset stream was ending was enough for pal_sink_hdmi_out to be missing
++ * from wpctl for the rest of the session (streams silently stayed on the old
++ * sink when HDMI was picked). Rebuild the stream instead, out of the callback
++ * (PipeWire's emission path still walks the stream after .state_changed
++ * returns, so the destroy has to wait for the main loop), a bounded number of
++ * times before giving up and just hiding the node.
++ */
++#define STREAM_RECOVER_INTERVAL_MS  500
++#define STREAM_RECOVER_ATTEMPTS     3
++
++/*
+  * jack_open_fd() is a one-shot scan at boot, and the jack input device is
+  * created by udev after the display driver probes -- later than the plugin
+  * starts. Measured on this board: the first scan runs at boot+9.398 s (only
+@@ -249,6 +267,9 @@
+ 
+     struct spa_source *jack_timer;
+     unsigned int jack_retry_left;
++
++    struct spa_source *recover_timer;
++    unsigned int recover_left;
+ };
+ 
+ static void pw_pal_destroy_stream(void *d)
+@@ -358,6 +379,8 @@
+     if (udata->isplayback)
+         pw_pal_set_volume(udata, 1.0);
+ 
++    /* The stream is up: a later failure gets a full rebuild budget again. */
++    udata->recover_left = STREAM_RECOVER_ATTEMPTS;
+     return 0;
+ cleanup:
+     if (close_pal_stream(udata))
+@@ -428,6 +451,8 @@
+     pw_loop_update_timer(loop, udata->retry_timer, &interval, &interval, false);
+ }
+ 
++static void pw_pal_recover_arm(struct pw_userdata *udata);
++
+ static void pw_pal_stream_start(struct pw_userdata *udata)
+ {
+     int rc = pw_pal_stream_open_start(udata);
+@@ -447,7 +472,16 @@
+     case PW_STREAM_STATE_ERROR:
+     case PW_STREAM_STATE_UNCONNECTED:
+         pw_pal_retry_disarm(udata);
+-        pw_impl_module_schedule_destroy(udata->module);
++        /*
++         * Rebuild the stream instead of destroying the module: see
++         * STREAM_RECOVER_ATTEMPTS. Without a core there is nothing to rebuild
++         * on, and that path (pw_pal_core_error / pw_pal_core_destroy) is
++         * already tearing the module down.
++         */
++        if (udata->core != NULL)
++            pw_pal_recover_arm(udata);
++        else
++            pw_impl_module_schedule_destroy(udata->module);
+         break;
+     case PW_STREAM_STATE_PAUSED:
+         pw_pal_retry_disarm(udata);
+@@ -653,6 +687,13 @@
+             pw_loop_destroy_source(loop, udata->jack_timer);
+         udata->jack_timer = NULL;
+     }
++    if (udata->recover_timer) {
++        struct pw_loop *loop = pw_context_get_main_loop(udata->context);
++
++        if (loop)
++            pw_loop_destroy_source(loop, udata->recover_timer);
++        udata->recover_timer = NULL;
++    }
+     /*
+      * Every teardown path has to release the PAL handle. PAL picks the ACDB
+      * graph instance from the number of streams still registered on the
+@@ -953,6 +994,73 @@
+     return 0;
+ }
+ 
++static void pw_pal_recover_disarm(struct pw_userdata *udata)
++{
++    struct timespec zero = { 0, 0 };
++
++    if (udata->recover_timer)
++        pw_loop_update_timer(pw_context_get_main_loop(udata->context),
++                udata->recover_timer, &zero, &zero, false);
++}
++
++/*
++ * The stream failed. Drop it and build a fresh one, which negotiates from
++ * scratch. This runs from the main loop and not from .state_changed, where
++ * pw_stream_destroy() would free the stream while PipeWire is still walking
++ * it. The module stays alive, so for a jacked channel the jack fd survives and
++ * the node comes back on the next plug.
++ */
++static void pw_pal_recover_timer_func(void *data, uint64_t expirations)
++{
++    struct pw_userdata *udata = data;
++    uint8_t sw_bitmask[NUM_BYTES] = { 0, };
++    bool visible = true;
++
++    pw_pal_recover_disarm(udata);
++    pw_pal_set_stream_visible(udata, false);
++
++    if (udata->recover_left == 0) {
++        pw_log_error("%s: stream still failing after %d rebuilds, leaving the node hidden",
++                udata->jack_name, STREAM_RECOVER_ATTEMPTS);
++        return;
++    }
++    udata->recover_left--;
++
++    /* A jacked instance whose device is gone has no node to show. */
++    if (udata->jack_name[0] != '\0' &&
++            ioctl(udata->jack_fd, EVIOCGSW(sizeof(sw_bitmask)), sw_bitmask) >= 0)
++        visible = jack_plugged(sw_bitmask);
++
++    if (!visible) {
++        pw_log_warn("%s: stream failed while unplugged, node stays hidden",
++                udata->jack_name);
++        return;
++    }
++    pw_log_warn("%s: stream failed, rebuilt (%u attempts left)",
++            udata->jack_name, udata->recover_left);
++    pw_pal_set_stream_visible(udata, true);
++}
++
++static void pw_pal_recover_arm(struct pw_userdata *udata)
++{
++    struct timespec interval = {
++        STREAM_RECOVER_INTERVAL_MS / 1000,
++        (STREAM_RECOVER_INTERVAL_MS % 1000) * 1000000,
++    };
++    struct pw_loop *loop = pw_context_get_main_loop(udata->context);
++
++    if (loop == NULL)
++        return;
++    if (udata->recover_timer == NULL) {
++        udata->recover_timer = pw_loop_add_timer(loop, pw_pal_recover_timer_func, udata);
++        if (udata->recover_timer == NULL) {
++            pw_log_error("could not create the stream recovery timer");
++            return;
++        }
++    }
++    pw_loop_update_timer(loop, udata->recover_timer, &interval, &interval, false);
++}
++
+ static void handle_jack_boot_event(struct pw_userdata *udata)
+ {
+     int fd = udata->jack_fd;
+@@ -1269,6 +1377,8 @@
+     if ((str = pw_properties_get(props, "jack-name")) != NULL)
+         snprintf(udata->jack_name, sizeof(udata->jack_name), "%s", str);
+ 
++    udata->recover_left = STREAM_RECOVER_ATTEMPTS;
++
+     pw_pal_set_props(udata, props, PW_KEY_AUDIO_RATE);
+     pw_pal_set_props(udata, props, PW_KEY_AUDIO_CHANNELS);
+     pw_pal_set_props(udata, props, SPA_KEY_AUDIO_POSITION);
