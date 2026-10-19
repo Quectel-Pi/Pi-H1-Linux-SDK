@@ -22,13 +22,16 @@ import cairo
 
 import os
 import re
+import sys
 import glob
+import mmap
 import shutil
 import tempfile
 import subprocess
 import threading
 import datetime
 import logging
+import time
 
 # ========== 配置 ==========
 # 板上 SNPE/QNN 工具路径 (由 qcom-snpe-sdk / qcom-qnn-sdk 安装)
@@ -36,6 +39,8 @@ SNPE_PF_VALIDATOR   = "/usr/bin/snpe-platform-validator"
 QNN_PF_VALIDATOR    = "/usr/bin/qnn-platform-validator"
 SNPE_NET_RUN        = "/usr/bin/snpe-net-run"
 SNPE_THROUGHPUT_RUN = "/usr/bin/snpe-throughput-net-run"
+SNPE_DIAGVIEW      = "/usr/bin/snpe-diagview"
+NPU_DAEMON         = "/usr/bin/npu-daemon"
 QNN_NET_RUN         = "/usr/bin/qnn-net-run"
 
 # 模型搜索路径:
@@ -264,48 +269,272 @@ def parse_throughput(text):
     return info
 
 
-def measure_npu_latency(model, image, runtime_flag="--use_dsp", duration=1):
-    """用 snpe-throughput-net-run 跑一次短时循环, 获取 NPU 纯推理延迟.
+class NpuDaemon:
+    """常驻 SNPE 会话: 容器只加载一次, 之后每次点击只付推理时间.
 
-    snpe-net-run 是一次性 CLI, 每次调用都要重新加载容器 + 初始化 DSP
-    runtime + 建立 fastrpc, 这部分固定开销约 2 秒, 与推理算力无关.
-    直接包住 snpe-net-run 计时会把这 2 秒算进"推理耗时", 数字虚高且失真.
+    snpe-net-run 每点一次都要重走 进程启动 + 13.6MB DLC 解析 + DSP 会话
+    建立, 实测 ~280ms, 而推理本身只要 10~20ms. 用一个常驻进程收 raw 喂
+    结果, 点击延迟从 ~310ms 降到 ~30ms. 输出与 snpe-net-run 逐字节一致
+    (boxes/scores/class_idx 三路 raw 已 md5 校验).
+    """
 
-    snpe-throughput-net-run 在一次进程里循环执行图, 自身输出:
-      Total throughput(inferences per second): X infs/sec
-      Total throughput(latency per inference): Y sec/inf
-    这是稳态下的真实 NPU 推理延迟 (已排除冷启动).  这里复用 parse_throughput 解析。
+    def __init__(self, model, perf="burst", runtime="dsp"):
+        self.dir = tempfile.mkdtemp(prefix="npu_daemon_", dir="/tmp")
+        # 输入走 /dev/shm: 管道每帧要多付 ~25ms 的 write+copy
+        self.shm_path = f"/dev/shm/npu_in_{os.getpid()}_{id(self)}.raw"
+        self.mm = None
+        self.runtime = runtime
+        args = [NPU_DAEMON, model, self.dir, perf,
+                self.shm_path if os.path.isdir("/dev/shm") else "", runtime]
+        # bufsize=0: 门铃/应答都只几个字节, 不要 Python 侧再缓存
+        self.p = subprocess.Popen(args,
+                                  stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE,
+                                  stderr=subprocess.DEVNULL, bufsize=0)
+        # SNPE 初始化时会先往 stdout 打一行 rpcmem 提示, 跳过它等 READY
+        line = b""
+        for _ in range(20):
+            line = self.p.stdout.readline()
+            if line.startswith(b"READY"):
+                break
+            if not line:                      # 进程已退出
+                break
+        if not line.startswith(b"READY"):
+            self.close()
+            raise RuntimeError(line.decode(errors="replace").strip()
+                               or "npu-daemon 未就绪")
+        parts = line.split()
+        self.input_bytes = int(parts[2])
+        self.use_shm = len(parts) > 3 and parts[3] == b"1"
+        if self.use_shm:
+            with open(self.shm_path, "wb") as f:
+                f.truncate(self.input_bytes)
+            self._shm_file = open(self.shm_path, "r+b")
+            self.mm = mmap.mmap(self._shm_file.fileno(), self.input_bytes)
+        self.lock = threading.Lock()
+
+    def infer(self, raw_bytes):
+        """喂一帧 float32 raw, 返回本轮 execute() 毫秒数."""
+        with self.lock:
+            if self.mm is not None:
+                self.mm[:] = raw_bytes
+                self.p.stdin.write(b"\x01")     # 门铃
+            else:
+                self.p.stdin.write(raw_bytes)
+            line = self.p.stdout.readline().decode(errors="replace").strip()
+        if not line.startswith("OK "):
+            raise RuntimeError(line or "npu-daemon 无响应")
+        self.last_ms = float(line.split()[1])
+        return self.last_ms
+
+    def close(self):
+        try:
+            self.p.stdin.close()
+        except Exception:
+            pass
+        try:
+            self.p.kill()
+            self.p.wait(timeout=5)
+        except Exception:
+            pass
+        try:
+            if self.mm is not None:
+                self.mm.close()
+            os.unlink(self.shm_path)
+        except Exception:
+            pass
+        shutil.rmtree(self.dir, ignore_errors=True)
+
+
+_DAEMONS = {}
+_DAEMON_LOCK = threading.Lock()
+
+
+def get_daemon(model, runtime="dsp"):
+    """按 (模型, 后端) 缓存常驻会话; 起不来就返回 None, 调用方回退 snpe-net-run."""
+    if not os.path.exists(NPU_DAEMON):
+        return None
+    key = (model, runtime)
+    with _DAEMON_LOCK:
+        d = _DAEMONS.get(key)
+        if d is not None and d.p.poll() is None:
+            return d
+        try:
+            d = NpuDaemon(model, runtime=runtime)
+        except Exception as e:
+            logging.getLogger("npu_test").warning(
+                f"npu-daemon({runtime}) 启动失败, 回退 snpe-net-run: {e}")
+            _DAEMONS[key] = None
+            return None
+        logging.getLogger("npu_test").info(f"npu-daemon 就绪: {model} [{runtime}]")
+        _DAEMONS[key] = d
+        return d
+
+
+def daemon_run(model, runtime, raw_bytes):
+    """用常驻会话跑一帧 raw, 返回 (daemon, ms); 没会话就返回 None 让调用方回退 CLI."""
+    d = get_daemon(model, runtime)
+    if d is None or len(raw_bytes) != d.input_bytes:
+        return None
+    try:
+        return d, d.infer(raw_bytes)
+    except Exception as e:
+        logging.getLogger("npu_test").warning(
+            f"npu-daemon({runtime}) 推理失败, 回退 CLI: {e}")
+        return None
+
+
+def throughput_via_daemon(model, runtime, raw_bytes, seconds):
+    """常驻会话压测: 固定时长内连续喂帧, 返回 snpe-throughput-net-run 同款文本.
+
+    比 snpe-throughput-net-run 更贴实际: 那个每次都要重建会话, 报的是它自己
+    的稳态; 这里报的是常驻会话真实吞吐.
+    """
+    r = daemon_run(model, runtime, raw_bytes)
+    if r is None:
+        return None
+    d, _ = r
+    n, lat = 0, []
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < seconds:
+        lat.append(d.infer(raw_bytes))
+        n += 1
+    wall = time.monotonic() - t0
+    if not n:
+        return None
+    avg = sum(lat) / n
+    return (f"npu-daemon[{d.runtime}] 常驻会话压测\n"
+            f"Total throughput(inferences per second): {n / wall:.3f} infs/sec\n"
+            f"Total throughput(latency per inference): {wall / n:.6f} sec/inf\n"
+            f"Total Inferences: {n}\n"
+            f"Total execution time: {wall:.3f} s\n"
+            f"单帧 execute 均值 {avg:.2f} ms / 最小 {min(lat):.2f} / 最大 {max(lat):.2f}")
+
+
+def yolo_detect_pixbuf(model, pixbuf, runtime="dsp", input_size=640):
+    """摄像头一帧: letterbox -> 常驻会话 -> 解码. 返回 (dets, infer_ms)."""
+    raw, (top, left, scale), (w, h) = yolo_letterbox(pixbuf, input_size)
+    r = daemon_run(model, runtime, raw)
+    if r is None:
+        return [], 0.0
+    d, ms = r
+    dets = _decode_yolo_raws(d.dir, top, left, scale, w, h,
+                             conf=0.5, iou=0.45, input_size=input_size)
+    return dets, ms
+
+
+# 各 runtime 最近一次实测推理延迟(ms). 用来算加速比, 也用来在没有对比数据时
+# 老实显示"—", 绝不猜数字.
+_RUNTIME_MS = {}
+
+
+def fmt_timing(lat, call_ms, runtime=""):
+    """把一次运行的耗时拼成面板文字.
+
+    三档 runtime 用同一个口径: 一次推理花多久. DSP 是常驻会话的 execute(),
+    CPU/GPU 是 SNPEDiag 的 Total Inference Time (没有 accelerator 计数器).
+    """
+    lat = lat or {}
+    npu = lat.get('avg_ms', 0) or 0
+    tot = lat.get('total_ms', 0) or 0
+    clk = lat.get('clock_mhz', 0) or 0
+    ms = tot or npu
+    if ms > 0 and runtime:
+        _RUNTIME_MS[runtime.split()[0]] = ms
+    out = []
+    if ms > 0:
+        out.append(f"推理延迟: {ms:.2f} ms   [{runtime}]\n")
+        if clk > 0:
+            out.append(f"DSP 计算: {npu:.2f} ms  (HTP {clk:.0f} MHz)\n")
+    if call_ms > 0:
+        out.append(f"端到端点击: {call_ms:.0f} ms  (letterbox + 推理 + 后处理)\n")
+    # 只在真的量过别的档位时才报倍数
+    if runtime.startswith("DSP") and ms > 0:
+        ref = [(k, v) for k, v in _RUNTIME_MS.items()
+               if k in ("GPU", "CPU") and v > 0]
+        if ref:
+            out.append("加速比: " + ", ".join(
+                f"比 {k} 快 {v / ms:.1f}×" for k, v in ref) + "\n")
+    return "".join(out)
+
+
+def compare_text(rows):
+    """三档对比表的文字. rows = [(runtime, 推理ms, 端到端ms, 目标数), ...]"""
+    ok = [r for r in rows if r[1] > 0]
+    base = min(r[1] for r in ok) if ok else 0
+    out = [f"{'='*55}\n  ⚡ 同模型同图 · 三档 Runtime 实测对比\n{'='*55}\n\n"
+           f"  {'Runtime':<16}{'推理延迟':>12}{'端到端':>12}{'相对':>9}\n"
+           f"  {'-'*49}\n"]
+    for name, ms, wall, nd in rows:
+        if ms <= 0:
+            out.append(f"  {name:<16}{'失败':>10}  (看日志)\n")
+            continue
+        out.append(f"  {name:<16}{ms:>9.2f}ms{wall:>9.0f}ms"
+                   f"{ms/base:>8.1f}×  ({nd} 目标)"
+                   + ("  ⚠ 输出异常" if nd == 0 else "") + "\n")
+    if len(ok) == 3:
+        out.append(f"\n  HTP/NPU 相对 CPU 加速 {rows[0][1]/base:.1f}×, "
+                   f"相对 GPU 加速 {rows[1][1]/base:.1f}×\n")
+    if any(r[3] == 0 for r in ok):
+        # 量化 DLC 在 CPU runtime 上算得出结果但分数全塌, 耗时也只能当参考.
+        out.append("  ⚠ 0 目标那档: 量化 DLC 的 CPU runtime 输出分数塌陷, "
+                   "耗时可信, 结果不可信\n")
+    out.append("  推理延迟 = 一次推理本身; 端到端 = 点一下要等多久\n")
+    out.append("  三档都用常驻会话, 新建会话的开销不在计时里 "
+               "(GPU 光建会话就要 1.35s)\n")
+    return "".join(out)
+
+
+def measure_npu_latency(model, out_dir):
+    """从本次推理的 SNPEDiag.log 里取 NPU 纯推理时间 (snpe-diagview).
+
+    snpe-net-run 每次调用都要重跑 HTP graph prepare (容器加载 / DSP 初始化 /
+    图定序), 这部分固定开销远大于推理本身, 所以不能用它包住的 wall time
+    当"推理延迟". SNPEDiag.log 里本来就有 Total Inference Time, 直接读,
+    不用像旧版那样另起一个 snpe-throughput-net-run 进程再跑 1 秒循环
+    (那一步固定多花 ~1.2s, 是点击后卡顿的第二大来源).
 
     Returns:
-        dict: {'avg_ms': float, 'avg_fps': float, 'raw': str} 解析失败时字段缺失.
-              传入 backend != snpe (qnn .so) 或工具缺失时返回空 dict.
+        dict: {'avg_ms': float, 'avg_fps': float, 'raw': str}
+              非 snpe 后端 / 无日志 / 工具缺失时返回空 dict.
     """
-    # qnn .so : snpe-throughput-net-run 只吃 .dlc, 无法测; 由调用方回退外部计时
     if model_backend(model) != "snpe":
         return {}
-    if not os.path.exists(SNPE_THROUGHPUT_RUN):
+    # 常驻会话跑的这一帧: 没有 SNPEDiag.log, 时间就是 daemon 报的 execute().
+    # execute() 是同步调用, 返回即算完, 所以它既是推理时间也是总时间.
+    for d in _DAEMONS.values():
+        if d is not None and getattr(d, "dir", None) == out_dir \
+                and getattr(d, "last_ms", 0):
+            return {'avg_ms': d.last_ms,
+                    'total_ms': d.last_ms,
+                    'clock_mhz': 0.0,
+                    'avg_fps': 1000.0 / d.last_ms,
+                    'raw': 'npu-daemon'}
+    if not os.path.exists(SNPE_DIAGVIEW):
         return {}
-    np = _np()
-    if np is None:
+    logp = os.path.join(out_dir, "SNPEDiag.log")
+    if not os.path.exists(logp):
+        logging.getLogger("npu_test").info("无 SNPEDiag.log, 跳过延迟解析")
         return {}
-    try:
-        raw_bytes, _, _ = yolo_letterbox(image, 640)
-    except Exception as e:
-        logging.getLogger("npu_test").warning(f"延迟测量预处理失败: {e}")
+    out, rc = run_cmd([SNPE_DIAGVIEW, f"--input_log={logp}"], timeout=30)
+    def us(pat):
+        m = re.search(pat, out)
+        return float(m.group(1)) / 1000.0 if m else 0.0
+    # Snpe Accelerator Time = DSP 上真正跑网络的时间; Total Inference Time 还含
+    # 4.9MB float32 输入的 fastrpc 搬运 / 输出张量拷贝, 单帧 cold run 上差 ~13ms.
+    acc = us(r'Snpe Accelerator Time:\s*([\d.]+)\s*us')
+    tot = us(r'Total Inference Time:\s*([\d.]+)\s*us')
+    if not tot:
         return {}
-    out_dir = tempfile.mkdtemp(prefix="npu_lat_", dir="/tmp")
-    raw_path = os.path.join(out_dir, "image.raw")
-    with open(raw_path, "wb") as f:
-        f.write(raw_bytes)
-    cmd = [SNPE_THROUGHPUT_RUN, f"--container={model}",
-           f"--input_raw={raw_path}", f"--duration={duration}",
-           runtime_flag, "--perf_profile=burst"]
-    out, rc = run_cmd(cmd, timeout=duration + 120)
-    info = parse_throughput(out)
-    info['raw'] = out
-    info.setdefault('avg_ms', 0)
-    info.setdefault('avg_fps', 0)
-    return info
+    m = re.search(r'Subnet 0 \(DSP\)\s*:\s*(\d+)\s*cycles', out)
+    # 同一张图的 DSP cycles 恒定 (~14.1M), 用它对时间反推当前 DSP 频率:
+    # 单帧冷跑 ~0.9GHz, 持续跑满 ~1.4GHz, 这才是 28ms vs 10ms 的实际来源.
+    clock = int(m.group(1)) / acc / 1000.0 if (m and acc) else 0.0
+    return {'avg_ms': acc or tot,
+            'total_ms': tot,
+            'clock_mhz': clock,
+            'avg_fps': 1000.0 / tot if tot > 0 else 0,
+            'raw': out}
 
 
 def parse_yolo_output(text):
@@ -361,6 +590,30 @@ def _np():
         return None
 
 
+_LB_CACHE = {}
+
+
+def _lb_canvas(size, pad_value, top, left, nh, nw):
+    """复用的 float32 letterbox 画布, 省掉每帧 1.2M 像素的 astype.
+
+    摄像头 1280x720 缩到 640x360 只占中间一条, 每帧只写这块; 几何变了才整块铺
+    pad 值. 之前每帧都 canvas.astype(float32)/255 全画布 (23ms), 现在只算有效
+    区域 (~7ms), 输出逐字节相同.
+    """
+    np = _np()
+    if np is None:
+        raise RuntimeError("letterbox 需要 numpy")
+    key = (size, pad_value)
+    geo = (top, left, nh, nw)
+    hit = _LB_CACHE.get(key)
+    if hit is None or hit[0] != geo:
+        canvas = np.full((size, size, 3), pad_value / 255.0, dtype=np.float32)
+        _LB_CACHE[key] = (geo, canvas)
+    else:
+        canvas = hit[1]
+    return canvas
+
+
 def yolo_letterbox(image_path, size=640, pad_value=114):
     """Letterbox-resize an image to (size,size) using GdkPixbuf, return float32
     NCHW bytes (3,H,W order) plus (top, left, scale) for un-letterboxing.
@@ -369,40 +622,35 @@ def yolo_letterbox(image_path, size=640, pad_value=114):
     RGB, /255.0, letterbox with constant pad=114, NCHW layout.
     GdkPixbuf already ships RGB 8-bit; we scale, pad, normalize and pack.
     """
-    pixbuf = GdkPixbuf.Pixbuf.new_from_file(image_path)
+    pixbuf = (image_path if isinstance(image_path, GdkPixbuf.Pixbuf)
+              else GdkPixbuf.Pixbuf.new_from_file(image_path))
     iw, ih = pixbuf.get_width(), pixbuf.get_height()
     r = size / max(iw, ih)
     nw, nh = int(round(iw * r)), int(round(ih * r))
     scaled = pixbuf.scale_simple(nw, nh, GdkPixbuf.InterpType.BILINEAR)
-    # build canvas filled with pad_value (gray), RGB
+    # 同样式的结果, 但走 numpy 整块拷贝: 原来的逐像素 Python 循环在
+    # 640x640 上实测 ~160ms, 这里是几毫秒, 输出逐字节相同.
+    np = _np()
+    if np is None:
+        raise RuntimeError("letterbox 需要 numpy")
     channels = 3
-    n_pixels = size * size
-    # GdkPixbuf rowstride may include padding; copy pixel data into a flat list
-    rowstride = scaled.get_rowstride()
-    spixels = scaled.get_pixels()
-    snppb = scaled.get_n_channels()
-    sbps = scaled.get_bits_per_sample()
-    canvas = bytearray([pad_value]) * (n_pixels * channels)
     top = (size - nh) // 2
     left = (size - nw) // 2
-    for y in range(nh):
-        srow = y * rowstride
-        drow = ((top + y) * size + left) * channels
-        for x in range(nw):
-            si = srow + x * snppb
-            di = drow + x * channels
-            canvas[di]     = spixels[si]
-            canvas[di + 1] = spixels[si + 1]
-            canvas[di + 2] = spixels[si + 2]
+    rowstride = scaled.get_rowstride()
+    snppb = scaled.get_n_channels()
+    src = np.frombuffer(scaled.get_pixels(), dtype=np.uint8,
+                        count=nh * rowstride)
+    src = src.reshape(nh, rowstride)[:, :nw * snppb].reshape(nh, nw, snppb)
+    canvas = _lb_canvas(size, pad_value, top, left, nh, nw)
+    # 只把有效区域搬进画布并归一化, pad 区域留上帧/上次铺好的值
+    np.divide(src[:, :, :channels], 255.0, out=canvas[top:top + nh, left:left + nw],
+              casting="unsafe")
     # to float32 [0,1], NHWC
     # SNPE .dlc containers expect NHWC (channels-last) layout — the Qualcomm
     # AI Hub YOLOv7 export uses [1, 640, 640, 3].  Feeding NCHW scrambles
     # pixel data and produces hundreds of garbage grid-pattern detections
     # that look like "mirror duplicates" on the preview.
-    np = _np()
-    arr = np.frombuffer(bytes(canvas), dtype=np.uint8, count=n_pixels*channels)
-    arr = arr.astype(np.float32) / 255.0
-    arr = arr.reshape(1, size, size, channels)                   # N,H,W,C
+    arr = canvas.reshape(1, size, size, channels)                 # N,H,C,W
     return arr.tobytes(), (top, left, r), (iw, ih)
 
 
@@ -426,65 +674,98 @@ def run_yolo(model, image, runtime_flag="--use_dsp", graph_name="yolov7",
     if backend == "onnx_reference":
         return ("ERROR: .onnx 源模型无法在板上直接推理, "
                 "需先用 qairt-converter 转成 .so\n"
-                "请选 yolov7.dlc (SNPE 容器) 进行检测。", None, [])
+                "请选 yolov7.dlc (SNPE 容器) 进行检测。", None, [], None)
 
     # ---- preprocess to raw (SNPE expects a float32 NCHW .raw input) ----
     np = _np()
     if np is None:
         return ("ERROR: YOLO 后处理需要 numpy, 但设备上未安装。\n"
                 "请安装: apt-get install python3-numpy "
-                "(Debian) 或在 Yocto 里加 python3-numpy", None, [])
+                "(Debian) 或在 Yocto 里加 python3-numpy", None, [], None)
 
     try:
+        t_lb = time.monotonic()
         raw_bytes, (top, left, scale), (orig_w, orig_h) = \
             yolo_letterbox(image, input_size)
+        lb_ms = (time.monotonic() - t_lb) * 1000.0
     except Exception as e:
         log.error(f"YOLO 预处理失败: {e}")
-        return f"ERROR: 预处理失败: {e}", None, []
-
-    raw_path = os.path.join(out_dir, "image.raw")
-    with open(raw_path, "wb") as f:
-        f.write(raw_bytes)
-    input_list = os.path.join(out_dir, "input_list.txt")
-    with open(input_list, "w") as f:
-        f.write(raw_path + "\n")
+        return f"ERROR: 预处理失败: {e}", None, [], None
 
     log.info(f"YOLO 推理: {os.path.basename(model)} x {os.path.basename(image)} "
              f"backend={backend}")
 
+    # 三档各自一个常驻会话, 端到端才可比: GPU 新建会话要 1.35s 编 OpenCL
+    # kernel, DSP 也要读 DLC + 建 HTP 会话, 摊销掉这些才是纯推理差距.
+    daemon = None
     if backend == "snpe":
-        cmd = [SNPE_NET_RUN, f"--container={model}",
-               f"--input_list={input_list}", f"--output_dir={out_dir}",
-               runtime_flag,
-               f"--set_output_tensors={graph_name} boxes,scores,class_idx"]
-    else:  # qnn .so
-        cmd = [QNN_NET_RUN, f"--model={model}",
-               f"--input_list={input_list}", f"--output_dir={out_dir}"]
-        cmd.extend(runtime_flag.split())
+        rt = ("gpu" if "gpu" in runtime_flag
+              else "dsp" if "dsp" in runtime_flag else "cpu")
+        daemon = get_daemon(model, rt)
+    if daemon is not None and len(raw_bytes) == daemon.input_bytes:
+        # 常驻会话: 省掉 进程启动 + 13.6MB DLC 解析 + 会话建立
+        try:
+            t_run = time.monotonic()
+            infer_ms = daemon.infer(raw_bytes)
+            run_ms = (time.monotonic() - t_run) * 1000.0
+        except Exception as e:
+            log.warning(f"npu-daemon 推理失败, 本帧回退 snpe-net-run: {e}")
+            daemon = None
+            run_ms = 0.0
+        else:
+            shutil.rmtree(out_dir, ignore_errors=True)   # 本帧没用到本地 tmp
+            out_dir = daemon.dir
+            out = (f"npu-daemon[{daemon.runtime}]: execute {infer_ms:.2f} ms "
+                   f"(常驻会话, 无进程启动/图初始化开销)")
 
-    log.debug(f"CMD: {' '.join(cmd)}")
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True,
-                           timeout=120, cwd=out_dir)
-        out = (r.stdout or "") + (r.stderr or "")
-        if r.returncode != 0:
-            log.warning(f"YOLO 返回码: {r.returncode}")
-    except subprocess.TimeoutExpired:
-        log.error("YOLO 推理超时(120s)")
-        return "ERROR: 推理超时(120s)", None, []
-    except Exception as e:
-        log.error(f"YOLO 异常: {e}")
-        return f"ERROR: {e}", None, []
+    if daemon is None:
+        raw_path = os.path.join(out_dir, "image.raw")
+        with open(raw_path, "wb") as f:
+            f.write(raw_bytes)
+        input_list = os.path.join(out_dir, "input_list.txt")
+        with open(input_list, "w") as f:
+            f.write(raw_path + "\n")
+
+        if backend == "snpe":
+            cmd = [SNPE_NET_RUN, f"--container={model}",
+                   f"--input_list={input_list}", f"--output_dir={out_dir}",
+                   f"--set_output_tensors={graph_name} boxes,scores,class_idx"]
+            cmd.extend(runtime_flag.split())    # CPU 档 runtime_flag 为空
+        else:  # qnn .so
+            cmd = [QNN_NET_RUN, f"--model={model}",
+                   f"--input_list={input_list}", f"--output_dir={out_dir}"]
+            cmd.extend(runtime_flag.split())
+
+        log.debug(f"CMD: {' '.join(cmd)}")
+        try:
+            t_run = time.monotonic()
+            r = subprocess.run(cmd, capture_output=True, text=True,
+                               timeout=120, cwd=out_dir)
+            run_ms = (time.monotonic() - t_run) * 1000.0
+            out = (r.stdout or "") + (r.stderr or "")
+            if r.returncode != 0:
+                log.warning(f"YOLO 返回码: {r.returncode}")
+        except subprocess.TimeoutExpired:
+            log.error("YOLO 推理超时(120s)")
+            return "ERROR: 推理超时(120s)", None, [], None
+        except Exception as e:
+            log.error(f"YOLO 异常: {e}")
+            return f"ERROR: {e}", None, [], None
 
     # ---- find output .raw (SNPE writes to Result_<n>/) ----
     # conf=0.5 + iou=0.45: SNPE quantized yolov7 emits many low-quality anchors;
     # a higher confidence cut + tighter NMS is more effective than aggressive
     # NMS alone.  iou lowered from 0.55 → 0.45 to suppress quantization-induced
     # duplicate boxes whose overlap falls in the 0.4-0.55 range.
+    t_dec = time.monotonic()
     dets = _decode_yolo_raws(out_dir, top, left, scale,
                              orig_w, orig_h, conf=0.5, iou=0.45,
                              input_size=input_size)
-    return out, None, dets
+    dec_ms = (time.monotonic() - t_dec) * 1000.0
+    # 分项耗时进日志, 卡的时候看这一行就知道该优化哪一步
+    log.info(f"YOLO 耗时: letterbox={lb_ms:.0f}ms infer={run_ms:.0f}ms "
+             f"decode={dec_ms:.0f}ms ({'daemon' if daemon else 'cli'})")
+    return out, None, dets, out_dir
 
 
 def _decode_yolo_raws(out_dir, top, left, scale, orig_w, orig_h,
@@ -775,10 +1056,23 @@ class NPUTestWindow(Gtk.Window):
         self.notebook = Gtk.Notebook()
         vbox.pack_start(self.notebook, True, True, 0)
 
+        # 摄像头状态: 取流线程/推理线程/绘制线程三方共享, 用条件变量传递最新帧
+        self._cam_on = False
+        self._cam_proc = None
+        self._cam_frame = None
+        self._cam_raw = None
+        self._cam_seq = 0
+        self._cam_lock = threading.Lock()
+        self._cam_cond = threading.Condition()
+
         self.build_validation_tab()
         self.build_inference_tab()
         self.build_yolo_tab()
+        self.build_camera_tab()
         self.build_throughput_tab()
+
+        # 开界面就把常驻会话拉起来, 不分 Tab: 第一次点任何页的按钮都只付推理时间
+        self.warm_sessions()
 
         # ===== 日志面板 =====
         log_frame = Gtk.Frame(label="运行日志")
@@ -1147,11 +1441,14 @@ class NPUTestWindow(Gtk.Window):
 
         def run():
             out_dir = tempfile.mkdtemp(prefix="npu_out_", dir="/tmp")
+            import time as _time
 
             # snpe-net-run / qnn-net-run only accept raw binary input,
             # not jpg/png.  Preprocess the image the same way the YOLO
             # tab does: letterbox → float32 [0,1] NHWC → .raw file.
             np = _np()
+            raw_bytes = None
+            input_file = image
             if np is not None:
                 try:
                     raw_bytes, _, _ = yolo_letterbox(image, 640)
@@ -1161,9 +1458,20 @@ class NPUTestWindow(Gtk.Window):
                     input_file = raw_path
                 except Exception as e:
                     self.logger.warning(f"图片预处理失败, 回退原始文件: {e}")
-                    input_file = image
-            else:
-                input_file = image
+
+            # 常驻会话优先: 和 YOLO 页共用同一个 npu-daemon, 点一下只付推理时间.
+            # 起不来(或模型尺寸不是 640)就回退 snpe-net-run.
+            if backend == "snpe" and raw_bytes:
+                r = daemon_run(model, ["dsp", "gpu", "cpu"][rt_idx], raw_bytes)
+                if r is not None:
+                    d, ms = r
+                    shutil.rmtree(out_dir, ignore_errors=True)
+                    lat = {"avg_ms": ms, "total_ms": ms, "clock_mhz": 0.0}
+                    out = (f"npu-daemon[{d.runtime}]: execute {ms:.2f} ms "
+                           f"(常驻会话, 无进程启动/图初始化开销)")
+                    GLib.idle_add(self.on_infer_done, out, 0, model, image,
+                                  runtime_name, d.dir, backend, ms, lat)
+                    return
 
             input_list = os.path.join(out_dir, "input_list.txt")
             with open(input_list, "w") as f:
@@ -1183,9 +1491,8 @@ class NPUTestWindow(Gtk.Window):
             t0 = _time.monotonic()
             out, rc = run_cmd(cmd, timeout=120)
             call_ms = (_time.monotonic() - t0) * 1000.0
-            # 用 snpe-throughput-net-run 取 NPU 稳态纯推理延迟, 排除 snpe-net-run
-            # 每次调用约 2 秒的容器加载 + DSP 初始化固定开销.
-            lat = measure_npu_latency(model, image, runtime_flag, duration=1)
+            # 推理延迟直接从本次运行的 SNPEDiag.log 读, 不再另跑一个进程.
+            lat = measure_npu_latency(model, out_dir)
             GLib.idle_add(self.on_infer_done, out, rc, model, image, runtime_name, out_dir, backend, call_ms, lat)
         threading.Thread(target=run, daemon=True).start()
 
@@ -1210,18 +1517,15 @@ class NPUTestWindow(Gtk.Window):
             a(f"模型名: {info['model_name']}\n")
         if 'status' in info:
             a(f"执行状态: {info['status']}\n")
-        # 耗时统计: 区分"NPU纯推理延迟"(snpe-throughput, 已排除冷启动) 和
-        # "调用总耗时"(snpe-net-run 含容器加载/DSP初始化). 后者约2秒是工具固定
-        # 开销,不是推理算力, 旧版本直接显示它导致耗时看起来不合理.
+        # 耗时统计: NPU 延迟取自本次运行的 SNPEDiag.log (snpe-diagview),
+        # 端到端耗时是真正点一次要等的时间 (预处理 + snpe-net-run + 后处理).
         a(f"\n{'─'*55}\n  ⚡ 耗时统计\n{'─'*55}\n")
+        # 拆成两行, 否则单帧冷跑的 Total 会被误当成"NPU 变慢了":
+        #   NPU计算 = DSP 上跑网络的时间 (转速随 DVFS 变, 单帧 ~0.9GHz / 满载 ~1.4GHz)
+        #   单次推理 = 计算 + 4.9MB 输入和 3 路输出张量的 fastrpc 搬运
         npu_ms = (lat or {}).get('avg_ms', 0)
-        npu_fps = (lat or {}).get('avg_fps', 0)
-        if npu_ms > 0:
-            a(f"NPU推理延迟: {npu_ms:.2f} ms ({npu_fps:.1f} FPS)\n")
-        elif 'total_ms' in info:
-            a(f"NPU推理延迟: {info['total_ms']:.2f} ms\n")
-        if call_ms > 0:
-            a(f"调用总耗时: {call_ms:.0f} ms (含模型加载/DSP初始化, 非纯推理)\n")
+        tot_ms = (lat or {}).get('total_ms', 0)
+        a(fmt_timing(lat, call_ms, runtime))
         if 'avg_layer_ms' in info:
             a(f"平均层耗时: {info['avg_layer_ms']:.2f} ms\n")
         if 'max_ms' in info:
@@ -1332,6 +1636,19 @@ class NPUTestWindow(Gtk.Window):
         self.btn_yolo.get_style_context().add_class("suggested-action")
         self.btn_yolo.connect("clicked", self.on_yolo_clicked)
         bbtn.pack_start(self.btn_yolo, False, False, 0)
+
+        # 一键量三档: 同一张图跑 CPU / GPU / NPU, 把 delay 差摆在面板上
+        self.btn_cmp = Gtk.Button(label="⚡ 三档对比")
+        self.btn_cmp.set_tooltip_text(
+            "同一模型同一张图依次跑 CPU / Adreno GPU / HTP(NPU), 用实测延迟对比")
+        self.btn_cmp.connect("clicked", self.on_compare_clicked)
+        bbtn.pack_start(self.btn_cmp, False, False, 0)
+
+        # 摄像头在独立 Tab 里看(占满窗口, 不跟静态图抢地方)
+        self.btn_cam = Gtk.Button(label="📷 摄像头实时识别")
+        self.btn_cam.set_tooltip_text("/dev/video10 (CamxBridge) 实时画面 + YOLO 叠框")
+        self.btn_cam.connect("clicked", self.on_cam_clicked)
+        bbtn.pack_start(self.btn_cam, False, False, 0)
         sel.pack_start(bbtn, False, False, 0)
 
         # 内容: 左图右结果
@@ -1364,6 +1681,230 @@ class NPUTestWindow(Gtk.Window):
 
         GLib.idle_add(lambda: self.load_image_preview(
             self.cmb_yolo_image, self._yolo_images, self.yolo_img_widget))
+
+    # ---------- 常驻会话预热 ----------
+    def warm_sessions(self):
+        """开界面就把常驻会话拉起来, 不管用户先点哪个 Tab.
+
+        CPU 档只建会话 ~0.1s 却要多占 ~200MB (每层都留 float buffer), 不常驻,
+        第一次用到时再起, 起来后一直留着.
+        """
+        log = logging.getLogger("npu_test")
+        warm = os.path.join(MODEL_DIRS[0], "yolov7.dlc")
+        if not os.path.exists(warm):
+            return
+        def _warm():
+            for rt in ("dsp", "gpu"):
+                t0 = time.monotonic()
+                d = get_daemon(warm, rt)
+                log.info(f"常驻会话 {rt}: "
+                         + (f"就绪 {time.monotonic() - t0:.2f}s" if d else "启动失败"))
+        threading.Thread(target=_warm, daemon=True).start()
+
+    # ---------- 摄像头实时预览 ----------
+    def on_cam_clicked(self, btn):
+        if self._cam_on:
+            self._cam_stop()
+            return
+        mi = self.cmb_yolo_model.get_active()
+        if mi < 0 or mi >= len(self._yolo_models):
+            self.show_error("请先选择 YOLO 模型")
+            return
+        model = self._yolo_models[mi]
+        if model_backend(model) != "snpe":
+            self.show_error("摄像头实时识别只支持 SNPE .dlc 模型\n请选 yolov7.dlc")
+            return
+        if get_daemon(model, "dsp") is None:
+            self.show_error("npu-daemon 起不来, 看日志")
+            return
+        self._cam_model = model
+        self._cam_on = True
+        self.notebook.set_current_page(self._cam_tab_idx)
+        self.btn_cam_tab.set_label("⏹ 停止")
+        # 预览线程共用一个 daemon 会话, 期间禁止点检测, 否则输出 raw 会串
+        self.btn_yolo.set_sensitive(False)
+        self.btn_cmp.set_sensitive(False)
+        self.logger.info("摄像头实时识别: 启动")
+        threading.Thread(target=self._cam_loop, daemon=True).start()
+
+    def _cam_stop(self):
+        if not self._cam_on:
+            return
+        self._cam_on = False
+        with self._cam_cond:
+            self._cam_cond.notify_all()   # 叫醒等帧的推理线程
+        p, self._cam_proc = self._cam_proc, None
+        if p is not None:
+            try:
+                p.kill()
+                p.wait(timeout=3)
+            except Exception:
+                pass
+        GLib.idle_add(self._cam_stopped)
+
+    def _cam_stopped(self):
+        try:
+            self.btn_cam_tab.set_label("▶ 开始")
+            self.lbl_cam.set_text("/dev/video10 · CamxBridge 1280x720 · YOLO on HTP")
+            self.btn_yolo.set_sensitive(True)
+            self.btn_cmp.set_sensitive(True)
+            self.logger.info("摄像头实时识别: 已停止")
+        except Exception:
+            pass    # 窗口正在销毁
+
+    def _cam_loop(self):
+        """取流线程 + 推理线程, 分开跑.
+
+        取流线程只干一件事: 把管道抽干, 永远只保留最新一帧. 推理慢(40ms/帧)时
+        丢掉中间的帧, 管道也不会被我们压住; 之前取流和推理串在一起, 一慢就落后
+        于摄像头, v4l2loopback 的生产端就会覆盖正在读的缓冲, 画面就撕裂了.
+        """
+        w, h = 1280, 720
+        nbytes = w * h * 3
+        cmd = ["gst-launch-1.0", "-q", "v4l2src", "device=/dev/video10", "!",
+               "videoconvert", "!",
+               f"video/x-raw,format=RGB,width={w},height={h}",
+               "!", "fdsink", "fd=1", "sync=false"]
+        try:
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                 stderr=subprocess.DEVNULL, bufsize=nbytes * 2)
+        except Exception as e:
+            self.logger.error(f"摄像头启动失败: {e}")
+            self._cam_on = False
+            GLib.idle_add(self._cam_stopped)
+            return
+        self._cam_proc = p
+        threading.Thread(target=self._cam_infer_loop,
+                         args=(w, h), daemon=True).start()
+
+        buf = bytearray(nbytes)
+        view = memoryview(buf)
+        fd = p.stdout.fileno()
+        try:
+            while self._cam_on:
+                got = 0
+                while got < nbytes:               # os.read 会短读, 凑满一帧
+                    n = os.readv(fd, [view[got:]])
+                    if not n:
+                        break
+                    got += n
+                if got < nbytes:
+                    self.logger.warning("摄像头流中断")
+                    break
+                with self._cam_cond:
+                    # 换缓冲而不是就地写: 推理线程正持有的那份不能被改
+                    self._cam_raw, buf = bytes(buf), buf
+                    self._cam_seq += 1
+                    self._cam_cond.notify()
+        finally:
+            try:
+                p.kill()
+            except Exception:
+                pass
+            if self._cam_on:            # 意外退出, 复位按钮
+                self._cam_on = False
+                GLib.idle_add(self._cam_stopped)
+
+    def _cam_infer_loop(self, w, h):
+        """只处理最新帧: 跳过积压, 画面永远是最新的, 检测框和这一帧同源不漂移."""
+        seq = 0
+        now = time.monotonic()
+        frames, t_log, t_fps, infer_ms = 0, now, now, 0.0
+        fps, hud = 0.0, ""
+        while self._cam_on:
+            with self._cam_cond:
+                while self._cam_on and self._cam_seq == seq:
+                    self._cam_cond.wait(0.5)
+                if not self._cam_on:
+                    return
+                seq, raw = self._cam_seq, self._cam_raw
+            if not raw:
+                continue
+            pb = GdkPixbuf.Pixbuf.new_from_bytes(
+                GLib.Bytes.new(raw), GdkPixbuf.Colorspace.RGB,
+                False, 8, w, h, w * 3)
+            try:
+                dets, infer_ms = yolo_detect_pixbuf(self._cam_model, pb)
+            except Exception as e:
+                dets = []
+                self.logger.warning(f"摄像头检测失败: {e}")
+            with self._cam_lock:
+                # 帧 + 框 + HUD 一起换, 不会错位
+                self._cam_frame = (pb, dets, hud)
+            GLib.idle_add(self.cam_area.queue_draw)
+            frames += 1
+            now = time.monotonic()
+            if now - t_fps >= 1.0:
+                fps = frames / (now - t_fps)
+                frames, t_fps = 0, now
+                hud = f"{fps:.1f} FPS · {len(dets)} 目标"
+                GLib.idle_add(self.lbl_cam.set_text,
+                              f"/dev/video10 · 1280x720 · {fps:.1f} FPS · "
+                              f"NPU {infer_ms:.1f} ms · {len(dets)} 个目标")
+            if dets and now - t_log >= 3.0:   # 只在识别到目标时才记日志
+                self.logger.info(f"摄像头识别: {dets[0]['name']} 等 {len(dets)} 个目标, "
+                                 f"NPU {infer_ms:.2f} ms, "
+                                 f"{fps:.1f} FPS")
+                t_log = now
+
+    def _on_cam_draw(self, area, ctx):
+        with self._cam_lock:
+            frame = self._cam_frame
+        return self._draw_frame(area, ctx, frame)
+
+    def _draw_frame(self, area, ctx, frame):
+        """画面铺满 (保持比例居中) + 左上 HUD + 检测框. 摄像头/视频共用."""
+        W, H = area.get_allocated_width(), area.get_allocated_height()
+        ctx.set_source_rgb(0.08, 0.08, 0.08)   # 先铺底, 尺寸变化时不留残影
+        ctx.rectangle(0, 0, W, H)
+        ctx.fill()
+        if not frame:
+            return False
+        pb, dets, hud = frame
+        w, h = pb.get_width(), pb.get_height()
+        s = min(W / w, H / h)
+        dw, dh = w * s, h * s
+        ox, oy = (W - dw) / 2, (H - dh) / 2
+        ctx.save()
+        ctx.translate(ox, oy)
+        ctx.scale(s, s)
+        Gdk.cairo_set_source_pixbuf(ctx, pb, 0, 0)
+        ctx.paint()
+        ctx.restore()
+        # 帧率/进度直接叠在画面上
+        ctx.set_font_size(16)
+        tw = ctx.text_extents(hud).width
+        ctx.set_source_rgba(0, 0, 0, 0.55)
+        ctx.rectangle(ox + 8, oy + 8, tw + 14, 26)
+        ctx.fill()
+        ctx.set_source_rgb(0.4, 1.0, 0.5)
+        ctx.move_to(ox + 15, oy + 27)
+        ctx.show_text(hud)
+        COLORS = [(0.0, 0.8, 1.0), (1.0, 0.5, 0.0), (0.0, 1.0, 0.4),
+                  (1.0, 0.2, 0.2), (0.8, 0.4, 1.0), (1.0, 1.0, 0.0)]
+        cols = {}
+        for d in dets:
+            c = cols.setdefault(d['name'], COLORS[len(cols) % len(COLORS)])
+            x1, y1 = ox + d['left'] * s, oy + d['top'] * s
+            x2, y2 = ox + d['right'] * s, oy + d['bottom'] * s
+            ctx.set_source_rgba(c[0], c[1], c[2], 0.15)
+            ctx.rectangle(x1, y1, x2 - x1, y2 - y1)
+            ctx.fill()
+            ctx.set_source_rgb(*c)
+            ctx.set_line_width(2)
+            ctx.rectangle(x1, y1, x2 - x1, y2 - y1)
+            ctx.stroke()
+            label = f"{d['name']} {d['conf']:.0%}"
+            ctx.set_font_size(11)
+            tw = ctx.text_extents(label).width
+            ty = max(0, y1 - 16)
+            ctx.set_source_rgba(c[0], c[1], c[2], 0.85)
+            ctx.rectangle(x1, ty, tw + 6, 16)
+            ctx.fill()
+            ctx.set_source_rgb(1, 1, 1)
+            ctx.move_to(x1 + 3, ty + 12)
+            ctx.show_text(label)
+        return False
 
     def _refresh_yolo_models(self):
         self.cmb_yolo_model.remove_all()
@@ -1409,7 +1950,7 @@ class NPUTestWindow(Gtk.Window):
             if not os.path.exists(SNPE_NET_RUN):
                 self.show_error(f"snpe-net-run 不存在: {SNPE_NET_RUN}")
                 return
-            runtime_flag = ["--use_dsp", "--use_gpu", "--use_cpu"][rt_idx]
+            runtime_flag = ["--use_dsp", "--use_gpu", ""][rt_idx]
         else:  # qnn (.so)
             if not os.path.exists(QNN_NET_RUN):
                 self.show_error(f"qnn-net-run 不存在: {QNN_NET_RUN}\n请确认 qcom-qnn-sdk 已安装")
@@ -1426,14 +1967,61 @@ class NPUTestWindow(Gtk.Window):
         def run():
             import time as _time
             t0 = _time.monotonic()
-            raw, out_path, dets = run_yolo(model, image, runtime_flag)
+            raw, out_path, dets, out_dir = run_yolo(model, image, runtime_flag)
             call_ms = (_time.monotonic() - t0) * 1000.0
-            # 用 snpe-throughput-net-run 取 NPU 稳态纯推理延迟, 排除 snpe-net-run
-            # 每次调用约 2 秒的容器加载 + DSP 初始化固定开销.
-            lat = measure_npu_latency(model, image, runtime_flag, duration=1)
+            # 推理延迟从本次运行的 SNPEDiag.log 读, 不再另跑一个进程.
+            t_lat = _time.monotonic()
+            lat = measure_npu_latency(model, out_dir) if out_dir else {}
+            lat_ms = (_time.monotonic() - t_lat) * 1000.0
+            self.logger.info(f"YOLO 分项: 总={call_ms:.0f}ms "
+                             f"diagview={lat_ms:.0f}ms NPU={lat.get('avg_ms', 0):.2f}ms")
             GLib.idle_add(self.on_yolo_done, raw, model, image, runtime_name,
                           out_path, dets, call_ms, lat)
         threading.Thread(target=run, daemon=True).start()
+
+    def on_compare_clicked(self, btn):
+        """同一张图依次跑 CPU / GPU / NPU, 只用实测数字画对比表."""
+        mi = self.cmb_yolo_model.get_active()
+        ii = self.cmb_yolo_image.get_active()
+        if mi < 0 or mi >= len(self._yolo_models) or ii < 0:
+            self.show_error("请先选好模型和图片")
+            return
+        model, image = self._yolo_models[mi], self._yolo_images[ii]
+        if model_backend(model) != "snpe":
+            self.show_error("三档对比只支持 .dlc (SNPE); .onnx 需先转换")
+            return
+        btn.set_sensitive(False)
+        btn.set_label("⏳ 对比中…")
+
+        def run():
+            rows = []
+            # 慢的在前: 落到 NPU 那行时的反差就是卖点
+            for name, flag in (("CPU (8×A78)", ""),
+                               ("GPU (Adreno)", "--use_gpu"),
+                               ("DSP (NPU/HTP)", "--use_dsp")):
+                t0 = time.monotonic()
+                raw, _p, dets, out_dir = run_yolo(model, image, flag)
+                wall = (time.monotonic() - t0) * 1000.0
+                lat = measure_npu_latency(model, out_dir) if out_dir else {}
+                ms = lat.get('total_ms') or lat.get('avg_ms') or 0
+                rows.append((name, ms, wall, len(dets or [])))
+            GLib.idle_add(self.show_compare, rows, btn)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def show_compare(self, rows, btn):
+        btn.set_sensitive(True)
+        btn.set_label("⚡ 三档对比")
+        ok = [r for r in rows if r[1] > 0]
+        if not ok:
+            self.show_error("三档都失败了, 看日志")
+            return
+        buf = self.yolo_result_text.get_buffer()
+        buf.set_text("")
+        buf.insert(buf.get_end_iter(), compare_text(rows))
+        for name, ms, _w, _n in rows:
+            if ms > 0:
+                _RUNTIME_MS[name.split()[0]] = ms
 
     def on_yolo_done(self, raw, model, image, runtime, out_path, dets=None, call_ms=0, lat=None):
         self.btn_yolo.set_sensitive(True)
@@ -1460,16 +2048,13 @@ class NPUTestWindow(Gtk.Window):
             a(f"SNPE 版本: {info['build_ver']}\n")
         if 'model_h' in info:
             a(f"模型输入: {info['model_w']}x{info['model_h']}x{info['model_c']}\n")
-        # 耗时统计: 区分"NPU纯推理延迟"(snpe-throughput, 已排除冷启动) 和
-        # "调用总耗时"(snpe-net-run 含容器加载/DSP初始化, 约两秒非推理算力).
+        # 耗时统计: NPU 延迟取自本次运行的 SNPEDiag.log (snpe-diagview).
+        # 拆成两行, 否则单帧冷跑的 Total 会被误当成"NPU 变慢了":
+        #   NPU计算 = DSP 上跑网络的时间 (随 DVFS 变, 单帧 ~0.9GHz / 满载 ~1.4GHz)
+        #   单次推理 = 计算 + 4.9MB 输入和 3 路输出张量的 fastrpc 搬运
         npu_ms = (lat or {}).get('avg_ms', 0)
-        npu_fps = (lat or {}).get('avg_fps', 0)
-        if npu_ms > 0:
-            a(f"NPU推理延迟: {npu_ms:.2f} ms ({npu_fps:.1f} FPS)\n")
-        elif (info.get('avg_ms') or info.get('infer_ms', 0)) > 0:
-            a(f"推理耗时: {info.get('avg_ms', info.get('infer_ms', 0)):.2f} ms\n")
-        if call_ms > 0:
-            a(f"调用总耗时: {call_ms:.0f} ms (含模型加载/DSP初始化, 非纯推理)\n")
+        tot_ms = (lat or {}).get('total_ms', 0)
+        a(fmt_timing(lat, call_ms, runtime))
         a("\n")
 
         if dets:
@@ -1572,6 +2157,26 @@ class NPUTestWindow(Gtk.Window):
         self.yolo_img_widget.queue_draw()
 
     # ========== Tab3: 吞吐量基准 ==========
+    def build_camera_tab(self):
+        tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        tab.set_border_width(8)
+        self._cam_tab_idx = self.notebook.append_page(tab, Gtk.Label(label="📷 摄像头实时"))
+
+        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.btn_cam_tab = Gtk.Button(label="▶ 开始")
+        self.btn_cam_tab.get_style_context().add_class("suggested-action")
+        self.btn_cam_tab.connect("clicked", self.on_cam_clicked)
+        bar.pack_start(self.btn_cam_tab, False, False, 0)
+        self.lbl_cam = Gtk.Label(label="/dev/video10 · CamxBridge 1280x720 · YOLO on HTP")
+        bar.pack_start(self.lbl_cam, False, False, 0)
+        tab.pack_start(bar, False, False, 0)
+
+        # 占满整个 Tab: 画面按比例缩放居中, 检测框跟着缩放
+        self.cam_area = Gtk.DrawingArea()
+        self.cam_area.set_size_request(640, 360)
+        self.cam_area.connect("draw", self._on_cam_draw)
+        tab.pack_start(self.cam_area, True, True, 0)
+
     def build_throughput_tab(self):
         tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         tab.set_margin_start(8)
@@ -1684,7 +2289,7 @@ class NPUTestWindow(Gtk.Window):
             self.show_error("找不到测试图片")
             return
         rt_idx = self.cmb_tp_runtime.get_active()
-        runtime_flag = ["--use_dsp", "--use_gpu", "--use_cpu"][rt_idx]
+        runtime_flag = ["--use_dsp", "--use_gpu", ""][rt_idx]
         runtime_name = ["DSP (NPU/HTP)", "GPU (Adreno)", "CPU"][rt_idx]
         duration = int(self.spin_duration.get_value())
         perf = self.cmb_perf.get_active_text()
@@ -1699,6 +2304,8 @@ class NPUTestWindow(Gtk.Window):
 
             # snpe-throughput-net-run 也只吃 raw, 预处理同单次推理
             np = _np()
+            raw_bytes = None
+            input_file = image
             if np is not None:
                 try:
                     raw_bytes, _, _ = yolo_letterbox(image, 640)
@@ -1708,14 +2315,21 @@ class NPUTestWindow(Gtk.Window):
                     input_file = raw_path
                 except Exception as e:
                     self.logger.warning(f"图片预处理失败, 回退原始文件: {e}")
-                    input_file = image
-            else:
-                input_file = image
+
+            # 常驻会话优先: 会话只建一次, 报的是真实吞吐, 不含每次重建的开销
+            if raw_bytes and model_backend(model) == "snpe":
+                rt = ["dsp", "gpu", "cpu"][rt_idx]
+                txt = throughput_via_daemon(model, rt, raw_bytes, duration)
+                if txt:
+                    GLib.idle_add(self.on_throughput_done, txt, 0, model,
+                                  runtime_name, duration, out_dir)
+                    return
 
             # snpe-throughput-net-run 不支持 --input_list, 用 --input_raw
             cmd = [SNPE_THROUGHPUT_RUN, f"--container={model}",
                    f"--input_raw={input_file}", f"--duration={duration}",
-                   runtime_flag, f"--perf_profile={perf}"]
+                   f"--perf_profile={perf}"]
+            cmd.extend(runtime_flag.split())    # CPU 档为空, 不能塞空串进去
             # 加超时给模型加载留余量
             out, rc = run_cmd(cmd, timeout=duration + 120)
             GLib.idle_add(self.on_throughput_done, out, rc, model, runtime_name, duration, out_dir)
@@ -1846,12 +2460,51 @@ class NPUTestWindow(Gtk.Window):
         d.destroy()
 
 
+def _selftest():
+    """板上自检 (不弹 GUI): python3 /usr/bin/qcom-npu-test --selftest
+
+    校验 letterbox 输出尺寸/填充值, 以及 snpe-net-run + diagview 延迟解析
+    这条主链路能不能跑通. 改了预处理或延迟解析后跑一次即可.
+    """
+    img = os.path.join(IMAGE_DIRS[0], "bus.jpg")
+    model = os.path.join(MODEL_DIRS[0], "yolov7.dlc")
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    raw, (top, left, scale), (iw, ih) = yolo_letterbox(img, 640)
+    assert len(raw) == 640 * 640 * 3 * 4, len(raw)
+    arr = _np().frombuffer(raw, dtype="float32").reshape(640, 640, 3)
+    if top:
+        assert abs(float(arr[0, 0, 0]) - 114.0 / 255.0) < 1e-6, float(arr[0, 0, 0])
+    txt, out_path, dets, out_dir = run_yolo(model, img, "--use_dsp")
+    assert out_dir, txt
+    lat = measure_npu_latency(model, out_dir)
+    assert (lat.get('avg_ms', 0) or lat.get('total_ms', 0)) > 0, \
+        f"未解析到推理时间: {txt[-400:]}"
+    # 摄像头走 pixbuf 直喂(不落盘), 校验它和 run_yolo 的检测结果一致
+    cdets, _cms = yolo_detect_pixbuf(model, GdkPixbuf.Pixbuf.new_from_file(img))
+    assert len(cdets) == len(dets), (len(cdets), len(dets))
+    # 吞吐页走的是常驻会话压测, 校验它输出的文本能被 parse_throughput 解析回来
+    tp = throughput_via_daemon(model, "dsp", raw, 2)
+    assert tp and parse_throughput(tp).get('avg_fps', 0) > 0, tp
+    print(f"SELFTEST OK: {len(dets)} dets, 推理 "
+          f"{(lat.get('total_ms') or lat.get('avg_ms', 0)):.2f} ms"
+          + (f" @ {lat['clock_mhz']:.0f}MHz" if lat.get('clock_mhz') else ""))
+
+
 def main():
     win = NPUTestWindow()
+    win.connect("destroy", lambda w: w._cam_stop())
     win.connect("destroy", Gtk.main_quit)
+    # --camera: 直接开最大化摄像头窗口, 不用点 Tab (大屏展示/无人值守用)
+    if "--camera" in sys.argv:
+        win.maximize()
+        win.notebook.set_current_page(win._cam_tab_idx)
+        GLib.idle_add(win.on_cam_clicked, None)
     win.show_all()
     Gtk.main()
 
 
 if __name__ == "__main__":
-    main()
+    if "--selftest" in sys.argv:
+        _selftest()
+    else:
+        main()
