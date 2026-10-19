@@ -1,0 +1,173 @@
+From: Igni <igni.li@quectel.com>
+Subject: [PATCH] pw-pal-plugin: serialise the PAL handle against the data loop
+
+0008 hands the one deep-buffer handle of a direction to the default sink and
+releases it from the metadata listener when that sink loses the default. The
+listener runs on the main loop; the handle is written through on the data loop by
+pw_pal_process_stream(). Nothing serialises the two, and pal_stream_close() frees
+the stream it is given, so a handover that lands while the data loop is inside
+pal_stream_write() is a use-after-free in libpal.
+
+Reproduced on the QCS6490 with a player running, headset -> speaker, twice in
+~50 handovers: pipewire.service dies 'killed, status=11/SEGV', and the core is
+taken by the data-loop thread,
+
+  #0 pal_stream_write () from /usr/lib/libpal.so.2
+  #1 pw_pal_process_stream (d=...) at pw-pal-plugin.c:856
+
+with 'close: 490: Enter. deviceCount 1 for device id 4 (PAL_DEVICE_OUT_WIRED_HEADSET)'
+in the same millisecond as the write that crashed. The player goes down with the
+daemon: no handover survives it.
+
+Give the handle one process-wide mutex. close_pal_stream() holds it across
+stop/close/NULL, the data loop holds it across the single pal_stream_write() or
+pal_stream_read() it makes, and the open path publishes the handle under it so a
+half-opened stream is never visible. Both orders are then safe: whoever takes the
+lock first either finishes the write before the close, or finds stream_handle
+NULL after it. The section is one PAL call, so it is only ever contended while a
+handover runs, and PAL serialises on its own process-wide state anyway -- one
+lock for the process costs nothing over one per instance.
+
+Checked: series 0001-0010 applies in bitbake's order and the patched source
+compiles with 0 errors. The core above is from the 0009 build; the same source
+with this patch ran the reproducer that produced it without a crash.
+
+Signed-off-by: Igni <igni.li@quectel.com>
+---
+--- a/pw-pal-plugin.c
++++ b/pw-pal-plugin.c
+@@ -16,6 +16,7 @@
+ #include <stdlib.h>
+ #include <signal.h>
+ #include <limits.h>
++#include <pthread.h>
+ #include <math.h>
+ #include <dirent.h>
+ #include <linux/input.h>
+@@ -309,10 +310,38 @@
+         free(volume);
+     }
+ }
++/*
++ * The handle of an instance is written by the main loop and read by the data
++ * loop, so the two need to agree on it.
++ *
++ * pw_pal_process_stream() runs on the data loop and writes straight through
++ * udata->stream_handle; .state_changed() and the metadata listener run on the
++ * main loop and close it. 0008 made the metadata listener close the handle of
++ * an instance that loses the default sink, which is a close on a stream that is
++ * very often still being written to, and libpal frees the stream on
++ * pal_stream_close(): measured, headset -> speaker under a running player,
++ * SEGV in the data-loop.0 thread at
++ *
++ *   #0 pal_stream_write () from libpal.so.2
++ *   #1 pw_pal_process_stream () at pw-pal-plugin.c:856
++ *
++ * with 'close: 490: Enter. ... device id 4' one millisecond earlier. One mutex
++ * around the handle, taken by both sides, makes the two orders safe: whoever
++ * gets it first either finishes the write before the close, or finds
++ * stream_handle NULL after it. The section is a single pal_stream_write /
++ * pal_stream_read -- PAL is a process-wide singleton that serialises on its own
++ * anyway, so one mutex for the whole process costs nothing over one per
++ * instance.
++ *
++ * ponytail: one process-wide lock. Per-instance locks only if a capture stream
++ * on a different device is ever measured waiting behind a playback handover.
++ */
++static pthread_mutex_t pal_handle_lock = PTHREAD_MUTEX_INITIALIZER;
+ static int close_pal_stream(struct pw_userdata *udata)
+ {
+     int rc = -1;
+ 
++    pthread_mutex_lock(&pal_handle_lock);
+     if (udata->stream_handle) {
+         rc = pal_stream_stop(udata->stream_handle);
+         if (rc) {
+@@ -322,9 +351,10 @@
+         if (rc)
+             pw_log_error("could not close sink handle %p, error %d", udata->stream_handle, rc);
+         udata->stream_handle = NULL;
++    } else {
++        rc = 0;
+     }
+-    else
+-        return 0;
++    pthread_mutex_unlock(&pal_handle_lock);
+ 
+     return rc;
+ }
+@@ -632,6 +662,7 @@
+ {
+     int rc = 0;
+     pal_buffer_config_t out_buf_cfg, in_buf_cfg;
++    pal_stream_handle_t *handle = NULL;
+ 
+     rc = pw_pal_init_audio();
+     if (rc) {
+@@ -647,14 +678,18 @@
+     }
+ 
+     rc = pal_stream_open(udata->stream_attributes, 1, udata->pal_device, 0, NULL, pa_pal_out_cb, udata,
+-            &udata->stream_handle);
++            &handle);
+ 
+     if (rc) {
+-        udata->stream_handle = NULL;
+         pw_log_error("Could not open output stream %d", rc);
+         return rc;
+     }
+ 
++    /* Publish it under the lock: the data loop reads it under the same lock. */
++    pthread_mutex_lock(&pal_handle_lock);
++    udata->stream_handle = handle;
++    pthread_mutex_unlock(&pal_handle_lock);
++
+     if (udata->isplayback) {
+         in_buf_cfg.buf_size = 0;
+         in_buf_cfg.buf_count = 0;
+@@ -834,6 +869,7 @@
+     void *data;
+     uint32_t offs, size;
+     struct pal_buffer pal_buf;
++    pal_stream_handle_t *handle;
+     int rc = 0;
+     static int tmp = 0;
+ 
+@@ -852,11 +888,13 @@
+         pal_buf.buffer = data;
+         pal_buf.size = size;
+ 
+-        if (udata->stream_handle) {
+-            if ((rc = pal_stream_write(udata->stream_handle, &pal_buf)) < 0) {
+-                pw_log_error("Could not write data: %d %d", rc, __LINE__);
+-            }
+-        }
++        pthread_mutex_lock(&pal_handle_lock);
++        handle = udata->stream_handle;
++        if (handle)
++            rc = pal_stream_write(handle, &pal_buf);
++        pthread_mutex_unlock(&pal_handle_lock);
++        if (rc < 0)
++            pw_log_error("Could not write data: %d %d", rc, __LINE__);
+     } else {
+         data = bd->data;
+         size = buf->requested ? buf->requested * udata->frame_size : bd->maxsize;
+@@ -864,11 +902,13 @@
+         pal_buf.buffer = data;
+         pal_buf.size = size;
+         /* fill buffer contents here */
+-        if (udata->stream_handle) {
+-            if ((rc = pal_stream_read(udata->stream_handle, &pal_buf)) < 0) {
+-                pw_log_error("Could not read data: %d %d", rc, __LINE__);
+-            }
+-        }
++        pthread_mutex_lock(&pal_handle_lock);
++        handle = udata->stream_handle;
++        if (handle)
++            rc = pal_stream_read(handle, &pal_buf);
++        pthread_mutex_unlock(&pal_handle_lock);
++        if (rc < 0)
++            pw_log_error("Could not read data: %d %d", rc, __LINE__);
+         pw_log_error("read buffer data %p with up to %u bytes", data, size);
+ 
+         bd->chunk->size = size;
