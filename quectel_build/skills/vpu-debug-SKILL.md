@@ -1,3 +1,12 @@
+---
+name: vpu-debug
+description: "VPU 视频解码调试: Venus VPU 状态、VA-API 兼容层、会话泄漏修复、ffmpeg/mpv 硬解"
+version: 1.0.0
+author: Hermes Agent
+license: MIT
+platforms: [linux]
+---
+
 # VPU 视频解码调试 (Venus/iris_vpu)
 
 > 会话交接文档：`log/VPU-交接-20260923.md`（含三仓状态、待办、复现命令、血泪教训）。

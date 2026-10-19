@@ -1,3 +1,12 @@
+---
+name: screenshot
+description: "屏幕截图: adb / weston 截图方法"
+version: 1.0.0
+author: Hermes Agent
+license: MIT
+platforms: [linux]
+---
+
 # 屏幕截图工具 (screenshot.sh)
 
 ## 工具位置

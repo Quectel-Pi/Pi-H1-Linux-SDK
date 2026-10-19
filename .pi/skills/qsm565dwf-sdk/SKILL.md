@@ -1,0 +1,1 @@
+../../../quectel_build/skills/qsm565dwf-sdk-SKILL.md

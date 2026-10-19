@@ -1,0 +1,1 @@
+../../../quectel_build/skills/at-debug-SKILL.md

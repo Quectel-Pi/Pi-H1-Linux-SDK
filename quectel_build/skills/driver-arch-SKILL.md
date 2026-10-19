@@ -1,3 +1,12 @@
+---
+name: driver-arch
+description: "驱动架构与源码索引: DTS→驱动映射、include 链追踪、各子系统代码定位"
+version: 1.0.0
+author: Hermes Agent
+license: MIT
+platforms: [linux]
+---
+
 # 驱动架构与源码索引
 
 > 记录 QCS6490-IDP-PI 各子系统的设备树 (DTS) 与驱动源码映射关系，

@@ -1,0 +1,1 @@
+../../../quectel_build/skills/vpu-debug-SKILL.md

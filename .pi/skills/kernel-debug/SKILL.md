@@ -1,0 +1,1 @@
+../../../quectel_build/skills/kernel-debug-SKILL.md

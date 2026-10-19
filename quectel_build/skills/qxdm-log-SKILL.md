@@ -1,3 +1,12 @@
+---
+name: qxdm-log
+description: "QXDM 日志抓取: diag_mdlog 用法、mask 文件选择、日志分析"
+version: 1.0.0
+author: Hermes Agent
+license: MIT
+platforms: [linux]
+---
+
 # QXDM 日志抓取 (smart_adb_qxdm_log)
 
 ## 工具位置

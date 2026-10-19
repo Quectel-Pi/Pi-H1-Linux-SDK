@@ -1,3 +1,12 @@
+---
+name: qcs6490-flash
+description: "QCS6490 一键烧录: USB EDL 模式、QDL 工具、烧录失败排除"
+version: 1.0.0
+author: Hermes Agent
+license: MIT
+platforms: [linux]
+---
+
 # QCS6490 一键烧录
 
 ## Overview

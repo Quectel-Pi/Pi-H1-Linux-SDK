@@ -1,0 +1,1 @@
+../../../quectel_build/skills/driver-arch-SKILL.md

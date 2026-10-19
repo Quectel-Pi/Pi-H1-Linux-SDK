@@ -1,0 +1,1 @@
+../../../quectel_build/skills/qcs6490-flash-SKILL.md

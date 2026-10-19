@@ -1,3 +1,12 @@
+---
+name: audio-debug
+description: "Quectel QCS6490 音频调试: 问题排查、tinymix 配置、codec 调试、journalctl 看 AGM/GSL"
+version: 1.0.0
+author: Hermes Agent
+license: MIT
+platforms: [linux]
+---
+
 # QCS6490 音频调试
 
 ## 音频调试（重要！）
