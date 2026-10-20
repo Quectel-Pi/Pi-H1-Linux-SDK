@@ -10,15 +10,15 @@ FROM ubuntu:22.04
 # 基础段 (来自 QPi-SDK-H1 docker_env/Dockerfile 的 quectel-pi-builder)
 # ---------------------------------------------------------------------------
 ENV DEBIAN_FRONTEND noninteractive
-RUN apt-get update
-RUN apt install -y software-properties-common
-RUN add-apt-repository -y ppa:deadsnakes/ppa
+# 只用 Ubuntu 官方源构建, 不引入 deadsnakes PPA: Launchpad (ppa.launchpadcontent.net)
+# 在客户内网/受限网络不可达, 会导致 apt 阶段直接失败; Yocto Scarthgap 用系统 3.10 即可
+# 依赖必须显式列出 (不再依赖 deadsnakes 包的传递依赖); file 是 Yocto HOSTTOOLS 必需项
 RUN apt-get update
 RUN apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev \
 						libc6-dev-i386 libncurses5 lib32ncurses5-dev x11proto-core-dev \
 						libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc \
-						unzip fontconfig pv chrpath cpio diffstat gawk wget zstd  liblz4-tool \
-						rsync libxml-simple-perl libelf-dev uuid-dev python3.9 python3.8  python2.7 \
+						unzip fontconfig pv chrpath cpio diffstat file gawk wget zstd  liblz4-tool \
+						rsync libxml-simple-perl libelf-dev uuid-dev \
 						xmlstarlet texinfo  libarchive-dev ssh libselinux1-dev \
 						fakechroot libiberty-dev qemu-user-static g++ gcc \
 						make libwayland-dev fakeroot libpam0g-dev openjdk-8-jdk-headless binutils-dev \
@@ -34,9 +34,6 @@ ENV LANG en_US.UTF-8
 ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8
 
-
-RUN ln -sf /usr/bin/python2.7 /usr/bin/python
-RUN ln -sf /usr/bin/python3.9 /usr/bin/python3
 
 RUN echo 'root:root' | chpasswd
 RUN useradd -m q1000
@@ -89,7 +86,8 @@ RUN rm /bin/sh && ln -sf /bin/bash /bin/sh
 # Yocto 适配段 (原 docker_env/Dockerfile 的追加内容)
 # ---------------------------------------------------------------------------
 
-# 1) 恢复系统 Python 3.10 (基础段把 python3 链到 deadsnakes 3.9、python 链到 2.7)
+# 1) 显式约束 python/python3 指向系统 3.10 (基础段已不再安装/链接 deadsnakes 版本,
+#    此处保留 rm/ln 作为兜底约束)
 #    Yocto Scarthgap 官方支持 Python 3.8-3.12, 系统 3.10 与 apt 的 python3-* 包配套;
 #    config_parser.py 通过 `python` 调用, 必须是 python3 语法 + pyhocon
 RUN rm -f /usr/bin/python /usr/bin/python3 && \
