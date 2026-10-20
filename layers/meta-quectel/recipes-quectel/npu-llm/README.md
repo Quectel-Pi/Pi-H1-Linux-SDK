@@ -1,7 +1,8 @@
 # npu-llm — LLM on the QCS6490 NPU (Hexagon V68)
 
-Two pre-compiled LLMs that actually run on the Hexagon, a CLI launcher and a
-fullscreen GTK4 chat UI, packaged both as a deb and as a Yocto recipe.
+Two pre-compiled LLMs that actually run on the Hexagon, a CLI launcher, a
+fullscreen GTK4 chat UI with offline speech in and out, packaged both as a deb
+and as a Yocto recipe.
 
 ```
 layers/meta-quectel/recipes-quectel/npu-llm/
@@ -27,6 +28,26 @@ Both are QAIRT context binaries compiled for V68 (`dsp_arch: v68`, `soc_id 35`)
 — the only model format the Hexagon on this SoC can load. Sources:
 `radxa/Qwen2.5-0.5B-v68` and `radxa/Llama3.2-1B-4096-qairt-v68` on ModelScope.
 
+## Voice
+
+Offline, on the CPU, independent of the NPU:
+
+| part | model                                        | speed        | payload |
+|------|----------------------------------------------|--------------|---------|
+| ASR  | SenseVoice small int8, zh/en/ja/ko/yue       | ~17x RT      | 228 MB  |
+| TTS  | VITS fanchen-C, 4 threads                    | ~1.4x RT     | 118 MB  |
+
+Both come from the `sherpa-onnx` python bindings (cp313 manylinux aarch64
+wheels, unpacked into `/usr/lib/npu-llm/voice`) plus models from hf-mirror
+(`csukuangfj/…`). In `npu-chat`: click the mic to start, click again to stop
+and recognise, then the transcript goes through the normal send path; the
+answer is spoken sentence by sentence while it streams. Audio goes through
+PipeWire (`pw-record`/`pw-play`) — this image has no ALSA tools.
+
+```bash
+npu-chat --voice-selftest    # record 4 s, transcribe, speak; needs a session
+```
+
 GGUF is not an option here. The ggml-hexagon backend in geniex ships HTP
 v73/v75/v79/v81 only and caps v68 to v73, which fails at session setup
 (`dspqueue_read failed: 0x0000002e`). Qwen3.5 is also architecturally out of
@@ -37,7 +58,7 @@ GPT2/GPTJ/LLAMA/QWEN graphs only) — it stays on CPU at ~7 tok/s.
 
 ```bash
 ./layers/meta-quectel/recipes-quectel/npu-llm/build-deb.sh
-# -> downloads/npu-llm_1.0_arm64.deb   (~2.3 GB, cache in downloads/npu-llm-cache/)
+# -> downloads/npu-llm_1.0_arm64.deb   (~2.7 GB, cache in downloads/npu-llm-cache/)
 ```
 
 `--no-download` rebuilds from the cache, `--output DIR` changes the target.

@@ -1,7 +1,9 @@
 SUMMARY = "LLM inference on the QCS6490 Hexagon NPU (V68) with a GTK4 chat UI"
 DESCRIPTION = "Pre-compiled QAIRT context binaries (Qwen2.5-0.5B, Llama-3.2-1B) for \
 Hexagon V68, the genie-t2t-run runtime and its QNN HTP V68 libraries, plus the npu-chat \
-GUI and npu-llm CLI launchers. \
+GUI and npu-llm CLI launchers. Offline speech is included too: SenseVoice ASR and VITS \
+TTS through sherpa-onnx, so the chat can be driven by a microphone and read the answer \
+out loud without a network. \
 GGUF models cannot reach the NPU on this SoC: ggml-hexagon ships HTP v73/v75/v79/v81 \
 backends only, so this recipe is the NPU path."
 HOMEPAGE = "https://aihub.qualcomm.com/"
@@ -10,14 +12,23 @@ HOMEPAGE = "https://aihub.qualcomm.com/"
 # commercial image; the launchers are trivial to drop if you only want the models.
 LICENSE = "CLOSED"
 
+# do_install unpacks the sherpa-onnx wheels with the build host's python.
+inherit python3native
+
 # Everything this recipe ships lives in files/; build-deb.sh packs the same
 # payload as a deb for adb install.
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
 QWEN = "https://modelscope.cn/models/radxa/Qwen2.5-0.5B-v68/resolve/master"
 LLAMA = "https://modelscope.cn/models/radxa/Llama3.2-1B-4096-qairt-v68/resolve/master"
+# Voice models come from the Hugging Face mirror: ModelScope has no anonymous
+# HTTP API for these repos (every endpoint 404s) and the github release is
+# ~140 kB/s.
+HF = "https://hf-mirror.com"
+SENSE = "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
+VITS = "csukuangfj/vits-zh-hf-fanchen-C"
 
-# ~2.3 GB of payload. Cached in DL_DIR after the first build; on a host without a
+# ~2.7 GB of payload. Cached in DL_DIR after the first build; on a host without a
 # route to modelscope.cn, drop the files into ${DL_DIR} under the names given by
 # downloadfilename and bitbake will use the cache.
 SRC_URI = " \
@@ -41,6 +52,13 @@ SRC_URI = " \
     ${LLAMA}/htp_backend_ext_config.json;name=llama_ext;subdir=npu-llm/llama3.2-1b;downloadfilename=npu-llm-llama-htp_backend_ext_config.json \
     ${LLAMA}/tokenizer.json;name=llama_tok;subdir=npu-llm/llama3.2-1b;downloadfilename=npu-llm-llama-tokenizer.json \
     ${LLAMA}/models/weight_sharing_model_1_of_1.serialized.bin;name=llama_bin;subdir=npu-llm/llama3.2-1b/models;downloadfilename=npu-llm-llama-model.bin \
+    ${HF}/${SENSE}/resolve/main/model.int8.onnx;name=asr_model;subdir=npu-llm/voice;downloadfilename=npu-llm-asr-model.int8.onnx \
+    ${HF}/${SENSE}/resolve/main/tokens.txt;name=asr_tok;subdir=npu-llm/voice;downloadfilename=npu-llm-asr-tokens.txt \
+    ${HF}/${VITS}/resolve/main/vits-zh-hf-fanchen-C.onnx;name=tts_model;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-model.onnx \
+    ${HF}/${VITS}/resolve/main/lexicon.txt;name=tts_lex;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-lexicon.txt \
+    ${HF}/${VITS}/resolve/main/tokens.txt;name=tts_tok;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-tokens.txt \
+    https://files.pythonhosted.org/packages/13/e3/115476caa9f80cd5f55e4e7b777a6c2d01a133d10f8fae574ba869fc48c3/sherpa_onnx-1.13.8-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl;name=whl_sherpa;subdir=npu-llm/voice;downloadfilename=npu-llm-sherpa-onnx-cp313.whl \
+    https://files.pythonhosted.org/packages/9c/72/02227b14cd3fb3d504a8814ad144ed321a53331948c893821e02f4abb1d7/sherpa_onnx_core-1.13.8-py3-none-manylinux2014_aarch64.whl;name=whl_core;subdir=npu-llm/voice;downloadfilename=npu-llm-sherpa-onnx-core.whl \
 "
 
 SRC_URI[rt_genie.sha256sum]     = "db6ba32ae2040cf25ca10c8b2fff5a79cad00e08a6382628e9ae4f2ee8bbac21"
@@ -58,6 +76,13 @@ SRC_URI[llama_cfg.sha256sum]    = "92d7bacf93c0cea7de0f35380cd5c27da121744db292f
 SRC_URI[llama_ext.sha256sum]    = "11553de7b4b70f8f3ee699bcdb385c6a7a74366ec4728b54bac345dc79b369f8"
 SRC_URI[llama_tok.sha256sum]    = "79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4"
 SRC_URI[llama_bin.sha256sum]    = "d4a284cb9a40d1178daee0c8da2f6a6144d5835b32f5f05e659c3de918aff586"
+SRC_URI[asr_model.sha256sum]    = "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51"
+SRC_URI[asr_tok.sha256sum]      = "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc"
+SRC_URI[tts_model.sha256sum]    = "77c4bf60602d7d83f0e320063d15655e3bfc51d25b728d727203cd13e77521ab"
+SRC_URI[tts_lex.sha256sum]      = "9af2824e49e731bf615927c768fdc36bbbe894cac57d8e0088d9c94331b07320"
+SRC_URI[tts_tok.sha256sum]      = "34b035b9aeb070df6188b022f29c00e0e142c7ade9f25611ced65db5e9cc8402"
+SRC_URI[whl_sherpa.sha256sum]   = "916ec38242e779ee3a99f7b161bd1bf3b02a7fad34cb073d091021c0469e0b58"
+SRC_URI[whl_core.sha256sum]     = "a51a03d55c376c32e15dd63ea852236042ba91a5cd73e253bbf7cf21f6582ba9"
 
 S = "${WORKDIR}"
 
@@ -117,6 +142,27 @@ do_install() {
     grep -q '"top-k": 40,' ${D}${datadir}/npu-llm/llama3.2-1b/model-config.json || \
         bbfatal "llama top-k patch did not apply -- upstream bundle changed?"
 
+    # Offline voice: the SenseVoice/VITS models plus the sherpa-onnx python
+    # bindings. npu-chat appends ${libdir}/npu-llm/voice to sys.path, so the
+    # bindings sit next to the models instead of in site-packages.
+    install -d ${D}${datadir}/npu-llm/voice/asr ${D}${datadir}/npu-llm/voice/tts
+    install -m 0644 ${S}/npu-llm/voice/npu-llm-asr-model.int8.onnx \
+        ${D}${datadir}/npu-llm/voice/asr/model.int8.onnx
+    install -m 0644 ${S}/npu-llm/voice/npu-llm-asr-tokens.txt \
+        ${D}${datadir}/npu-llm/voice/asr/tokens.txt
+    install -m 0644 ${S}/npu-llm/voice/npu-llm-tts-model.onnx \
+        ${D}${datadir}/npu-llm/voice/tts/model.onnx
+    install -m 0644 ${S}/npu-llm/voice/npu-llm-tts-lexicon.txt \
+        ${D}${datadir}/npu-llm/voice/tts/lexicon.txt
+    install -m 0644 ${S}/npu-llm/voice/npu-llm-tts-tokens.txt \
+        ${D}${datadir}/npu-llm/voice/tts/tokens.txt
+
+    install -d ${D}${libdir}/npu-llm/voice
+    for whl in ${S}/npu-llm/voice/npu-llm-sherpa-onnx*.whl; do
+        python3 -m zipfile -e "$whl" ${D}${libdir}/npu-llm/voice
+    done
+    rm -rf ${D}${libdir}/npu-llm/voice/*.dist-info
+
     install -d ${D}${docdir}/${PN}
     install -m 0644 ${S}/npu-llm-files/README.Debian ${D}${docdir}/${PN}/README.Debian
 
@@ -139,8 +185,9 @@ FILES:${PN} = " \
 # npu-chat needs GTK4 + PyGObject, which the Debian GNOME rootfs already ships.
 # They are NOT pulled in as RDEPENDS: this image is a Debian rootfs overlay and
 # dragging the OE gtk4 stack in would duplicate it. Add gtk4 + python3-pygobject
-# yourself if you build a pure-OE image.
-RDEPENDS:${PN} = "python3 coreutils"
+# yourself if you build a pure-OE image. numpy is what sherpa-onnx takes the
+# microphone buffer as; coreutils is for the launcher's stdbuf.
+RDEPENDS:${PN} = "python3 python3-numpy coreutils"
 
 # Prebuilt arm64 binaries: skip the QA that inspects them.
 #

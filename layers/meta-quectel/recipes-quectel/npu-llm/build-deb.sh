@@ -9,7 +9,7 @@
 #   ./build-deb.sh --no-download   # rebuild from the local cache only
 #   ./build-deb.sh --output <dir>  # where to put the .deb (default: downloads/)
 #
-# The payload is ~2.3 GB; the cache lives in downloads/npu-llm-cache/.
+# The payload is ~2.7 GB; the cache lives in downloads/npu-llm-cache/.
 # Keep FILES below in sync with layers/meta-quectel/recipes-quectel/npu-llm/npu-llm_1.0.bb
 
 set -euo pipefail
@@ -39,6 +39,11 @@ done
 VERSION=1.0
 QWEN="https://modelscope.cn/models/radxa/Qwen2.5-0.5B-v68/resolve/master"
 LLAMA="https://modelscope.cn/models/radxa/Llama3.2-1B-4096-qairt-v68/resolve/master"
+# Voice models: hf-mirror, the github release is ~140 kB/s from here. ModelScope
+# has no anonymous HTTP API for these repos (every endpoint 404s).
+HF="https://hf-mirror.com"
+SENSE="csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
+VITS="csukuangfj/vits-zh-hf-fanchen-C"
 
 # url|sha256|path inside the package
 FILES=(
@@ -57,6 +62,19 @@ FILES=(
 "$LLAMA/htp-model-config-llama32-1b-gqa.json|92d7bacf93c0cea7de0f35380cd5c27da121744db292fcd5127358f61a619a16|usr/share/npu-llm/llama3.2-1b/model-config.json"
 "$LLAMA/tokenizer.json|79e3e522635f3171300913bb421464a87de6222182a0570b9b2ccba2a964b2b4|usr/share/npu-llm/llama3.2-1b/tokenizer.json"
 "$LLAMA/models/weight_sharing_model_1_of_1.serialized.bin|d4a284cb9a40d1178daee0c8da2f6a6144d5835b32f5f05e659c3de918aff586|usr/share/npu-llm/llama3.2-1b/models/weight_sharing_model_1_of_1.serialized.bin"
+"$HF/$SENSE/resolve/main/model.int8.onnx|c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51|usr/share/npu-llm/voice/asr/model.int8.onnx"
+"$HF/$SENSE/resolve/main/tokens.txt|f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc|usr/share/npu-llm/voice/asr/tokens.txt"
+"$HF/$VITS/resolve/main/vits-zh-hf-fanchen-C.onnx|77c4bf60602d7d83f0e320063d15655e3bfc51d25b728d727203cd13e77521ab|usr/share/npu-llm/voice/tts/model.onnx"
+"$HF/$VITS/resolve/main/lexicon.txt|9af2824e49e731bf615927c768fdc36bbbe894cac57d8e0088d9c94331b07320|usr/share/npu-llm/voice/tts/lexicon.txt"
+"$HF/$VITS/resolve/main/tokens.txt|34b035b9aeb070df6188b022f29c00e0e142c7ade9f25611ced65db5e9cc8402|usr/share/npu-llm/voice/tts/tokens.txt"
+)
+
+# sherpa-onnx python bindings, unpacked into usr/lib/npu-llm/voice/ (npu-chat
+# puts that on sys.path). cp313 because the image ships python 3.13; the -core
+# wheel carries the shared libraries.
+WHEELS=(
+"https://files.pythonhosted.org/packages/13/e3/115476caa9f80cd5f55e4e7b777a6c2d01a133d10f8fae574ba869fc48c3/sherpa_onnx-1.13.8-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl|916ec38242e779ee3a99f7b161bd1bf3b02a7fad34cb073d091021c0469e0b58"
+"https://files.pythonhosted.org/packages/9c/72/02227b14cd3fb3d504a8814ad144ed321a53331948c893821e02f4abb1d7/sherpa_onnx_core-1.13.8-py3-none-manylinux2014_aarch64.whl|a51a03d55c376c32e15dd63ea852236042ba91a5cd73e253bbf7cf21f6582ba9"
 )
 
 work=$(mktemp -d)
@@ -77,7 +95,24 @@ for entry in "${FILES[@]}"; do
     echo "$sum  $f" | sha256sum -c --quiet - || die "checksum mismatch: $url"
     install -D -m 0755 "$f" "$root/$dest"
 done
-chmod 0644 "$root"/usr/share/npu-llm/*/*.json "$root"/usr/share/npu-llm/*/models/*
+chmod 0644 "$root"/usr/share/npu-llm/*/*.json "$root"/usr/share/npu-llm/*/models/* \
+    "$root"/usr/share/npu-llm/voice/*/*
+
+# voice: unpack the sherpa-onnx wheels next to the models; npu-chat puts this
+# directory on sys.path and imports sherpa_onnx from it
+for entry in "${WHEELS[@]}"; do
+    IFS='|' read -r url sum <<<"$entry"
+    f="$CACHE/$(printf '%s' "$url" | sha256sum | cut -c1-12)-$(basename "$url")"
+    if [ ! -f "$f" ]; then
+        [ "$DOWNLOAD" = 1 ] || die "not cached: $url"
+        echo "fetch $(basename "$url")"
+        curl -fsSL --retry 3 -o "$f.part" "$url" || die "download failed: $url"
+        mv "$f.part" "$f"
+    fi
+    echo "$sum  $f" | sha256sum -c --quiet - || die "checksum mismatch: $url"
+    python3 -m zipfile -e "$f" "$root/usr/lib/npu-llm/voice"
+done
+rm -rf "$root"/usr/lib/npu-llm/voice/*.dist-info
 
 # The Llama bundle ships greedy sampling (top-k 1). On this 1B model that loops
 # and burns the whole 512-token budget (65 s of repeated lines); 40 is what the
@@ -102,15 +137,19 @@ Maintainer: Quectel PI local build <root@localhost>
 Installed-Size: ${size}
 Section: misc
 Priority: optional
-Depends: libc6 (>= 2.39), libstdc++6, libgcc-s1, python3-gi, gir1.2-gtk-4.0
+Depends: libc6 (>= 2.39), libstdc++6, libgcc-s1, python3, python3-numpy, python3-gi, gir1.2-gtk-4.0
 Homepage: https://aihub.qualcomm.com/
 Description: LLMs on the QCS6490 Hexagon NPU (V68), plus a chat UI
  Qwen2.5-0.5B and Llama-3.2-1B as QAIRT context binaries, the
  genie-t2t-run runtime, its QNN HTP V68 libraries, and a fullscreen
- GTK4 chat application.
+ GTK4 chat application with offline speech input and output.
  .
  CLI: npu-llm llama3.2-1b -p "hello"
  GUI: npu-chat
+ .
+ Voice runs on the CPU with sherpa-onnx (SenseVoice ASR, VITS TTS) so it
+ keeps working while the NPU streams the answer. Needs a PipeWire session
+ for pw-record/pw-play.
  .
  GGUF models cannot use the NPU on this SoC: ggml-hexagon ships HTP
  v73/v75/v79/v81 backends only. This package is the V68 path.

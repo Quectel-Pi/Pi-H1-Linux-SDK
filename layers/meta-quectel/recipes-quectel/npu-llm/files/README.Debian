@@ -9,8 +9,10 @@ plus the genie-t2t-run runtime and the QNN HTP V68 libraries they need.
   /usr/bin/npu-llm                      CLI launcher
   /usr/bin/npu-chat                     fullscreen GTK4 chat UI
   /usr/lib/npu-llm/                     genie-t2t-run + libGenie/libQnnHtp (private)
+  /usr/lib/npu-llm/voice/               sherpa-onnx python bindings (private)
   /usr/share/npu-llm/qwen2.5-0.5b/      Qwen2.5-0.5B, W4, 1024 ctx
   /usr/share/npu-llm/llama3.2-1b/       Llama-3.2-1B, W4, 4096 ctx
+  /usr/share/npu-llm/voice/{asr,tts}/   SenseVoice ASR + VITS TTS models
   /usr/share/applications/npu-chat.desktop
 
 Both run entirely on the NPU (QnnHtp backend, cdsp domain).
@@ -48,10 +50,11 @@ package sets top-k 40, the same as the Qwen bundle: the same prompt now ends at
 EOS in 6 s. Edit /usr/share/npu-llm/<model>/model-config.json to taste
 (temp, top-k, top-p, max-num-tokens).
 
-One process runs per question: ~1.2 s to load the context binary, then the
-answer is revealed as it arrives (genie-t2t-run emits the whole answer at the
-end of generation, so the UI cannot stream token by token). If the GUI is
-killed mid-answer the child is killed with it (PR_SET_PDEATHSIG) — a surviving
+One process runs per question: ~1.2 s to load the context binary, then text
+streams into the UI as genie-t2t-run emits it (the launcher runs it under
+stdbuf so nothing is held back by pipe buffering). Stop interrupts generation
+with SIGINT and falls back to SIGKILL after 2 s. If the GUI is killed
+mid-answer the child is killed with it (PR_SET_PDEATHSIG) — a surviving
 orphan keeps the DSP busy and the next run fails with
 "Failed to create device: 14001" until reboot.
 
@@ -63,6 +66,40 @@ Measured on a Quectel PI H1 (QCS6490, 8x A55, 8 GB):
 
 The GUI defaults to llama3.2-1b (more coherent in Chinese and English); switch
 models with the chip in the top right corner.
+
+Voice: talk to it, and it talks back
+------------------------------------
+Everything is offline and on the CPU, so speech keeps working while the NPU
+streams the answer:
+
+  ASR  SenseVoice small (int8), zh/en/ja/ko/yue, ~17x real time
+  TTS  VITS fanchen-C (zh), 4 threads, ~1.4x real time
+
+In the GUI: press "mic" to start recording, press it again to stop. The
+recognition result goes into the entry as if you had typed it, then the normal
+send path runs. "speak" (on by default) reads the answer out loud sentence by
+sentence as it streams in, so the first sentence is audible ~2 s after the
+question. "stop" silences it too.
+
+Recording and playback go through PipeWire (pw-record / pw-play), not ALSA:
+this image has no alsa-utils and arecord does not exist. Both need a running
+user session — from a root shell:
+
+  systemd-run --uid=p --scope --setenv=XDG_RUNTIME_DIR=/run/user/1001 \
+      npu-chat
+
+Headless check of the whole chain (record 4 s, transcribe, speak):
+
+  NPU_LLM_VOICE=/usr/share/npu-llm/voice npu-chat --voice-selftest
+
+The TTS lexicon is Chinese only, so the text is normalised before synthesis:
+arabic digits become Chinese numerals ("25" -> 二十五, "12" -> 十二, years
+digit by digit), 60% -> 百分之六十, and anything the lexicon cannot pronounce
+(ASCII letters, emoji, markup) is dropped instead of failing the sentence.
+
+Measured on the same board: 5.6 s of speech recognised in 0.33 s (17x real
+time), a 3.9 s sentence synthesised in 2.4 s (1.4x real time) — well inside
+the ~20 tok/s the NPU produces.
 
 Why not GGUF on the NPU
 -----------------------

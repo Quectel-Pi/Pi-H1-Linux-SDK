@@ -8,12 +8,17 @@
 # as it arrives.
 
 import os
+import array
 import ctypes
+import queue
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+import wave
 
 import gi
 
@@ -41,6 +46,9 @@ window.root { background-image: linear-gradient(160deg, #0a0e17 0%, #101828 55%,
 .chip.quit { color: #ffbcbc; border-color: rgba(255,120,120,0.30);
              background-color: rgba(255,90,90,0.10); }
 .chip.quit:hover { background-color: rgba(255,90,90,0.20); }
+.chip:checked { color: #ffffff; border-color: rgba(150,185,255,0.9);
+                background-image: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%); }
+.chip:checked:hover { background-image: linear-gradient(135deg, #4f8ffb 0%, #7580f5 100%); }
 .chip:disabled { color: #4c5670; border-color: rgba(120,160,255,0.12);
                  background-color: rgba(80,120,255,0.05); }
 scrolled { background: transparent; }
@@ -68,6 +76,7 @@ scrolled > viewport { background: transparent; }
         border-radius: 999px; min-width: 50px; min-height: 50px;
         box-shadow: none; text-shadow: none; border: none; }
 .send:hover { background-image: linear-gradient(135deg, #4f92ff, #7b7df7); }
+.send.listening { background-image: linear-gradient(135deg, #ef4444, #f97316); }
 .send:disabled { color: #55607a; background-image: none;
                  background-color: rgba(255,255,255,0.05); }
 .status { font-family: "Noto Sans CJK SC", sans-serif; font-size: 11px; color: #5f6c85;
@@ -203,6 +212,331 @@ def _die_with_parent():
             pass
 
 
+# ---------------------------------------------------------------------- voice
+# Offline ASR + TTS, nothing leaves the board: sherpa-onnx with SenseVoice small
+# for speech in and VITS for speech out, both on the CPU while the LLM keeps the
+# DSP. Measured on this board: ASR ~17x real time (0.3 s for 5.6 s of audio),
+# TTS ~1.9x real time at 4 threads. Capture and playback use PipeWire
+# (pw-record/pw-play) and fall back to ALSA (arecord/aplay).
+VOICE = os.environ.get("NPU_LLM_VOICE", "/usr/share/npu-llm/voice")
+SHERPA = os.environ.get("NPU_LLM_SHERPA", "/usr/lib/npu-llm/voice")
+ASR_FILES = ("model.int8.onnx", "tokens.txt")
+TTS_FILES = ("model.onnx", "lexicon.txt", "tokens.txt")
+ENDERS = "。！？!?；;\n"
+# hands-free listening: speech must cross SPEECH_RMS before trailing silence can
+# end the utterance. Measured on this board: ambient ~40, normal speech ~400.
+SPEECH_RMS = 150
+SILENCE_S = 0.8
+# VITS speaking rate; TTS_SPEED=1.5 is the fastest that still sounds natural.
+TTS_SPEED = float(os.environ.get("NPU_LLM_TTS_SPEED", "1.3"))
+
+_sx = None
+_asr = None
+_tts = None
+_chars = None
+_lock = threading.Lock()
+_gen = threading.Lock()
+
+DIGITS = "零一二三四五六七八九"
+UNITS = ("", "十", "百", "千")
+SAY_MAP = {"+": "加", "=": "等于", "×": "乘", "÷": "除以", "&": "和"}
+
+
+def cn_number(s):
+    """'12' -> 十二, '105' -> 一百零五; digit by digit past four places so
+    years and long ids stay recognisable."""
+    s = s.lstrip("0") or "0"
+    if s == "0":
+        return "零"
+    if len(s) > 4:
+        return "".join(DIGITS[int(c)] for c in s)
+    out = []
+    for i, ch in enumerate(s):
+        v = int(ch)
+        if v:
+            out.append(DIGITS[v] + UNITS[len(s) - i - 1])
+        elif out and out[-1] != "零":
+            out.append("零")
+    text = "".join(out).rstrip("零")
+    return text[1:] if text.startswith("一十") else text
+
+
+def _speakable_chars():
+    """The VITS lexicon has no arabic digits and few symbols: anything outside
+    its character set is dropped, digits are read out in Chinese."""
+    global _chars
+    if _chars is None:
+        cs = set("，。！？、；：—…·")
+        with open(os.path.join(VOICE, "tts", "lexicon.txt"), encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    cs.add(line.split(" ", 1)[0])
+        _chars = cs
+    return _chars
+
+
+def speakable(text):
+    cs = _speakable_chars()
+    out, i = [], 0
+    while i < len(text):
+        ch = text[i]
+        if ch.isdigit():
+            j = i
+            while j < len(text) and text[j].isdigit():
+                j += 1
+            out.append(cn_number(text[i:j]))
+            i = j
+            continue
+        if ch == "%":  # 60% reads as 百分之六十, so it goes in front of the number
+            if out and out[-1] and out[-1][-1] in DIGITS + "十百千":
+                out[-1] = "百分之" + out[-1]
+            else:
+                out.append("百分之")
+            i += 1
+            continue
+        if ch in cs:
+            out.append(ch)
+        elif ch in SAY_MAP:
+            out.append(SAY_MAP[ch])
+        i += 1
+    return "".join(out)
+
+
+def voice_ready():
+    return all(
+        os.path.isfile(os.path.join(VOICE, d, f))
+        for d, fs in (("asr", ASR_FILES), ("tts", TTS_FILES))
+        for f in fs
+    )
+
+
+def _sherpa():
+    global _sx
+    if _sx is None:
+        if SHERPA not in sys.path:
+            sys.path.insert(0, SHERPA)
+        import sherpa_onnx
+
+        _sx = sherpa_onnx
+    return _sx
+
+
+def speech_engine():
+    global _tts
+    with _lock:
+        if _tts is None:
+            sx = _sherpa()
+            cfg = sx.OfflineTtsConfig(
+                model=sx.OfflineTtsModelConfig(
+                    vits=sx.OfflineTtsVitsModelConfig(
+                        model=os.path.join(VOICE, "tts", "model.onnx"),
+                        lexicon=os.path.join(VOICE, "tts", "lexicon.txt"),
+                        tokens=os.path.join(VOICE, "tts", "tokens.txt"),
+                    ),
+                    num_threads=4,  # 4 is the sweet spot here, 8 is slower
+                ),
+                max_num_sentences=1,
+            )
+            _tts = sx.OfflineTts(cfg)
+    return _tts
+
+
+def transcribe(path):
+    global _asr
+    with _lock:
+        if _asr is None:
+            sx = _sherpa()
+            _asr = sx.OfflineRecognizer.from_sense_voice(
+                model=os.path.join(VOICE, "asr", "model.int8.onnx"),
+                tokens=os.path.join(VOICE, "asr", "tokens.txt"),
+                use_itn=True,
+                language="zh",
+                num_threads=2,
+            )
+    import numpy as np
+
+    with wave.open(path) as w:
+        sr = w.getframerate()
+        pcm = w.readframes(w.getnframes())
+    if not pcm:
+        return ""
+    samples = np.frombuffer(pcm, dtype="<i2").astype("float32") / 32768.0
+    s = _asr.create_stream()
+    s.accept_waveform(sr, samples)
+    _asr.decode_stream(s)
+    return s.result.text.strip()
+
+
+def synth(text, out):
+    """Write one sentence to a 16-bit wav; returns its duration in seconds."""
+    import array
+
+    spoken = speakable(text)
+    if not spoken.strip("，。！？、；：—…·"):
+        return 0.0
+    with _gen:
+        audio = speech_engine().generate(spoken, sid=0, speed=TTS_SPEED)
+    a = array.array("h", (int(max(-1.0, min(1.0, x)) * 32767) for x in audio.samples))
+    with wave.open(out, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(audio.sample_rate)
+        w.writeframes(a.tobytes())
+    return len(a) / audio.sample_rate
+
+
+def player():
+    for c in ("pw-play", "aplay"):
+        if shutil.which(c):
+            return [c]
+    return None
+
+
+def recorder():
+    if shutil.which("pw-record"):
+        return ["pw-record", "--rate", "16000", "--channels", "1", "--format", "s16"]
+    if shutil.which("arecord"):
+        return ["arecord", "-q", "-f", "S16_LE", "-r", "16000", "-c", "1", "-t", "wav"]
+    return None
+
+
+def new_sentences(text, pos):
+    """Sentences completed after pos; the trailing partial stays buffered.
+
+    Only "N." inside a number would trip the latin full stop, so it needs a
+    following space to count as an end of sentence.
+    """
+    out, start = [], pos
+    for i in range(pos, len(text)):
+        ch = text[i]
+        end = ch in ENDERS or (ch == "." and i + 1 < len(text) and text[i + 1].isspace())
+        if end:
+            piece = text[start : i + 1].strip()
+            if len(piece) > 1:
+                out.append(piece)
+            start = i + 1
+    return out, start
+
+
+class Speaker:
+    """Synthesise and play sentence by sentence while the LLM is still writing."""
+
+    def __init__(self):
+        self.q = queue.Queue()
+        self.serial = 0
+        self.p = None
+        self.active = False
+        self.t = threading.Thread(target=self._run, daemon=True)
+        self.t.start()
+
+    def idle(self):
+        """True once every queued sentence has finished playing."""
+        return not self.active and self.q.empty()
+
+    def say(self, text):
+        if text.strip():
+            self.q.put((self.serial, text.strip()))
+
+    def close(self):
+        """Join the worker before the process exits: if the interpreter tears
+        down while an onnxruntime session is initialising, the C++ side aborts
+        ("GetElementType is not implemented" then "terminate called")."""
+        self.cancel()
+        self.q.put((self.serial, None))
+        self.t.join(5)
+
+    def cancel(self):
+        self.serial += 1
+        while True:
+            try:
+                self.q.get_nowait()
+            except queue.Empty:
+                break
+        p, self.p = self.p, None
+        if p is not None and p.poll() is None:
+            p.kill()
+
+    def _run(self):
+        cmd = player()
+        while True:
+            serial, text = self.q.get()
+            if text is None:
+                return
+            if serial != self.serial or cmd is None:
+                continue
+            fn = os.path.join(tempfile.gettempdir(), f"npu-chat-say-{serial}.wav")
+            dbg = os.environ.get("NPU_LLM_DEBUG")
+            self.active = True
+            try:
+                secs = synth(text, fn)
+            except Exception as e:  # a broken TTS model must not kill the GUI
+                print(f"npu-chat: tts failed: {e}", file=sys.stderr)
+                self.active = False
+                continue
+            if dbg:
+                print(f"npu-chat: say {len(text)}ch -> {secs:.2f}s", file=sys.stderr)
+            if serial != self.serial or secs <= 0:
+                self.active = False
+                continue
+            self.p = subprocess.Popen(
+                cmd + [fn], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                preexec_fn=_die_with_parent,
+            )
+            rc = self.p.wait()
+            if dbg:
+                print(f"npu-chat: play rc={rc} {cmd[0]}", file=sys.stderr)
+            self.p = None
+            self.active = False
+            try:
+                os.unlink(fn)
+            except OSError:
+                pass
+
+
+def tail_rms(path, ms=200):
+    """RMS of the last `ms` of a wav that is still being written, else None."""
+    try:
+        with open(path, "rb") as f:
+            end = f.seek(0, os.SEEK_END)
+            if end < 44 + 3200:
+                return None
+            f.seek(max(44, end - ms * 32))  # 16 kHz s16 mono = 32 bytes/ms
+            raw = f.read()
+    except OSError:
+        return None
+    a = array.array("h")
+    a.frombytes(raw[: len(raw) & ~1])
+    return (sum(x * x for x in a) / len(a)) ** 0.5 if a else None
+
+
+class Recorder:
+    """Push to talk: start on the first click, stop on the second."""
+
+    def __init__(self, path="/tmp/npu-chat-utt.wav"):
+        self.path = path
+        self.p = None
+
+    def start(self):
+        cmd = recorder()
+        if cmd is None:
+            raise RuntimeError("需要 pw-record 或 arecord")
+        self.p = subprocess.Popen(
+            cmd + [self.path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            preexec_fn=_die_with_parent,
+        )
+
+    def stop(self):
+        p, self.p = self.p, None
+        if p is not None and p.poll() is None:
+            p.send_signal(signal.SIGINT)  # both tools finalise the wav header here
+            try:
+                p.wait(3)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait()
+        return self.path
+
+
 class Chat(Gtk.Application):
     shot = None
     ask_text = None
@@ -225,7 +559,7 @@ class Chat(Gtk.Application):
         names = models()
         self.model = names[0] if names else None
         for n in names:
-            if "llama" in n:
+            if "qwen" in n:  # 3x the tok/s of llama on V68, better for voice turns
                 self.model = n
                 break
         if self.want_model in names:
@@ -260,6 +594,13 @@ class Chat(Gtk.Application):
         self.stop_btn.set_sensitive(False)
         self.stop_btn.connect("clicked", self.stop)
         head.append(self.stop_btn)
+
+        self.speak_btn = Gtk.ToggleButton(label="🔊 朗读")
+        self.speak_btn.add_css_class("chip")
+        self.speak_btn.set_sensitive(voice_ready())
+        self.speak_btn.set_active(voice_ready())
+        self.speak_btn.connect("toggled", lambda b: None if b.get_active() else self.hush())
+        head.append(self.speak_btn)
 
         self.clear_btn = Gtk.Button(label="清空")
         self.clear_btn.add_css_class("chip")
@@ -303,6 +644,12 @@ class Chat(Gtk.Application):
 
         self.history = []
         self.busy = False
+        self.rec = None
+        self.hold = 0
+        self.cap = 0
+        self.vstop = None
+        self.speaker = None
+        self.speech_pos = 0
         self.show_welcome()
 
         # ---- input
@@ -311,14 +658,25 @@ class Chat(Gtk.Application):
         bar.set_margin_bottom(4)
         self.entry = Gtk.Entry()
         self.entry.add_css_class("entry")
-        self.entry.set_placeholder_text("输入消息…")
+        self.entry.set_placeholder_text("输入消息，或按住 ↑ 说话…")
         self.entry.set_hexpand(True)
         self.entry.connect("activate", self.send)
         self.send_btn = Gtk.Button(label="↑")
         self.send_btn.add_css_class("send")
-        self.send_btn.connect("clicked", self.send)
+        self.send_btn.set_tooltip_text("点一下发送，按住说话")
+        hold = Gtk.GestureClick()
+        hold.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
+        hold.connect("pressed", self.talk_press)
+        hold.connect("released", self.talk_release)
+        self.send_btn.add_controller(hold)
         bar.append(self.entry)
         bar.append(self.send_btn)
+        self.cont_btn = Gtk.ToggleButton(label="🔁 连续对话")
+        self.cont_btn.add_css_class("chip")
+        self.cont_btn.set_sensitive(voice_ready())
+        self.cont_btn.set_tooltip_text("回答读完自动再次开麦，接着问下一句")
+        self.cont_btn.connect("toggled", self.cont_toggled)
+        bar.append(self.cont_btn)
         col.append(bar)
 
         self.status = Gtk.Label(label="就绪", xalign=0)
@@ -336,6 +694,11 @@ class Chat(Gtk.Application):
         elif self.shot:
             GLib.timeout_add(1500, self.take_shot)
 
+    def quit(self):
+        if self.speaker is not None:
+            self.speaker.close()
+        super().quit()
+
     def take_shot(self):
         """--shot PATH: render the window to a PNG (kiosk diagnostics)."""
         w, h = self.win.get_width(), self.win.get_height()
@@ -349,7 +712,168 @@ class Chat(Gtk.Application):
         self.quit()
         return False
 
-    # ---------------------------------------------------------------- helpers
+    # ------------------------------------------------------------------ voice
+    LONG_PRESS = 350  # ms on the send button before it starts listening
+
+    def cont_toggled(self, btn):
+        if btn.get_active():
+            if voice_ready():
+                self.speak_btn.set_active(True)  # a hands-free loop has to talk back
+            self.status.set_text("连续对话：回答读完自动开麦")
+            if not self.busy:
+                self.next_turn()
+        elif self.vstop is not None:
+            self.vstop.set()  # cut the hands-free listen; ASR still runs
+
+    def next_turn(self):
+        """After a turn finishes, reopen the mic once the answer stopped playing."""
+        if not self.cont_btn.get_active() or not voice_ready():
+            return False
+        if self.busy or self.rec is not None:
+            return False
+        sp = self.speaker
+        if sp is not None and not sp.idle():
+            GLib.timeout_add(400, self.next_turn)
+            return False
+        self._auto_listen()
+        return False
+
+    def _auto_listen(self):
+        if not self.cont_btn.get_active() or self.busy or self.rec is not None:
+            return False
+        self.hush()  # playback and capture share the PipeWire graph
+        try:
+            rec = Recorder()
+            rec.start()
+        except Exception as e:
+            self.status.set_text(f"录音失败：{e}")
+            return False
+        self.rec = rec
+        self.vstop = threading.Event()
+        self.send_btn.set_label("●")
+        self.send_btn.add_css_class("listening")
+        self.status.set_text("在听…说完自动发送")
+        threading.Thread(target=self._vad, args=(rec, self.vstop), daemon=True).start()
+        return False
+
+    def _vad(self, rec, stop):
+        """End the utterance on trailing silence; 20 s hard cap."""
+        deadline = time.monotonic() + 20
+        spoke, quiet = False, 0.0
+        while not stop.is_set() and time.monotonic() < deadline:
+            time.sleep(0.2)
+            rms = tail_rms(rec.path)
+            if rms is None:
+                continue
+            if rms >= SPEECH_RMS:
+                spoke, quiet = True, 0.0
+            elif spoke:
+                quiet += 0.2
+                if quiet >= SILENCE_S:
+                    break
+        if self.rec is rec:
+            self.rec = None
+            rec.stop()
+            GLib.idle_add(self._auto_done, rec.path)
+        return
+
+    def _auto_done(self, path):
+        self.vstop = None
+        self.send_btn.set_label("↑")
+        self.send_btn.remove_css_class("listening")
+        self.status.set_text("识别中…")
+        threading.Thread(target=self._hear, args=(path,), daemon=True).start()
+        return False
+
+    def talk_press(self, *_):
+        """Press and hold ↑ to talk: recording starts once the press sticks."""
+        if self.rec is not None:
+            if self.vstop is not None:  # hands-free listen: tap to go straight to ASR
+                self.vstop.set()
+            return
+        if self.busy or not voice_ready():
+            return
+        self.hold = GLib.timeout_add(self.LONG_PRESS, self._start_talk)
+
+    def _start_talk(self):
+        self.hold = 0
+        if self.busy:
+            return False
+        self.hush()  # playback and capture share the PipeWire graph
+        try:
+            self.rec = Recorder()
+            self.rec.start()
+        except Exception as e:
+            self.rec = None
+            self.status.set_text(f"录音失败：{e}")
+            return False
+        self.send_btn.set_label("●")
+        self.send_btn.add_css_class("listening")
+        self.status.set_text("正在听…松开发送")
+        # a lost release (finger off the screen) must not record until the app dies
+        self.cap = GLib.timeout_add_seconds(60, self._talk_cap)
+        return False
+
+    def _talk_cap(self):
+        self.cap = 0
+        self.talk_release()
+        return False
+
+    def talk_release(self, *_):
+        if self.cap:
+            GLib.source_remove(self.cap)
+            self.cap = 0
+        if self.hold:
+            GLib.source_remove(self.hold)
+            self.hold = 0
+            self.send()  # a plain tap still sends, and the mic never opened
+            return
+        rec, self.rec = self.rec, None
+        if rec is None:
+            return
+        self.send_btn.set_label("↑")
+        self.send_btn.remove_css_class("listening")
+        path = rec.stop()
+        self.status.set_text("识别中…")
+        threading.Thread(target=self._hear, args=(path,), daemon=True).start()
+
+    def _hear(self, path):
+        text, err = "", None
+        try:
+            text = transcribe(path)
+        except Exception as e:  # model missing, no audio, ...
+            err = str(e)
+        GLib.idle_add(self._heard, text, err)
+
+    def _heard(self, text, err):
+        if err:
+            self.status.set_text(f"识别失败：{err}")
+        elif not text:
+            self.status.set_text("没听清，再说一次")
+            if self.cont_btn.get_active():
+                GLib.timeout_add(600, self._auto_listen)
+        else:
+            self.status.set_text(f"听到：{text}")
+            # a spoken question always gets a spoken answer
+            if voice_ready():
+                self.speak_btn.set_active(True)
+            self.fire(text)
+        return False
+
+    def feed_speech(self, full):
+        """Hand every finished sentence to the speaker while text still streams."""
+        if not self.speak_btn.get_active() or not voice_ready():
+            return
+        if self.speaker is None:
+            self.speaker = Speaker()
+        parts, self.speech_pos = new_sentences(full, self.speech_pos)
+        for p in parts:
+            self.speaker.say(p)
+
+    def hush(self):
+        if self.speaker is not None:
+            self.speaker.cancel()
+
     def pick(self, name, pop):
         self.model = name
         self.chip.set_label(name)
@@ -360,7 +884,9 @@ class Chat(Gtk.Application):
         """Cut the turn short. SIGINT first; genie usually exits in ~0.1 s and the
         DSP is free for the next turn, SIGKILL is only a backstop."""
         p = getattr(self, "job", {}).get("p")
+        self.hush()
         if p is None or p.poll() is not None:
+            self.status.set_text("已停止朗读")
             return
         self.job["stop"] = True
         p.send_signal(signal.SIGINT)
@@ -376,6 +902,7 @@ class Chat(Gtk.Application):
     def clear(self, *_):
         if getattr(self, "busy", False):
             return
+        self.hush()
         while self.list.get_first_child() is not None:
             self.list.remove(self.list.get_first_child())
         self.history = []
@@ -473,6 +1000,8 @@ class Chat(Gtk.Application):
         self.entry.set_text("")
         self.busy = True
         self.job = {"p": None, "stop": False}
+        self.speech_pos = 0
+        self.hush()
         self.send_btn.set_sensitive(False)
         self.stop_btn.set_sensitive(True)
         self.chip.add_css_class("busy")
@@ -503,6 +1032,7 @@ class Chat(Gtk.Application):
                 body.set_selectable(True)
             phase["got"] = len(txt)
             body.set_text(txt)
+            self.feed_speech(txt)
             self.glide()
             return False
 
@@ -546,6 +1076,12 @@ class Chat(Gtk.Application):
                 return False
             show(txt)
             self.history.append(("assistant", txt))
+            tail = txt[self.speech_pos :].strip()
+            if tail and self.speak_btn.get_active() and voice_ready():
+                if self.speaker is None:
+                    self.speaker = Speaker()
+                self.speaker.say(tail)
+                self.speech_pos = len(txt)
             approx = tokens(txt) / dt if dt > 0 else 0
             tag = "已停止" if stopped else f"{dt:0.1f}s"
             self.status.set_text(f"{self.model}  ·  {tag}  ·  约 {approx:0.1f} tok/s")
@@ -555,6 +1091,8 @@ class Chat(Gtk.Application):
                     GLib.timeout_add(1800, self.take_shot)
                 else:
                     self.quit()
+            else:
+                GLib.timeout_add(200, self.next_turn)
             return False
 
         threading.Thread(target=work, daemon=True).start()
@@ -580,13 +1118,74 @@ def selftest():
     assert t is None and "error" in e, (t, e)
     assert abs(tokens("hello world") - 2.75) < 0.01, tokens("hello world")
     assert abs(tokens("秋天") - 2) < 0.01, tokens("秋天")
+
+    # voice: finished sentences leave the buffer, the tail stays for the next
+    # chunk, and decimals are not mistaken for sentence ends
+    assert new_sentences("今天晴。气温二十度", 0) == (["今天晴。"], 4)
+    assert new_sentences("今天晴。气温二十度。", 4) == (["气温二十度。"], 10)
+    assert new_sentences("你好", 0) == ([], 0)
+    assert new_sentences("pi is 3.14 ok. done", 0) == (["pi is 3.14 ok."], 14)
+    assert new_sentences("雨。", 0)[0] == ["雨。"]
+    assert cn_number("0") == "零"
+    assert cn_number("12") == "十二"
+    assert cn_number("105") == "一百零五"
+    assert cn_number("2024") == "二千零二十四"
+    assert cn_number("123456") == "一二三四五六"
+    if voice_ready():
+        assert speakable("他买了10个面包。") == "他买了十个面包。"
+        assert speakable("3+2=5") == "三加二等于五"
+        assert speakable("温度25℃") == "温度二十五"
+        assert speakable("湿度60%") == "湿度百分之六十"
+        assert speakable("%") == "百分之"
+        assert speakable("<|endoftext|>") == ""
+    # hands-free VAD: read the tail of a wav that is still being written
+    p = os.path.join(tempfile.gettempdir(), "npu-chat-rms.wav")
+    with open(p, "wb") as f:
+        f.write(b"\0" * 44)
+        f.write(array.array("h", [0] * 1600 + [1000] * 1600).tobytes())
+    assert 600 < tail_rms(p) < 800, tail_rms(p)
+    assert tail_rms("/dev/null") is None
+    os.unlink(p)
     print("selftest ok")
+
+
+def voice_selftest(seconds=4):
+    """End-to-end check without the GUI: record, transcribe, then speak."""
+    if not voice_ready():
+        print(f"voice payload missing under {VOICE}")
+        return 1
+    print("recorder:", recorder(), "player:", player())
+    r = Recorder("/tmp/npu-chat-selftest.wav")
+    r.start()
+    print(f"recording {seconds}s — say something now")
+    time.sleep(seconds)
+    path = r.stop()
+    t0 = time.monotonic()
+    text = transcribe(path)
+    print(f"ASR {time.monotonic() - t0:0.2f}s: {text!r}")
+    out = "/tmp/npu-chat-selftest-tts.wav"
+    t0 = time.monotonic()
+    secs = synth("语音链路正常。", out)
+    dt = time.monotonic() - t0
+    print(f"TTS {dt:0.2f}s for {secs:0.2f}s audio ({secs / dt:0.2f}x real time)")
+    cmd = player()
+    if cmd:
+        t0 = time.monotonic()
+        subprocess.run(cmd + [out], check=False)
+        print(f"played in {time.monotonic() - t0:0.2f}s")
+    return 0
 
 
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         selftest()
         sys.exit(0)
+    if "--voice-selftest" in sys.argv:
+        i = sys.argv.index("--voice-selftest")
+        try:
+            sys.exit(voice_selftest(int(sys.argv[i + 1])))
+        except (IndexError, ValueError):
+            sys.exit(voice_selftest())
     shot = None
     if "--shot" in sys.argv:
         shot = sys.argv[sys.argv.index("--shot") + 1]
