@@ -1,0 +1,108 @@
+#!/bin/sh
+# npu-llm — run a pre-compiled LLM on the QCS6490 Hexagon NPU (V68).
+#
+#   npu-llm list
+#   npu-llm qwen2.5-0.5b -p "Write three sentences about the sea."
+#   npu-llm llama3.2-1b -p "hi" --profile /tmp/prof.json
+#
+# Arguments after the model name go straight to genie-t2t-run(1).
+set -e
+
+ROOT="${NPU_LLM_ROOT:-/usr/lib/npu-llm}"
+DATA="${NPU_LLM_DATA:-/usr/share/npu-llm}"
+
+usage() {
+    cat <<'EOF'
+usage: npu-llm <model> [options...]
+       npu-llm <model> -i          interactive chat on stdin/stdout
+
+models (QAIRT context binaries, run on the Hexagon V68 NPU):
+  qwen2.5-0.5b    Qwen2.5-0.5B  W4, 1024 ctx   ~20 tok/s
+  llama3.2-1b     Llama-3.2-1B  W4, 4096 ctx   ~8 tok/s
+
+examples:
+  npu-llm qwen2.5-0.5b -p "Write three sentences about the sea."
+  npu-llm llama3.2-1b -i                 # type, Enter, repeat; Ctrl-D quits
+  npu-llm llama3.2-1b --prompt_file /tmp/p.txt --profile /tmp/p.json
+EOF
+}
+
+case "${1:-}" in
+    ""|-h|--help|help|list) usage; exit 0 ;;
+esac
+
+model="$1"
+shift
+dir="$DATA/$model"
+[ -f "$dir/model-config.json" ] || {
+    echo "npu-llm: no such model: $model" >&2
+    usage >&2
+    exit 2
+}
+
+# The dialog JSON refers to tokenizer.json and models/*.bin relative to the
+# working directory, so run from the model directory.
+cd "$dir"
+
+LD_LIBRARY_PATH="$ROOT${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+ADSP_LIBRARY_PATH="$ROOT${ADSP_LIBRARY_PATH:+:$ADSP_LIBRARY_PATH}"
+export LD_LIBRARY_PATH ADSP_LIBRARY_PATH
+
+# Interactive chat. genie-t2t-run has no REPL, so every turn is a fresh process:
+# ~1.2 s to load the context binary, then the whole history is re-prefilled.
+repl() {
+    case "$model" in
+        llama*) fam=llama ;;
+        qwen*)  fam=qwen ;;
+        *)      echo "npu-llm: -i not supported for $model" >&2; exit 2 ;;
+    esac
+
+    hist=$(mktemp)
+    pfile=$(mktemp)
+    trap 'rm -f "$hist" "$pfile"' EXIT
+
+    tmpl() {
+        if [ "$fam" = llama ]; then
+            awk -F'\t' '{printf "<|start_header_id|>%s<|end_header_id|>\n\n%s<|eot_id|>", $1, $2}' "$hist"
+            printf '<|start_header_id|>assistant<|end_header_id|>\n\n'
+        else
+            awk -F'\t' '{printf "<|im_start|>%s\n%s<|im_end|>\n", $1, $2}' "$hist"
+            printf '<|im_start|>assistant\n'
+        fi
+    }
+
+    echo "npu-llm: $model on the Hexagon NPU. Ctrl-D or 'exit' to quit."
+    while printf '你> ' && IFS= read -r line; do
+        case "$line" in
+            ""|exit|quit) printf '\n'; break ;;
+        esac
+        printf 'user\t%s\n' "$line" >> "$hist"
+        # ponytail: last 6 turns only -- the Qwen bundle has a 1024-token context
+        # and blows past it after a few exchanges. Raise when a bigger ctx lands.
+        tail -n 6 "$hist" > "$hist.t" && mv "$hist.t" "$hist"
+        tmpl > "$pfile"
+        out=$("$ROOT/genie-t2t-run" -c model-config.json --prompt_file "$pfile" 2>/dev/null || true)
+        # awk, not sed: the answer is usually one line "[BEGIN]: x[END]", and a
+        # sed /BEGIN/,/END/ range doesn't test the end pattern on the start line,
+        # so it would run on to EOF and swallow the rpcmem banner.
+        ans=$(printf '%s\n' "$out" | awk '
+            /\[BEGIN\]:/ { on = 1; sub(/^\[BEGIN\]:[ \t]*/, "") }
+            on { if (sub(/\[END\].*/, "")) { print; on = 0 } else print }
+        ')
+        if [ -z "$ans" ]; then
+            printf '（推理失败：%s）\n' "$(printf '%s\n' "$out" | grep -iE 'rror|ailed' | head -1)"
+            continue
+        fi
+        printf '%s\n\n' "$ans"
+        printf 'assistant\t%s\n' "$(printf '%s' "$ans" | tr '\n' ' ')" >> "$hist"
+    done
+}
+
+
+case "${1:-}" in
+    -i|--interactive) repl; exit 0 ;;
+esac
+
+# stdbuf: genie-t2t-run never flushes, so on a pipe or a tty the answer only
+# appears once the process exits. Unbuffered it trickles out token by token.
+exec stdbuf -o0 -e0 "$ROOT/genie-t2t-run" -c model-config.json "$@"

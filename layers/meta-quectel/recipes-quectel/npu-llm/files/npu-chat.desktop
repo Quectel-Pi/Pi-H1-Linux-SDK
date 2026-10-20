@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=NPU Chat
+Name[zh_CN]=NPU 对话
+Comment=Chat with LLMs running on the Hexagon NPU
+Comment[zh_CN]=和跑在 Hexagon NPU 上的大模型对话
+Exec=npu-chat
+Icon=npu-chat
+Terminal=false
+Categories=Utility;
+Keywords=NPU;LLM;AI;chat;
+StartupNotify=false

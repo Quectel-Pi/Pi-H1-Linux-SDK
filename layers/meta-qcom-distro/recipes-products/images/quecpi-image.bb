@@ -40,6 +40,7 @@ IMAGE_INSTALL:append = " \
                     sysdig-quectel \
                     btrfs-tools \
                     qcom-npu-test \
+                    npu-llm \
                 "
 
 IMAGE_INSTALL:remove = " \

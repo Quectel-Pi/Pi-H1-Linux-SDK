@@ -1,0 +1,95 @@
+npu-llm — LLM on the QCS6490 Hexagon NPU (V68)
+==============================================
+
+What this is
+------------
+Two LLMs pre-compiled as QAIRT context binaries for Hexagon V68 (QCS6490),
+plus the genie-t2t-run runtime and the QNN HTP V68 libraries they need.
+
+  /usr/bin/npu-llm                      CLI launcher
+  /usr/bin/npu-chat                     fullscreen GTK4 chat UI
+  /usr/lib/npu-llm/                     genie-t2t-run + libGenie/libQnnHtp (private)
+  /usr/share/npu-llm/qwen2.5-0.5b/      Qwen2.5-0.5B, W4, 1024 ctx
+  /usr/share/npu-llm/llama3.2-1b/       Llama-3.2-1B, W4, 4096 ctx
+  /usr/share/applications/npu-chat.desktop
+
+Both run entirely on the NPU (QnnHtp backend, cdsp domain).
+
+Usage
+-----
+  npu-chat                              # fullscreen chat, no window chrome
+  npu-llm list
+  npu-llm qwen2.5-0.5b -i               # interactive chat on stdin/stdout
+  npu-llm qwen2.5-0.5b -p "Write three sentences about the sea."
+  npu-llm llama3.2-1b  -p "hi" --profile /tmp/prof.json
+
+No GUI needed: -i gives a REPL on any terminal (serial console, ssh, adb
+shell). Type a line, press Enter, get the answer; Ctrl-D or "exit" quits. It
+keeps the last 6 turns in the prompt. Every turn reloads the context binary
+(~1.2 s) and re-prefills the history, because genie-t2t-run has no session
+model — expect ~2 s overhead on top of generation.
+
+Over adb from a host:
+
+  ./quectel_build/tools/adb -s <serial> shell npu-llm qwen2.5-0.5b -i
+
+qwen2.5-0.5b is the faster one and much better at Chinese; llama3.2-1b is more
+coherent in English. Neither keeps state between runs of the one-shot -p form.
+
+The GUI needs a Wayland or X session (log in on the HDMI output — tty1 shows
+the GDM greeter; pick user `p`). It is undecorated and fullscreen by design;
+Esc quits. To start it automatically at login, copy the .desktop file:
+
+  cp /usr/share/applications/npu-chat.desktop /etc/xdg/autostart/
+
+Sampling: the Llama bundle shipped greedy sampling (top-k 1) and looped until
+it hit the 512-token cap (65 s of repeated lines on the poem prompt). This
+package sets top-k 40, the same as the Qwen bundle: the same prompt now ends at
+EOS in 6 s. Edit /usr/share/npu-llm/<model>/model-config.json to taste
+(temp, top-k, top-p, max-num-tokens).
+
+One process runs per question: ~1.2 s to load the context binary, then the
+answer is revealed as it arrives (genie-t2t-run emits the whole answer at the
+end of generation, so the UI cannot stream token by token). If the GUI is
+killed mid-answer the child is killed with it (PR_SET_PDEATHSIG) — a surviving
+orphan keeps the DSP busy and the next run fails with
+"Failed to create device: 14001" until reboot.
+
+Measured on a Quectel PI H1 (QCS6490, 8x A55, 8 GB):
+
+  model            prefill      decode
+  qwen2.5-0.5b     160 tok/s    20.3 tok/s
+  llama3.2-1b      48.6 tok/s    7.9 tok/s
+
+The GUI defaults to llama3.2-1b (more coherent in Chinese and English); switch
+models with the chip in the top right corner.
+
+Why not GGUF on the NPU
+-----------------------
+ggml-hexagon (llama.cpp) ships backends for HTP v73/v75/v79/v81 only. On a
+V68 part it caps the arch to v73 and fails at session setup:
+
+  ggml-hex: Hexagon arch v68 is under supported range, capping at v73
+  ggml-hex: dspqueue_read failed: 0x0000002e
+
+So GGUF models (including Qwen3.5) are CPU-only here. The NPU path requires a
+context binary compiled for V68, which is what this package ships.
+
+Qwen3.5 in particular cannot be compiled for the NPU: it is a hybrid
+architecture (qwen3_5: 3x linear_attention + 1x full_attention per block) and
+libQnnGenAiTransformer only supports GPT2/GPTJ/LLAMA/QWEN graphs.
+
+Provenance
+----------
+Binaries and weights come from the radxa ModelScope bundles
+(radxa/Qwen2.5-0.5B-v68, radxa/Llama3.2-1B-4096-qairt-v68), built with
+Qualcomm AI Runtime 2.40.1. They are third-party Qualcomm redistributables:
+check your licence before shipping them in a product image.
+
+Adding a model
+--------------
+A bundle needs: model-config.json (dialog JSON), tokenizer.json,
+htp_backend_ext_config.json and models/*.bin, all in one directory, plus the
+V68 runtime libraries (shared, already in /usr/lib/npu-llm). Prebuilt V68
+bundles are scarce — Qualcomm AI Hub publishes V73+ only for current models,
+so anything else has to be compiled with QAIRT for V68 yourself.

@@ -1,0 +1,604 @@
+#!/usr/bin/env python3
+# npu-chat — fullscreen chat UI for the QCS6490 Hexagon NPU (V68).
+#
+# Talks to genie-t2t-run from the npu-llm package. One process per turn: the
+# model reload costs ~1.2 s, the rest is generation. genie-t2t-run prints each
+# token as it lands, but stdio is fully buffered when stdout is a pipe, so it
+# runs under `stdbuf -o0` and the reader thread mirrors the text into the bubble
+# as it arrives.
+
+import os
+import ctypes
+import signal
+import subprocess
+import sys
+import threading
+import time
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+from gi.repository import GLib, Gtk, Graphene, Pango  # noqa: E402
+
+ROOT = os.environ.get("NPU_LLM_ROOT", "/usr/lib/npu-llm")
+DATA = os.environ.get("NPU_LLM_DATA", "/usr/share/npu-llm")
+
+CSS = b"""
+window.root { background-image: linear-gradient(160deg, #0a0e17 0%, #101828 55%, #0d1524 100%); }
+.column { }
+.header { padding: 22px 8px 10px 8px; }
+.title { font-family: "Noto Sans CJK SC", "Noto Sans", sans-serif; font-size: 21px;
+         font-weight: 700; color: #f2f6ff; letter-spacing: 0.3px; }
+.subtitle { font-family: "Noto Sans CJK SC", sans-serif; font-size: 11px;
+            color: #7d8aa5; letter-spacing: 1.4px; }
+.chip { font-family: "Noto Sans CJK SC", sans-serif; font-size: 12px; font-weight: 600;
+        color: #cfe0ff; background-color: rgba(80,120,255,0.13);
+        border: 1px solid rgba(120,160,255,0.28); border-radius: 999px;
+        padding: 6px 16px; box-shadow: none; text-shadow: none; }
+.chip:hover { background-color: rgba(80,120,255,0.22); }
+.chip.busy { color: #ffd479; border-color: rgba(255,200,100,0.35);
+             background-color: rgba(255,180,60,0.12); }
+.chip.quit { color: #ffbcbc; border-color: rgba(255,120,120,0.30);
+             background-color: rgba(255,90,90,0.10); }
+.chip.quit:hover { background-color: rgba(255,90,90,0.20); }
+.chip:disabled { color: #4c5670; border-color: rgba(120,160,255,0.12);
+                 background-color: rgba(80,120,255,0.05); }
+scrolled { background: transparent; }
+scrolled > viewport { background: transparent; }
+.bub-user { font-family: "Noto Sans CJK SC", sans-serif; font-size: 15px; color: #ffffff; }
+.bub-bot  { font-family: "Noto Sans CJK SC", sans-serif; font-size: 15px; color: #e6ecf7; }
+.card-user { background-image: linear-gradient(135deg, #3b82f6 0%, #6366f1 100%);
+             border-radius: 22px; padding: 16px 22px; box-shadow: none; }
+.card-bot  { background-color: rgba(255,255,255,0.045);
+             border: 1px solid rgba(255,255,255,0.055);
+             border-radius: 22px; padding: 16px 22px; box-shadow: none; }
+.meta { font-family: "Noto Sans CJK SC", sans-serif; font-size: 10px;
+        color: #6b7891; padding: 4px 6px; }
+.typing { font-family: "Noto Sans", sans-serif; font-size: 17px; color: #7f8dab;
+          letter-spacing: 4px; }
+.entry { font-family: "Noto Sans CJK SC", sans-serif; font-size: 15px; color: #eef3ff;
+         background-color: rgba(255,255,255,0.05);
+         border: 1px solid rgba(255,255,255,0.09); border-radius: 24px;
+         padding: 13px 20px; caret-color: #6f9bff; }
+.entry:focus-within { border-color: rgba(110,150,255,0.55);
+                      background-color: rgba(255,255,255,0.07); }
+.entry placeholder { color: #5d6a83; }
+.send { font-family: "Noto Sans", sans-serif; font-size: 19px; font-weight: 700;
+        color: #ffffff; background-image: linear-gradient(135deg, #3b82f6, #6366f1);
+        border-radius: 999px; min-width: 50px; min-height: 50px;
+        box-shadow: none; text-shadow: none; border: none; }
+.send:hover { background-image: linear-gradient(135deg, #4f92ff, #7b7df7); }
+.send:disabled { color: #55607a; background-image: none;
+                 background-color: rgba(255,255,255,0.05); }
+.status { font-family: "Noto Sans CJK SC", sans-serif; font-size: 11px; color: #5f6c85;
+          padding: 2px 6px 14px 6px; }
+.hint { font-family: "Noto Sans CJK SC", sans-serif; font-size: 13px; color: #8b98b3;
+        background-color: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.07); border-radius: 16px; padding: 9px 16px;
+        box-shadow: none; text-shadow: none; }
+.hint:hover { background-color: rgba(255,255,255,0.08); color: #dfe7f7; }
+.welcome { font-family: "Noto Sans CJK SC", sans-serif; font-size: 30px; font-weight: 700;
+           color: #dbe6ff; }
+.err { font-family: "Noto Sans CJK SC", sans-serif; font-size: 13px; color: #ff9f9f; }
+"""
+
+SEND_HINTS = ["介绍一下你自己", "用三句话描述大海", "写一首关于秋天的短诗", "什么是 Hexagon NPU？"]
+
+# prompt budget in chars, sized to the model's context window
+BUDGET = {"qwen": 1700, "llama": 6000}
+
+
+def family(name):
+    return "llama" if "llama" in name.lower() else "qwen"
+
+
+def build_prompt(model, history):
+    """history: [(role, text)] -> prompt string in the model's chat format."""
+    fam = family(model)
+    budget = BUDGET[fam]
+    turns = list(history)
+    while len(turns) > 1 and sum(len(t) for _, t in turns) > budget:
+        turns.pop(0)
+    if fam == "llama":
+        out = "".join(
+            f"<|start_header_id|>{r}<|end_header_id|>\n\n{t}<|eot_id|>" for r, t in turns
+        )
+        return out + "<|start_header_id|>assistant<|end_header_id|>\n\n"
+    out = "".join(f"<|im_start|>{r}\n{t}<|im_end|>\n" for r, t in turns)
+    return out + "<|im_start|>assistant\n"
+
+
+def extract(out):
+    """Pull the answer out of genie-t2t-run's stdout (noise + [BEGIN]/[END])."""
+    if "[BEGIN]:" not in out:
+        bad = [ln for ln in out.splitlines() if "rror" in ln or "ailed" in ln]
+        return None, (bad[0] if bad else out.strip()[-300:])
+    body = out.split("[BEGIN]:", 1)[1]
+    if "[END]" in body:
+        body = body.split("[END]", 1)[0]
+    text = "\n".join(
+        ln for ln in body.splitlines() if "rpcmem" not in ln and "/prj/qct/" not in ln
+    )
+    return text.strip(), None
+
+
+def models():
+    try:
+        names = sorted(os.listdir(DATA))
+    except OSError:
+        return []
+    return [n for n in names if os.path.isfile(os.path.join(DATA, n, "model-config.json"))]
+
+
+def tokens(text):
+    """Rough token count: CJK is ~1 token per char, latin ~4 chars per token."""
+    cjk = sum(1 for ch in text if ord(ch) > 0x2E7F)
+    return cjk + (len(text) - cjk) / 4.0
+
+
+def ask(model, prompt, on_chunk=None, job=None):
+    """Run one turn, streaming. Returns (text, error, seconds, stopped).
+
+    on_chunk(text) is called from this thread with the answer so far, so the
+    caller must marshal to the main loop. job is a dict the caller can use to
+    cancel: job["p"] holds the child, job["stop"] says a stop was asked for.
+    """
+    d = os.path.join(DATA, model)
+    env = dict(os.environ)
+    env["LD_LIBRARY_PATH"] = ROOT + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
+    env["ADSP_LIBRARY_PATH"] = ROOT + (":" + env["ADSP_LIBRARY_PATH"] if env.get("ADSP_LIBRARY_PATH") else "")
+    t0 = time.monotonic()
+    p = subprocess.Popen(
+        ["stdbuf", "-o0", "-e0", os.path.join(ROOT, "genie-t2t-run"), "-c", "model-config.json",
+         "-p", prompt],
+        cwd=d, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0,
+        preexec_fn=_die_with_parent,
+    )
+    if job is not None:
+        job["p"] = p
+    raw = bytearray()
+    text = ""
+    try:
+        while True:
+            chunk = p.stdout.read(4096)
+            if not chunk:
+                break
+            raw += chunk
+            # Re-extract from everything so far: extract() already knows how to
+            # skip the rpcmem banner and stop at [END], and on a truncated
+            # buffer it just returns the text without the closing marker.
+            sofar, _ = extract(raw.decode("utf-8", "replace"))
+            if sofar and sofar != text:
+                text = sofar
+                if on_chunk:
+                    on_chunk(text)
+    finally:
+        p.wait()
+        if job is not None:
+            job["p"] = None
+    dt = time.monotonic() - t0
+    stopped = bool(job and job.get("stop"))
+    if text:
+        return text, None, dt, stopped
+    _, err = extract(raw.decode("utf-8", "replace"))
+    if stopped:
+        return "", None, dt, True
+    return "", err or f"genie-t2t-run exited {p.returncode}", dt, False
+
+
+try:
+    _PRCTL = ctypes.CDLL("libc.so.6", use_errno=True).prctl
+except (OSError, AttributeError):
+    _PRCTL = None
+
+
+def _die_with_parent():
+    """Kill the model process if the GUI dies; an orphaned genie holds the DSP
+    and the next run fails with 'Failed to create device: 14001' until reboot.
+    Runs in the forked child, so libc is loaded above, not here."""
+    if _PRCTL:
+        try:
+            _PRCTL(1, signal.SIGKILL)  # PR_SET_PDEATHSIG
+        except Exception:
+            pass
+
+
+class Chat(Gtk.Application):
+    shot = None
+    ask_text = None
+    want_model = None
+
+    def do_activate(self):
+        self.win = Gtk.ApplicationWindow(application=self)
+        self.win.add_css_class("root")
+        self.win.set_decorated(False)
+        self.win.set_title("NPU Chat")
+        self.win.fullscreen()
+        self.win.set_default_size(1280, 800)
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(CSS)
+        Gtk.StyleContext.add_provider_for_display(
+            self.win.get_display(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+        names = models()
+        self.model = names[0] if names else None
+        for n in names:
+            if "llama" in n:
+                self.model = n
+                break
+        if self.want_model in names:
+            self.model = self.want_model
+
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        self.win.set_child(outer)
+        col = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        col.add_css_class("column")
+        col.set_halign(Gtk.Align.CENTER)
+        col.set_size_request(1000, -1)
+        col.set_vexpand(True)
+        outer.append(col)
+
+        # ---- header
+        head = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        head.add_css_class("header")
+        tl = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        t = Gtk.Label(label="NPU Chat", xalign=0)
+        t.add_css_class("title")
+        s = Gtk.Label(label="QCS6490  ·  HEXAGON V68  ·  本地推理", xalign=0)
+        s.add_css_class("subtitle")
+        tl.append(t)
+        tl.append(s)
+        head.append(tl)
+        spacer = Gtk.Box()
+        spacer.set_hexpand(True)
+        head.append(spacer)
+
+        self.stop_btn = Gtk.Button(label="停止")
+        self.stop_btn.add_css_class("chip")
+        self.stop_btn.set_sensitive(False)
+        self.stop_btn.connect("clicked", self.stop)
+        head.append(self.stop_btn)
+
+        self.clear_btn = Gtk.Button(label="清空")
+        self.clear_btn.add_css_class("chip")
+        self.clear_btn.connect("clicked", self.clear)
+        head.append(self.clear_btn)
+
+        quit_btn = Gtk.Button(label="退出")
+        quit_btn.add_css_class("chip")
+        quit_btn.add_css_class("quit")
+        quit_btn.connect("clicked", lambda *_: self.quit())
+        head.append(quit_btn)
+
+        self.chip = Gtk.MenuButton()
+        self.chip.add_css_class("chip")
+        self.chip.set_label(self.model or "no model")
+        if names:
+            pop = Gtk.Popover()
+            box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            box.set_margin_top(6)
+            box.set_margin_bottom(6)
+            for n in names:
+                b = Gtk.Button(label=n)
+                b.add_css_class("flat")
+                b.connect("clicked", lambda _b, n=n: self.pick(n, pop))
+                b.set_halign(Gtk.Align.FILL)
+                box.append(b)
+            pop.set_child(box)
+            self.chip.set_popover(pop)
+        head.append(self.chip)
+        col.append(head)
+
+        # ---- messages
+        self.scroll = Gtk.ScrolledWindow()
+        self.scroll.set_vexpand(True)
+        self.scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self.list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        self.list.set_margin_top(8)
+        self.list.set_margin_bottom(8)
+        self.scroll.set_child(self.list)
+        col.append(self.scroll)
+
+        self.history = []
+        self.busy = False
+        self.show_welcome()
+
+        # ---- input
+        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        bar.set_margin_top(6)
+        bar.set_margin_bottom(4)
+        self.entry = Gtk.Entry()
+        self.entry.add_css_class("entry")
+        self.entry.set_placeholder_text("输入消息…")
+        self.entry.set_hexpand(True)
+        self.entry.connect("activate", self.send)
+        self.send_btn = Gtk.Button(label="↑")
+        self.send_btn.add_css_class("send")
+        self.send_btn.connect("clicked", self.send)
+        bar.append(self.entry)
+        bar.append(self.send_btn)
+        col.append(bar)
+
+        self.status = Gtk.Label(label="就绪", xalign=0)
+        self.status.add_css_class("status")
+        col.append(self.status)
+
+        key = Gtk.EventControllerKey()
+        key.connect("key-pressed", self.on_key)
+        self.win.add_controller(key)
+
+        self.win.present()
+        self.entry.grab_focus()
+        if self.ask_text:
+            GLib.timeout_add(200, lambda: (self.fire(self.ask_text), False)[1])
+        elif self.shot:
+            GLib.timeout_add(1500, self.take_shot)
+
+    def take_shot(self):
+        """--shot PATH: render the window to a PNG (kiosk diagnostics)."""
+        w, h = self.win.get_width(), self.win.get_height()
+        snap = Gtk.Snapshot()
+        Gtk.WidgetPaintable.new(self.win).snapshot(snap, w, h)
+        node = snap.to_node()
+        rect = Graphene.Rect().init(0, 0, w, h)
+        tex = Gtk.Native.get_renderer(self.win).render_texture(node, rect)
+        tex.save_to_png(self.shot)
+        print(f"wrote {self.shot} ({w}x{h})")
+        self.quit()
+        return False
+
+    # ---------------------------------------------------------------- helpers
+    def pick(self, name, pop):
+        self.model = name
+        self.chip.set_label(name)
+        pop.popdown()
+        self.status.set_text(f"已切换到 {name}")
+
+    def stop(self, *_):
+        """Cut the turn short. SIGINT first; genie usually exits in ~0.1 s and the
+        DSP is free for the next turn, SIGKILL is only a backstop."""
+        p = getattr(self, "job", {}).get("p")
+        if p is None or p.poll() is not None:
+            return
+        self.job["stop"] = True
+        p.send_signal(signal.SIGINT)
+
+        def backstop():
+            if p.poll() is None:
+                p.kill()
+            return False
+
+        GLib.timeout_add(2000, backstop)
+        self.status.set_text("正在停止…")
+
+    def clear(self, *_):
+        if getattr(self, "busy", False):
+            return
+        while self.list.get_first_child() is not None:
+            self.list.remove(self.list.get_first_child())
+        self.history = []
+        self.welcome = None
+        self.show_welcome()
+        self.status.set_text("已清空")
+
+    def on_key(self, _c, keyval, _code, _mods):
+        if keyval == 0xFF1B:  # Escape
+            self.quit()
+            return True
+        return False
+
+    def show_welcome(self):
+        w = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
+        w.set_valign(Gtk.Align.CENTER)
+        w.set_margin_top(40)
+        w.set_margin_bottom(40)
+        t = Gtk.Label(label="问点什么吧", xalign=0.5)
+        t.add_css_class("welcome")
+        s = Gtk.Label(label="Qwen2.5-0.5B · Llama-3.2-1B 跑在 NPU 上，不联网", xalign=0.5)
+        s.add_css_class("subtitle")
+        w.append(t)
+        w.append(s)
+        chips = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        chips.set_halign(Gtk.Align.CENTER)
+        chips.set_margin_top(10)
+        for h in SEND_HINTS:
+            b = Gtk.Button(label=h)
+            b.add_css_class("hint")
+            b.connect("clicked", lambda _b, h=h: self.fire(h))
+            chips.append(b)
+        w.append(chips)
+        self.welcome = w
+        self.list.append(w)
+
+    def bubble(self, text, user, meta=None):
+        row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card.add_css_class("card-user" if user else "card-bot")
+        label = Gtk.Label(label=text, xalign=0, yalign=0)
+        label.set_wrap(True)
+        label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        label.set_max_width_chars(62)
+        label.set_selectable(True)
+        label.add_css_class("bub-user" if user else "bub-bot")
+        card.append(label)
+        row.append(card)
+        row.set_halign(Gtk.Align.END if user else Gtk.Align.START)
+        if meta:
+            m = Gtk.Label(label=meta, xalign=1 if user else 0)
+            m.add_css_class("meta")
+            row.append(m)
+        self.list.append(row)
+        self.glide()
+        return label
+
+    def glide(self):
+        GLib.idle_add(self._scroll_bottom)
+
+    def _scroll_bottom(self):
+        adj = self.scroll.get_vadjustment()
+        adj.set_value(adj.get_upper())
+        return False
+
+    def error(self, msg):
+        row = Gtk.Box()
+        card = Gtk.Box()
+        card.add_css_class("card-bot")
+        l = Gtk.Label(label=msg, xalign=0)
+        l.set_wrap(True)
+        l.set_max_width_chars(62)
+        l.add_css_class("err")
+        card.append(l)
+        row.append(card)
+        row.set_halign(Gtk.Align.START)
+        self.list.append(row)
+        self.glide()
+
+    # ------------------------------------------------------------------ turn
+    def fire(self, text):
+        self.entry.set_text(text)
+        self.send()
+
+    def send(self, *_):
+        text = self.entry.get_text().strip()
+        if not text or self.model is None:
+            return
+        if getattr(self, "busy", False):
+            return
+        if getattr(self, "welcome", None) is not None:
+            self.list.remove(self.welcome)
+            self.welcome = None
+
+        self.entry.set_text("")
+        self.busy = True
+        self.job = {"p": None, "stop": False}
+        self.send_btn.set_sensitive(False)
+        self.stop_btn.set_sensitive(True)
+        self.chip.add_css_class("busy")
+        self.bubble(text, True)
+        self.history.append(("user", text))
+
+        card = Gtk.Box()
+        card.add_css_class("card-bot")
+        body = Gtk.Label(label="●", xalign=0, yalign=0)
+        body.add_css_class("typing")
+        card.append(body)
+        holder = Gtk.Box()
+        holder.append(card)
+        holder.set_halign(Gtk.Align.START)
+        self.list.append(holder)
+        self.glide()
+
+        phase = {"i": 0, "t0": time.monotonic(), "got": 0}
+
+        def show(txt):
+            if not phase["got"]:
+                # first chunk: the dots become the answer
+                body.remove_css_class("typing")
+                body.add_css_class("bub-bot")
+                body.set_wrap(True)
+                body.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
+                body.set_max_width_chars(62)
+                body.set_selectable(True)
+            phase["got"] = len(txt)
+            body.set_text(txt)
+            self.glide()
+            return False
+
+        def tick():
+            if not self.busy:
+                return False
+            el = max(time.monotonic() - phase["t0"], 0.001)
+            if phase["got"]:
+                self.status.set_text(
+                    f"{self.model} 生成中  {el:0.1f}s  约 {tokens(body.get_text()) / el:0.1f} tok/s"
+                )
+            else:
+                body.set_text(["●", "●●", "●●●"][phase["i"] % 3])
+                self.status.set_text(f"{self.model} 正在 NPU 上生成…  {el:0.1f}s")
+            phase["i"] += 1
+            return True
+
+        timer = GLib.timeout_add(250, tick)
+
+        def work():
+            prompt = build_prompt(self.model, self.history)
+            txt, err, dt, stopped = ask(
+                self.model, prompt, on_chunk=lambda t: GLib.idle_add(show, t), job=self.job
+            )
+            GLib.idle_add(done, txt, err, dt, stopped)
+
+        def done(txt, err, dt, stopped):
+            GLib.source_remove(timer)
+            self.busy = False
+            self.send_btn.set_sensitive(True)
+            self.stop_btn.set_sensitive(False)
+            self.chip.remove_css_class("busy")
+            if err:
+                self.list.remove(holder)
+                self.error(f"推理失败：{err}")
+                self.status.set_text("失败")
+                return False
+            if not txt:
+                self.list.remove(holder)
+                self.status.set_text("已停止")
+                return False
+            show(txt)
+            self.history.append(("assistant", txt))
+            approx = tokens(txt) / dt if dt > 0 else 0
+            tag = "已停止" if stopped else f"{dt:0.1f}s"
+            self.status.set_text(f"{self.model}  ·  {tag}  ·  约 {approx:0.1f} tok/s")
+            if self.ask_text:
+                print(f"ANSWER ({dt:0.1f}s): {txt}\nSTATUS: {self.status.get_text()}")
+                if self.shot:
+                    GLib.timeout_add(1800, self.take_shot)
+                else:
+                    self.quit()
+            return False
+
+        threading.Thread(target=work, daemon=True).start()
+
+
+def selftest():
+    q = build_prompt("qwen2.5-0.5b", [("user", "hi"), ("assistant", "yo"), ("user", "ok")])
+    assert q.endswith("<|im_start|>assistant\n"), q
+    assert "<|im_start|>user\nhi<|im_end|>" in q
+    l = build_prompt("llama3.2-1b", [("user", "hi")])
+    assert l.startswith("<|start_header_id|>user<|end_header_id|>\n\nhi<|eot_id|>"), l
+    assert l.endswith("<|start_header_id|>assistant<|end_header_id|>\n\n"), l
+    # trimming keeps the newest turn and stays under budget
+    long_hist = [("user", "x" * 1000), ("assistant", "y" * 1000), ("user", "last")]
+    t = build_prompt("qwen2.5-0.5b", long_hist)
+    assert "last" in t and len(t) < 1900, len(t)
+    assert extract("junk\n[BEGIN]: hello\nworld[END]\nnoise rpcmem\n") == ("hello\nworld", None)
+    # streaming: the buffer is re-extracted while generation is still running, so
+    # a missing [END] must still yield the text received so far
+    assert extract("banner\n[BEGIN]: 大海是")[0] == "大海是"
+    assert extract("noise only")[0] is None
+    t, e = extract("some error: boom")
+    assert t is None and "error" in e, (t, e)
+    assert abs(tokens("hello world") - 2.75) < 0.01, tokens("hello world")
+    assert abs(tokens("秋天") - 2) < 0.01, tokens("秋天")
+    print("selftest ok")
+
+
+if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        selftest()
+        sys.exit(0)
+    shot = None
+    if "--shot" in sys.argv:
+        shot = sys.argv[sys.argv.index("--shot") + 1]
+    ask_text = None
+    if "--ask" in sys.argv:
+        ask_text = sys.argv[sys.argv.index("--ask") + 1]
+    if "--model" in sys.argv:
+        want = sys.argv[sys.argv.index("--model") + 1]
+    else:
+        want = None
+    app = Chat(application_id="org.quectel.NpuChat")
+    app.shot = shot
+    app.ask_text = ask_text
+    app.want_model = want
+    app.run([])

@@ -25,6 +25,7 @@ IMAGE_INSTALL:append = " \
 		    python3-opencv \
                     btrfs-tools \
                     qcom-npu-test \
+                    npu-llm \
                 "
 
 IMAGE_INSTALL:remove = " \
