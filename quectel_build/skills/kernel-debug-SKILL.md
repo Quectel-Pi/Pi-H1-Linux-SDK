@@ -1,7 +1,7 @@
 ---
 name: kernel-debug
-description: "内核驱动调试：debug print 策略、一次性加够、查看方法"
-version: 1.2.0
+description: "内核驱动调试：debug print 策略、一次性加够、UKI 重打包增量验证、查看方法"
+version: 1.3.0
 author: Hermes Agent
 license: MIT
 platforms: [linux]
@@ -156,6 +156,97 @@ list_for_each_entry(m, &connector->modes, head) {
 }
 dev_info(dev, "[modes] total: %d\n", count);
 ```
+
+## 快速验证：内核内建代码改动 → 重打 UKI 替换（Debian/UKI 启动，推荐）
+
+**当改动的是内核内建代码（不是 .ko，比如 `drivers/usb/dwc3/core.c`、`drivers/gpu/drm/...` 里 `=y` 的部分），
+不要全量 `bitbake quecpi-image` + EDL 烧录（慢、要断电进 9008），只编内核然后重打 UKI、替换板上 EFI 分区
+`EFI/Linux/linux-*.efi` 即可，一轮 6~10 分钟。**
+
+本项目（PI H1 / QCS6490 IDP / Debian）实测可用。
+
+### 前提
+- `build-qcom-wayland/` 构建目录存在，且 `ukify` 可用：
+  `build-qcom-wayland/tmp-glibc/sysroots-components/x86_64/systemd-boot-native/usr/bin/ukify`
+- 板子可访问（SSH 可用，`sudo` 可用；下文用 `$BOARD` 表示 `<用户>@<板子IP>`，密码按实际填）
+- `WORK` 里备好 4 个输入：`linuxaa64.efi.stub`、`initrd.bin`、`cmdline`、`osrel`
+
+### 首次准备 UKI 输入（后续复用，不用重做）
+
+```bash
+ROOT=<项目根目录>            # 例如 SDK 仓库根目录
+BOARD=<用户>@<板子IP>        # SSH 登录目标
+ESP=/efi                     # 板上 EFI 系统分区挂载点
+PASS=<板子登录密码>          # sudo 密码同此
+WORK=/tmp/ukiwork            # 主机上的 UKI 工作目录
+mkdir -p $WORK && cd $WORK
+
+# stub 来自 deploy 目录
+cp $ROOT/build-qcom-wayland/tmp-glibc/deploy/images/qcm6490-idp/linuxaa64.efi.stub .
+
+# initrd 从板上当前 UKI 里抠出来（UKI 里没有 .dtb section，DTB 走 esp 单独文件）
+sshpass -p $PASS ssh $BOARD "echo $PASS | sudo -S sh -c 'objcopy -O binary -j .initrd $ESP/EFI/Linux/<UKI名>.efi /tmp/initrd.bin'"
+sshpass -p $PASS scp $BOARD:/tmp/initrd.bin .
+
+# cmdline / osrel 与当前系统保持一致（可从板上 /proc/cmdline 和 /etc/os-release 抄）
+printf 'root=/dev/disk/by-partlabel/system rw rootwait console=ttynull pcie_pme=nomsi rcupdate.rcu_expedited=1 rcu_nocbs=0-7 kpti=off kasan=off kasan.stacktrace=off no-steal-acc nokaslr  swiotlb=128 mitigations=auto net.ifnames=0' > cmdline
+printf 'ID=qcom-wayland\nNAME="Qualcomm Linux"\nVERSION="1.7-ver.1.1" \nVERSION_ID=1.7-ver.1.1\nPRETTY_NAME="Qualcomm Linux 1.7-ver.1.1"\nCPE_NAME="cpe:/o:openembedded:qcom-wayland:1.7-ver.1.1"\n' > osrel
+```
+
+### 每轮迭代：编译 → 打包 → 替换 → 重启
+
+```bash
+ROOT=<项目根目录>
+BOARD=<用户>@<板子IP>
+ESP=/efi
+PASS=<板子登录密码>
+WORK=/tmp/ukiwork
+UKIFY=$ROOT/build-qcom-wayland/tmp-glibc/sysroots-components/x86_64/systemd-boot-native/usr/bin/ukify
+IMG=$ROOT/build-qcom-wayland/tmp-glibc/work/qcm6490_idp-qcom-linux/linux-qcom-custom/6.6/build/arch/arm64/boot/Image
+
+# 1) 只编内核（约 5-8 分钟）。用 setsid+nohup 跑，避免会话断连打断构建
+cd $ROOT
+nohup setsid bash -c 'cd '"$ROOT"' && source quectel_build/compile/build.sh && bitbake virtual/kernel -c compile -f; echo RC=$?' > /tmp/uk-build.log 2>&1 < /dev/null &
+# 等 RC=0（不要 kill bitbake）
+tail -3 /tmp/uk-build.log
+
+# 2) 确认新 Image 生成（时间戳是刚才）
+ls -la --time-style=+%H:%M:%S $IMG
+# 确认改动真的进了二进制（换成你自己新加的字符串）
+strings $IMG | grep -c "<你新加的字符串>"
+
+# 3) 重打 UKI（--uname 用板上 uname -r 的输出）
+cd $WORK
+cp $IMG ./Image.new
+python3 $UKIFY build --efi-arch=aa64 --stub=linuxaa64.efi.stub --linux=Image.new \
+  --initrd=initrd.bin --cmdline=@cmdline --os-release=@osrel \
+  --uname=<uname -r 输出> --output=<UKI名>.efi.new
+md5sum <UKI名>.efi.new
+
+# 4) 推到板上，校验 md5 一致后再替换（备份，可回滚）
+sshpass -p $PASS scp -o StrictHostKeyChecking=no <UKI名>.efi.new $BOARD:/tmp/
+sshpass -p $PASS ssh $BOARD 'md5sum /tmp/<UKI名>.efi.new'
+sshpass -p $PASS ssh $BOARD "echo $PASS | sudo -S sh -c '\
+  cd $ESP/EFI/Linux && \
+  cp -f <UKI名>.efi <UKI名>.efi.bak && \
+  mv -f /tmp/<UKI名>.efi.new <UKI名>.efi.new && sync && \
+  mv -f <UKI名>.efi.new <UKI名>.efi && sync && \
+  md5sum <UKI名>.efi'"
+
+# 5) 重启（板上必须用 systemctl reboot 或 adb shell reboot，adb reboot 无效）
+sshpass -p $PASS ssh $BOARD "echo $PASS | sudo -S systemctl reboot"
+
+# 6) 等待回来，确认内核真的换了（uname -v 的编译时间戳必须变）
+for i in $(seq 1 24); do sleep 5; sshpass -p $PASS ssh -o ConnectTimeout=5 $BOARD 'uname -v' 2>/dev/null && break; done
+```
+
+### 注意事项
+- **UKI 里只有 `.osrel/.cmdline/.initrd`，没有 `.dtb` section**（用 `objdump -h` 确认），所以 ukify 不需要 `--devicetree`；DTB 是 esp 分区上的独立文件
+- 替换后务必 `sync`，否则掉电可能起不来
+- 回滚：`cp $ESP/EFI/Linux/<UKI名>.efi.bak $ESP/EFI/Linux/<UKI名>.efi && sync` 后重启
+- 本项目的 `CONFIG_DYNAMIC_DEBUG` **未开启**，`dev_dbg()` 会被编译掉（`strings` 里找不到），需要现场日志时用 `dev_info()`/`pr_info()`，验证完再降级
+- 校验“新代码进了二进制”：`strings Image | grep -c <你新加的字符串>`；校验“旧代码没了”：`grep -c <旧字符串>` 应为 0
+- 只改 `.ko`（可卸载模块）时用下面的 .ko 替换法更快，不必动 UKI
 
 ## 快速验证：板上编译 .ko 替换模块（不需要全量烧录）
 
