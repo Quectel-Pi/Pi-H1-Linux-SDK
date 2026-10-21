@@ -316,6 +316,7 @@ static void pmic_glink_ucsi_notify(struct work_struct *work)
 
 	ucsi_log("notify:", UCSI_CCI, (u8 *)&cci, sizeof(cci));
 	con_num = UCSI_CCI_CONNECTOR(cci);
+	dev_info(ucsi->dev, "QLIDBG glink notify cci=%08x con=%u\n", cci, con_num);
 	if (con_num)
 		ucsi_connector_change(ucsi->ucsi, con_num);
 

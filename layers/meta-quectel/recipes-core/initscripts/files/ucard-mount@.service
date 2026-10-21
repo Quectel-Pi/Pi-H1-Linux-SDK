@@ -13,6 +13,8 @@ RemainAfterExit=true
 # 会抢先 mount 到 /mnt/sdcardN，导致 GNOME 起来后 udisks2 认为分区
 # 已被挂载而不展示。因此以"系统是否安装 gnome-shell"（持久标志）为
 # 准，全时段生效，无竞态窗口；udisks2 启动时会自动挂载已插着的 U 盘。
+# ExecStop 必须用同样的判断：ExecStart 跳过时并没有创建 /mnt/sdcardN，
+# 若再去 umount/rmdir 会以 non-zero 退出，导致服务被标记为 failed。
 ExecStart=/bin/sh -c ' \
   PORT=$$(echo %i | cut -d"-" -f1); \
   DEVICE=$$(echo %i | cut -d"-" -f2); \
@@ -26,6 +28,11 @@ ExecStart=/bin/sh -c ' \
 
 ExecStop=/bin/sh -c ' \
   PORT=$$(echo %i | cut -d"-" -f1); \
+  DEVICE=$$(echo %i | cut -d"-" -f2); \
+  if [ -x /usr/bin/gnome-shell ] || pgrep -x gnome-shell >/dev/null 2>&1; then \
+    echo "GNOME system, skip umount /mnt/sdcard$$PORT (udisks2 handles it)"; \
+    exit 0; \
+  fi; \
   /bin/umount -l /mnt/sdcard$$PORT; \
   /bin/rmdir /mnt/sdcard$$PORT \
 '

@@ -1797,6 +1797,9 @@ void typec_set_data_role(struct typec_port *port, enum typec_data_role role)
 {
 	struct device *partner_dev;
 
+	dev_info(&port->dev, "QLIDBG typec data_role %d -> %d\n",
+		 port->data_role, role);
+
 	if (port->data_role == role)
 		return;
 
@@ -1824,6 +1827,9 @@ EXPORT_SYMBOL_GPL(typec_set_data_role);
  */
 void typec_set_pwr_role(struct typec_port *port, enum typec_role role)
 {
+	dev_info(&port->dev, "QLIDBG typec pwr_role %d -> %d\n",
+		 port->pwr_role, role);
+
 	if (port->pwr_role == role)
 		return;
 

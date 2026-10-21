@@ -158,6 +158,20 @@ void dwc3_set_prtcap(struct dwc3 *dwc, u32 mode, bool ignore_susphy)
 static void dwc3_core_exit(struct dwc3 *dwc);
 static int dwc3_core_init_for_resume(struct dwc3 *dwc);
 
+static const char *dwc3_role_name(u32 role)
+{
+	switch (role) {
+	case DWC3_GCTL_PRTCAP_HOST:
+		return "HOST";
+	case DWC3_GCTL_PRTCAP_DEVICE:
+		return "DEVICE";
+	case DWC3_GCTL_PRTCAP_OTG:
+		return "OTG";
+	default:
+		return "NONE";
+	}
+}
+
 static void __dwc3_set_mode(struct work_struct *work)
 {
 	struct dwc3 *dwc = work_to_dwc(work);
@@ -165,13 +179,21 @@ static void __dwc3_set_mode(struct work_struct *work)
 	int ret = 0;
 	u32 reg;
 	u32 desired_dr_role;
+	u32 prev_dr_role;
 
 	mutex_lock(&dwc->mutex);
 	spin_lock_irqsave(&dwc->lock, flags);
 	desired_dr_role = dwc->desired_dr_role;
+	prev_dr_role = dwc->current_dr_role;
 	spin_unlock_irqrestore(&dwc->lock, flags);
 
 	pm_runtime_get_sync(dwc->dev);
+
+	dev_info(dwc->dev,
+		 "role %s(%u) -> %s(%u) (core_inited=%d cable_disconnected=%d)\n",
+		 dwc3_role_name(prev_dr_role), prev_dr_role,
+		 dwc3_role_name(desired_dr_role), desired_dr_role,
+		 dwc->core_inited, dwc->cable_disconnected);
 
 	if (dwc->current_dr_role == DWC3_GCTL_PRTCAP_OTG)
 		dwc3_otg_update(dwc, 0);
@@ -326,6 +348,45 @@ static void __dwc3_set_mode(struct work_struct *work)
 			reg |= DWC3_GUCTL_RESBWHSEPS;
 			dwc3_writel(dwc->regs, DWC3_GUCTL, reg);
 		}
+
+		/*
+		 * device -> host hand-over.
+		 *
+		 * The device session left the core and both PHYs built for
+		 * PRTCAPDIR=DEVICE.  dwc3_set_prtcap() above only rewrites
+		 * GCTL.PRTCAPDIR; for the SNPS HS PHY, phy_set_mode() just
+		 * caches the mode in software (qcom_snps_hsphy_set_mode())
+		 * and the hardware only picks it up in power_on().  So the
+		 * HS PHY stays set up for device termination, the xHCI root
+		 * port never sees D+ pull-up and a stick plugged in this
+		 * state is never enumerated - while a cold boot works
+		 * because there the first dwc3_core_init() already ran.
+		 *
+		 * Rebuild the controller the same way the DEVICE branch and
+		 * the runtime resume path do it.  Only the DRD hand-over
+		 * from device is affected: from NONE/OTG the old behaviour
+		 * (plain set_prtcap + host init) is kept, so host-only
+		 * devices and the OTG initial probe are untouched.
+		 */
+		if (prev_dr_role == DWC3_GCTL_PRTCAP_DEVICE) {
+			dev_info(dwc->dev, "host hand-over: rebuilding core\n");
+
+			phy_set_mode(dwc->usb2_generic_phy, PHY_MODE_USB_HOST);
+			phy_set_mode(dwc->usb3_generic_phy, PHY_MODE_USB_HOST);
+
+			dwc3_core_exit(dwc);
+
+			ret = dwc3_core_init_for_resume(dwc);
+			if (ret) {
+				dev_err(dwc->dev,
+					"failed to rebuild core on host hand-over: %d\n",
+					ret);
+				break;
+			}
+
+			dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_HOST, false);
+		}
+
 		ret = dwc3_host_init(dwc);
 		if (ret) {
 			dev_err(dwc->dev, "failed to initialize host\n");
@@ -337,6 +398,13 @@ static void __dwc3_set_mode(struct work_struct *work)
 			 * rebuild the core before it can enumerate again.
 			 */
 			dwc->core_inited = false;
+
+			dev_info(dwc->dev,
+				 "host up: GCTL=%08x DSTS=%08x GUSB2PHYCFG0=%08x GUSB3PIPECTL0=%08x\n",
+				 dwc3_readl(dwc->regs, DWC3_GCTL),
+				 dwc3_readl(dwc->regs, DWC3_DSTS),
+				 dwc3_readl(dwc->regs, DWC3_GUSB2PHYCFG(0)),
+				 dwc3_readl(dwc->regs, DWC3_GUSB3PIPECTL(0)));
 
 			if (dwc->usb2_phy)
 				otg_set_vbus(dwc->usb2_phy->otg, true);

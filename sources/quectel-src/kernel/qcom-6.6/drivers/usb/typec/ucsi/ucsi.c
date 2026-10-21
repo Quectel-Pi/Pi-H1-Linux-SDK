@@ -180,6 +180,10 @@ static int ucsi_send_command_common(struct ucsi *ucsi, u64 command,
 	mutex_lock(&ucsi->ppm_lock);
 
 	ret = ucsi_exec_command(ucsi, command);
+	dev_info(ucsi->dev, "QLIDBG cmd=%02x conn=%u size=%zu ret=%d\n",
+		 (unsigned int)UCSI_COMMAND(command),
+		 (unsigned int)UCSI_CONNECTOR_NUMBER(command),
+		 size, ret);
 	if (ret < 0)
 		goto out;
 
@@ -788,6 +792,12 @@ static int ucsi_register_partner(struct ucsi_connector *con)
 		return PTR_ERR(partner);
 	}
 
+	dev_info(con->ucsi->dev,
+		 "QLIDBG register_partner con%u flags=%08x type=%u usb_pd=%d accessory=%d\n",
+		 con->num, con->status.flags,
+		 (unsigned int)UCSI_CONSTAT_PARTNER_TYPE(con->status.flags),
+		 desc.usb_pd, desc.accessory);
+
 	con->partner = partner;
 
 	return 0;
@@ -847,7 +857,19 @@ static void ucsi_partner_change(struct ucsi_connector *con)
 	if (!(UCSI_CONSTAT_PARTNER_FLAGS(con->status.flags) & UCSI_CONSTAT_PARTNER_FLAG_USB))
 		u_role = USB_ROLE_NONE;
 
+	dev_info(con->ucsi->dev,
+		 "QLIDBG partner_change con%u flags=%08x type=%u pwr_dir=%u opmode=%u pflags=%u connected=%d partner=%d u_role=%d\n",
+		 con->num, con->status.flags,
+		 (unsigned int)UCSI_CONSTAT_PARTNER_TYPE(con->status.flags),
+		 !!(con->status.flags & UCSI_CONSTAT_PWR_DIR),
+		 (unsigned int)UCSI_CONSTAT_PWR_OPMODE(con->status.flags),
+		 (unsigned int)UCSI_CONSTAT_PARTNER_FLAGS(con->status.flags),
+		 !!(con->status.flags & UCSI_CONSTAT_CONNECTED),
+		 con->partner ? 1 : 0, u_role);
+
 	ret = usb_role_switch_set_role(con->usb_role_sw, u_role);
+	dev_info(con->ucsi->dev, "QLIDBG partner_change role_sw(%d) ret=%d\n",
+		 u_role, ret);
 	if (ret)
 		dev_err(con->ucsi->dev, "con:%d: failed to set usb role:%d\n",
 			con->num, u_role);
@@ -905,6 +927,12 @@ static void ucsi_handle_connector_change(struct work_struct *work)
 	}
 
 	trace_ucsi_connector_change(con->num, &con->status);
+
+	dev_info(ucsi->dev, "QLIDBG con%u flags=%08x change=%08x partner=%d type=%u pflags=%u\n",
+		 con->num, con->status.flags, con->status.change,
+		 con->partner ? 1 : 0,
+		 (unsigned int)UCSI_CONSTAT_PARTNER_TYPE(con->status.flags),
+		 (unsigned int)UCSI_CONSTAT_PARTNER_FLAGS(con->status.flags));
 
 	if (ucsi->ops->connector_status)
 		ucsi->ops->connector_status(con);
@@ -964,6 +992,9 @@ out_unlock:
 void ucsi_connector_change(struct ucsi *ucsi, u8 num)
 {
 	struct ucsi_connector *con = &ucsi->connector[num - 1];
+
+	dev_info(ucsi->dev, "QLIDBG conn change con=%u ntfy=%08x pending=%d\n",
+		 num, ucsi->ntfy, test_bit(EVENT_PENDING, &ucsi->flags));
 
 	if (!(ucsi->ntfy & UCSI_ENABLE_NTFY_CONNECTOR_CHANGE)) {
 		dev_dbg(ucsi->dev, "Early connector change event\n");
@@ -1365,6 +1396,10 @@ static int ucsi_register_port(struct ucsi *ucsi, struct ucsi_connector *con)
 		u_role = USB_ROLE_NONE;
 
 	ret = usb_role_switch_set_role(con->usb_role_sw, u_role);
+	dev_info(con->ucsi->dev, "QLIDBG register_port role_sw(%d) ret=%d flags=%08x type=%u pflags=%u\n",
+		 u_role, ret, con->status.flags,
+		 (unsigned int)UCSI_CONSTAT_PARTNER_TYPE(con->status.flags),
+		 (unsigned int)UCSI_CONSTAT_PARTNER_FLAGS(con->status.flags));
 	if (ret) {
 		dev_err(ucsi->dev, "con:%d: failed to set usb role:%d\n",
 			con->num, u_role);

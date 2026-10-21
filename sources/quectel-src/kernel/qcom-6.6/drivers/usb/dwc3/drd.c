@@ -431,6 +431,7 @@ static int dwc3_drd_notifier(struct notifier_block *nb,
 {
 	struct dwc3 *dwc = container_of(nb, struct dwc3, edev_nb);
 
+	dev_info(dwc->dev, "QLIDBG extcon_notifier event=%lu\n", event);
 	dwc3_set_mode(dwc, event ?
 		      DWC3_GCTL_PRTCAP_HOST :
 		      DWC3_GCTL_PRTCAP_DEVICE);
@@ -448,6 +449,10 @@ static int dwc3_usb_role_switch_set(struct usb_role_switch *sw,
 	int ret = 0;
 
 	dwc->cable_disconnected = false;
+
+	dev_info(dwc->dev,
+		 "QLIDBG role_switch_set role=%d default_mode=%d cable_disc=%d\n",
+		 role, dwc->role_switch_default_mode, dwc->cable_disconnected);
 
 	switch (role) {
 	case USB_ROLE_HOST:
@@ -515,10 +520,20 @@ static int dwc3_setup_role_switch(struct dwc3 *dwc)
 	u32 mode;
 
 	dwc->role_switch_default_mode = usb_get_role_switch_default_mode(dwc->dev);
-	if (dwc->role_switch_default_mode == USB_DR_MODE_HOST) {
+	/*
+	 * Idle Type-C port must stay a host.  With a device-role idle port the
+	 * PD firmware (UCSI/PPM) has no VBUS on and no xhci registered, and it
+	 * presents Rd on CC, so a U-disk (also Rd) never generates an attach
+	 * event and stays invisible until reboot.  Host idle keeps VBUS up and
+	 * xhci running, so a disk enumerates on its D+ pull-up without any CC
+	 * handshake.  A real PC attach still arrives as USB_ROLE_DEVICE and
+	 * switches back to device role, so OTG is preserved.
+	 * Only an explicit role-switch-default-mode = "peripheral" is honoured.
+	 */
+	if (dwc->role_switch_default_mode != USB_DR_MODE_PERIPHERAL) {
+		dwc->role_switch_default_mode = USB_DR_MODE_HOST;
 		mode = DWC3_GCTL_PRTCAP_HOST;
 	} else {
-		dwc->role_switch_default_mode = USB_DR_MODE_PERIPHERAL;
 		mode = DWC3_GCTL_PRTCAP_DEVICE;
 	}
 	dwc3_set_mode(dwc, mode);
