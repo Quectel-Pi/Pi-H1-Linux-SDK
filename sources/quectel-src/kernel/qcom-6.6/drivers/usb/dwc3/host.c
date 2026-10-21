@@ -10,6 +10,7 @@
 #include <linux/irq.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 #include <linux/usb.h>
 #include <linux/usb/hcd.h>
 
@@ -149,6 +150,24 @@ int dwc3_host_init(struct dwc3 *dwc)
 		goto err;
 	}
 
+	/*
+	 * Pin the xHCI controller runtime-active for its whole lifetime.
+	 *
+	 * A runtime-suspended xHCI cannot notice a device plugged into the
+	 * port: usb_hcd_irq() drops every interrupt while the HCD is not HW
+	 * accessible, and the Qualcomm glue arms its DP/DM/SS wakeup
+	 * interrupts only from dwc3_qcom_suspend(), which never runs because
+	 * the glue itself stays runtime-active.  The port then remains at
+	 * "Connected ... U0" with the connect-change bit pending and the
+	 * device is never enumerated.
+	 *
+	 * A usage reference is used instead of relying on
+	 * pm_runtime_forbid() alone, so that power/control writes from
+	 * userspace cannot re-enable autosuspend behind our back.  The root
+	 * hubs are still free to autosuspend: their wakeup bits do work.
+	 */
+	pm_runtime_get_noresume(&xhci->dev);
+
 	if (dwc->sys_wakeup) {
 		/* Restore wakeup setting if switched from device */
 		device_wakeup_enable(dwc->sysdev);
@@ -167,6 +186,9 @@ void dwc3_host_exit(struct dwc3 *dwc)
 {
 	if (dwc->sys_wakeup)
 		device_init_wakeup(&dwc->xhci->dev, false);
+
+	/* Release the reference taken in dwc3_host_init(). */
+	pm_runtime_put_noidle(&dwc->xhci->dev);
 
 	dwc3_enable_susphy(dwc, true);
 	platform_device_unregister(dwc->xhci);

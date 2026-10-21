@@ -98,6 +98,7 @@ struct dwc3_qcom {
 
 	enum usb_role		current_role;
 	struct notifier_block	xhci_nb;
+	bool			xhci_nb_registered;
 };
 
 static inline void dwc3_qcom_setbits(void __iomem *base, u32 offset, u32 val)
@@ -813,7 +814,10 @@ static int dwc3_qcom_handle_cable_disconnect(void *data)
 		 * branch above resumes the wrapper for exactly that reason.
 		 */
 		dwc3_qcom_vbus_regulator_enable(qcom, false);
-		usb_unregister_notify(&qcom->xhci_nb);
+		if (qcom->xhci_nb_registered) {
+			usb_unregister_notify(&qcom->xhci_nb);
+			qcom->xhci_nb_registered = false;
+		}
 	}
 
 	pm_runtime_mark_last_busy(qcom->dev);
@@ -849,8 +853,20 @@ static void dwc3_qcom_handle_set_mode(void *data, u32 desired_dr_role)
 		 * in the 6.12.y vendor driver.
 		 */
 		dwc3_qcom_vbus_override_enable(qcom, false);
-		qcom->xhci_nb.notifier_call = dwc3_xhci_event_notifier;
-		usb_register_notify(&qcom->xhci_nb);
+
+		/*
+		 * Register exactly once.  The old check on xhci_nb.next was
+		 * wrong: next == NULL means "last entry in the chain", not
+		 * "not registered", and notifier_chain_unregister() never
+		 * clears it.  The duplicate then tripped
+		 * WARN(notifier_chain_register) on every DEVICE -> HOST
+		 * transition.
+		 */
+		if (!qcom->xhci_nb_registered) {
+			qcom->xhci_nb.notifier_call = dwc3_xhci_event_notifier;
+			usb_register_notify(&qcom->xhci_nb);
+			qcom->xhci_nb_registered = true;
+		}
 		qcom->current_role = USB_ROLE_HOST;
 		dwc3_qcom_vbus_regulator_enable(qcom, true);
 	}
@@ -863,14 +879,21 @@ static void dwc3_qcom_handle_mode_changed(void *data, u32 current_dr_role)
 	struct dwc3_qcom *qcom = (struct dwc3_qcom *)data;
 
 	/*
-	 * XHCI platform device is allocated upon host init.
-	 * So ensure we are in host mode before enabling autosuspend.
+	 * Do NOT enable runtime autosuspend for the xHCI controller here.
+	 *
+	 * A suspended xHCI never sees a connect: usb_hcd_irq() returns
+	 * IRQ_NONE while the HCD is not HW accessible, and the glue wakeup
+	 * interrupts are only armed in dwc3_qcom_suspend(), which does not
+	 * run because the glue stays runtime-active.  With autosuspend
+	 * enabled the port ends up "Connected ... U0" with the
+	 * connect-change bit pending and the device is never enumerated,
+	 * which is exactly what broke hotplug after a DEVICE -> HOST
+	 * hand-over.
+	 *
+	 * dwc3_host_init() now keeps the controller runtime-active.
 	 */
-	if ((current_dr_role == DWC3_GCTL_PRTCAP_HOST) &&
-	    (qcom->current_role == USB_ROLE_HOST)) {
-		pm_runtime_use_autosuspend(&qcom->dwc.xhci->dev);
-		pm_runtime_set_autosuspend_delay(&qcom->dwc.xhci->dev, 0);
-	}
+	dev_dbg(qcom->dev, "mode changed: dr_role=%u glue_role=%d\n",
+		current_dr_role, qcom->current_role);
 }
 
 static void dwc3_post_conndone_notification(void *data)

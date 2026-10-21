@@ -201,7 +201,17 @@ static void __dwc3_set_mode(struct work_struct *work)
 	if (!desired_dr_role)
 		goto out;
 
-	if (!dwc->cable_disconnected)
+	/*
+	 * HOST transitions must reach the glue even when the cable is already
+	 * gone.  A DEVICE -> HOST hand-over happens right after the PC was
+	 * unplugged, so cable_disconnected is set here.  Skipping the notify
+	 * left the wrapper in USB_ROLE_NONE: no VBUS regulator, no xhci
+	 * notifier, so the next attach was never handled and the stick stayed
+	 * invisible.  Notifying HOST here keeps the glue state machine in step
+	 * with the boot-time NONE -> HOST path.
+	 */
+	if (!dwc->cable_disconnected ||
+	    desired_dr_role == DWC3_GCTL_PRTCAP_HOST)
 		dwc3_notify_set_mode(dwc, desired_dr_role);
 
 	/*
