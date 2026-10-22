@@ -41,6 +41,8 @@ IMAGE_INSTALL:append = " \
                     btrfs-tools \
                     qcom-npu-test \
                     npu-llm \
+                    qwen35-npu \
+                    qwen35-npu-model \
                 "
 
 IMAGE_INSTALL:remove = " \
@@ -48,6 +50,17 @@ IMAGE_INSTALL:remove = " \
                 "
 
 IMAGE_INSTALL:remove = "qcom-resize-partitions wlan-sigma-dut"
+
+# qwen35-npu-model carries the Qwen3.5-0.8B weights (720 MB int8 ONNX graph +
+# 508 MB fp16 embedding table) in /var/lib/qwen35, so every firmware built from
+# here has Qwen3.5 available and npu-chat takes it as the default model.  The
+# runner is the default ORT backend; an HTP image ships kvc.bin instead (764 MB,
+# see QWEN35_MODEL_FILES in the recipe).
+# The weights are fetched from a GitHub release and pinned by sha256 (see
+# QWEN35_MODEL_URL/_ARTIFACTS in the recipe); they are not in git.
+# A build that does not want the 1.2 GB of weights can drop it with:
+#     IMAGE_INSTALL:remove = "qwen35-npu-model"
+#     QWEN35_MODEL_IN_IMAGE = "0"
 
 # Writes debian rootfs
 

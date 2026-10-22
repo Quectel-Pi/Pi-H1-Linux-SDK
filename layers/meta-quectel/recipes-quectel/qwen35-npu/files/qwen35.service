@@ -1,0 +1,38 @@
+[Unit]
+Description=Qwen3.5-0.8B resident server (int8 ONNX on the CPU by default)
+Documentation=file:///usr/share/qwen35-npu/README.md
+After=network.target
+# Only the HTP backend needs the DSP; harmless for the default ORT backend.
+After=adsp.service adsprpcd.service
+Wants=adsp.service adsprpcd.service
+# The weights are not packaged (1.2 GB). Skip the unit instead of entering a
+# restart loop when they are not installed yet: `systemctl start qwen35` right
+# after flashing would otherwise fail ten times and leave the unit in
+# "failed", and npu-chat would show the model but not be able to run it.
+ConditionPathExists=/var/lib/qwen35/qwen08b_i8.onnx
+ConditionPathExists=/var/lib/qwen35/emb08_f16.npy
+
+[Service]
+Type=simple
+Environment=ADSP_LIBRARY_PATH=/usr/lib/rfsa/adsp:/dsp
+Environment=QWEN35_DIR=/var/lib/qwen35
+Environment=QWEN35_BACKEND=ort
+# 4 threads beat 8 by 25% for int8 MatMul on this 4+4 SoC (see qwen35ort.py)
+Environment=QWEN35_THREADS=4
+Environment=QWEN35_PORT=8000
+Environment=PYTHONUNBUFFERED=1
+# Pin to the 4 big cores. Without this schedutil sees 4 runnable threads spread
+# over 8 CPUs as ~50% utilisation and holds the big cluster at 1.5 GHz; pinned,
+# every core looks busy and the clocks sit at 2.4 GHz. Measured 205 -> 140
+# ms/token (+47%), flat over 400 steps even at 94 C. See README "CPU pinning".
+CPUAffinity=4-7
+ExecStart=/usr/share/qwen35-npu/tools/qwen35-launch.sh
+Restart=on-failure
+RestartSec=10
+# 720 MB of int8 weights, ~130 MB of state/KV buffers; the 508 MB embedding
+# table is mmap'd, so keep the limit generous but bounded
+MemoryMax=5G
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

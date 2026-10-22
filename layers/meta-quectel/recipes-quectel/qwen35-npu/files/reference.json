@@ -1,0 +1,8 @@
+{
+  "_comment": "Greedy continuation of the built-in self-test prompt, checked by hand against the int8 model on the board. qwen35-serve.py --selftest compares its own tokens against this list and prints 'quality: pass' or 'quality: MISMATCH' (a mismatch does not stop the service, it means the model or the tokenizer changed and the text should be looked at again).",
+  "backend": "ort",
+  "model": "qwen08b_i8.onnx (int8 weights, fp32 activations, onnxruntime 1.31.0, 4 threads)",
+  "prompt": "Hello",
+  "tokens": [9419, 0, 2500, 628, 353, 1438, 488, 3242],
+  "text": "Hello! How can I help you today"
+}

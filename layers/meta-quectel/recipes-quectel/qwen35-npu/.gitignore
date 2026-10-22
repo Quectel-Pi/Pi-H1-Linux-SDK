@@ -1,0 +1,9 @@
+# The model artifacts (720 MB int8 ONNX graph, 725 MB prefill graph, 764 MB QNN
+# context, 508 MB fp16 embedding table) are built, not source, so they are not
+# committed: the recipe fetches them from the GitHub release (see
+# QWEN35_MODEL_URL in qwen35-npu_1.0.bb).  This directory is only where a local
+# build or an offline QWEN35_MODEL_URL=file://... keeps them.
+files/model/
+# py_compile / imports during development
+__pycache__/
+*.pyc
