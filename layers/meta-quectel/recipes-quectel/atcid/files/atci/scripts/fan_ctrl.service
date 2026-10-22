@@ -1,6 +1,13 @@
 [Unit]
 Description=Fan LED Control by CPU Temperature
 After=local-fs.target
+# persist 是独立分区(/dev/disk/by-partlabel/persist)，flag 落在里面。
+# 只做顺序依赖(不用 Requires)，挂载失败时仍然能按 condition 判定，不会被拖着起不来。
+After=var-persist.mount pi-cleanup.service
+# 产线 AT 测试模式(/var/persist/fct_done_flag 不存在)下不启动温控：此时风扇由
+# AT+FANON / AT+FANOFF 独占控制，避免这里每 5s 按温度把 pwm1 覆盖回去。
+# AT+QFCT="done" 建好 flag 后会显式 systemctl start 把温控接回来。
+ConditionPathExists=/var/persist/fct_done_flag
 Before=shutdown.target poweroff.target halt.target reboot.target
 
 [Service]

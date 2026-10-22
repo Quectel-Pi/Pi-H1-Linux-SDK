@@ -1889,16 +1889,110 @@ ATRESPONSE_t QL_AT_SSDTEST_Handle(char* cmdline, ATOP_t opType, char* response)
 }
 ATRESPONSE_t QL_AT_40PINLEDON_Handle (char* cmdline, ATOP_t opType, char* response) { system(scripts_gpio_led_on_sh); return AT_OK; }
 ATRESPONSE_t QL_AT_40PINLEDOFF_Handle(char* cmdline, ATOP_t opType, char* response) { system(scripts_gpio_led_off_sh); return AT_OK; }
+
+/* pwm-fan 的 hwmon 编号不固定(hwmon32 只是某次启动恰好排到)，按
+ * name=="pwmfan" 查找，和 fan_ctrl.sh 的做法保持一致；找不到再按平台路径扫。
+ * 原来写死 hwmon32 时，编号一变 echo 会失败但 AT 照样回 OK(假通过)。 */
+#define PWM_FAN_PLATFORM_HWMON "/sys/devices/platform/soc@0/soc@0:pwm-fan/hwmon"
+
+static int fan_hwmon_dir(char *dir, size_t len)
+{
+    int i;
+    char path[128], name[64];
+    FILE *fp;
+    DIR *dp;
+    struct dirent *de;
+
+    for (i = 0; i < 64; i++) {
+        snprintf(path, sizeof(path), "/sys/class/hwmon/hwmon%d/name", i);
+        if ((fp = fopen(path, "r")) == NULL)
+            continue;
+        if (fgets(name, sizeof(name), fp) == NULL) {
+            fclose(fp);
+            continue;
+        }
+        fclose(fp);
+        name[strcspn(name, "\n")] = '\0';
+        if (strcmp(name, "pwmfan") == 0) {
+            snprintf(dir, len, "/sys/class/hwmon/hwmon%d", i);
+            return 0;
+        }
+    }
+
+    dp = opendir(PWM_FAN_PLATFORM_HWMON);
+    if (dp == NULL)
+        return -1;
+    while ((de = readdir(dp)) != NULL) {
+        if (strncmp(de->d_name, "hwmon", 5) != 0)
+            continue;
+        snprintf(dir, len, "%s/%s", PWM_FAN_PLATFORM_HWMON, de->d_name);
+        closedir(dp);
+        return 0;
+    }
+    closedir(dp);
+    return -1;
+}
+
+/* 写 sysfs 属性并回读确认，失败返回 -1，让 AT 回 ERROR 而不是假 OK */
+static int fan_set_attr(const char *attr, int value)
+{
+    char dir[128], path[192], buf[32];
+    FILE *fp;
+    int back = -1;
+
+    if (fan_hwmon_dir(dir, sizeof(dir)) < 0) {
+        LOGATCI(LOG_ERR, "[fan] pwmfan hwmon not found");
+        return -1;
+    }
+    snprintf(path, sizeof(path), "%s/%s", dir, attr);
+
+    if ((fp = fopen(path, "w")) == NULL) {
+        LOGATCI(LOG_ERR, "[fan] open %s failed: %s", path, strerror(errno));
+        return -1;
+    }
+    if (fprintf(fp, "%d\n", value) < 0 || fclose(fp) != 0) {
+        LOGATCI(LOG_ERR, "[fan] write %s failed: %s", path, strerror(errno));
+        return -1;
+    }
+
+    if ((fp = fopen(path, "r")) == NULL) {
+        LOGATCI(LOG_ERR, "[fan] readback open %s failed: %s", path, strerror(errno));
+        return -1;
+    }
+    if (fgets(buf, sizeof(buf), fp) != NULL)
+        back = atoi(buf);
+    fclose(fp);
+
+    if (back != value) {
+        LOGATCI(LOG_ERR, "[fan] %s wrote %d, readback %d", path, value, back);
+        return -1;
+    }
+    LOGATCI(LOG_DEBUG, "[fan] %s = %d (%s)", attr, value, dir);
+    return 0;
+}
+
 ATRESPONSE_t QL_AT_FANON_Handle      (char* cmdline, ATOP_t opType, char* response) {
-    system("systemctl stop fan_ctrl.service");
-    system("echo 1 > /sys/devices/platform/soc@0/soc@0:pwm-fan/hwmon/hwmon32/pwm1_enable");
-    system("echo 255 > /sys/devices/platform/soc@0/soc@0:pwm-fan/hwmon/hwmon32/pwm1");
+    if (opType == AT_TEST_OP)
+        return AT_OK;
+
+    /* 不用停 fan_ctrl：该服务带 ConditionPathExists=/var/persist/fct_done_flag，
+     * 产线测试模式(flag 不存在)下本来就不会启动，pwm1 只由这里写。 */
+
+    /* enable=1 交回手动 PWM 控制，占空比拉满 */
+    if (fan_set_attr("pwm1_enable", 1) < 0 || fan_set_attr("pwm1", 255) < 0)
+        return AT_ERROR;
+    LOGATCI(LOG_DEBUG, "[QL_AT_FANON_Handle] fan on (pwm1=255)");
     return AT_OK;
 }
 ATRESPONSE_t QL_AT_FANOFF_Handle     (char* cmdline, ATOP_t opType, char* response) {
-    system("systemctl stop fan_ctrl.service");
-    system("echo 0 > /sys/devices/platform/soc@0/soc@0:pwm-fan/hwmon/hwmon32/pwm1");
-    system("echo 0 > /sys/devices/platform/soc@0/soc@0:pwm-fan/hwmon/hwmon32/pwm1_enable");
+    if (opType == AT_TEST_OP)
+        return AT_OK;
+
+    /* 保留 pwm1_enable=1 + 占空比 0：风扇停转，但 PWM 控制权还在手动一侧，
+     * 出货后开机 fan_ctrl 能直接接管，不需要先改 enable。 */
+    if (fan_set_attr("pwm1_enable", 1) < 0 || fan_set_attr("pwm1", 0) < 0)
+        return AT_ERROR;
+    LOGATCI(LOG_DEBUG, "[QL_AT_FANOFF_Handle] fan off (pwm1=0)");
     return AT_OK;
 }
 #define QCOM_SCM_DLOAD_MODE_PATH "/sys/module/qcom_scm/parameters/download_mode"
