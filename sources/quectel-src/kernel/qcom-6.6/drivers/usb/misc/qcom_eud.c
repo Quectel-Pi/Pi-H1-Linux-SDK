@@ -118,12 +118,26 @@ static int eud_usb_role_set(struct eud_chip *chip, enum usb_role role)
 	struct usb_role_switch *sw;
 	int ret;
 
-	if (role == chip->current_role)
-		return 0;
-
 	sw = usb_role_switch_get(chip->dev);
 	if (IS_ERR_OR_NULL(sw))
 		return -EINVAL;
+
+	/*
+	 * Compare against the role switch's own state instead of a private
+	 * shadow copy.  current_role is initialised to USB_ROLE_DEVICE in
+	 * probe(), while the downstream controller (dwc3) starts in host
+	 * mode.  A private cache therefore compares DEVICE with DEVICE on
+	 * the very first attach event, returns 0 without ever programming
+	 * the controller, and leaves the port stuck in host role - with the
+	 * gadget never registered and no UDC created - until the cable is
+	 * physically replugged (which changes the downstream role and makes
+	 * the next event pass the check).
+	 */
+	if (role == usb_role_switch_get_role(sw)) {
+		chip->current_role = role;
+		usb_role_switch_put(sw);
+		return 0;
+	}
 
 	ret = usb_role_switch_set_role(sw, role);
 	usb_role_switch_put(sw);
@@ -395,7 +409,13 @@ static int eud_probe(struct platform_device *pdev)
 		return dev_err_probe(chip->dev, PTR_ERR(chip->role_sw),
 				"failed to register role switch\n");
 
-	chip->current_role = USB_ROLE_DEVICE;
+	/*
+	 * Must not mirror the downstream controller's power-on role: dwc3 is
+	 * brought up as a host before this switch is registered, so claiming
+	 * DEVICE here would mask the first real attach event.  See
+	 * eud_usb_role_set().
+	 */
+	chip->current_role = USB_ROLE_NONE;
 	enable_irq_wake(chip->irq);
 
 	if (chip->mode_mgr_phys && !chip->mode_mgr) {
