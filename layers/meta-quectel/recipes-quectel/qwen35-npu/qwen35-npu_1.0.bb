@@ -1,240 +1,413 @@
-SUMMARY = "Qwen3.5-0.8B resident runner, server and tooling (int8 ONNX on the CPU)"
-DESCRIPTION = "Board-side resident runner for a Qwen3_5ForConditionalGeneration decode \
-graph.  This is not a genie model: 18 of the 24 layers are gated-DeltaNet with \nrecurrent state, which genie cannot express, so the graph is exported to ONNX and \ndriven directly. \\
-\\
-Two backends share one model loop: \\
-  * ort -- qwen08b_i8.onnx, int8 weights with fp32 activations, onnxruntime on \
-    the CPU.  Default.  Logits cosine 0.9925 against an fp32 run, 139 ms/token \
-    at 4 threads (7.2 tok/s) on this board.  The prompt is pre-filled by \
-    qwen08b_pf64_i8.onnx, the same model in 64-token blocks: 947 ms per block \
-    instead of 132 ms per token, so a 100 token prompt costs 1.9 s and not \
-    13.2 s. \\
-  * htp -- kvc.bin, a W8A16 context binary on the Hexagon V68 NPU, 126 ms of \
-    graph time per token.  Kept for measurement: 16-bit per-tensor activations \
-    over 1621 tensors reach only cosine 0.9688, which does not keep the top-1 \
-    token, so the generated text is noise.  qwen35ort.py and README.md carry \
-    the measurements; there is no local fix, the error is spread over the whole \
-    graph. \\
-\\
-npu-chat only offers the model when /run/qwen35.ok exists; the launcher writes \
-that marker after its self-test, and reports the accuracy status separately."
-LICENSE = "CLOSED"
+SUMMARY = "Qwen3.5-0.8B text server on the Hexagon V68 NPU (ONNX Runtime QNN EP, EPContext graphs)"
+DESCRIPTION = "Board-side resident OpenAI-compatible server for Qwen3.5-0.8B running on \
+the Hexagon HTP v68 NPU of the QCS6490 (Quectel PI H1), ported from the Radxa \
+Dragon Q6A release (Apache-2.0). \
+The design is not \"export a graph and quantize it here\": the 2K release ships \
+pre-compiled QNN EPContexts (decode_ctx.onnx + decode_ctx_qnn.bin for the P5 \
+decoder, prefill_ctx.onnx for the 64-token block prefill) and this recipe wires \
+them up: \
+  * qwen_text_engine -- cross-compiled from native/qwen_text_engine.cpp, links \
+    libonnxruntime and registers the QNN execution-provider plugin \
+    (RegisterExecutionProviderLibrary + AppendExecutionProvider_V2), owns the \
+    recurrent state arena and the sampler; \
+  * runtime/*.py -- upstream python front end (qwen_server.py, request_frontend, \
+    stage_worker, state encoders): tokenizer, HTTP API, chunked prefill, state \
+    transport between the front end and the engine; \
+  * configs/2k.json + runtime.json -- the server config; runtime.json is \
+    generated at build time by qwen35-mkconfig.py (a port of install.py's \
+    cfg['paths'] block) so the board never runs the upstream installer. \
+Layout, fixed with the model package (qwen35-npu-model) and files/qwen35-launch.sh: \
+  /usr/lib/qwen35/           python runtime, qwen_text_engine, runtime.json, \
+                             qwen35-launch.sh; qnn/ is the QNN EP/HTP library dir \
+                             from the onnxruntime-qnn package, lib/ holds the ORT \
+                             SONAME alias; \
+  /usr/share/qwen35/         model assets (from qwen35-npu-model); \
+  /var/lib/qwen35/           writable state: scratch/ and logs/ (created at runtime). \
+The service listens on 127.0.0.1:8000 and is pinned to the four big cores \
+(CPUAffinity=4-7), which is what keeps schedutil at 2.4 GHz.  The upstream \
+installer is not used: no aarch64 host check, no pip, no on-board g++, no \
+binary sha256 self-check; the recipe pins the wheels and the assets instead."
+
+HOMEPAGE = "https://github.com/super617/radxa-dragon-q6a-qwen3.5-0.8b-qcs6490-qnn-npu"
+LICENSE = "Apache-2.0"
+LIC_FILES_CHKSUM = "file://LICENSE;md5=a2f7eec73f8b7e1873feeb201028cf9c"
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
-# Python bindings for the ORT backend.  The image's python3 is the Debian 3.13
-# from prebuild/debian-gnome-rootfs (rsync'd over the Yocto rootfs), so this is a
-# manylinux wheel unpacked into Debian's dist-packages rather than a Yocto
-# python3-onnxruntime recipe (that one builds ONNX Runtime from source).
-# The wheel is self-contained: at import time it needs numpy and packaging
-# (both already in the Debian rootfs) but not flatbuffers/protobuf, which are
-# only used by the onnxruntime.quantization and transformers helpers.
-ORT_WHEEL = "onnxruntime-1.31.0-cp313-cp313-manylinux_2_28_aarch64.whl"
-ORT_WHEEL_URL = "https://files.pythonhosted.org/packages/8a/d0/3677fe93ec0fa3c637744aa4c3ae6ef89a93ee229cd3c5157820f267c7bd"
+# ---------------------------------------------------------------------------
+# Layout and profile
+# ---------------------------------------------------------------------------
+# 2k is the text model (2048 context).  4k needs the 4K asset group in
+# qwen35-npu-model (QWEN35_QNN_GROUPS = "4k"), its own configs/4k.json here, and
+# the -DQWEN_CONTEXT=4096 below; upstream ships it as a separate profile because
+# the context binary is twice the size and the state arena grows with it.
+QWEN35_PROFILE ??= "2k"
 
-# Which artifacts the firmware carries.  Default: the int8 ORT decode graph, the
-# 64-token prefill graph and the fp16 embedding table both backends share.  An
-# HTP image sets QWEN35_MODEL_FILES = "kvc.bin emb08_f16.npy" instead.
-QWEN35_MODEL_FILES ??= "qwen08b_i8.onnx qwen08b_pf64_i8.onnx emb08_f16.npy"
-QWEN35_MODEL_IN_IMAGE ??= "1"
+QWEN35_LIBDIR = "${libdir}/qwen35"
+QWEN35_ASSETDIR = "${datadir}/qwen35"
+QWEN35_STATEDIR = "${localstatedir}/lib/qwen35"
+# .../lib/qwen35, not ${localstatedir}/qwen35: ${localstatedir} expands to /var, and
+# systemd's StateDirectory=qwen35 in qwen35.service always resolves to
+# /var/lib/qwen35.  With the wrong root, runtime.json pointed the server at
+# /var/qwen35/scratch while the unit created and whitelisted (ReadWritePaths)
+# /var/lib/qwen35: two directories, one of them outside the sandbox rules, and
+# launch.sh logging somewhere else than the server.  Keep the three in step:
+# this variable, qwen35.service StateDirectory/ReadWritePaths/QWEN35_STATE, and
+# qwen35-launch.sh DEFAULT_STATE_DIR.
 
-# Where those artifacts come from.  They are build products (1.9 GB of ONNX and
-# numpy), not source, so they are not in this layer and not in git: the recipe
-# fetches them from the GitHub release, verifies each file against the sha256
-# below, and installs them from ${WORKDIR}/qwen35-model.  DL_DIR keeps them, so
-# a rebuild does not download them again.
-#
-# An offline build (or a tree that already has the files) points this at a
-# directory and nothing changes but the fetcher:
-#     QWEN35_MODEL_URL = "file:///data/qwen35-model"
-# QWEN35_MODEL_IN_IMAGE = "0" skips the weights entirely (runner-only image).
-#
-# The default tag is `latest`, which is a moving target by nature: the sha256
-# per file below is what actually pins the build, and a re-upload that changes
-# one byte fails do_fetch instead of silently rebuilding an image.  Point the
-# tag at an immutable release (QWEN35_MODEL_TAG = "v1.0" and so on) when the
-# firmware has to be reproducible from the tag alone.
-QWEN35_MODEL_TAG ??= "latest"
-QWEN35_MODEL_URL ??= "https://github.com/super617/Qwen3.5-for-qcs6490/releases/download/${QWEN35_MODEL_TAG}"
+# The two library paths the engine and runtime.json point at.  The names are a
+# contract with the onnxruntime-qnn recipe (DEPENDS_NOTES.md): the QNN EP plugin
+# is the library handed to RegisterExecutionProviderLibrary(), the backend is the
+# HTP implementation libQnnHtp.so that the plugin dlopen()s.
+QWEN35_QNN_DIR ??= "${QWEN35_LIBDIR}/qnn"
+QWEN35_QNN_PLUGIN ??= "${QWEN35_QNN_DIR}/libonnxruntime_providers_qnn.so"
+QWEN35_QNN_BACKEND ??= "${QWEN35_QNN_DIR}/libQnnHtp.so"
 
-# label:file:sha256.  The label is what the fetcher keys SRC_URI[...sha256sum]
-# off, so it has to be unique and stable; the sha256 is per file, not per tag.
-QWEN35_MODEL_ARTIFACTS = " \
-    model_i8:qwen08b_i8.onnx:696ea91d873e602bd228c8c926080879db2d72e4c19d1898f1098b422caef23d \
-    model_pf64:qwen08b_pf64_i8.onnx:3352a5c05ec2e75756cee48fa1b31e6d1b946404567f839d6b663d9f5a7137ab \
-    model_emb:emb08_f16.npy:329c9a43c2a66c03bea93f03eeab9c46c0e310400964b7899c67ae9c69600137 \
-    model_kvc:kvc.bin:b3daff34b6a96cb7a0f9977d75aef60e92b230148e23ef10ef07b20adcaa470e \
-"
+# onnxruntime release the C API headers and the engine were taken from.
+QWEN35_ORT_VERSION ??= "1.27.0"
+# Directory the onnxruntime recipe publishes libonnxruntime.so* in, when it is
+# not the plain ${STAGING_LIBDIR}.  Empty means "search the usual places" (see
+# do_compile); the wheel-based recipe in DEPENDS_NOTES.md installs into
+# ${libdir}/qwen35/lib, which is already in that list.
+QWEN35_ORT_LIBDIR ??= ""
 
-# Text payload only: python, the layout table and the tokenizer. No downloads
-# except the int8 ORT wheel; the weights are appended below only when the image
-# carries them.
 SRC_URI = " \
-    file://qwen35-convert.sh \
-    file://export_prefill.py \
-    file://qwen35-run.sh \
-    file://qwen35-run.py \
-    file://qwen35rt.py \
-    file://qwen35ort.py \
-    file://qwen35-rt.py \
-    file://qwen35-serve.py \
+    file://runtime/host_memory.py \
+    file://runtime/image_frontend.py \
+    file://runtime/native_handoff.py \
+    file://runtime/prompt_bundle.py \
+    file://runtime/qwen_server.py \
+    file://runtime/request_frontend.py \
+    file://runtime/runtime_cache.py \
+    file://runtime/stage_worker.py \
+    file://runtime/state_encoder.py \
+    file://runtime/state_handoff.py \
+    file://runtime/vision_runtime.py \
+    file://native/qwen_text_engine.cpp \
+    file://native/qnn_memory.cpp \
+    file://native/exact_prefix.h \
+    file://native/logit_offset.h \
+    file://native/resident_prefill.h \
+    file://native/ort_include/onnxruntime_c_api.h \
+    file://native/ort_include/onnxruntime_cxx_api.h \
+    file://native/ort_include/onnxruntime_cxx_inline.h \
+    file://native/ort_include/onnxruntime_ep_c_api.h \
+    file://native/ort_include/onnxruntime_float16.h \
+    file://native/ort_include/UPSTREAM.json \
+    file://configs/${QWEN35_PROFILE}.json \
+    file://qwen35-mkconfig.py \
     file://qwen35-launch.sh \
-    file://qwen35-model-install.sh \
-    file://qwen35-ready.py \
+    file://qwen35-verify.sh \
     file://qwen35.service \
-    file://qnnlib.py \
-    file://qnnres.cpp \
-    file://offload_kv.py \
-    file://mklayout.py \
-    file://layout.json \
-    file://kv_manifest.json \
-    file://reference.json \
-    file://tokenizer.json.gz;unpack=0 \
-    file://calib_gen.py \
-    file://prep_native.py \
+    file://qwen35-journald.conf \
+    file://LICENSE \
+    file://NOTICE \
     file://README.md \
-    ${ORT_WHEEL_URL}/${ORT_WHEEL};name=ortwheel;unpack=0 \
 "
-SRC_URI[ortwheel.sha256sum] = "ad663106f6eeff3d454f24a786450459d07f30e74863851104fc1b8b3f368127"
 
-# Resolve QWEN35_MODEL_FILES into real SRC_URI entries plus their checksums.  An
-# anonymous function so QWEN35_MODEL_FILES / _URL / _IN_IMAGE can be overridden
-# from local.conf without the recipe listing a URL it will not fetch; a file the
-# table does not know is a parse-time error instead of a 1.9 GB download that
-# fails at do_fetch.
-#
-# setVarFlag, not setVar("SRC_URI[name.sha256sum]"): the datastore has no bracket
-# syntax, so setVar() would create a variable whose *name* contains the brackets
-# and bb.fetch2's getVarFlag("SRC_URI", "name.sha256sum") would still see nothing
-# -- the download then completes and do_fetch fails with "Missing SRC_URI
-# checksum" after 1.9 GB.
-python __anonymous() {
-    if d.getVar("QWEN35_MODEL_IN_IMAGE") != "1":
-        return
-    base = (d.getVar("QWEN35_MODEL_URL") or "").rstrip("/")
-    table = {}
-    for row in (d.getVar("QWEN35_MODEL_ARTIFACTS") or "").split():
-        label, fname, sha = row.split(":")
-        table[fname] = (label, sha)
-    uris = []
-    for f in (d.getVar("QWEN35_MODEL_FILES") or "").split():
-        if f not in table:
-            bb.fatal("qwen35-npu: %s is not in QWEN35_MODEL_ARTIFACTS" % f)
-        label, sha = table[f]
-        uris.append("%s/%s;name=%s;subdir=qwen35-model" % (base, f, label))
-        d.setVarFlag("SRC_URI", "%s.sha256sum" % label, sha)
-    if not uris:
-        bb.fatal("qwen35-npu: QWEN35_MODEL_IN_IMAGE=1 but QWEN35_MODEL_FILES is empty")
-    d.appendVar("SRC_URI", " " + " ".join(uris))
-}
-
-# bitbake decompresses a .gz source into the workdir on unpack (bb.fetch2
-# unpacks .gz to a file with the extension stripped), and the runner wants the
-# 3.5 MB gzip stream, not the 12.8 MB json. unpack=0 keeps the file intact.
 S = "${WORKDIR}"
-do_configure[noexec] = "1"
-do_compile[noexec] = "1"
 
-inherit systemd
-SYSTEMD_SERVICE:${PN} = "qwen35.service"
-# Start at boot so qwen3.5 is the default model in npu-chat. The unit has
-# ConditionPathExists on the two weights, so enabling it is harmless before the
-# model is installed: it is skipped instead of failing in a restart loop.
-SYSTEMD_AUTO_ENABLE:${PN} = "enable"
-
-# The weights are fetched, not carried in the layer, so there is nothing to
-# point at: do_install takes them from where do_unpack put them.
-
-do_install() {
-    install -d ${D}${datadir}/qwen35-npu/tools
-    install -d ${D}${systemd_system_unitdir}
-
-    install -m 0755 ${S}/qwen35-convert.sh ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/export_prefill.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/qwen35-run.sh ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/qwen35-run.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/qwen35rt.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/qwen35ort.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/qwen35-rt.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/qwen35-serve.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/qwen35-launch.sh ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/qwen35-model-install.sh ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/qwen35-ready.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/offload_kv.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0755 ${S}/mklayout.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0644 ${S}/qnnlib.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0644 ${S}/qnnres.cpp ${D}${datadir}/qwen35-npu/tools/
-    install -m 0644 ${S}/calib_gen.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0644 ${S}/prep_native.py ${D}${datadir}/qwen35-npu/tools/
-    install -m 0644 ${S}/layout.json ${D}${datadir}/qwen35-npu/tools/
-    install -m 0644 ${S}/kv_manifest.json ${D}${datadir}/qwen35-npu/tools/
-    install -m 0644 ${S}/reference.json ${D}${datadir}/qwen35-npu/tools/
-    install -m 0644 ${S}/tokenizer.json.gz ${D}${datadir}/qwen35-npu/tools/
-    install -m 0644 ${S}/README.md ${D}${datadir}/qwen35-npu/
-
-    install -m 0644 ${S}/qwen35.service ${D}${systemd_system_unitdir}/
-
-    # onnxruntime for the ORT backend, into the Debian rootfs's dist-packages:
-    # the image's python3 is the Debian 3.13 overlaid by quecpi-image, whose
-    # sys.path has /usr/lib/python3/dist-packages and not the Yocto
-    # site-packages directory.
-    install -d ${D}/usr/lib/python3/dist-packages
-    python3 -m zipfile -e ${WORKDIR}/${ORT_WHEEL} \
-        ${D}/usr/lib/python3/dist-packages
-
-    if [ "${QWEN35_MODEL_IN_IMAGE}" = "1" ]; then
-        install -d ${D}${localstatedir}/lib/qwen35
-        for f in ${QWEN35_MODEL_FILES}; do
-            src="${WORKDIR}/qwen35-model/$f"
-            if [ ! -f "$src" ]; then
-                bbfatal "qwen35-npu: $src is missing. The fetcher should have \
-put it there from ${QWEN35_MODEL_URL} (QWEN35_MODEL_FILES=${QWEN35_MODEL_FILES}); \
-see files/README.md, 'Model artifacts'."
-            fi
-            install -m 0644 "$src" ${D}${localstatedir}/lib/qwen35/$f
-        done
-    fi
-}
-
-# qwen35rt.py / qwen35ort.py / qwen35-serve.py need numpy for the tensor views,
-# gzip for the tokenizer and http.server (which oe-core ships in netclient) for
-# the API.  onnxruntime itself comes from this recipe (the ORT_WHEEL above), not
-# from a Yocto recipe; python3-ctypes is only needed by the HTP backend.
+# onnxruntime/onnxruntime-qnn are wheel-based recipes (DEPENDS_NOTES.md).  The
+# wheels are cp313/aarch64 and install into /usr/lib/python3/dist-packages, i.e.
+# their headers are not staged and libonnxruntime is not in ${STAGING_LIBDIR};
+# DEPENDS is here so the sysroot is populated before do_compile and so
+# ${STAGING_LIBDIR}/qwen35/lib/libonnxruntime.so.* appears (the wheel recipe
+# installs it under ${libdir}/qwen35/lib, which normal sysroot staging covers).
+# The C API headers come from files/native/ort_include/ -- the same 1.27.0 set,
+# verified against upstream's runtime-lock.json.  RDEPENDS keeps both packages in
+# the image, which is what provides the .so.1 the engine loads at runtime.
+DEPENDS = "onnxruntime onnxruntime-qnn"
 RDEPENDS:${PN} = " \
+    onnxruntime \
+    onnxruntime-qnn \
     python3 \
-    python3-numpy \
-    python3-ctypes \
+    python3-core \
     python3-json \
     python3-compression \
     python3-netclient \
     python3-netserver \
+    python3-tokenizers \
+    pillow \
+    fastrpc \
+    util-linux-flock \
+    util-linux-taskset \
 "
+
+# Deliberately *not* depended on:
+#
+#   python3-numpy  - the rootfs is Debian (prebuild/debian-gnome-rootfs.tar.xz)
+#                    and already ships numpy for its CPython 3.13 in
+#                    /usr/lib/python3/dist-packages/numpy.  The only OE recipe
+#                    is poky's python3-numpy, which lands in
+#                    /usr/lib/python3.12/site-packages - a directory the board's
+#                    3.13 interpreter never puts on sys.path - so depending on it
+#                    would add build time and image size and still not satisfy
+#                    `import numpy`.  Do not add it back for a Debian rootfs.
+#   python3-onnx   - no layer has this recipe (checked).  `import onnx` appears
+#                    only in runtime/chunk_prefill.py, and nothing imports that
+#                    module: stage_worker.py loads request_frontend.py,
+#                    image_frontend.py and prompt_bundle.py by path and never
+#                    touches chunk_prefill.  It is dead code upstream, so it is
+#                    not installed either (it is not in SRC_URI): shipping a
+#                    module whose only dependency is absent would just be a trap.
+#                    Re-add both the file and this RDEPENDS to get upstream's
+#                    full-NPU prefill path back.
+#   python3-pillow - that name belongs to meta-python's python3-pillow_10.3.0.bb,
+#                    which builds for 3.12 and lands in a directory the board's
+#                    3.13 interpreter never searches (same problem as numpy
+#                    above).  PIL is *required* on the server path --
+#                    request_frontend.py:121 imports it unguarded inside
+#                    preprocess_image(), and only image_frontend.py (the
+#                    standalone CLI) wraps its import in try/except -- so the
+#                    self-contained cp313 wheel ships as 'pillow'
+#                    (recipes-quectel/onnxruntime/pillow_11.3.0.bb) and is in
+#                    RDEPENDS above.  Without it an image request is a 500.
+
+# qwen35-mkconfig.py runs on the build host in do_install, so the native
+# interpreter has to be in the recipe sysroot rather than whatever python3 the
+# build machine happens to have.
+inherit python3native
+inherit systemd
+
+# fastrpc is not a python/QNN dependency but an ELF one: the HTP stub
+# libQnnHtpV68Stub.so has NEEDED libcdsprpc.so, and HTP sessions run on the CDSP
+# (cdsprpcd), not the ADSP.  meta-quectel's fastrpc bbappend already enables
+# adsprpcd + cdsprpcd, so the only thing missing here is the package dependency.
+# python3-tokenizers is provided by recipes-quectel/onnxruntime/tokenizers_0.22.2.bb
+# (an abi3 wheel; the recipe RPROVIDES the OE-style name used above).
+# fastrpc is already in the RDEPENDS list at the top; the note here is the
+# reasoning, not a second dependency (a duplicate entry is harmless but makes
+# the list look like it grew twice).
+
+SYSTEMD_SERVICE:${PN} = "qwen35.service"
+# DISABLED: the resident server is on-demand only, never at boot.  It pins four
+# big cores, holds ~490 MB RSS and owns the whole 850 MB NPU context, so leaving
+# it resident degrades every other workload on the board.  It is started either
+# by hand ('systemctl start qwen35') or by npu-chat after the user selects
+# qwen3.5, and npu-chat stops it again when the user switches away.
+# qwen35.service keeps its [Install] section, so 'systemctl enable qwen35' still
+# works for anyone who wants the old behaviour.
+# NOTE: set the un-overridden variable, not SYSTEMD_AUTO_ENABLE:${PN}.
+# systemd.bbclass interpolates ${SYSTEMD_AUTO_ENABLE} into the generated
+# postinst (systemd_postinst runs 'systemctl enable' when it reads "enable"),
+# so a :${PN} only assignment -- which get_package_var() reads for the preset
+# file -- would still leave the unit enabled in the image.  There is one
+# package here, so the plain assignment is unambiguous for both readers.
+SYSTEMD_AUTO_ENABLE = "disable"
+
+# Flags from upstream install.py, unchanged: the engine needs C++20 (std::span,
+# designated initialisers), -O3 for the sampler/state copies, and NDEBUG because
+# its asserts are on hot paths.  -O3 comes after ${CXXFLAGS} on purpose so it
+# wins over the default -O2.  -DQWEN_CONTEXT is only added for 4k: the 2K source
+# hard-codes 2048 (no QWEN_CONTEXT reference in native/, checked) and defining it
+# would change the graph contract.
+QWEN35_ENGINE_CPPFLAGS = "-std=c++20 -O3 -DNDEBUG -pthread"
+QWEN35_ENGINE_CPPFLAGS:append = "${@ ' -DQWEN_CONTEXT=4096' if d.getVar('QWEN35_PROFILE') == '4k' else ''}"
+
+do_configure[noexec] = "1"
+
+do_compile() {
+	# --- onnxruntime C API headers ------------------------------------
+	# The wheel does not ship headers (checked: onnxruntime/capi/ has only the
+	# .so files), so this normally uses the vendored copy; ${STAGING_INCDIR}
+	# comes first anyway so that a future headers package wins and a version bump
+	# fails loudly here instead of silently compiling against 1.27.0 headers.
+	# Either way the header set is byte-identical to upstream's runtime-lock.json
+	# (sha256 in DEPENDS_NOTES.md §4).
+	ort_inc="${STAGING_INCDIR}"
+	if [ ! -e "${ort_inc}/onnxruntime_cxx_api.h" ]; then
+		ort_inc="${S}/native/ort_include"
+	fi
+	for h in onnxruntime_c_api.h onnxruntime_cxx_api.h onnxruntime_cxx_inline.h \
+	         onnxruntime_ep_c_api.h onnxruntime_float16.h; do
+		if [ ! -e "${ort_inc}/$h" ]; then
+			bbfatal "qwen35-npu: onnxruntime header $h is not in ${STAGING_INCDIR} \
+nor in ${S}/native/ort_include. DEPENDS = \"onnxruntime\" should have published \
+it; see DEPENDS_NOTES.md."
+		fi
+	done
+
+	# --- libonnxruntime ------------------------------------------------
+	# A library recipe installs libonnxruntime.so; an unpacked manylinux wheel
+	# only has the versioned file plus a symlink.  Link whichever exists, by
+	# full path, so the result does not depend on -L ordering.
+	ort_lib=""
+	for d in ${QWEN35_ORT_LIBDIR} "${STAGING_LIBDIR}" "${STAGING_LIBDIR}/qwen35" \
+	         "${STAGING_LIBDIR}/qwen35/lib" "${STAGING_LIBDIR}/onnxruntime"; do
+		[ -n "$d" ] || continue
+		for name in libonnxruntime.so libonnxruntime.so.1 \
+		            libonnxruntime.so.${QWEN35_ORT_VERSION}; do
+			if [ -e "$d/$name" ]; then
+				ort_lib="$d/$name"
+				break 2
+			fi
+		done
+	done
+	if [ -z "$ort_lib" ]; then
+		bbfatal "qwen35-npu: libonnxruntime.so not found (tried ${STAGING_LIBDIR}, \
+${STAGING_LIBDIR}/qwen35, ${STAGING_LIBDIR}/qwen35/lib; names .so, .so.1, \
+.so.${QWEN35_ORT_VERSION}). DEPENDS = \"onnxruntime\" should have published it; \
+set QWEN35_ORT_LIBDIR, see DEPENDS_NOTES.md."
+	fi
+	bbnote "qwen35-npu: linking against $ort_lib"
+
+	# qwen_text_engine.cpp #includes qnn_memory.cpp (upstream layout), so this
+	# is one translation unit, exactly like upstream install.py's g++ line.
+	# -rpath $ORIGIN/lib:$ORIGIN is upstream's -Wl,-rpath,$ORIGIN/lib: the
+	# engine must find the ORT copy in /usr/lib/qwen35/lib even when
+	# LD_LIBRARY_PATH is not set (it is set by qwen35-launch.sh, but the engine
+	# is also run by hand and by --sampler-self-test).
+	${CXX} ${CXXFLAGS} ${LDFLAGS} \
+		${QWEN35_ENGINE_CPPFLAGS} \
+		-I"$ort_inc" \
+		${S}/native/qwen_text_engine.cpp \
+		"$ort_lib" -ldl \
+		-Wl,-rpath,'$ORIGIN/lib' -Wl,-rpath,'$ORIGIN' \
+		-o ${B}/qwen_text_engine
+}
+
+do_install() {
+	install -d ${D}${QWEN35_LIBDIR} ${D}${QWEN35_LIBDIR}/configs \
+	           ${D}${QWEN35_LIBDIR}/lib ${D}${QWEN35_ASSETDIR} \
+	           ${D}${bindir} ${D}${systemd_system_unitdir} ${D}${docdir}/qwen35-npu
+
+	# python front end: imported by qwen_server.py from its own directory
+	# (launch.sh cd's into ${QWEN35_LIBDIR}), so 0644 is right.
+	install -m 0644 ${S}/runtime/*.py ${D}${QWEN35_LIBDIR}/
+
+	# stage_worker.py:106 derives the directory its vision warmup is allowed to
+	# live in as "Path(__file__).resolve().parent / 'scratch'" and aborts with
+	# "warmup must stay inside the new layered scratch directory" otherwise.
+	# The worker really puts that directory under paths["scratch_root"]
+	# (${QWEN35_STATEDIR}/scratch), which is the writable state root, so without
+	# this link the worker exits during startup and the server never listens.
+	# A symlink keeps the shipped runtime .py byte-identical to upstream
+	# (PORT_NOTES.md §5) and makes the guard's assumption true; nothing is
+	# written through it at build time.  rm -rf first: if a previous layout left
+	# a real directory here, ln -s would silently create the link *inside* it.
+	rm -rf ${D}${QWEN35_LIBDIR}/scratch
+	ln -s ${QWEN35_STATEDIR}/scratch ${D}${QWEN35_LIBDIR}/scratch
+
+	install -m 0755 ${B}/qwen_text_engine ${D}${QWEN35_LIBDIR}/qwen_text_engine
+	install -m 0755 ${S}/qwen35-launch.sh ${D}${QWEN35_LIBDIR}/qwen35-launch.sh
+	# Board-side acceptance check (11 sections: assets, QNN pairing, DSP skel,
+	# ADSP path, runtime.json, readiness, HTTP, NPU prefill, decode, perf, log
+	# health).  It lives next to what it checks and is only ever run by hand.
+	install -m 0755 ${S}/qwen35-verify.sh ${D}${QWEN35_LIBDIR}/qwen35-verify.sh
+
+	# The upstream config template plus the generated runtime.json.  Both are
+	# useful on the board: the template documents the tunables, runtime.json is
+	# what the server reads.
+	install -m 0644 ${S}/configs/${QWEN35_PROFILE}.json \
+		${D}${QWEN35_LIBDIR}/configs/${QWEN35_PROFILE}.json
+	install -m 0755 ${S}/qwen35-mkconfig.py ${D}${bindir}/qwen35-mkconfig.py
+
+	# runtime.json is generated here, not on the board: qwen35-launch.sh refuses
+	# to start without it, and qwen_server.py treats paths["python"] and
+	# paths["decoder_engine"] as files that must exist.  qwen35-mkconfig.py writes
+	# those two shims next to its --lib-root, so lib-root is the *staging* path
+	# (otherwise it would try to create /usr/lib/qwen35 on the build host), and
+	# the staging prefix is stripped from the generated JSON afterwards.  Every
+	# path it emits except the asset root is under ${D}; the asset root is passed
+	# as the real target path, so lib_root is the only source of ${D}.
+	python3 ${S}/qwen35-mkconfig.py \
+		--config ${S}/configs/${QWEN35_PROFILE}.json \
+		--profile ${QWEN35_PROFILE} \
+		--assets-root ${QWEN35_ASSETDIR} \
+		--lib-root ${D}${QWEN35_LIBDIR} \
+		--state-root ${QWEN35_STATEDIR} \
+		--qnn-plugin ${QWEN35_QNN_PLUGIN} \
+		--qnn-backend ${QWEN35_QNN_BACKEND} \
+		--out ${D}${QWEN35_LIBDIR}/runtime.json \
+		--verbose
+	sed -i "s|${D}||g" ${D}${QWEN35_LIBDIR}/runtime.json
+	# A generated config that still mentions ${D}, or the build host, would look
+	# fine here and fail on the board, so check the two hazards explicitly.
+	if grep -q "${D}" ${D}${QWEN35_LIBDIR}/runtime.json; then
+		bbfatal "qwen35-npu: runtime.json contains ${D}; a staging path leaked through"
+	fi
+	if ! grep -q "\"qnn_plugin\"" ${D}${QWEN35_LIBDIR}/runtime.json; then
+		bbfatal "qwen35-npu: runtime.json has no qnn_plugin path"
+	fi
+	python3 -m json.tool ${D}${QWEN35_LIBDIR}/runtime.json > /dev/null || \
+		bbfatal "qwen35-npu: runtime.json is not valid JSON"
+	# The two shims the generator just wrote are what qwen_server.py runs; they
+	# are generated rather than shipped because upstream derives them from the
+	# install directory (see qwen35-mkconfig.py:SHIM_PYTHON/SHIM_ENGINE).
+	for shim in qwen-python engine.sh; do
+		if [ ! -x ${D}${QWEN35_LIBDIR}/$shim ]; then
+			bbfatal "qwen35-npu: qwen35-mkconfig.py did not write $shim"
+		fi
+	done
+
+	install -m 0644 ${S}/qwen35.service ${D}${systemd_system_unitdir}/qwen35.service
+	# The unit is a separate file with its own owner; if it is still the old
+	# CPU-plan unit (ExecStart into /usr/share/qwen35-npu/tools) the package
+	# boots and then fails, so say so at build time instead of on the board.
+	if ! grep -q "qwen35-launch.sh" ${D}${systemd_system_unitdir}/qwen35.service; then
+		bbwarn "qwen35-npu: qwen35.service does not start qwen35-launch.sh; files/qwen35.service is still the old CPU unit"
+	fi
+
+	install -m 0644 ${S}/LICENSE ${S}/NOTICE ${D}${docdir}/qwen35-npu/
+	# qwen35.service points Documentation= at this file.
+	install -m 0644 ${S}/README.md ${D}${docdir}/qwen35-npu/README.md
+	# NOT installed as a journald drop-in: making the journal persistent is a
+	# whole-system decision (flash wear, log retention for every unit), not
+	# something a model package should flip. Ship it as a copy-and-go example so
+	# the advice in qwen35-verify.sh is actionable.
+	install -m 0644 ${S}/qwen35-journald.conf \
+		${D}${docdir}/qwen35-npu/journald.conf.example
+}
 
 FILES:${PN} = " \
-    ${datadir}/qwen35-npu/ \
+    ${QWEN35_LIBDIR} \
+    ${QWEN35_ASSETDIR} \
+    ${bindir}/qwen35-mkconfig.py \
     ${systemd_system_unitdir}/qwen35.service \
-    /usr/lib/python3/dist-packages/onnxruntime* \
+    ${docdir}/qwen35-npu \
 "
-# The weights are huge, so they get their own package: qwen35-npu-model is what
-# quecpi-image installs to carry Qwen3.5 in the firmware (and what makes
-# qwen3.5 npu-chat's default). Builds that only want the runner skip it.
+# oe-core's default FILES:${PN}-doc claims ${docdir}, and ${PN}-doc sits before
+# ${PN} in PACKAGES, so do_package silently moved every file above into a
+# qwen35-npu-doc package -- which no image installs (checked against
+# quecpi-image's package.manifest: it lists qwen35-npu and qwen35-npu-model,
+# never the -doc one).  That cost three things at once: the Apache-2.0 LICENSE
+# and NOTICE, which have to travel with the binary that links the code; the
+# unit's Documentation=file:///usr/share/doc/qwen35-npu/README.md, which became
+# a dead link; and the 'cp .../journald.conf.example ...' advice printed by
+# qwen35-verify.sh, which pointed at a file that was not on the board.  This
+# recipe installs no other documentation, so emptying the -doc split loses
+# nothing and keeps the docs with the package that needs them.
+FILES:${PN}-doc = ""
+# ${QWEN35_LIBDIR}/lib and qnn/ are where the onnxruntime packages put their
+# shared objects; they ship in those packages (FILES above only covers what this
+# recipe installs, and the directories are created empty here -- ${QWEN35_LIBDIR}
+# covers lib/ and qnn/).
 #
-# The context is already dense, so compressing the deb only costs build time
-# and gains nothing.
-DPKG_BUILDCMD = "dpkg-deb -Znone"
-PACKAGES =+ "${PN}-model"
-ALLOW_EMPTY:${PN}-model = "1"
-FILES:${PN}-model = "${localstatedir}/lib/qwen35/"
-RDEPENDS:${PN}-model = "${PN}"
+# ${QWEN35_ASSETDIR} is the one empty directory that is *not* covered by that:
+# do_install creates /usr/share/qwen35 so runtime.json has a target and the
+# launcher's presence checks have somewhere to look, while the files themselves
+# come from qwen35-npu-model.  Without it in FILES, populate_packages reports
+# "installed but not shipped" (installed-vs-shipped) and the task fails.  Both
+# packages may own the directory; only files conflict in dpkg.
 
-# The onnxruntime wheel is a prebuilt manylinux binary: its three .so files ship
-# stripped, so the already-stripped QA check (a fatal error by default) fires on
-# them.  There are no sources to rebuild them from here, and the debug symbols
-# are not in the wheel anyway, so skip that one check for this package.
+# /usr/lib/qwen35/lib/libonnxruntime.so.1 (this package's RUNPATH, $ORIGIN/lib)
+# and .../dist-packages/onnxruntime/capi/libonnxruntime.so.1 (needed by the
+# python extension) are two regular files with the same SONAME in two different
+# directories, so oe's shlib scan registers two providers and the lookup becomes
+# ambiguous: "Multiple shlib providers for libonnxruntime.so.1: onnxruntime,
+# onnxruntime" -- a fatal QA error.  The engine deliberately loads the copy next
+# to it via DT_RUNPATH, i.e. its own private library, which is what PRIVATE_LIBS
+# declares.  RDEPENDS above still pulls onnxruntime into the image, so nothing on
+# the board is lost; only the ambiguous directory lookup is skipped.
+PRIVATE_LIBS:${PN} = "libonnxruntime.so.1"
+
+# The ORT/QNN libraries that arrive via RDEPENDS are prebuilt manylinux binaries
+# that ship stripped, and nothing here can rebuild them with symbols; the QA
+# check is fatal by default.  Everything this recipe builds itself is stripped by
+# the normal do_package path.
 INSANE_SKIP:${PN} += "already-stripped"
-# Nothing in SRC_URI is a patch or a local file that skips the fetcher, and the
-# four model URLs are on github.com, so bitbake's default network/checksum rules
-# apply unchanged; the sstate signature covers the four sha256 values above, so
-# a re-tagged release with the same bytes does not rebuild the image.
-# IMAGE_INSTALL carries qwen35-npu-model (see quecpi-image), so the firmware
-# ships the weights; the empty package is the runner-only build.
+
+# No entry in IMAGE_INSTALL is needed beyond the two names quecpi-image already
+# carries (qwen35-npu + qwen35-npu-model).  Drop the model package to get a
+# runner-only image; the unit is skipped by ConditionPathExists instead of
+# failing in a restart loop.

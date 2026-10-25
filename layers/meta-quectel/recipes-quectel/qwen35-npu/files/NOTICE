@@ -1,0 +1,110 @@
+Qwen3.5-0.8B QNN NPU runtime for the Quectel PI H1 (QCS6490)
+NOTICE -- attribution, provenance and modification statement
+============================================================
+
+This Yocto recipe (qwen35-npu) packages a third-party Apache-2.0 runtime plus
+pre-compiled model assets published by a third party. It is a repackaging and
+integration effort, not an original port. The license text is in LICENSE, next
+to this file, and in /usr/share/doc/qwen35-npu/ on the installed system.
+
+1. Runtime and native engine
+----------------------------
+The Python runtime (runtime/2k/*.py) and the C++ native engine
+(native/2k/qwen_text_engine.cpp, native/2k/qnn_memory.cpp and headers) come
+from the Radxa Dragon Q6A port of Qwen3.5-0.8B:
+
+  Fork used for the integration
+    https://github.com/super617/radxa-dragon-q6a-qwen3.5-0.8b-qcs6490-qnn-npu
+    commit 97650f6ed3a1178dcf1ff761d95e4523819bfe08
+
+  Original upstream project
+    https://github.com/PrismPhi/radxa-dragon-q6a-qwen3.5-0.8b-qcs6490-qnn-npu
+    release v0.1.0-rc1
+
+  License: Apache-2.0 (see LICENSE). Copyright and attribution belong to the
+  upstream authors; this repository claims no authorship of that code.
+
+The ONNX Runtime API headers bundled with our native engine
+(files/native/ort_include/*.h) are five unmodified headers from
+microsoft/onnxruntime v1.27.0 (tag v1.27.0, commit 8f0278c) and remain under the
+MIT license, with their original file notices intact.
+
+2. Pre-compiled NPU model assets
+--------------------------------
+The compiled QNN EPContext graphs, the tensor contracts and the shared assets
+(embedding table, tokenizer) are downloaded at build time, unchanged, from:
+
+  HuggingFace  PrismPhi/Qwen3.5-0.8B-Radxa-Dragon-Q6A-QCS6490-QNN-NPU
+  revision     05de67d2f33c0cb83e375f13788895c761d30b1e
+
+They are pinned per file by SHA-256 in the recipe (SRC_URI[...sha256sum]); no
+file is modified, re-quantized or re-compiled by this integration. Distributed
+under the terms of the upstream Apache-2.0 release; keep this NOTICE and
+LICENSE with any redistribution.
+
+Only the 2K group is installed: common/, models/2k/ and contracts/2k/. The 4K
+group and the Vision contexts are intentionally not shipped.
+
+3. Base model
+-------------
+The assets above are derivatives of the Qwen3.5-0.8B checkpoint:
+
+  Qwen/Qwen3.5-0.8B, revision 2fc06364715b967f1860aea9cf38778875588b17
+  Copyright (c) Alibaba Cloud / Qwen team. Licensed under Apache-2.0.
+  https://huggingface.co/Qwen/Qwen3.5-0.8B
+
+The distributed derivatives include a fixed-shape ONNX export, post-training
+quantization, device-specific numerical corrections, graph layout
+transformations, context extension and QNN EPContext compilation, all performed
+by the upstream project, not by this integration.
+
+4. Not redistributed here
+-------------------------
+  * Qualcomm QNN / QAIRT runtime libraries (libQnnHtp.so, libQnnSystem.so,
+    libQnnHtpV68Stub.so, libQnnHtpV68Skel.so) and Hexagon CDSP firmware are
+    external dependencies installed by their own packages on the target. They
+    are not part of this recipe and their vendor terms apply unchanged.
+  * onnxruntime and onnxruntime-qnn are installed from the official PyPI wheels
+    by a separate recipe; each wheel carries its own licenses and notices.
+  * The Qwen3.5-0.8B checkpoint weights themselves are never distributed; only
+    the compiled contexts described in section 2 are.
+
+An Apache-2.0 or MIT license on a repository does not relicense vendor binaries
+supplied by a runtime package. Qualcomm, Qwen, Radxa, Microsoft and Hugging
+Face names identify upstream hardware, models, software or hosting services;
+nothing here implies endorsement, sponsorship or trademark rights.
+
+5. Modifications made by this integration
+-----------------------------------------
+Code changes (all runtime/native sources stay otherwise verbatim):
+
+  * Text-only build. The Vision encoder contexts, the image frontend and the
+    image request path are removed from what is installed. Requests carrying
+    image content are rejected by the runtime instead of being silently
+    downgraded; there is no vision support in this package.
+  * 2K only. Only the 2,048-token envelope (models/2k + contracts/2k) is
+    installed. The 4K profile is not built, not shipped and not selectable.
+  * Repackaged for Yocto/Debian. Upstream install.py (platform gate, package
+    version lock, binary SHA-256 gate, board-side g++ build, cp 4-7 affinity
+    check) is not used. The native engine is cross-compiled by the recipe, the
+    runtime configuration (runtime.json) is generated at build time with fixed
+    paths, and the Python dependency closure comes from unpacked PyPI wheels
+    instead of a venv created on the board.
+  * Relocated file layout. Upstream's single installation directory is split
+    into /usr/lib/qwen35 (runtime, engine, launch and wrappers) and
+    /usr/share/qwen35 (read-only model assets), with all paths resolved through
+    runtime.json. Nothing is written into the application directory at runtime.
+  * Service integration. A systemd unit starts the server at boot on
+    127.0.0.1:8000 and stops it cleanly; scratch, metrics and logs live under
+    /run and /var/log instead of the installation directory.
+
+Asset changes: none. Every downloaded file is installed byte-identical and is
+verified against the upstream SHA-256 before use.
+
+6. Development disclosure
+-------------------------
+Portions of this integration (recipe text, relocation logic, documentation)
+were written with AI assistance and reviewed against the upstream sources.
+Performance and accuracy figures quoted in README.md are the upstream project's
+own measurements on Radxa Dragon Q6A (same QCS6490 / HTP v68 SoC), not
+measurements taken on the Quectel PI H1.

@@ -1,0 +1,54 @@
+{
+  "schema": "qwen35_q6a_openai_server_config_v2",
+  "model_id": "qwen3.5-0.8b-q6a-2k",
+  "host": "127.0.0.1",
+  "port": 8000,
+  "api_key_env": "QWEN35_API_KEY",
+  "limits": {
+    "default_max_tokens": 2048,
+    "max_tokens": 2048,
+    "max_request_bytes": 12000000,
+    "max_image_bytes": 8000000
+  },
+  "runtime": {
+    "cpu_threads": 4,
+    "stage_timeout_seconds": 300,
+    "decoder_timeout_seconds": 420,
+    "persistent_decoder": true,
+    "full_npu_prefill": true,
+    "p5_repair_tokens_text": 32,
+    "p5_repair_tokens_image": 1,
+    "full_p5_text_max_prompt_tokens": 31,
+    "default_repetition_penalty": 1.0,
+    "sampling_defaults": {
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "top_k": 20,
+      "min_p": 0.0,
+      "presence_penalty": 1.5,
+      "repetition_penalty": 1.0,
+      "seed": 0,
+      "frequency_penalty": 0.0
+    },
+    "image_sampling_defaults": {
+      "temperature": 0.0,
+      "top_p": 1.0,
+      "top_k": 1,
+      "presence_penalty": 1.0,
+      "repetition_penalty": 1.0,
+      "frequency_penalty": 0.15
+    },
+    "frontend_vector_vision_suffix": true,
+    "frontend_tmpfs_requests": true,
+    "single_image_prompt_order": "image_first",
+    "image_system_prompt": "Answer the image question directly using only visible facts. Do not guess names, identities, history, dates, locations, or unreadable text. Follow the requested language and output format exactly. Keep image descriptions brief and do not repeat yourself. If the requested information cannot be determined from the image, say so briefly instead of leaving the answer empty.",
+    "shared_image_grid_thw": [
+      1,
+      36,
+      64
+    ],
+    "shared_native_resident_prefill": true,
+    "shared_weight_sharing_compiled": true
+  },
+  "paths": {}
+}

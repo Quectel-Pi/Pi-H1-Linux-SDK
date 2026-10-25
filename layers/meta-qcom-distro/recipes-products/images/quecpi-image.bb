@@ -52,16 +52,21 @@ IMAGE_INSTALL:remove = " \
 
 IMAGE_INSTALL:remove = "qcom-resize-partitions wlan-sigma-dut"
 
-# qwen35-npu-model carries the Qwen3.5-0.8B weights (720 MB int8 ONNX graph +
-# 508 MB fp16 embedding table) in /var/lib/qwen35, so every firmware built from
-# here has Qwen3.5 available and npu-chat takes it as the default model.  The
-# runner is the default ORT backend; an HTP image ships kvc.bin instead (764 MB,
-# see QWEN35_MODEL_FILES in the recipe).
-# The weights are fetched from a GitHub release and pinned by sha256 (see
-# QWEN35_MODEL_URL/_ARTIFACTS in the recipe); they are not in git.
-# A build that does not want the 1.2 GB of weights can drop it with:
+# qwen35-npu-model carries the Qwen3.5-0.8B assets (2.0 GB: a 1.02 GB fp32
+# embedding table, the compiled EPContext text graphs, the three Vision graphs
+# and the contracts) in /usr/share/qwen35, so every firmware built from here has
+# Qwen3.5 available and npu-chat takes it as the default model.  The graphs run
+# on the NPU through the ONNX Runtime QNN EP; the runtime itself (engine,
+# python, runtime.json) is in qwen35-npu, and both packages are needed.
+# The assets are fetched from HuggingFace at one pinned commit, one SRC_URI entry
+# per file with its own sha256 (see QWEN35_QNN_REPO/_TAG/_ARTIFACTS in the
+# recipe); they are not in git, and seed-dl-dir.sh next to the recipe can
+# pre-fetch them through a mirror.
+# The Vision graphs are not optional at the packaging level -- the runtime
+# refuses to start without them even for text-only traffic.  A build that does
+# not want the 2.0 GB can drop the whole package with:
 #     IMAGE_INSTALL:remove = "qwen35-npu-model"
-#     QWEN35_MODEL_IN_IMAGE = "0"
+# (the unit then skips itself through ConditionPathExists instead of looping).
 
 # Writes debian rootfs
 

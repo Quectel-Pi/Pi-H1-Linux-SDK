@@ -31,32 +31,70 @@ ROOT = os.environ.get("NPU_LLM_ROOT", "/usr/lib/npu-llm")
 DATA = os.environ.get("NPU_LLM_DATA", "/usr/share/npu-llm")
 
 # Qwen3.5-0.8B is not a genie model: genie's transformer library has no
-# gated-DeltaNet support, so it runs under a resident ONNX Runtime QNN server
-# instead. One process holds ~3 GB of NPU context, so it starts on the first
-# turn and stays up.
+# gated-DeltaNet support, so it runs under a resident ONNX Runtime server using
+# the QNN execution provider, which hands the pre-compiled EPContext graphs to
+# the Hexagon HTP (V68) NPU. One process holds the whole 2K context and stays
+# up, so it starts on the first turn.
 QWEN35_MODEL = "qwen3.5-0.8b"
 QWEN35_URL = os.environ.get("QWEN35_URL", "http://127.0.0.1:8000").rstrip("/")
-# Two installers provide this model: the qwen35-npu package (a resident runner
-# that talks to QNN directly) and an older ONNX Runtime payload. Both expose the
-# same OpenAI surface, so the GUI only needs to know how to start a server.
-QWEN35_LAUNCH = os.environ.get("QWEN35_LAUNCH", "/var/lib/qwen35/run/launch.sh")
-QWEN35_PAYLOAD = os.environ.get("QWEN35_PAYLOAD", "/usr/share/qwen35/src/install.py")
+# The qwen35-npu package installs exactly one launcher and one layout: it binds
+# the runtime.json generated at build time to the assets under QWEN35_DIR and
+# execs the HTTP server on port 8000.
+QWEN35_LAUNCH = os.environ.get("QWEN35_LAUNCH",
+                               "/usr/lib/qwen35/qwen35-launch.sh")
+# Separate name for callers that point at the packaged launcher explicitly; it
+# now defaults to the same path as QWEN35_LAUNCH.
 QWEN35_NPU_LAUNCH = os.environ.get("QWEN35_NPU_LAUNCH",
-                                   "/usr/share/qwen35-npu/tools/qwen35-launch.sh")
-# The weights travel with the firmware (qwen35-npu-model installs them into
-# /var/lib/qwen35), so this is normally populated on a freshly flashed board.
-QWEN35_DIR = os.environ.get("QWEN35_DIR", "/var/lib/qwen35")
-# The heavy file depends on the unit's backend: qwen08b_i8.onnx for the default
-# CPU/onnxruntime path, kvc.bin for the QNN one on the Hexagon DSP. Either is
-# enough -- the embedding table is shared.
-QWEN35_MODELS = ("qwen08b_i8.onnx", "kvc.bin")
-QWEN35_ARTIFACTS = ("emb08_f16.npy",)
+                                   "/usr/lib/qwen35/qwen35-launch.sh")
+# The assets travel with the firmware (the qwen35-npu-model package installs
+# them into /usr/share/qwen35), so this is populated on a freshly flashed board.
+QWEN35_DIR = os.environ.get("QWEN35_DIR", "/usr/share/qwen35")
+# qwen_server.py verifies every one of these at startup and refuses to serve
+# without it, so the GUI gates on all() -- a single missing file means the
+# server cannot come up at all.  The EPContext pairs are inseparable: the .bin
+# is the HTP-compiled graph that the .onnx wrapper points at.
+QWEN35_MODELS = (
+    "models/2k/decode_ctx.onnx",
+    "models/2k/decode_ctx_qnn.bin",
+    "models/2k/prefill_ctx.onnx",
+)
+QWEN35_ARTIFACTS = (
+    "common/embedding_fp32.npy",
+    "common/tokenizer.json",
+    "contracts/2k/rope_ctx2048_cos_sin_fp32.bin",
+    "contracts/2k/tensor_contract.tsv",
+    "contracts/2k/advance_plan.tsv",
+    # full_npu_prefill is true in configs/2k.json, so _validate_config() adds
+    # full_npu_tail_assembly_report to its required set; the worker takes it as
+    # --full-npu-tail-assembly-report and cannot start without it.
+    "models/2k/assembly_report.json",
+)
+# qwen_server.py's _validate_config() lists the three vision .onnx paths in the
+# *unconditional* required set and then is_file()-checks them, so a missing
+# vision pair is FileNotFoundError at startup -- not a text-only model. The
+# model package ships them by default (QWEN35_VISION_IN_IMAGE = "1" in
+# qwen35-npu-model_1.0.bb), so the gate has to cover them too; otherwise the GUI
+# offers qwen3.5 on a board where the server can only fail on turn one.
+# QWEN35_VISION=0 drops them again, which is only correct for an image built
+# with QWEN35_VISION_IN_IMAGE=0 *and* a runtime whose vision paths are optional.
+QWEN35_VISION = os.environ.get("QWEN35_VISION", "1") != "0"
+QWEN35_VISION_PAIRS = (
+    "models/vision/patch_ctx.onnx",
+    "models/vision/patch_ctx_qnn.bin",
+    "models/vision/body_ctx.onnx",
+    "models/vision/body_ctx_qnn.bin",
+    "models/vision/merger_ctx.onnx",
+    "models/vision/merger_ctx_qnn.bin",
+)
+# What the startup gate actually stats: the text set plus the vision pairs.
+QWEN35_REQUIRED = QWEN35_MODELS + QWEN35_ARTIFACTS + (
+    QWEN35_VISION_PAIRS if QWEN35_VISION else ())
 QWEN35_MAX_TOKENS = int(os.environ.get("QWEN35_MAX_TOKENS", "768"))
-# The launcher writes this after its self-test. It is not required when the
-# firmware ships the model and the unit is enabled: the server then starts at
-# boot and this GUI may well come up first (the context takes ~20 s to load),
-# and waiting for the marker would mean qwen3.5 is not the default on a normal
-# boot. QWEN35_HIDE=1 refuses the model, QWEN35_FORCE=1 skips every check.
+# qwen35-launch.sh writes this once /v1/models answers, so it reports "serving"
+# and not merely "spawned". It is informational here (qwen35_installed() no
+# longer requires it) because the unit is start-on-demand and this GUI normally
+# comes up while nothing is running. QWEN35_HIDE=1 refuses the model,
+# QWEN35_FORCE=1 skips every check.
 QWEN35_OK = os.environ.get("QWEN35_OK", "/run/qwen35.ok")
 
 CSS = b"""
@@ -184,59 +222,36 @@ def qwen35_up(timeout=0.4):
 def qwen35_installed():
     """True when qwen3.5 can take the default slot.
 
-    A firmware build carries the weights (qwen35-npu-model) and enables the
-    unit, which is the normal case and makes qwen3.5 the default model. If the
-    weights are there but the unit is not enabled -- a manual install, or a
-    runner-only image -- the server has to prove itself first by writing
-    QWEN35_OK, so a half-set-up model cannot pose as usable.
+    The server is deliberately NOT enabled at boot: it pins four big cores,
+    holds ~490 MB RSS and owns the whole NPU context, so it is started here --
+    on the first turn after the user selects qwen3.5 -- and stopped again when
+    the user switches to another model (see pick()). Availability therefore
+    depends on the install being complete (launcher + every asset), never on the
+    unit being enabled or on a satisfied marker: start_qwen35() waits for the
+    server either way.
     """
     if os.environ.get("QWEN35_HIDE") == "1":
         return False
     if os.environ.get("QWEN35_FORCE") == "1":
         return _qwen35_artifacts()
-    if not _qwen35_present():
-        return False
-    if os.path.exists(QWEN35_OK):
-        return True
-    # enabled at boot => it is either already answering or on its way; the
-    # first turn waits in start_qwen35()
-    return _qwen35_enabled()
-
-
-def _qwen35_enabled():
-    if not shutil.which("systemctl"):
-        return False
-    r = subprocess.run(["systemctl", "is-enabled", "qwen35"],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return r.returncode == 0
+    return _qwen35_present()
 
 
 def _qwen35_artifacts():
     have = lambda f: os.path.exists(os.path.join(QWEN35_DIR, f))
-    return all(have(f) for f in QWEN35_ARTIFACTS) and any(
-        have(f) for f in QWEN35_MODELS)
+    return all(have(f) for f in QWEN35_REQUIRED)
 
 
 def _qwen35_present():
-    # The NPU package ships the launcher but not the model, so the weights are
-    # the real gate: without them the unit refuses to start (ConditionPathExists)
-    # and offering the model would only produce a start failure on turn one.
-    launcher = (os.path.exists(QWEN35_LAUNCH) or os.path.exists(QWEN35_PAYLOAD)
+    # The runtime package ships the launcher, the model package ships the
+    # assets; both are needed, and the assets are the real gate: without them
+    # the unit refuses to start (ConditionPathExists) and offering the model
+    # would only produce a start failure on turn one.
+    launcher = (os.path.exists(QWEN35_LAUNCH)
                 or os.path.exists(QWEN35_NPU_LAUNCH))
     if not launcher:
         return False
-    if not _qwen35_artifacts():
-        return False
-    if not shutil.which("systemctl"):
-        return True
-    ok = subprocess.run(["systemctl", "cat", "qwen35.service"],
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if ok.returncode == 0:
-        return True
-    # qwen35-npu ships the unit as a file; "cat" fails for it only when the
-    # unit is not installed, and the launcher plus the weights already prove it
-    # is usable.
-    return not os.path.exists(QWEN35_PAYLOAD)
+    return _qwen35_artifacts()
 
 
 def start_qwen35():
@@ -244,11 +259,10 @@ def start_qwen35():
     if qwen35_up():
         return None
     if not _qwen35_artifacts():
-        return ("qwen3.5 的模型文件不在 %s（需要 %s 之一 + %s）。\n"
-                "跑 qwen35-model-install.sh <目录> 安装，或把文件拷进该目录后 "
-                "systemctl restart qwen35。"
-                % (QWEN35_DIR, " / ".join(QWEN35_MODELS),
-                   " / ".join(QWEN35_ARTIFACTS)))
+        return ("qwen3.5 的模型文件不全（在 %s 下需要 %s）。\n"
+                "模型由 qwen35-npu-model 包安装，检查 /usr/share/qwen35 是否"
+                "完整，重装该包后 systemctl restart qwen35。"
+                % (QWEN35_DIR, " / ".join(QWEN35_REQUIRED)))
     # The engine needs root: /dev/fastrpc-cdsp is root:system and it pins cores
     # 4-7. The unit owns it and the GUI just asks systemd; direct launch stays as
     # the fallback for a manual install the current user can read.

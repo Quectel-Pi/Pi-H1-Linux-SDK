@@ -1,0 +1,28 @@
+{
+  "project": "microsoft/onnxruntime",
+  "tag": "v1.27.0",
+  "commit_prefix": "8f0278c",
+  "license": "MIT",
+  "files": [
+    {
+      "path": "onnxruntime_c_api.h",
+      "sha256": "c19f266a8a8f4e26ecabc8c988d914a5dee4603771faeef84e46e972f10b5fc6"
+    },
+    {
+      "path": "onnxruntime_cxx_api.h",
+      "sha256": "3903cb4bddb0adf3a68d24d5851d1453040e452a548071de62f967fcc28eca76"
+    },
+    {
+      "path": "onnxruntime_cxx_inline.h",
+      "sha256": "2251187e39dde60ec2a5b7c6f63fc8e92d32053437d542a703fb27b7da1d84a4"
+    },
+    {
+      "path": "onnxruntime_float16.h",
+      "sha256": "9b45e1bc0fe19d9d53f272b168f5cab616e26eb00136c3a1b78f394c9b1b6757"
+    },
+    {
+      "path": "onnxruntime_ep_c_api.h",
+      "sha256": "5520793813b18dfa687862054346b7971a3caf0b76f3d661253094adc94813d5"
+    }
+  ]
+}

@@ -1,9 +1,20 @@
-# The model artifacts (720 MB int8 ONNX graph, 725 MB prefill graph, 764 MB QNN
-# context, 508 MB fp16 embedding table) are built, not source, so they are not
-# committed: the recipe fetches them from the GitHub release (see
-# QWEN35_MODEL_URL in qwen35-npu_1.0.bb).  This directory is only where a local
-# build or an offline QWEN35_MODEL_URL=file://... keeps them.
+# The model assets never live in this directory.
+#
+# They are 2.0 GB of upstream build products (QNN EPContext pairs + the fp32
+# embedding table + tokenizer), not source.  They are fetched by the separate
+# qwen35-npu-model recipe, which pulls every file from HuggingFace
+# (PrismPhi/Qwen3.5-0.8B-Radxa-Dragon-Q6A-QCS6490-QNN-NPU) at a pinned commit
+# during do_fetch and verifies each one against a sha256 in the recipe.  DL_DIR
+# is the only place they are cached; nothing here is ever committed, and at
+# runtime they are installed into /usr/share/qwen35.
+#
+# There is no "build the model locally, drop it in files/model/" path any more:
+# the CPU / ONNX Runtime int8 plan that used this directory (qwen08b_i8.onnx,
+# kvc.bin, emb08_f16.npy) was removed.  The ignore rule is kept only so a stale
+# working tree that still has files/model/ cannot be committed by accident.
 files/model/
-# py_compile / imports during development
+
+# py_compile / imports while editing qwen35-mkconfig.py, the runtime/ modules or
+# the helper scripts.
 __pycache__/
 *.pyc

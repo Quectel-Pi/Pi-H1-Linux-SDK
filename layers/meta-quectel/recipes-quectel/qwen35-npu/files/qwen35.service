@@ -1,38 +1,94 @@
 [Unit]
-Description=Qwen3.5-0.8B resident server (int8 ONNX on the CPU by default)
-Documentation=file:///usr/share/qwen35-npu/README.md
+Description=Qwen3.5-0.8B resident server (QNN/HTP on the Hexagon NPU)
+Documentation=file:///usr/share/doc/qwen35-npu/README.md
 After=network.target
-# Only the HTP backend needs the DSP; harmless for the default ORT backend.
-After=adsp.service adsprpcd.service
-Wants=adsp.service adsprpcd.service
-# The weights are not packaged (1.2 GB). Skip the unit instead of entering a
-# restart loop when they are not installed yet: `systemctl start qwen35` right
-# after flashing would otherwise fail ten times and leave the unit in
-# "failed", and npu-chat would show the model but not be able to run it.
-ConditionPathExists=/var/lib/qwen35/qwen08b_i8.onnx
-ConditionPathExists=/var/lib/qwen35/emb08_f16.npy
+# Only the HTP backend needs the DSP. QNN HTP runs on the *cdsp* remoteproc on
+# this SoC ("Effective cdsp_id is: 3" in the QnnHtp log), so cdsprpcd is the
+# daemon that actually matters; adsprpcd is kept because the DSP-side skel is
+# loaded through whichever rpcd is up. There is no adsp.service in this BSP -
+# the fastrpc recipe installs adsprpcd/cdsprpcd/cdsp1rpcd/gdsprpcd/gdsp1rpcd
+# (fastrpc_15.0.qcom.bb:43), and a Wants= for a unit that does not exist only
+# logs noise.
+After=network.target adsprpcd.service cdsprpcd.service
+Wants=cdsprpcd.service
+# A wedged CDSP (q6v5_pas 'start timed out', -110) does not come back on a
+# restart -- only a power cycle clears it, as 'reboot' does not reset the DSP.
+# The launcher therefore exits 75 when the DSP never comes up;
+# RestartPreventExitStatus keeps systemd from re-running that dead end once per
+# 10 s, and the StartLimit* pair is the backstop for every other failure (a
+# genuine crash loop should stop and be visible, not spin forever).
+RestartPreventExitStatus=75
+StartLimitIntervalSec=300
+StartLimitBurst=3
+# NOT STARTED AT BOOT -- on demand only.
+# The resident server pins four big cores, holds ~490 MB RSS and owns the whole
+# 850 MB NPU context, so leaving it up permanently degrades every other workload
+# on the board. The image therefore ships the unit *disabled*
+# (SYSTEMD_AUTO_ENABLE = "disable" in qwen35-npu_1.0.bb) and it is started by
+# whoever needs it:
+#   - by hand:        systemctl start qwen35
+#   - from npu-chat:  after the user picks qwen3.5 in the model chip
+# npu-chat stops it again when the user switches to another model.
+# [Install] stays so an admin can still opt in with 'systemctl enable qwen35'.
+#
+# The model assets (1.8 GB) ship in the separate qwen35-npu-model package.
+# Skip the unit instead of entering a restart loop while they are absent:
+# right after flashing, "systemctl start qwen35" would otherwise fail ten times
+# and leave the unit in "failed".
+ConditionPathExists=/usr/share/qwen35/common/embedding_fp32.npy
+ConditionPathExists=/usr/share/qwen35/models/2k/decode_ctx.onnx
+ConditionPathExists=/usr/lib/qwen35/runtime.json
 
 [Service]
 Type=simple
-Environment=ADSP_LIBRARY_PATH=/usr/lib/rfsa/adsp:/dsp
-Environment=QWEN35_DIR=/var/lib/qwen35
-Environment=QWEN35_BACKEND=ort
-# 4 threads beat 8 by 25% for int8 MatMul on this 4+4 SoC (see qwen35ort.py)
-Environment=QWEN35_THREADS=4
+User=root
+# /usr/lib/qwen35 holds the program, /var/lib/qwen35 the scratch dir and logs.
+Environment=QWEN35_DIR=/usr/lib/qwen35
+Environment=QWEN35_STATE=/var/lib/qwen35
+Environment=QWEN35_QNN_DIR=/usr/lib/qwen35/qnn
+# DSP-visible directory that must hold libQnnHtpV68Skel.so (NOT /usr/lib/rfsa/adsp,
+# that one is the host view).
+Environment=QWEN35_SKEL_DIR=/usr/lib/dsp/cdsp
 Environment=QWEN35_PORT=8000
+# ADSP_LIBRARY_PATH is SEMICOLON-separated. With ':' QNN reports "Failed to load
+# skel, error: 1002" then "QnnDevice_create 14001". The launch script rebuilds
+# this value (skel dir first, then /usr/lib/dsp/{cdsp,adsp} + /dsp); the line
+# below is only a floor in case the script is ever replaced by a bare command.
+Environment=ADSP_LIBRARY_PATH=/usr/lib/dsp/cdsp;/usr/lib/dsp/adsp;/dsp
 Environment=PYTHONUNBUFFERED=1
-# Pin to the 4 big cores. Without this schedutil sees 4 runnable threads spread
-# over 8 CPUs as ~50% utilisation and holds the big cluster at 1.5 GHz; pinned,
-# every core looks busy and the clocks sit at 2.4 GHz. Measured 205 -> 140
-# ms/token (+47%), flat over 400 steps even at 94 C. See README "CPU pinning".
+Environment=PYTHONDONTWRITEBYTECODE=1
+# Pin to the 4 big cores: spread over 8 CPUs schedutil sees ~50% utilisation and
+# holds the big cluster at 1.5 GHz; pinned, every core looks busy and the clocks
+# sit at 2.4 GHz (upstream measured 205 -> 140 ms/token on the same SoC).
 CPUAffinity=4-7
-ExecStart=/usr/share/qwen35-npu/tools/qwen35-launch.sh
-Restart=on-failure
+# Creates/wipes /var/lib/qwen35 (scratch + logs) with the right ownership.
+StateDirectory=qwen35
+StateDirectoryMode=0750
+# /run/qwen35 holds the single-instance lock of qwen35-launch.sh.
+RuntimeDirectory=qwen35
+RuntimeDirectoryMode=0755
+Environment=QWEN35_RUN_DIR=/run/qwen35
+WorkingDirectory=/usr/lib/qwen35
+ExecStart=/usr/lib/qwen35/qwen35-launch.sh
+# The launcher writes this once the HTTP server answers /v1/models. It lives
+# outside RuntimeDirectory (npu-chat reads the fixed path /run/qwen35.ok), so it
+# has to be removed here -- a stale marker would claim the server is up after it
+# was stopped.
+ExecStopPost=-/bin/rm -f /run/qwen35.ok
+Restart=always
 RestartSec=10
-# 720 MB of int8 weights, ~130 MB of state/KV buffers; the 508 MB embedding
-# table is mmap'd, so keep the limit generous but bounded
-MemoryMax=5G
+# 75 = launcher gave up on the CDSP (see [Unit]); do not retry it.
+# Hard cap: 1.0 GB embedding table (mmap'd) + ~850 MB QNN context + up to
+# 768 MiB /dev/shm scratch + state/KV buffers. 5 GiB (5368709120) keeps ~2 GB of
+# headroom over the measured ~3 GB resident without letting a leak eat the board.
+MemoryMax=5368709120
 Nice=-5
+# The DSP and the NPU allocator need the device nodes and the DMA-heap ioctls.
+PrivateDevices=no
+ProtectHome=no
+ProtectSystem=full
+ReadWritePaths=/var/lib/qwen35
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=multi-user.target
