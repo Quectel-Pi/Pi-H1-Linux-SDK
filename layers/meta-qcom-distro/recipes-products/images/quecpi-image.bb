@@ -43,6 +43,7 @@ IMAGE_INSTALL:append = " \
                     npu-llm \
                     qwen35-npu \
                     qwen35-npu-model \
+                    qcom-remoteproc-recover \
                 "
 
 IMAGE_INSTALL:remove = " \

@@ -1,0 +1,21 @@
+[Unit]
+Description=Recover Hexagon DSPs left running by a previous boot
+# cdsprpcd exports /dev/fastrpc-cdsp to userspace and lives in multi-user.target,
+# so make sure the DSP is up before the RPC daemon is started.
+After=local-fs.target
+Before=cdsprpcd.service
+ConditionPathExists=/sys/class/remoteproc
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+Environment=QCOM_RPROC_MATCH=cdsp.mdt
+Environment=QCOM_RPROC_RETRIES=8
+ExecStart=/usr/sbin/qcom-remoteproc-recover
+TimeoutStartSec=300
+# A DSP that still refuses to start is a firmware/PAS problem: log it and let the
+# boot continue instead of holding up everything that depends on this unit.
+SuccessExitStatus=0 1
+
+[Install]
+WantedBy=multi-user.target

@@ -418,6 +418,37 @@ static int adsp_stop(struct rproc *rproc)
 	return ret;
 }
 
+/*
+ * A restart or a poweroff of the application processor does not power-cycle the
+ * remote processors.  Without an explicit PAS shutdown the DSP keeps running the
+ * firmware of the previous boot, and the next boot then authenticates a new image
+ * into the carveout while the already running DSP never raises the start
+ * interrupt, so adsp_start() gives up with
+ *
+ *     qcom_q6v5_pas a300000.remoteproc: start timed out
+ *     remoteproc remoteproc3: can't start rproc a300000.remoteproc: -110
+ *
+ * and leaves the CDSP -- and with it the Hexagon NPU -- dead until the board is
+ * power cycled.  Note that the timeout path does shut the firmware down through
+ * PAS, which is what finally resets the DSP, but nothing then retries the start:
+ * the CDSP stays offline for the rest of that boot.  Run the same sequence that
+ * adsp_stop() runs, on poweroff and on restart, so that every boot starts from a
+ * DSP that is really in reset.
+ */
+static void adsp_shutdown(struct platform_device *pdev)
+{
+	struct qcom_adsp *adsp = platform_get_drvdata(pdev);
+
+	if (!adsp || !adsp->rproc)
+		return;
+
+	/* Nothing to stop when the firmware was never started. */
+	if (adsp->rproc->state != RPROC_RUNNING)
+		return;
+
+	adsp_stop(adsp->rproc);
+}
+
 static void *adsp_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem)
 {
 	struct qcom_adsp *adsp = rproc->priv;
@@ -1546,6 +1577,7 @@ MODULE_DEVICE_TABLE(of, adsp_of_match);
 static struct platform_driver adsp_driver = {
 	.probe = adsp_probe,
 	.remove_new = adsp_remove,
+	.shutdown = adsp_shutdown,
 	.driver = {
 		.name = "qcom_q6v5_pas",
 		.of_match_table = adsp_of_match,

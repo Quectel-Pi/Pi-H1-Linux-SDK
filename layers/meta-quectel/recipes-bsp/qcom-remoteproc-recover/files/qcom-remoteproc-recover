@@ -1,0 +1,73 @@
+#!/bin/sh
+#
+# A restart or poweroff of the application processor does not power-cycle the
+# Hexagon DSPs.  When a DSP is still running the firmware of the previous boot,
+# the first PAS start of the new boot times out:
+#
+#   qcom_q6v5_pas a300000.remoteproc: start timed out
+#   remoteproc remoteproc3: can't start rproc a300000.remoteproc: -110
+#
+# and /dev/fastrpc-cdsp never appears, so every Hexagon NPU user fails until the
+# board is power cycled.  That failed start does shut the DSP down through PAS,
+# which is what actually resets it, so a later start succeeds: retry a bounded
+# number of times here instead of requiring a power cycle.
+#
+# More than one retry is needed in practice.  Measured on the board after an NPU
+# session, the CDSP only came back on the fifth PAS reset (kernel attempt plus
+# four retries), so the default is deliberately generous: each attempt costs one
+# 5s PAS timeout, and failing is much worse than a slow boot.
+#
+# The kernel driver shuts the firmwares down on poweroff/restart, so this is the
+# safety net for the paths that skip it: panic, watchdog, `reboot -f`, and reset
+# buttons.  Only the firmware names in QCOM_RPROC_MATCH are touched -- the
+# remoteprocs that are meant to stay offline (modem, wpss) must never be started
+# from here.
+
+MATCH="${QCOM_RPROC_MATCH:-cdsp.mdt}"
+RETRIES="${QCOM_RPROC_RETRIES:-8}"
+
+say() {
+	echo "qcom-remoteproc-recover: $*"
+}
+
+rc=0
+
+for rp in /sys/class/remoteproc/remoteproc*; do
+	[ -r "$rp/state" ] || continue
+
+	fw=$(cat "$rp/firmware" 2>/dev/null) || continue
+	match=0
+	for pattern in $MATCH; do
+		case "$fw" in
+		*"$pattern"*) match=1; break ;;
+		esac
+	done
+	[ "$match" = 1 ] || continue
+
+	state=$(cat "$rp/state" 2>/dev/null)
+	if [ "$state" = "running" ]; then
+		say "$(basename "$rp") ($fw) is already running"
+		continue
+	fi
+
+	attempt=0
+	while [ "$attempt" -lt "$RETRIES" ] && [ "$state" != "running" ]; do
+		attempt=$((attempt + 1))
+		say "$(basename "$rp") ($fw) is $state, start attempt $attempt/$RETRIES"
+		# A start is synchronous and blocks until the 5s PAS timeout expires,
+		# so the state read below already reflects the outcome.
+		echo start > "$rp/state" 2>/dev/null
+		state=$(cat "$rp/state" 2>/dev/null)
+		[ "$state" = "running" ] && break
+		sleep 1
+	done
+
+	if [ "$state" = "running" ]; then
+		say "$(basename "$rp") ($fw) is now up"
+	else
+		say "$(basename "$rp") ($fw) is still $state after $RETRIES attempts"
+		rc=1
+	fi
+done
+
+exit $rc
