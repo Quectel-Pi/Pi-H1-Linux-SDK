@@ -708,6 +708,26 @@ static u8 hci_cc_read_local_version(struct hci_dev *hdev, void *data,
 		hdev->lmp_ver = rp->lmp_ver;
 		hdev->manufacturer = __le16_to_cpu(rp->manufacturer);
 		hdev->lmp_subver = __le16_to_cpu(rp->lmp_subver);
+
+		/* Qualcomm controllers advertise
+		 * HCI_OP_ENHANCED_SETUP_SYNC_CONN in their supported commands, but
+		 * their firmware asserts and dumps its memory as soon as the
+		 * command is used to bring up an eSCO link, which kills HFP/SCO.
+		 * It even happens when the host never sends a SCO packet, so it is
+		 * the opcode itself that is broken.
+		 *
+		 * btusb marks it broken for every Qualcomm part it drives (see
+		 * btusb_setup_qca()).  A UART controller driven through the
+		 * generic H4 protocol misses that workaround, because the vendor
+		 * setup callback of the QCA protocol does not run when the
+		 * firmware is downloaded by a userspace helper (hciattach).  Set
+		 * the quirk here so that such controllers also fall back to the
+		 * legacy HCI_OP_SETUP_SYNC_CONN command.
+		 */
+		if (hdev->bus == HCI_UART &&
+		    hdev->manufacturer == 29 /* Qualcomm */)
+			set_bit(HCI_QUIRK_BROKEN_ENHANCED_SETUP_SYNC_CONN,
+				&hdev->quirks);
 	}
 
 	return rp->status;
