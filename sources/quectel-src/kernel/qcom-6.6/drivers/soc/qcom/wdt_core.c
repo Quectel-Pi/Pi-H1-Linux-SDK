@@ -507,6 +507,7 @@ static irqreturn_t qcom_wdt_bark_handler(int irq, void *dev_id)
 	struct msm_watchdog_data *wdog_dd = dev_id;
 	unsigned long nanosec_rem;
 	unsigned long long t = sched_clock();
+	int cpu;
 
 	nanosec_rem = do_div(t, 1000000000);
 	dev_info(wdog_dd->dev, "QCOM Apps Watchdog bark! Now = %lu.%06lu\n",
@@ -519,10 +520,42 @@ static irqreturn_t qcom_wdt_bark_handler(int irq, void *dev_id)
 	if (wdog_dd->do_ipi_ping)
 		qcom_wdt_dump_cpu_alive_mask(wdog_dd);
 
+	/*
+	 * Also report how long each CPU took to answer the pet IPI. A CPU
+	 * that never answered is visible as an unset bit in the alive mask
+	 * above; the latencies of the others tell whether the surviving
+	 * CPUs were already close to the bark deadline, which points at
+	 * the load starving the pet thread instead of a single stuck CPU.
+	 */
+	for_each_cpu(cpu, cpu_present_mask) {
+		if (!wdog_dd->ping_start[cpu])
+			continue;
+		if (!wdog_dd->ping_end[cpu])
+			dev_info(wdog_dd->dev,
+				 "cpu%d did not answer the pet IPI\n", cpu);
+		else
+			dev_info(wdog_dd->dev, "cpu%d pet IPI latency %lluus\n",
+				 cpu, (wdog_dd->ping_end[cpu] -
+				       wdog_dd->ping_start[cpu]) / 1000);
+	}
+
 	if (wdog_dd->freeze_in_progress)
 		dev_info(wdog_dd->dev, "Suspend in progress\n");
 
-	qcom_wdt_trigger_bite();
+	/*
+	 * Do not fall through to qcom_wdt_trigger_bite() here. That helper
+	 * arms a 1 ms bite and then pets the watchdog again, and on the
+	 * Gunyah virtual watchdog the pet cancels the bite it has just
+	 * programmed, so the bite never fires. The CPU then spins in the
+	 * helper's final loop forever: the board is dead until it is power
+	 * cycled and not a single line reaches the logs, because the loop
+	 * never schedules the userspace that would flush them.
+	 *
+	 * Panicking instead keeps the alive mask printed above (it names the
+	 * CPU that stopped answering the pet IPI) and reboots after
+	 * panic_timeout, so the crash can be captured instead of bricking.
+	 */
+	panic("QCOM Apps Watchdog bark");
 
 	return IRQ_HANDLED;
 }
