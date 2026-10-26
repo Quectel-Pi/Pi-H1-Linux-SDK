@@ -26,12 +26,17 @@ import sys
 import glob
 import mmap
 import shutil
+import signal
 import tempfile
 import subprocess
 import threading
 import datetime
 import logging
 import time
+import json
+import base64
+import urllib.request
+import urllib.error
 
 # ========== 配置 ==========
 # 板上 SNPE/QNN 工具路径 (由 qcom-snpe-sdk / qcom-qnn-sdk 安装)
@@ -59,7 +64,316 @@ COCO_LABELS = "/usr/share/qcom-npu-test/labels/coco_80_labels_list.txt"
 LOG_DIR = "/tmp/qcom_npu_test_logs"
 
 
+# ========== 多模态 (视觉模型) ==========
+# 视觉通路: 摄像头帧 -> JPEG -> base64 data URL -> /v1/chat/completions。
+# 服务端只接受内联 data URL(远程 URL 被明确禁用), 单次一张图。
+#
+# 模型名/视觉输入尺寸/生成长度上限/解码速度 全部不在代码里写死:
+#   1. 启动时读服务端自己发布的 /usr/lib/qwen35/runtime.json (model_id, 网格,
+#      token 上限, 超时) —— 这是配置权威;
+#   2. 每次回答后从响应体的 qwen35_metrics 里取实测值 (image.decoder_size_wh,
+#      decode_tokens_per_second, stage_wall_seconds, vision_run_seconds,
+#      context_capacity_tokens) —— 这是运行权威;
+#   3. 学到的值缓存到 ~/.cache 下, 下次启动就不用再猜 (旧版本的"6.9 tok/s"
+#      "1024x576" 这种常量就是这么来的, 一律改为实测)。
+VLM_ENDPOINT      = "http://127.0.0.1:8000/v1/chat/completions"
+VLM_MODELS        = "http://127.0.0.1:8000/v1/models"
+VLM_BASE          = "http://127.0.0.1:8000"
+VLM_RUNTIME_JSON  = "/usr/lib/qwen35/runtime.json"
+VLM_SERVICE       = "qwen35"          # systemd 单元名, 不是模型名
+VLM_TIMEOUT       = 300
+VLM_PROMPT        = "请用中文描述你看到的画面内容。"
+VLM_MAX_TOKENS    = 128               # 首次使用的默认值, 实际上限从 runtime.json 读
+VLM_JPEG_QUALITY  = "90"
+VLM_PATCH_SIZE    = 16                # 仅当 runtime.json 不可读时用于推算网格
+
+_SIZE_RE = re.compile(r"^\d+(?:\.\d+)?[bB]$")
+_CTX_RE = re.compile(r"^(\d+)([kKmM])$")
+
+
+def vlm_display_name(model_id):
+    if not model_id:
+        return "未探测到模型"
+    raw = str(model_id).strip()
+    toks = [t for t in re.split(r"[-_/\s]+", raw) if t]
+    if not toks:
+        return "未探测到模型"
+
+    family = toks[0]
+    size = ctx = None
+    for t in toks[1:]:
+        if size is None and _SIZE_RE.match(t):
+            size = t
+            continue
+        m = _CTX_RE.match(t)
+        if m and ctx is None:
+            ctx = (m.group(1), m.group(2).upper())
+    if size is None and ctx is None:
+        return raw
+
+    name = family[:1].upper() + family[1:]
+    if size:
+        name += "-" + size[:-1] + size[-1].upper()
+    return f"{name} · {ctx[0]}{ctx[1]} 上下文" if ctx else name
+VLM_PROFILE_CACHE = os.path.join(os.path.expanduser("~"), ".cache",
+                                 "qcom-npu-test", "vlm_profile.json")
+# CamxBridge 是按需建流的: 客户端一连上来先吐几帧全黑的初始 buffer,
+# 真实画面过一会才到. 预热期不允许点识别, 否则会拿黑图去问模型.
+MM_WARMUP_FRAMES = 15
+# 再暗就不发请求了: 全黑帧模型只能说"图是空的", 白烧 20s NPU
+MM_MIN_LUMA = 8.0
+
+
+class VlmProfile(object):
+    """描述"这台机器上这个服务实际是什么样"——全部字段来自读取或实测.
+
+    runtime_cfg  : /usr/lib/qwen35/runtime.json 的内容 (可能为空)
+    observed     : 从真实响应学到的值, 缓存在磁盘上
+    """
+
+    # 只有一条真实数据都没有时才用的初始估计(秒). 一旦跑过一次就会被实测覆盖,
+    # 所以这里的数字不会成为谎话, 只是第一眼的保守占位.
+    FIRST_RUN_STAGES = {"frontend": 1.5, "vision": 1.3,
+                        "npu_prefill": 8.0, "decoder": 12.0}
+
+    def __init__(self):
+        self.runtime_cfg = None
+        self.observed = {}
+        self.model_id = None
+        self.max_tokens_cap = VLM_MAX_TOKENS
+        self.decoder_wh = None          # 服务端视觉输入尺寸 (w, h)
+        self.image_tokens = None
+        self.ctx_capacity = None
+        self.stage_budget = {}
+        self.decode_tps = None
+        self.load_cache()
+        self.load_runtime()
+
+    # ---------- 启动期: 读服务端发布出来的配置 ----------
+    def load_runtime(self):
+        try:
+            with open(VLM_RUNTIME_JSON, "r") as f:
+                cfg = json.load(f)
+        except Exception:
+            return False
+        self.runtime_cfg = cfg
+        if cfg.get("model_id"):
+            self.model_id = cfg["model_id"]
+        lim = cfg.get("limits") or {}
+        for key in ("max_tokens", "default_max_tokens"):
+            if isinstance(lim.get(key), int) and lim[key] > 0:
+                self.max_tokens_cap = lim[key]
+                break
+        rt = cfg.get("runtime") or {}
+        if rt.get("stage_timeout_seconds"):
+            global VLM_TIMEOUT
+            VLM_TIMEOUT = int(rt["stage_timeout_seconds"])
+        # shared_image_grid_thw = [t, h_patches, w_patches]; 乘 patch 尺寸即为
+        # 服务端真正喂给视觉塔的像素尺寸(不需要代码里写 1024x576).
+        grid = rt.get("shared_image_grid_thw")
+        if isinstance(grid, (list, tuple)) and len(grid) == 3:
+            try:
+                h = int(grid[1]) * VLM_PATCH_SIZE
+                w = int(grid[2]) * VLM_PATCH_SIZE
+                if w > 0 and h > 0:
+                    self.decoder_wh = (w, h)
+                    # Qwen 视觉塔按 2x2 合并 patch, 所以 token 数是 patch 数的 1/4
+                    self.image_tokens = int(grid[1]) * int(grid[2]) // 4
+            except (TypeError, ValueError):
+                pass
+        return True
+
+    # ---------- 运行期: 用实测值覆盖估计 ----------
+    def learn(self, meta):
+        if not isinstance(meta, dict):
+            return
+        if meta.get("model"):
+            self.model_id = meta["model"]
+        img = meta.get("image") or {}
+        dw = img.get("decoder_size_wh")
+        if isinstance(dw, (list, tuple)) and len(dw) == 2:
+            try:
+                self.decoder_wh = (int(dw[0]), int(dw[1]))
+            except (TypeError, ValueError):
+                pass
+        if meta.get("context_capacity_tokens"):
+            self.ctx_capacity = int(meta["context_capacity_tokens"])
+        tps = meta.get("decode_tps")
+        if isinstance(tps, (int, float)) and tps > 0.5:
+            # 指数滑动平均: 温度/负载变化下跟随, 又不会被单次抖动带飞
+            self.decode_tps = tps if self.decode_tps is None \
+                else self.decode_tps * 0.7 + tps * 0.3
+        st = meta.get("stages") or {}
+        cached = meta.get("prefill_cached_tokens") or 0
+        for src, dst in (("frontend", "frontend"), ("npu_prefill", "npu_prefill"),
+                         ("decoder", "decoder")):
+            v = st.get(src)
+            if not isinstance(v, (int, float)) or v < 0:
+                continue
+            # 预填充命中前缀缓存时几乎不耗时, 拿它去学会把冷启动的估计值压成 0.
+            # 只学真正算过的那些, 缓存命中的留给展示层单独标注.
+            if dst == "npu_prefill" and cached:
+                continue
+            prev = self.stage_budget.get(dst)
+            self.stage_budget[dst] = v if prev is None else prev * 0.7 + v * 0.3
+        if isinstance(meta.get("vision_s"), (int, float)) and meta["vision_s"] > 0:
+            prev = self.stage_budget.get("vision")
+            v = meta["vision_s"]
+            self.stage_budget["vision"] = v if prev is None else prev * 0.7 + v * 0.3
+        self.save_cache()
+
+    # ---------- 磁盘缓存 ----------
+    def load_cache(self):
+        try:
+            with open(VLM_PROFILE_CACHE, "r") as f:
+                d = json.load(f)
+        except Exception:
+            return
+        self.observed = d if isinstance(d, dict) else {}
+        if self.observed.get("decode_tps"):
+            self.decode_tps = float(self.observed["decode_tps"])
+        sb = self.observed.get("stage_budget")
+        if isinstance(sb, dict):
+            self.stage_budget = {k: float(v) for k, v in sb.items()
+                                 if isinstance(v, (int, float))}
+        if self.observed.get("decoder_wh"):
+            try:
+                self.decoder_wh = tuple(int(x) for x in self.observed["decoder_wh"])
+            except (TypeError, ValueError):
+                pass
+
+    def save_cache(self):
+        try:
+            d = os.path.dirname(VLM_PROFILE_CACHE)
+            if d and not os.path.isdir(d):
+                os.makedirs(d, exist_ok=True)
+            tmp = VLM_PROFILE_CACHE + ".tmp"
+            with open(tmp, "w") as f:
+                json.dump({"decode_tps": self.decode_tps,
+                           "stage_budget": self.stage_budget,
+                           "decoder_wh": list(self.decoder_wh) if self.decoder_wh else None,
+                           "model_id": self.model_id}, f)
+            os.replace(tmp, VLM_PROFILE_CACHE)
+        except Exception:
+            pass        # 缓存写不了不影响功能, 只是下次还得重新学
+
+    # ---------- 对外展示 ----------
+    @property
+    def model_display(self):
+        return vlm_display_name(self.model_id)
+
+    @property
+    def vision_size_text(self):
+        wh = self.decoder_wh
+        return f"视觉输入 {wh[0]}x{wh[1]}" if wh else "视觉输入待探测"
+
+    @property
+    def tps(self):
+        return self.decode_tps or 6.5          # 仅首帧估计值, 很快被实测覆盖
+
+    def stage_plan(self):
+        """把学到的阶段耗时转成动画用的时间轴 [(开始秒, 名称, 说明)].
+
+        完全没有历史时返回 FIRST_RUN_STAGES 推出的保守顺序, 跑过一次后就
+        全部改成实测均值, 所以动画节奏和真实阶段是对得上的。
+        """
+        b = dict(self.FIRST_RUN_STAGES)
+        for k, v in self.stage_budget.items():
+            if isinstance(v, (int, float)) and v > 0:
+                b[k] = float(v)
+        size = (f"letterbox 到 {self.decoder_wh[0]}x{self.decoder_wh[1]}"
+                if self.decoder_wh else "letterbox 到服务端输入尺寸")
+        vt = "视觉塔三阶段"
+        if self.image_tokens:
+            vt += f", {self.image_tokens} 图像 token"
+        rows, t = [], 0.0
+        rows.append((t, "\u2460 前端预处理", f"解码 JPEG + {size} + 分词"))
+        t += b["frontend"]
+        rows.append((t, "\u2461 视觉编码", vt))
+        t += b["vision"]
+        rows.append((t, "\u2462 预填充", "文本 + 图像 embedding 喂入 HTP"))
+        t += b["npu_prefill"]
+        rows.append((t, "\u2463 解码生成", f"逐 token 输出, 实测约 {self.tps:.1f} tok/s"))
+        return rows
+
+
+VLM_PROFILE = VlmProfile()
+
+# 回答区的醒目标式. 用 CSS 而不是 override_font, 因为字号/背景/边框一次配完,
+# 且能跟随主题色. px 在 GTK3 CSS 里是绝对单位, 不受桌面字号设置影响.
+VLM_CSS = b"""
+#vlm-answer-frame {
+    background-color: alpha(@theme_selected_bg_color, 0.07);
+    border: 2px solid alpha(@theme_selected_bg_color, 0.45);
+    border-radius: 10px;
+}
+#vlm-answer-text, #vlm-answer-text text {
+    font-size: 19px;
+    color: @theme_fg_color;
+}
+#vlm-stage-text, #vlm-stage-text text {
+    font-size: 13px;
+    color: alpha(@theme_fg_color, 0.85);
+}
+#vlm-busy-stage {
+    font-size: 15px;
+    font-weight: bold;
+}
+#vlm-recognize-btn {
+    font-size: 17px;
+    font-weight: bold;
+    padding: 12px 30px;
+    border-radius: 8px;
+}
+#vlm-recognize-btn:disabled {
+    font-size: 17px;
+    padding: 12px 30px;
+}
+#vlm-hint {
+    font-size: 12px;
+    color: alpha(@theme_fg_color, 0.6);
+}
+.vlm-small-btn {
+    font-size: 12px;
+    padding: 2px 6px;
+    min-height: 0;
+}
+"""
+
+
+def install_vlm_css():
+    """把回答区样式挂到默认屏幕. 重复调用无害."""
+    try:
+        prov = Gtk.CssProvider()
+        try:
+            prov.load_from_data(VLM_CSS)          # GTK >= 3.20
+        except TypeError:
+            prov.load_from_data(VLM_CSS.decode(), len(VLM_CSS))
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), prov,
+            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        return True
+    except Exception:
+        return False    # 样式失效也还有字号保底, 不影响功能
+
+# 摄像头源: 与"摄像头实时"选项卡完全同一个 (CamxBridge 虚拟摄像头)
+CAM_DEVICE = "/dev/video10"
+CAM_W, CAM_H = 1280, 720
+
+
 # ========== 工具函数 ==========
+def camera_pipeline_cmd(w=CAM_W, h=CAM_H, device=CAM_DEVICE):
+    """gst 取流命令: 裸 RGB 写到 stdout, 由调用方 os.read 凑成一帧.
+
+    sync=false 让管道按摄像头自己的节奏出帧, 不按墙上时间重采样; 拿到的就是
+    摄像头原始帧, 不会因为下游慢而插值重复帧.
+    """
+    return ["gst-launch-1.0", "-q", "v4l2src", f"device={device}", "!",
+            "videoconvert", "!",
+            f"video/x-raw,format=RGB,width={w},height={h}",
+            "!", "fdsink", "fd=1", "sync=false"]
+
+
 def find_models():
     """查找 .dlc / .so(QNN模型) / .onnx / .tflite 模型文件
 
@@ -1015,6 +1329,149 @@ def setup_logger(textview):
     return logger
 
 
+# ========== Qwen3.5 视觉请求 ==========
+def vlm_probe(timeout=3.0):
+    """探测 Qwen3.5 服务. 返回模型 id, 不可用返回 None."""
+    try:
+        with urllib.request.urlopen(VLM_MODELS, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+        items = data.get("data") or []
+        return (items[0].get("id") if items else "ready")
+    except Exception:
+        return None
+
+
+def vlm_ask_image(jpeg, prompt, max_tokens=VLM_MAX_TOKENS,
+                  timeout=VLM_TIMEOUT):
+    """把一张 JPEG 发给 Qwen3.5 视觉模型, 返回 (回答文本, 指标字典).
+
+    服务端契约 (见 qwen35 的 request_frontend / qwen_server):
+      - content 数组里放 {"type":"image_url","image_url":{"url":"data:..."}}
+        和 {"type":"text","text":...}, 图片只允许 data URL, 单次只允许一张;
+      - 尺寸由服务端按自己的视觉输入尺寸 letterbox, 所以这里传摄像头原生帧即可;
+      - 回答在 choices[0].message.content, 耗时/速度在 qwen35_metrics 里。
+    失败时抛异常, 由调用方分类展示。
+    """
+    payload = {
+        "messages": [{"role": "user", "content": [
+            {"type": "image_url",
+             "image_url": {"url": "data:image/jpeg;base64,"
+                                  + base64.b64encode(jpeg).decode("ascii")}},
+            {"type": "text", "text": prompt},
+        ]}],
+        "max_tokens": int(max_tokens),
+    }
+    req = urllib.request.Request(
+        VLM_ENDPOINT, data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = json.loads(resp.read().decode("utf-8", "replace"))
+
+    choice = (data.get("choices") or [{}])[0]
+    msg = choice.get("message") or {}
+    text = (msg.get("content") or "").strip()
+    if not text:
+        # 模型可能只输出了推理段, 兜底拿它, 总比空白好
+        text = (msg.get("reasoning_content") or "").strip() or "(模型没有输出内容)"
+
+    usage = data.get("usage") or {}
+    m = data.get("qwen35_metrics") or {}
+    stages = m.get("stage_wall_seconds") or {}
+    meta = {
+        "prompt_tokens": usage.get("prompt_tokens", m.get("prompt_tokens")),
+        "completion_tokens": usage.get("completion_tokens",
+                                     m.get("completion_tokens")),
+        "decode_tps": m.get("decode_tokens_per_second"),
+        "mode": m.get("mode"),
+        "finish_reason": choice.get("finish_reason"),
+        "model": data.get("model"),
+        # 服务端会把真正的耗时拆成阶段报回来, 用来把"中间过程"展示成时间轴
+        "stages": stages if isinstance(stages, dict) else {},
+        "vision_s": m.get("vision_run_seconds"),
+        "prefill_s": m.get("npu_prefill_compute_seconds"),
+        "prefill_tps": m.get("npu_prefill_compute_tokens_per_second"),
+        "first_token_s": m.get("decoder_first_token_seconds"),
+        "image_order": m.get("image_content_order"),
+        "image": m.get("image") or {},
+        "context_capacity_tokens": m.get("context_capacity_tokens"),
+        "prefill_cached_tokens": m.get("prefill_cached_tokens"),
+        "request_seconds": m.get("request_seconds"),
+    }
+    VLM_PROFILE.learn(meta)
+    return text, meta
+
+
+def mm_frame_luma(raw, step=997):
+    """粗估一帧 RGB 的平均亮度 (0-255). 隔字节抽样, 不用 PIL/OpenCV.
+
+    CamxBridge 刚建流时前几帧是全黑的, 而全黑帧送进去模型只会回一句
+    "这张图片是空的/很模糊", 属于拿不到信息的调用. 这里就提前拦下来。
+    """
+    if not raw:
+        return 0.0
+    total = n = 0
+    for i in range(0, len(raw), step):
+        total += raw[i]
+        n += 1
+    return total / n if n else 0.0
+
+
+def vlm_meta_line(meta, elapsed=None, jpeg_bytes=None):
+    """把请求指标拼成一行给人看的摘要."""
+    parts = []
+    if elapsed is not None:
+        parts.append(f"端到端 {elapsed:.1f}s")
+    if jpeg_bytes:
+        parts.append(f"图像 {jpeg_bytes / 1024:.0f} KB")
+    if meta.get("prompt_tokens"):
+        parts.append(f"prompt {meta['prompt_tokens']} tokens")
+    if meta.get("completion_tokens"):
+        parts.append(f"生成 {meta['completion_tokens']} tokens")
+    if meta.get("decode_tps"):
+        parts.append(f"解码 {meta['decode_tps']:.1f} tok/s")
+    if meta.get("finish_reason"):
+        parts.append(f"finish={meta['finish_reason']}")
+    if meta.get("prefill_cached_tokens"):
+        parts.append(f"缓存命中 {meta['prefill_cached_tokens']} tok")
+    return " · ".join(parts)
+
+
+def vlm_stage_rows(meta):
+    """把服务端报的阶段耗时整理成 [(名称, 秒数, 补充说明)] , 供时间轴展示."""
+    st = meta.get("stages") or {}
+    rows = []
+    if st.get("frontend"):
+        wh = VLM_PROFILE.decoder_wh
+        size = f"{wh[0]}x{wh[1]}" if wh else "服务端视觉输入尺寸"
+        rows.append(("前端预处理", st["frontend"], f"解码图像 + letterbox 到 {size} + 分词"))
+    if meta.get("vision_s"):
+        it = VLM_PROFILE.image_tokens
+        extra = "patch / body / merger 三阶段" + (f", {it} 个图像 token" if it else "")
+        rows.append(("视觉编码 (HTP)", meta["vision_s"], extra))
+    if st.get("npu_prefill") or meta.get("prefill_s"):
+        sec = st.get("npu_prefill") or meta.get("prefill_s")
+        extra = ""
+        if meta.get("prompt_tokens"):
+            extra = f"{meta['prompt_tokens']} tokens"
+            if meta.get("prefill_tps"):
+                extra += f", {meta['prefill_tps']:.0f} tok/s"
+        cached = meta.get("prefill_cached_tokens") or 0
+        if cached:
+            # 同一张图的 prompt 前缀会缓存, 命中后预填充几乎不耗时
+            extra = (extra + " · " if extra else "") + \
+                    f"前缀缓存命中 {cached} tokens"
+        rows.append(("预填充", sec, extra))
+    if st.get("decoder"):
+        extra = ""
+        if meta.get("first_token_s"):
+            extra = f"首 token {meta['first_token_s']:.2f}s"
+        if meta.get("completion_tokens") and meta.get("decode_tps"):
+            extra += (" · " if extra else "") + \
+                     f"{meta['completion_tokens']} tokens @ {meta['decode_tps']:.1f} tok/s"
+        rows.append(("解码生成", st["decoder"], extra))
+    return rows
+
+
 # ========== GUI ==========
 class NPUTestWindow(Gtk.Window):
     def __init__(self):
@@ -1055,6 +1512,8 @@ class NPUTestWindow(Gtk.Window):
         # Tab 容器
         self.notebook = Gtk.Notebook()
         vbox.pack_start(self.notebook, True, True, 0)
+        # 切页时自动开关多模态预览: 进页就取流, 离页就释放 /dev/video10
+        self.notebook.connect("switch-page", self.on_notebook_switch_page)
 
         # 摄像头状态: 取流线程/推理线程/绘制线程三方共享, 用条件变量传递最新帧
         self._cam_on = False
@@ -1065,10 +1524,21 @@ class NPUTestWindow(Gtk.Window):
         self._cam_lock = threading.Lock()
         self._cam_cond = threading.Condition()
 
+        # 多模态预览状态: 只取流不推理, 单线程就能跟上摄像头
+        self._mm_on = False
+        self._mm_busy = False          # 正在等 Qwen3.5 回答
+        self._mm_ready = False         # 已过预热帧数, 可以识别
+        self._mm_proc = None
+        self._mm_frame = None
+        self._mm_raw = None
+        self._mm_fail_streak = 0        # 连续取流失败次数, 用于判断要不要提示手动重置
+        self._mm_lock = threading.Lock()
+
         self.build_validation_tab()
         self.build_inference_tab()
         self.build_yolo_tab()
         self.build_camera_tab()
+        self.build_multimodal_tab()
         self.build_throughput_tab()
 
         # 开界面就把常驻会话拉起来, 不分 Tab: 第一次点任何页的按钮都只付推理时间
@@ -1706,6 +2176,10 @@ class NPUTestWindow(Gtk.Window):
         if self._cam_on:
             self._cam_stop()
             return
+        if self._mm_on:
+            # 同一个 /dev/video10, 只能有一个读者
+            self.logger.info("摄像头实时识别: 先停掉多模态预览")
+            self._mm_stop()
         mi = self.cmb_yolo_model.get_active()
         if mi < 0 or mi >= len(self._yolo_models):
             self.show_error("请先选择 YOLO 模型")
@@ -1759,12 +2233,9 @@ class NPUTestWindow(Gtk.Window):
         丢掉中间的帧, 管道也不会被我们压住; 之前取流和推理串在一起, 一慢就落后
         于摄像头, v4l2loopback 的生产端就会覆盖正在读的缓冲, 画面就撕裂了.
         """
-        w, h = 1280, 720
+        w, h = CAM_W, CAM_H
         nbytes = w * h * 3
-        cmd = ["gst-launch-1.0", "-q", "v4l2src", "device=/dev/video10", "!",
-               "videoconvert", "!",
-               f"video/x-raw,format=RGB,width={w},height={h}",
-               "!", "fdsink", "fd=1", "sync=false"]
+        cmd = camera_pipeline_cmd(w, h)
         try:
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                  stderr=subprocess.DEVNULL, bufsize=nbytes * 2)
@@ -1905,6 +2376,800 @@ class NPUTestWindow(Gtk.Window):
             ctx.move_to(x1 + 3, ty + 12)
             ctx.show_text(label)
         return False
+
+    # ---------- 多模态测试 (Qwen3.5 视觉) ----------
+    def build_multimodal_tab(self):
+        tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        tab.set_margin_start(8)
+        tab.set_margin_end(8)
+        tab.set_margin_top(8)
+        self._mm_tab_idx = self.notebook.append_page(
+            tab, Gtk.Label(label="\U0001F441 多模态测试"))
+
+        desc = Gtk.Label(xalign=0)
+        desc.set_line_wrap(True)
+        desc.set_markup('<span size="small" foreground="gray">'
+                        '把摄像头画面送给本地视觉模型, 问它看到了什么并输出回答. '
+                        '摄像头源与"摄像头实时"页相同 (/dev/video10), 两页互斥使用. '
+                        '本页打开即自动开始取流, 切走即释放摄像头</span>')
+        tab.pack_start(desc, False, False, 0)
+
+        # ---- 操作栏 ----
+        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+
+        # 识别是这一页的主操作: 放大字号 + 加内边距 + 主色, 一眼能看见
+        self.btn_mm_rec = Gtk.Button(label="\U0001F50D 识别")
+        self.btn_mm_rec.set_sensitive(False)   # 有帧之后才可点
+        self.btn_mm_rec.set_tooltip_text("把当前预览帧送给视觉模型, 问它看到了什么")
+        self.btn_mm_rec.get_style_context().add_class("suggested-action")
+        self.btn_mm_rec.set_name("vlm-recognize-btn")
+        self.btn_mm_rec.set_size_request(170, 56)
+        self.btn_mm_rec.connect("clicked", self.on_mm_recognize_clicked)
+        bar.pack_start(self.btn_mm_rec, False, False, 0)
+
+        self.btn_mm_prev = Gtk.Button(label="\u25B6 打开预览")
+        self.btn_mm_prev.connect("clicked", self.on_mm_preview_clicked)
+        bar.pack_start(self.btn_mm_prev, False, False, 0)
+
+        # 取流卡住时的兜底: 自动重试也不行才需要人工点一下。
+        # 做小一点, 不跟识别键抢注意力。
+        self.btn_mm_reset = Gtk.Button(label="\u21BB 重置摄像头")
+        self.btn_mm_reset.set_tooltip_text(
+            "预览不出画面时点一下: 重新释放并打开 " + CAM_DEVICE)
+        self.btn_mm_reset.set_relief(Gtk.ReliefStyle.NONE)
+        self.btn_mm_reset.set_valign(Gtk.Align.CENTER)   # 不跟同行按钮一起撑高
+        self.btn_mm_reset.set_size_request(0, 0)
+        self.btn_mm_reset.get_style_context().add_class("vlm-small-btn")
+        self.btn_mm_reset.connect("clicked", self.on_mm_reset_clicked)
+        bar.pack_start(self.btn_mm_reset, False, False, 0)
+
+        self.btn_mm_clear = Gtk.Button(label="\U0001F5D1 清空结果")
+        self.btn_mm_clear.connect("clicked", self.on_mm_clear_clicked)
+        bar.pack_start(self.btn_mm_clear, False, False, 0)
+
+        self.lbl_mm = Gtk.Label(
+            label=f"{CAM_DEVICE} · CamxBridge {CAM_W}x{CAM_H} · 预览未开启", xalign=0)
+        bar.pack_start(self.lbl_mm, True, True, 0)
+        tab.pack_start(bar, False, False, 0)
+
+        # ---- 模型状态 / 提示词 / 生成长度 ----
+        qb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        self.lbl_mm_qwen = Gtk.Label(label="视觉模型: 检测中…", xalign=0)
+        qb.pack_start(self.lbl_mm_qwen, False, False, 0)
+
+        self.btn_mm_start = Gtk.Button(label=f"启动视觉服务 ({VLM_SERVICE})")
+        self.btn_mm_start.set_tooltip_text(
+            f"systemctl start {VLM_SERVICE} (默认不开机自启: 独占 4 个大核 + 约 490MB)")
+        self.btn_mm_start.connect("clicked", self.on_mm_start_qwen)
+        qb.pack_start(self.btn_mm_start, False, False, 0)
+
+        qb.pack_start(Gtk.Label(label="提示词:", xalign=0), False, False, 0)
+        self.ent_mm_prompt = Gtk.Entry()
+        self.ent_mm_prompt.set_text(VLM_PROMPT)
+        self.ent_mm_prompt.set_hexpand(True)
+        self.ent_mm_prompt.set_tooltip_text("回车或点『识别』发送")
+        self.ent_mm_prompt.connect("activate", self.on_mm_recognize_clicked)
+        qb.pack_start(self.ent_mm_prompt, True, True, 0)
+
+        qb.pack_start(Gtk.Label(label="最多生成:", xalign=0), False, False, 0)
+        # 生成长度上限不写死: 按服务端 runtime.json 的 limits.max_tokens 定范围
+        cap = max(16, int(VLM_PROFILE.max_tokens_cap))
+        self.sp_mm_tokens = Gtk.SpinButton.new_with_range(16, cap, 16)
+        self.sp_mm_tokens.set_value(min(VLM_MAX_TOKENS, cap))
+        self.sp_mm_tokens.set_tooltip_text(
+            f"越多回答越长也越慢 (上限 {cap}, 来自服务端配置; "
+            f"实测解码约 {VLM_PROFILE.tps:.1f} tok/s)")
+        qb.pack_start(self.sp_mm_tokens, False, False, 0)
+        qb.pack_start(Gtk.Label(label="tokens", xalign=0), False, False, 0)
+        tab.pack_start(qb, False, False, 0)
+
+        # ---- 上半预览 / 下半回答, 分隔可拖 ----
+        paned = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL)
+        paned.set_position(360)
+
+        self.mm_area = Gtk.DrawingArea()
+        self.mm_area.set_size_request(640, 360)
+        self.mm_area.connect("draw", self._on_mm_draw)
+        paned.pack1(self.mm_area, True, False)
+
+        rbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+
+        # 标题行: 左边大标题, 右边一行小字指标
+        hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.lbl_mm_res = Gtk.Label(xalign=0)
+        self.lbl_mm_res.set_markup('<span size="x-large" weight="bold">'
+                                   '\U0001F4AC 识别结果</span>')
+        hb.pack_start(self.lbl_mm_res, False, False, 0)
+        self.lbl_mm_meta = Gtk.Label(xalign=0)
+        hb.pack_start(self.lbl_mm_meta, True, True, 0)
+        rbox.pack_start(hb, False, False, 0)
+
+        # ---- 识别中的动画区 (平时隐藏) ----
+        self.mm_prog = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        self.mm_prog.set_margin_top(4)
+        ptop = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        self.mm_spinner = Gtk.Spinner()
+        ptop.pack_start(self.mm_spinner, False, False, 0)
+        self.lbl_mm_stage = Gtk.Label(xalign=0)
+        self.lbl_mm_stage.set_name("vlm-busy-stage")
+        ptop.pack_start(self.lbl_mm_stage, False, False, 0)
+        self.lbl_mm_elapsed = Gtk.Label(xalign=1)
+        ptop.pack_end(self.lbl_mm_elapsed, False, False, 0)
+        self.mm_prog.pack_start(ptop, False, False, 0)
+        # pulse 模式: 服务端不给进度, 用不确定式进度条表达"在动", 不伪造成百分比
+        self.mm_pbar = Gtk.ProgressBar()
+        self.mm_pbar.set_pulse_step(0.06)
+        self.mm_prog.pack_start(self.mm_pbar, False, False, 0)
+        self.lbl_mm_stage_desc = Gtk.Label(xalign=0)
+        self.lbl_mm_stage_desc.set_name("vlm-stage-text")
+        self.mm_prog.pack_start(self.lbl_mm_stage_desc, False, False, 0)
+        rbox.pack_start(self.mm_prog, False, False, 0)
+        # set_no_show_all 必须在 hide 之前: 否则外层 show_all() 会把它们又弹出来
+        self.mm_prog.set_no_show_all(True)
+        self.mm_prog.hide()
+
+        # ---- 回答本体: 大字号 + 底色框, 一眼能看到 ----
+        ans_frame = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        ans_frame.set_name("vlm-answer-frame")
+        sw = Gtk.ScrolledWindow()
+        sw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        sw.set_shadow_type(Gtk.ShadowType.NONE)
+        self.mm_result = Gtk.TextView()
+        self.mm_result.set_name("vlm-answer-text")
+        self.mm_result.set_editable(False)
+        self.mm_result.set_cursor_visible(False)
+        self.mm_result.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.mm_result.set_left_margin(14)
+        self.mm_result.set_right_margin(14)
+        self.mm_result.set_top_margin(12)
+        self.mm_result.set_bottom_margin(12)
+        self.mm_result.set_pixels_above_lines(5)     # 中文长句拉开行距更好读
+        self.mm_result.set_pixels_below_lines(5)
+        # 字号主要靠 CSS(#vlm-answer-text), 但 override_font 优先级比 CSS 高,
+        # 所以这里不无条件覆盖; 只有 CSS 没装上时(见 __init__ 里的回退)才补.
+        self.mm_result_buf = self.mm_result.get_buffer()
+        sw.add(self.mm_result)
+        ans_frame.pack_start(sw, True, True, 0)
+        rbox.pack_start(ans_frame, True, True, 0)
+
+        # ---- 处理过程时间轴 (回答后填真实耗时, 可折叠) ----
+        self.mm_expander = Gtk.Expander()
+        self.mm_expander.set_label("\u23F1 处理过程")
+        self.mm_stage = Gtk.TextView()
+        self.mm_stage.set_name("vlm-stage-text")
+        self.mm_stage.set_editable(False)
+        self.mm_stage.set_cursor_visible(False)
+        self.mm_stage.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.mm_stage.set_left_margin(10)
+        self.mm_stage.set_right_margin(10)
+        self.mm_stage.set_top_margin(6)
+        self.mm_stage.set_bottom_margin(6)
+        self.mm_stage_buf = self.mm_stage.get_buffer()
+        ssw = Gtk.ScrolledWindow()
+        ssw.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        ssw.set_min_content_height(110)
+        ssw.add(self.mm_stage)
+        self.mm_expander.add(ssw)
+        rbox.pack_start(self.mm_expander, False, False, 0)
+        self.mm_expander.set_no_show_all(True)
+        self.mm_expander.hide()
+
+        paned.pack2(rbox, True, False)
+        tab.pack_start(paned, True, True, 0)
+
+        self._mm_busy_t0 = 0.0
+        self._mm_busy_tick = None
+        self._mm_max_tokens = VLM_MAX_TOKENS
+        if not install_vlm_css():
+            # CSS 挂不上时才用 override_font 保底(它会盖过 CSS, 所以只能二选一)
+            self.logger.warning("多模态回答区样式未生效, 已回退到内置字号")
+            try:
+                self.mm_result.override_font(Pango.FontDescription("Sans 13"))
+                self.mm_stage.override_font(Pango.FontDescription("Monospace 9"))
+            except Exception:
+                pass
+
+        # 开界面后台探一下 qwen35 在不在, 不让探测阻塞主循环
+        threading.Thread(target=self._mm_probe_worker, daemon=True).start()
+
+    def on_mm_clear_clicked(self, btn):
+        if self._mm_busy:
+            return                              # 识别中别抢 buffer
+        self.mm_result_buf.set_text("")
+        self.lbl_mm_meta.set_markup("")
+        self.mm_expander.hide()
+        self.lbl_mm_res.set_markup('<span size="x-large" weight="bold">'
+                                   '\U0001F4AC 识别结果</span>')
+
+    # ---------- 视觉模型服务状态 ----------
+    def _mm_probe_worker(self):
+        GLib.idle_add(self._mm_qwen_label, vlm_probe())
+
+    def _mm_qwen_label(self, mid):
+        try:
+            if mid:
+                # 模型名/视觉尺寸都是读出来的: mid 来自 /v1/models,
+                # 尺寸来自 runtime.json 或上次实测的 decoder_size_wh
+                if VLM_PROFILE.model_id is None:
+                    VLM_PROFILE.model_id = str(mid)
+                self.lbl_mm_qwen.set_markup(
+                    '<span foreground="#2ec27e">视觉模型: 就绪</span>  '
+                    '<span size="small" foreground="gray">'
+                    + GLib.markup_escape_text(VLM_PROFILE.model_display)
+                    + ' · ' + GLib.markup_escape_text(VLM_PROFILE.vision_size_text)
+                    + '</span>')
+                self.btn_mm_start.set_sensitive(False)
+                # 探测到模型后把生成长度上限和提示速度也按实际刷新
+                cap = max(16, int(VLM_PROFILE.max_tokens_cap))
+                self.sp_mm_tokens.set_range(16, cap)
+                self.sp_mm_tokens.set_tooltip_text(
+                    f"越多回答越长也越慢 (上限 {cap}, 来自服务端配置; "
+                    f"实测解码约 {VLM_PROFILE.tps:.1f} tok/s)")
+            else:
+                self.lbl_mm_qwen.set_markup(
+                    '<span foreground="#e01b24">视觉模型: 未运行</span>  '
+                    '<span size="small" foreground="gray">'
+                    '需先启动 ' + VLM_SERVICE + ' 服务</span>')
+                self.btn_mm_start.set_sensitive(True)
+        except Exception:
+            pass
+
+    def on_mm_start_qwen(self, btn):
+        btn.set_sensitive(False)
+        self.lbl_mm_qwen.set_text(f"视觉模型: 启动中… (首次加载约 10~30s)")
+        threading.Thread(target=self._mm_start_qwen_worker, daemon=True).start()
+
+    def _mm_start_qwen_worker(self):
+        try:
+            r = subprocess.run(["sudo", "-n", "systemctl", "start", "qwen35"],
+                               capture_output=True, timeout=300)
+        except FileNotFoundError:
+            GLib.idle_add(self.show_error,
+                          "找不到 sudo, 请手动执行: sudo systemctl start qwen35")
+            GLib.idle_add(self._mm_qwen_label, None)
+            return
+        except Exception as e:
+            self.logger.error(f"启动 qwen35 失败: {e}")
+            GLib.idle_add(self.show_error, f"启动 qwen35 失败: {e}")
+            GLib.idle_add(self._mm_qwen_label, None)
+            return
+        if r.returncode != 0:
+            msg = (r.stderr or r.stdout or b"").decode("utf-8", "replace").strip()
+            self.logger.error(f"启动 qwen35 失败: {msg or 'rc=' + str(r.returncode)}")
+            GLib.idle_add(self.show_error,
+                          f"启动 qwen35 失败 ({msg or 'rc=' + str(r.returncode)})\n"
+                          "请手动执行: sudo systemctl start qwen35")
+            GLib.idle_add(self._mm_qwen_label, None)
+            return
+        # systemctl start 返回不代表端口已监听, 等 /v1/models 真的能应答
+        deadline = time.monotonic() + 180
+        mid = None
+        while time.monotonic() < deadline:
+            mid = vlm_probe(timeout=2.0)
+            if mid:
+                break
+            time.sleep(1.0)
+        if mid:
+            self.logger.info(f"Qwen3.5 已就绪: {mid}")
+        else:
+            self.logger.error("Qwen3.5 启动超时, 端口 8000 没起来")
+        GLib.idle_add(self._mm_qwen_label, mid)
+
+    # ---------- 预览 ----------
+    def on_mm_preview_clicked(self, btn):
+        if self._mm_on:
+            self._mm_stop()
+            return
+        self._mm_start()
+
+    def _mm_start(self, reason="手动"):
+        """开始取流。切页进来、手动点按钮、重置后重开都走同一条路。"""
+        if self._mm_on:
+            return
+        if self._cam_on:
+            # 同一个 /dev/video10, 只能有一个读者
+            self.logger.info("多模态预览: 先停掉摄像头实时识别")
+            self._cam_stop()
+        self._mm_on = True
+        self._mm_ready = False
+        self.btn_mm_rec.set_sensitive(False)
+        self.btn_mm_prev.set_label("\u23F9 停止预览")
+        self.lbl_mm.set_text(f"{CAM_DEVICE} · {CAM_W}x{CAM_H} · 正在打开…")
+        self.logger.info(f"多模态预览: 启动 ({reason})")
+        threading.Thread(target=self._mm_preview_loop, daemon=True).start()
+
+    def on_mm_reset_clicked(self, btn):
+        """预览不出画面时的手工兜底。在后台线程做, 不阻塞界面。
+
+        普通用户就能完成的部分: 杀掉自己残留的取流子进程、关掉并重新打开
+        v4l2 节点(CamxBridge 会在最后一个读者断开后重连 camera)。
+        需要 root 的部分(重启桥接服务)只在退避重试也救不回来时才尝试,
+        非 root 时把命令告诉用户, 不弹密码框。
+        """
+        btn.set_sensitive(False)
+        self.logger.info("多模态预览: 手动重置摄像头")
+        threading.Thread(target=self._mm_reset_worker, daemon=True).start()
+
+    def _mm_reset_worker(self):
+        try:
+            self._mm_on = False               # 令取流循环退出
+            self._mm_kill_proc()
+            self._mm_kill_stale_helpers()
+            time.sleep(0.5)                   # 给 bridge 时间重建 pipeline
+            self._mm_fail_streak = 0
+            GLib.idle_add(self._mm_restart_from_reset)
+        except Exception as e:
+            self.logger.error(f"重置摄像头失败: {e}")
+            GLib.idle_add(self._mm_reset_failed, str(e))
+
+    def _mm_restart_from_reset(self):
+        try:
+            self.btn_mm_reset.set_sensitive(True)
+        except Exception:
+            pass
+        self._mm_start("重置后")
+
+    def _mm_reset_failed(self, msg):
+        try:
+            self.btn_mm_reset.set_sensitive(True)
+        except Exception:
+            pass
+        self.lbl_mm.set_text(f"{CAM_DEVICE} · 重置失败: {msg}")
+
+    def _mm_kill_proc(self):
+        """杀掉当前取流子进程并等它真的退出(不等会和新进程抢设备)。"""
+        p, self._mm_proc = self._mm_proc, None
+        if p is None:
+            return
+        try:
+            p.kill()
+            p.wait(timeout=3)
+        except Exception:
+            pass
+
+    def _mm_kill_stale_helpers(self):
+        """清掉以前遗留的取流管道。只动本进程启动的、命令行带本程序特征的那些。"""
+        me = os.getuid()
+        killed = 0
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit() or int(entry) == os.getpid():
+                continue
+            base = f"/proc/{entry}"
+            try:
+                if os.stat(base).st_uid != me:
+                    continue            # 不是自己的进程不碰
+                with open(f"{base}/cmdline", "rb") as f:
+                    cmd = f.read().replace(b"\0", b" ").decode("utf-8", "replace")
+                # 只匹配我们发出的那条管道, 避免误伤用户自己的 gst 命令
+                if "v4l2src" in cmd and CAM_DEVICE in cmd and "fdsink" in cmd \
+                        and "videoconvert" in cmd:
+                    os.kill(int(entry), signal.SIGKILL)
+                    killed += 1
+            except Exception:
+                continue
+        if killed:
+            self.logger.info(f"多模态预览: 清掉 {killed} 个残留取流进程")
+        return killed
+
+    def on_notebook_switch_page(self, notebook, page, page_num):
+        """切页自动开关预览: 进本页就取流, 离本页就释放摄像头。
+
+        手动停止后切走再切回仍会重新开始 —— 页面的默认状态就是“在预览”。
+        检测中(_mm_busy)切走不拦截请求: 帧已经送出去, 结果回来仍会填到回答区,
+        只是不再占着摄像头。
+        """
+        try:
+            if page_num == self._mm_tab_idx:
+                if not self._mm_on:
+                    self._mm_start("切到本页")
+            elif self._mm_on:
+                self.logger.info("多模态预览: 离开本页, 释放摄像头")
+                self._mm_stop()
+        except Exception:
+            pass        # 启动阶段页面索引未就绪, 不因切页报错卡住界面
+
+    def _mm_stop(self):
+        if not self._mm_on:
+            return
+        self._mm_on = False
+        p, self._mm_proc = self._mm_proc, None
+        if p is not None:
+            try:
+                p.kill()
+                p.wait(timeout=3)
+            except Exception:
+                pass
+        GLib.idle_add(self._mm_stopped)
+
+    def _mm_stopped(self, failed=False):
+        try:
+            self.btn_mm_prev.set_label("\u25B6 打开预览")
+            self.btn_mm_rec.set_sensitive(False)
+            self._mm_ready = False
+            if failed:
+                # 自动重试也救不回来: 把办法直接写在状态行, 不用去翻日志
+                self._mm_recover_camera()
+            else:
+                self.lbl_mm.set_text(
+                    f"{CAM_DEVICE} · CamxBridge {CAM_W}x{CAM_H} · 预览未开启")
+            with self._mm_lock:
+                self._mm_raw = None
+                self._mm_frame = None
+            self.mm_area.queue_draw()
+            self.logger.info("多模态预览: 已停止")
+        except Exception:
+            pass    # 窗口正在销毁
+
+    def _mm_recover_camera(self):
+        """取流反复失败后的收尾: 能自己重启就重启, 不能就把该输的命令给出。"""
+        unit = "camx-v4l2-bridge@0"
+        cmd = f"sudo systemctl restart {unit}"
+        if os.geteuid() == 0:
+            try:
+                r = subprocess.run(["systemctl", "restart", unit],
+                                   capture_output=True, timeout=60)
+                if r.returncode == 0:
+                    self.logger.info(f"已重启 {unit}, 重新开始预览")
+                    self.lbl_mm.set_text(
+                        f"{CAM_DEVICE} · 已重启摄像头服务, 正在重新取流…")
+                    self._mm_fail_streak = 0
+                    GLib.timeout_add(1500, self._mm_auto_restart)
+                    return
+                err = (r.stderr or b"").decode("utf-8", "replace").strip()
+                self.logger.error(f"重启 {unit} 失败: {err or r.returncode}")
+            except Exception as e:
+                self.logger.error(f"重启 {unit} 失败: {e}")
+        self.lbl_mm.set_text(
+            f"{CAM_DEVICE} · 取不到画面, 已自动重试 {self._mm_fail_streak} 次\n"
+            f"先点“\u21BB 重置摄像头”; 仍不行就在终端执行: {cmd}")
+
+    def _mm_auto_restart(self):
+        """重启完摄像头服务后自动接回预览(仍在本页才做)。"""
+        try:
+            if self.notebook.get_current_page() == self._mm_tab_idx and not self._mm_on:
+                self._mm_start("摄像头服务重启后")
+        except Exception:
+            pass
+        return False
+
+    def _mm_preview_loop(self):
+        """只取流不推理: 每帧转成 pixbuf 供绘制, 同时留住裸 RGB 供识别用.
+
+        不做 YOLO 检测, 因此不需要拆成取流/推理两个线程: 30fps 下单线程
+        就能跟上, 画面永远是摄像头当前帧.
+        """
+        w, h = CAM_W, CAM_H
+        nbytes = w * h * 3
+        buf = bytearray(nbytes)
+        view = memoryview(buf)
+        frames, t_fps = 0, time.monotonic()
+        seen = 0                             # 累计帧数, 不随 FPS 统计清零
+        # CamxBridge 是按需建流的: 上一个客户端断开后它要重建整条 pipeline,
+        # 这个窗口里新连上来的读者会一帧都拿不到就 EOF. 切页自动预览比手动点
+        # 按钮更容易撞上这个窗口, 所以前几帧都拿不到时静默重试几次, 而不是
+        # 让用户看到一个空的预览区再去手动切换。
+        attempts, max_attempts = 0, 3
+        while self._mm_on and attempts < max_attempts:
+            attempts += 1
+            started = False                  # 本次尝试是否已经出过完整帧
+            try:
+                p = subprocess.Popen(camera_pipeline_cmd(w, h),
+                                     stdout=subprocess.PIPE,
+                                     stderr=subprocess.DEVNULL,
+                                     bufsize=nbytes * 2)
+            except Exception as e:
+                self.logger.error(f"多模态预览启动失败: {e}")
+                break
+            self._mm_proc = p
+            fd = p.stdout.fileno()
+            try:
+                while self._mm_on:
+                    got = 0
+                    while got < nbytes:      # os.read 会短读, 凑满一帧
+                        n = os.readv(fd, [view[got:]])
+                        if not n:
+                            break
+                        got += n
+                    if got < nbytes:
+                        break
+                    started = True
+                    # 换缓冲而不是就地写: 识别线程可能正握着上一帧
+                    raw, buf = bytes(buf), buf
+                    pb = GdkPixbuf.Pixbuf.new_from_bytes(
+                        GLib.Bytes.new(raw), GdkPixbuf.Colorspace.RGB,
+                        False, 8, w, h, w * 3)
+                    with self._mm_lock:
+                        self._mm_raw = raw
+                        self._mm_frame = pb
+                    GLib.idle_add(self.mm_area.queue_draw)
+                    if not self._mm_ready and seen >= MM_WARMUP_FRAMES:
+                        # 过了预热期才让点识别, 否则送出去的是开头的黑帧
+                        self._mm_ready = True
+                        self._mm_fail_streak = 0     # 真出画面了, 健康计数归零
+                        GLib.idle_add(self.btn_mm_rec.set_sensitive, True)
+                    frames += 1
+                    seen += 1
+                    now = time.monotonic()
+                    if now - t_fps >= 1.0:
+                        fps = frames / (now - t_fps)
+                        frames, t_fps = 0, now
+                        GLib.idle_add(self.lbl_mm.set_text,
+                                      f"{CAM_DEVICE} · {w}x{h} · {fps:.1f} FPS · "
+                                      f"亮度 {mm_frame_luma(raw):.0f} · "
+                                      f"预览中 (识别送入 {VLM_PROFILE.model_display})")
+            finally:
+                try:
+                    p.kill()
+                    p.wait(timeout=3)
+                except Exception:
+                    pass
+                self._mm_proc = None
+            if not self._mm_on:
+                return                       # 用户主动停止/切走, 不报错不重试
+            # 跑起来过再断 = 桥接重建或摄像头侧抽风, 也值得自动重连,
+            # 但只在没出过帧时才算“启动失败”(用于判断要不要提示手动重置)。
+            if started:
+                self._mm_fail_streak = max(self._mm_fail_streak, 1)
+                if attempts < max_attempts:
+                    self.logger.warning(
+                        f"多模态预览: 取流中断, 自动重连 ({attempts}/{max_attempts})")
+                    GLib.idle_add(self.lbl_mm.set_text,
+                                  f"{CAM_DEVICE} · {w}x{h} · 取流中断, "
+                                  f"自动重连 ({attempts}/{max_attempts})…")
+                    time.sleep(0.8)
+                    continue
+            else:
+                self._mm_fail_streak += 1
+                if attempts < max_attempts:
+                    self.logger.info(
+                        f"多模态预览: 桥接正在重建, {attempts}/{max_attempts} 次未取到帧, "
+                        "稍后重试")
+                    GLib.idle_add(self.lbl_mm.set_text,
+                                  f"{CAM_DEVICE} · {w}x{h} · 正在重试取流 "
+                                  f"({attempts}/{max_attempts})…")
+                    time.sleep(0.8)
+                    continue
+            break
+        if self._mm_on:                  # 意外退出, 复位按钮
+            self._mm_on = False
+            GLib.idle_add(self._mm_stopped, self._mm_fail_streak > 0)
+
+    def _on_mm_draw(self, area, ctx):
+        with self._mm_lock:
+            pb = self._mm_frame
+        W, H = area.get_allocated_width(), area.get_allocated_height()
+        ctx.set_source_rgb(0.08, 0.08, 0.08)   # 先铺底, 尺寸变化时不留残影
+        ctx.rectangle(0, 0, W, H)
+        ctx.fill()
+        if not pb:
+            return False
+        w, h = pb.get_width(), pb.get_height()
+        s = min(W / w, H / h)                  # 保持比例撑满, 居中留黑边
+        ctx.save()
+        ctx.translate((W - w * s) / 2, (H - h * s) / 2)
+        ctx.scale(s, s)
+        Gdk.cairo_set_source_pixbuf(ctx, pb, 0, 0)
+        ctx.paint()
+        ctx.restore()
+        return False
+
+    # ---------- 识别 ----------
+    def on_mm_recognize_clicked(self, btn):
+        if self._mm_busy:
+            return
+        with self._mm_lock:
+            raw = self._mm_raw
+        if not raw:
+            self.show_error("预览还没有画面, 稍等一下再点识别")
+            return
+        luma = mm_frame_luma(raw)
+        if luma < MM_MIN_LUMA:
+            # 全黑/极暗帧: 通常是 bridge 刚建流, 真实画面还没到
+            self.show_error(
+                f"当前帧几乎全黑 (亮度 {luma:.0f}/255), 识别没意义\n"
+                "预览刚打开时前几帧是黑的, 等画面出来再点识别")
+            return
+        prompt = self.ent_mm_prompt.get_text().strip() or VLM_PROMPT
+        max_tokens = int(self.sp_mm_tokens.get_value())
+        self._mm_busy = True
+        self.btn_mm_rec.set_sensitive(False)
+        self.btn_mm_rec.set_label("\u23F3 识别中…")
+        self.mm_result_buf.set_text("")
+        self.lbl_mm_meta.set_markup("")
+        self.mm_expander.hide()
+        self._mm_anim_start(max_tokens)
+        self.logger.info(f"多模态识别: 发送 1 帧 {CAM_W}x{CAM_H}, "
+                         f"prompt={prompt!r}, max_tokens={max_tokens}")
+        threading.Thread(target=self._mm_worker,
+                         args=(raw, prompt, max_tokens), daemon=True).start()
+
+    # ---------- 识别中的动画 ----------
+    def _mm_anim_start(self, max_tokens):
+        """启动旋转图标 + pulse 进度条 + 阶段提示.
+
+        服务端是同步 HTTP, 没有逐阶段进度可拿, 所以时间轴按实测耗时估算推进,
+        进度条用 pulse(不确定态) 而不是伪造百分比. 已经用掉的秒数会实时显示,
+        用户能判断"它还在跑"还是"卡住了".
+        """
+        self._mm_busy_t0 = time.monotonic()
+        self._mm_max_tokens = max_tokens
+        # 时间轴每次启动时从 VLM_PROFILE 重建: 跑过几次后就是实测节奏
+        self._mm_stages = VLM_PROFILE.stage_plan()
+        self._mm_tps = VLM_PROFILE.tps
+        self._mm_show_dyn(self.mm_prog)
+        self.mm_spinner.start()
+        self.lbl_mm_elapsed.set_text("0.0s")
+        self._mm_anim_tick()
+        if self._mm_busy_tick is None:
+            self._mm_busy_tick = GLib.timeout_add(120, self._mm_anim_tick)
+
+    @staticmethod
+    def _mm_show_dyn(widget):
+        """显示一个 set_no_show_all 的容器.
+
+        被标了 no_show_all 的控件, 连自己调 show_all() 都无效(这是 GTK 的语义),
+        所以这里逐个 show() 显式打开.
+        """
+        widget.show()
+        if hasattr(widget, "get_children"):
+            for ch in widget.get_children():
+                NPUTestWindow._mm_show_dyn(ch)
+
+    def _mm_anim_tick(self):
+        """每 120ms 刷一次: 推进度条 + 按已用时间选当前阶段."""
+        if not self._mm_busy:
+            self._mm_busy_tick = None
+            return False
+        el = time.monotonic() - self._mm_busy_t0
+        try:
+            self.mm_pbar.pulse()
+            self.lbl_mm_elapsed.set_text(f"{el:.1f}s")
+            stages = getattr(self, "_mm_stages", None) or VLM_PROFILE.stage_plan()
+            stage = stages[0]
+            for s in stages:
+                if el >= s[0]:
+                    stage = s
+            name, desc = stage[1], stage[2]
+            # 解码阶段能按实测 tok/s 估个大概进度, 给用户点期待
+            if stage is stages[-1] and self._mm_max_tokens:
+                tps = getattr(self, "_mm_tps", None) or VLM_PROFILE.tps
+                est = self._mm_max_tokens / tps
+                done = min(self._mm_max_tokens,
+                           int((el - stages[-1][0]) * tps))
+                desc = f"已生成约 {max(0, done)}/{self._mm_max_tokens} tokens" \
+                       f" (按实测 {tps:.1f} tok/s, 上限 {est:.0f}s, 提前结束即为准)"
+            self.lbl_mm_stage.set_text(name)
+            self.lbl_mm_stage_desc.set_text(desc)
+        except Exception:
+            pass
+        return True
+
+    def _mm_anim_stop(self):
+        self._mm_busy_tick = None
+        try:
+            self.mm_spinner.stop()
+            self.mm_prog.hide()
+        except Exception:
+            pass
+
+    def _mm_worker(self, raw, prompt, max_tokens):
+        t0 = time.monotonic()
+        try:
+            pb = GdkPixbuf.Pixbuf.new_from_bytes(
+                GLib.Bytes.new(raw), GdkPixbuf.Colorspace.RGB,
+                False, 8, CAM_W, CAM_H, CAM_W * 3)
+            ok, jpeg = pb.save_to_bufferv(
+                "jpeg", ["quality"], [VLM_JPEG_QUALITY])
+            if not ok or not jpeg:
+                raise RuntimeError("GdkPixbuf JPEG 编码失败")
+            # 留一份实际发出去的图, 便于复现/比对回答
+            try:
+                d = os.path.join(LOG_DIR, "vlm")
+                os.makedirs(d, exist_ok=True)
+                stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                with open(os.path.join(d, f"frame_{stamp}.jpg"), "wb") as f:
+                    f.write(jpeg)
+            except Exception:
+                pass
+            text, meta = vlm_ask_image(jpeg, prompt, max_tokens)
+        except urllib.error.HTTPError as e:
+            detail = ""
+            try:
+                detail = e.read().decode("utf-8", "replace")
+                detail = ((json.loads(detail).get("error") or {}).get("message")
+                          or detail)
+            except Exception:
+                pass
+            self.logger.error(f"多模态识别失败: HTTP {e.code} {detail[:400]}")
+            GLib.idle_add(self._mm_failed, f"Qwen3.5 返回 HTTP {e.code}\n{detail[:800]}")
+            return
+        except urllib.error.URLError as e:
+            self.logger.error(f"多模态识别失败: 连不上 qwen35 ({e.reason})")
+            GLib.idle_add(self._mm_failed,
+                          f"连不上 Qwen3.5 服务 ({VLM_ENDPOINT})\n"
+                          f"原因: {e.reason}\n"
+                          "请点\"启动 Qwen3.5\"或执行: sudo systemctl start qwen35")
+            return
+        except Exception as e:
+            self.logger.error(f"多模态识别失败: {e}")
+            GLib.idle_add(self._mm_failed, str(e))
+            return
+        elapsed = time.monotonic() - t0
+        self.logger.info(f"多模态识别完成: {elapsed:.1f}s, "
+                         f"JPEG {len(jpeg) / 1024:.0f}KB, "
+                         f"生成 {meta.get('completion_tokens')} tokens, "
+                         f"{meta.get('decode_tps') or 0:.1f} tok/s")
+        GLib.idle_add(self._mm_done, text, meta, elapsed, len(jpeg))
+
+    def _mm_done(self, text, meta, elapsed, jpeg_len):
+        self._mm_anim_stop()
+        try:
+            self.mm_result_buf.set_text(text)
+            self.lbl_mm_meta.set_markup(
+                '<span size="small" foreground="#2ec27e" weight="bold">'
+                f'{elapsed:.1f}s</span>'
+                '<span size="small" foreground="gray">  '
+                + GLib.markup_escape_text(
+                    f"{VLM_PROFILE.model_display} · "
+                    + vlm_meta_line(meta, None, jpeg_len))
+                + '</span>')
+            self._mm_fill_stages(meta, elapsed, jpeg_len)
+            # 模型状态行也跟着用实测值刷新(尺寸/速度可能刚学到)
+            self.lbl_mm_qwen.set_markup(
+                '<span foreground="#2ec27e">视觉模型: 就绪</span>  '
+                '<span size="small" foreground="gray">'
+                + GLib.markup_escape_text(VLM_PROFILE.model_display)
+                + ' · ' + GLib.markup_escape_text(VLM_PROFILE.vision_size_text)
+                + '</span>')
+        except Exception:
+            pass
+        self._mm_busy = False
+        self.btn_mm_rec.set_label("\U0001F50D 识别")
+        self.btn_mm_rec.set_sensitive(self._mm_on)
+
+    def _mm_fill_stages(self, meta, elapsed, jpeg_len):
+        """把服务端报的真实阶段耗时画成一条时间轴(带占比进度条)."""
+        rows = vlm_stage_rows(meta)
+        buf = self.mm_stage_buf
+        buf.set_text("")
+        if not rows:
+            self.mm_expander.hide()
+            return
+        total = sum(r[1] for r in rows) or 1.0
+        # 等宽字体才能用空格把条形对齐
+        tag = buf.create_tag("mono", family="Monospace")
+        it = buf.get_end_iter()
+        for name, sec, extra in rows:
+            bar_n = max(1, int(round(sec / total * 26)))
+            buf.insert(it, f"{name:<14}{sec:6.2f}s  ", -1)
+            buf.insert_with_tags(it, "\u2588" * bar_n, tag)
+            buf.insert(it, "\u2591" * (26 - bar_n)
+                       + f" {sec / total * 100:4.1f}%\n", -1)
+            if extra:
+                buf.insert(it, f"{'':<14}\u2514 {extra}\n", -1)
+        buf.insert(it, f"{'─' * 54}\n", -1)
+        if meta.get("request_seconds"):
+            buf.insert(it, f"{'服务端 self 计时':<14}{meta['request_seconds']:6.2f}s\n", -1)
+        buf.insert(it, f"{'阶段合计(可重叠)':<14}{total:6.2f}s\n", -1)
+        buf.insert(it, f"{'客户端端到端':<14}{elapsed:6.2f}s  "
+                       f"(含 JPEG {jpeg_len / 1024:.0f}KB 编码与传输)\n", -1)
+        self.mm_expander.set_expanded(False)
+        self._mm_show_dyn(self.mm_expander)
+
+    def _mm_failed(self, msg):
+        self._mm_anim_stop()
+        try:
+            self.mm_result_buf.set_text(msg)
+            self.lbl_mm_res.set_markup(
+                '<span size="x-large" weight="bold" foreground="#e01b24">'
+                '\u26A0 识别失败</span>')
+            self.lbl_mm_meta.set_markup("")
+            self.mm_expander.hide()
+        except Exception:
+            pass
+        self._mm_busy = False
+        self.btn_mm_rec.set_label("\U0001F50D 识别")
+        self.btn_mm_rec.set_sensitive(self._mm_on)
 
     def _refresh_yolo_models(self):
         self.cmb_yolo_model.remove_all()
@@ -2490,15 +3755,53 @@ def _selftest():
           + (f" @ {lat['clock_mhz']:.0f}MHz" if lat.get('clock_mhz') else ""))
 
 
+def _vlm_selftest():
+    """多模态链路自检 (不弹 GUI): python3 qcom-npu-test --vlm-selftest
+
+    不需要摄像头也不弹窗: 拿自带的 bus.jpg 按摄像头同分辨率重采样成 1280x720
+    再编码成 JPEG, 走一遍真实的 /v1/chat/completions 图像请求. 需要 qwen35 已
+    启动 (sudo systemctl start qwen35).
+    """
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+    img = os.path.join(IMAGE_DIRS[0], "bus.jpg")
+    assert os.path.isfile(img), f"找不到测试图: {img}"
+
+    mid = vlm_probe(timeout=5.0)
+    print(f"视觉服务: {vlm_display_name(mid) if mid else '未运行'}")
+    assert mid, "Qwen3.5 未就绪, 先执行: sudo systemctl start qwen35"
+
+    # 与摄像头帧走同一条路径: raw RGB -> pixbuf -> JPEG
+    pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(img, CAM_W, CAM_H, False)
+    ok, jpeg = pb.save_to_bufferv("jpeg", ["quality"], [VLM_JPEG_QUALITY])
+    assert ok and jpeg, "JPEG 编码失败"
+    assert jpeg[:3] == b"\xff\xd8\xff", jpeg[:3]
+    print(f"JPEG: {pb.get_width()}x{pb.get_height()}, {len(jpeg) / 1024:.0f} KB")
+
+    t0 = time.monotonic()
+    text, meta = vlm_ask_image(jpeg, VLM_PROMPT, 64)
+    elapsed = time.monotonic() - t0
+    assert text and text != "(模型没有输出内容)", "模型无输出"
+    assert meta.get("mode") == "image", f"服务端没走图像通路: {meta}"
+    print(f"回答 ({elapsed:.1f}s): {text}")
+    print(f"指标: {vlm_meta_line(meta, elapsed, len(jpeg))}")
+    print("VLM SELFTEST OK")
+
+
 def main():
     win = NPUTestWindow()
     win.connect("destroy", lambda w: w._cam_stop())
+    win.connect("destroy", lambda w: w._mm_stop())
     win.connect("destroy", Gtk.main_quit)
     # --camera: 直接开最大化摄像头窗口, 不用点 Tab (大屏展示/无人值守用)
     if "--camera" in sys.argv:
         win.maximize()
         win.notebook.set_current_page(win._cam_tab_idx)
         GLib.idle_add(win.on_cam_clicked, None)
+    # --multimodal: 直接开多模态页并启动预览
+    if "--multimodal" in sys.argv:
+        win.maximize()
+        win.notebook.set_current_page(win._mm_tab_idx)
+        GLib.idle_add(win.on_mm_preview_clicked, None)
     win.show_all()
     Gtk.main()
 
@@ -2506,5 +3809,7 @@ def main():
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         _selftest()
+    elif "--vlm-selftest" in sys.argv:
+        _vlm_selftest()
     else:
         main()

@@ -2,8 +2,16 @@ SUMMARY = "Quectel PI (QCS6490) Qualcomm NPU Graphical Test Tool"
 DESCRIPTION = "GTK3 GUI for Qualcomm NPU (Hexagon DSP/HTP) testing via SNPE/QNN SDK. \
 Includes platform validation, single-model inference, and throughput benchmarking. \
 Wraps snpe-platform-validator, qnn-platform-validator, snpe-net-run, and \
-snpe-throughput-net-run already shipped on the device by qcom-snpe-sdk / qcom-qnn-sdk."
+snpe-throughput-net-run already shipped on the device by qcom-snpe-sdk / qcom-qnn-sdk. \
+The multimodal tab sends a live camera frame to the local Qwen3.5 vision \
+service (qwen35, /v1/chat/completions) and prints what the model says it sees. \
+The model id, vision input size and token limits are read from the service \
+itself (GET /v1/models plus /usr/lib/qwen35/runtime.json), never hard-coded."
 LICENSE = "CLOSED"
+
+# 多模态页不新增任何构建依赖: HTTP 用 python3 自带的 urllib, JPEG 编码用已在用的
+# GdkPixbuf.save_to_bufferv, 图像缩放由 qwen35 服务端自己做.
+# 运行时只要求板上的 qwen35 服务在跑 (默认不开机自启), 没跑时界面会提供启动按钮.
 
 # Pure data/script package: no compilation.
 inherit pkgconfig
