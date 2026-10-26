@@ -9,12 +9,13 @@ After=network.target
 # the fastrpc recipe installs adsprpcd/cdsprpcd/cdsp1rpcd/gdsprpcd/gdsp1rpcd
 # (fastrpc_15.0.qcom.bb:43), and a Wants= for a unit that does not exist only
 # logs noise.
-After=network.target adsprpcd.service cdsprpcd.service
-Wants=cdsprpcd.service
+After=network.target adsprpcd.service cdsprpcd.service qcom-remoteproc-recover.service
+Wants=cdsprpcd.service qcom-remoteproc-recover.service
 # A wedged CDSP (q6v5_pas 'start timed out', -110) does not come back on a
-# restart -- only a power cycle clears it, as 'reboot' does not reset the DSP.
-# The launcher therefore exits 75 when the DSP never comes up;
-# RestartPreventExitStatus keeps systemd from re-running that dead end once per
+# restart -- the DSP has to be reset through PAS, and that single
+# reset-and-retry job belongs to qcom-remoteproc-recover.service (ordered before
+# this unit).  The launcher only waits for /dev/fastrpc-cdsp and exits 75 when
+# it never shows up; RestartPreventExitStatus keeps systemd from re-running that
 # 10 s, and the StartLimit* pair is the backstop for every other failure (a
 # genuine crash loop should stop and be visible, not spin forever).
 RestartPreventExitStatus=75

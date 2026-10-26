@@ -24,7 +24,21 @@
 # from here.
 
 MATCH="${QCOM_RPROC_MATCH:-cdsp.mdt}"
-RETRIES="${QCOM_RPROC_RETRIES:-8}"
+RETRIES="${QCOM_RPROC_RETRIES:-12}"
+
+# Serialise: a manual run while systemd's own instance is still retrying would
+# put a second writer on rp/state and race the PAS handshake, which is exactly
+# the failure this unit exists to avoid.  Exit 0 instead of 1 so a redundant
+# invocation never looks like a recovery failure.
+LOCK="${QCOM_RPROC_LOCK:-/run/qcom-remoteproc-recover.lock}"
+if command -v flock >/dev/null 2>&1; then
+	if ! exec 9>"$LOCK"; then
+		:   # no writable /run: fall through and run unlocked
+	elif ! flock -n 9; then
+		echo "qcom-remoteproc-recover: another instance is already recovering the DSP, nothing to do"
+		exit 0
+	fi
+fi
 
 say() {
 	echo "qcom-remoteproc-recover: $*"

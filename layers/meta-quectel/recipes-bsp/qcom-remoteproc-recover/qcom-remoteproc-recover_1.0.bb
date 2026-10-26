@@ -12,6 +12,7 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 SRC_URI = " \
     file://qcom-remoteproc-recover \
     file://qcom-remoteproc-recover.service \
+    file://cdsprpcd-order.conf \
 "
 
 S = "${WORKDIR}"
@@ -30,9 +31,16 @@ do_install() {
     install -d ${D}${systemd_system_unitdir}
     install -m 0644 ${S}/qcom-remoteproc-recover.service \
         ${D}${systemd_system_unitdir}/qcom-remoteproc-recover.service
+
+    # Make the upstream cdsprpcd wait for the recovery.  Installed as a drop-in
+    # so meta-qcom's cdsprpcd.service stays untouched.
+    install -d ${D}${systemd_system_unitdir}/cdsprpcd.service.d
+    install -m 0644 ${S}/cdsprpcd-order.conf \
+        ${D}${systemd_system_unitdir}/cdsprpcd.service.d/order.conf
 }
 
 FILES:${PN} = " \
     ${sbindir}/qcom-remoteproc-recover \
     ${systemd_system_unitdir}/qcom-remoteproc-recover.service \
+    ${systemd_system_unitdir}/cdsprpcd.service.d/order.conf \
 "

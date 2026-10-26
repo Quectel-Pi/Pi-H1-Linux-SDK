@@ -64,77 +64,46 @@ mkdir -p "$STATE_DIR/scratch" "$STATE_DIR/logs"
 # ---------------------------------------------------------- DSP bring-up ----
 # QNN HTP runs on the CDSP and libcdsprpc needs /dev/fastrpc-cdsp, which the
 # fastrpc driver creates only after a300000.remoteproc completed its PAS
-# handshake. The rproc is auto-booted by the driver, but that handshake has a
-# 5 s timeout and on the *first* boot after a flash it does miss it:
+# handshake.
 #
-#   qcom_q6v5_pas a300000.remoteproc: start timed out
-#   remoteproc remoteproc3: can't start rproc a300000.remoteproc: -110
+# This script must NOT write /sys/class/remoteproc/*/state.  That node has a
+# single owner: qcom-remoteproc-recover.service, and qwen35.service is ordered
+# after it (After=/Wants=).  Writing 'start' from here as well put a second
+# writer on the same 5 s handshake -- and since it is the *failed* attempt that
+# actually resets the DSP, two interleaved attempts never give it a clean reset.
+# Measured on this board: one boot logged 21 "powering up a300000.remoteproc"
+# attempts from three different writers (recovery, this script, systemd restart)
+# and never came up; running the recovery alone brought the DSP up on attempt 4.
 #
-# The CDSP then stays offline, cdsprpcd restarts every 10 s and the engine
-# fails with "open_device_node failed for domain ID 3 ... (errno 2)".
-#
-# A single retry with a fixed poll is not enough: each 'echo start' BLOCKS for
-# the whole 5 s handshake (measured ~8 s wall on a miss) and then leaves the
-# rproc offline again. The previous form wrote 'start' exactly once and polled
-# 15 s, which gave up one attempt too early -- on the first start after a flash
-# the unit died and only came up via systemd's restart. Retry until the node
-# appears or the budget runs out; the successful attempt takes ~100 ms.
-CDSP_TIMEOUT="${QWEN35_CDSP_TIMEOUT:-60}"
-cdsp_state() { cat "$1/state" 2>/dev/null || echo unknown; }
+# So: only wait for the node the recovery is supposed to produce, and fail with
+# a message that points at the recovery unit instead of duplicating it.
+CDSP_TIMEOUT="${QWEN35_CDSP_TIMEOUT:-120}"
 
 if [ -e /dev/fastrpc-cdsp ]; then
     log "CDSP ready: /dev/fastrpc-cdsp present"
 else
-    cdsp_rproc=""
-    for rp in /sys/class/remoteproc/remoteproc*; do
-        if [ -r "$rp/name" ] && [ "$(cat "$rp/name" 2>/dev/null)" = "a300000.remoteproc" ]; then
-            cdsp_rproc="$rp"
-            break
-        fi
+    log "waiting up to ${CDSP_TIMEOUT}s for /dev/fastrpc-cdsp (the DSP start belongs to qcom-remoteproc-recover)"
+    _started=$(date +%s)
+    _deadline=$((_started + CDSP_TIMEOUT))
+    while [ ! -e /dev/fastrpc-cdsp ] && [ "$(date +%s)" -lt "$_deadline" ]; do
+        sleep 1
     done
-    if [ -z "$cdsp_rproc" ]; then
-        log "WARNING no a300000.remoteproc in /sys/class/remoteproc (CDSP node disabled in DTS?)"
+    if [ -e /dev/fastrpc-cdsp ]; then
+        log "CDSP ready: /dev/fastrpc-cdsp present after $(( $(date +%s) - _started ))s"
     else
-        _attempt=0
-        _started=$(date +%s)
-        _deadline=$((_started + CDSP_TIMEOUT))
-        log "CDSP is offline ($(cdsp_state "$cdsp_rproc")), bringing a300000.remoteproc up"
-        while [ ! -e /dev/fastrpc-cdsp ] && [ "$(date +%s)" -lt "$_deadline" ]; do
-            if [ "$(cdsp_state "$cdsp_rproc")" != "running" ]; then
-                _attempt=$((_attempt + 1))
-                log "CDSP start attempt $_attempt"
-                echo start >"$cdsp_rproc/state" 2>/dev/null \
-                    || log "WARNING could not write $cdsp_rproc/state"
-            fi
-            # Probe the fastrpc child device in 1 s steps: it appears a moment
-            # after the handshake, and a slow probe is not a failed start.
-            _t=0
-            while [ ! -e /dev/fastrpc-cdsp ] && [ "$_t" -lt 5 ] \
-                    && [ "$(date +%s)" -lt "$_deadline" ]; do
-                sleep 1
-                _t=$((_t + 1))
-            done
-        done
-        if [ -e /dev/fastrpc-cdsp ]; then
-            log "CDSP ready: /dev/fastrpc-cdsp present after $(( $(date +%s) - _started ))s ($_attempt start attempt(s))"
-        else
-            # Do NOT start the server without the node. It used to warn and
-            # carry on, which loaded 258 MB of weights, burned ~5 s of CPU and
-            # then died inside libcdsprpc with a wall of 'domain_deinit for
-            # domain N: dev -1' lines that say nothing about the real cause --
-            # and systemd restarted it every 10 s to repeat that forever.
-            # Exiting here means one clear message per attempt instead, and
-            # StartLimitBurst in the unit stops the loop when the DSP is gone
-            # for good (a wedged CDSP needs a power cycle, not a restart).
-            log "ERROR the CDSP did not come up after ${CDSP_TIMEOUT}s ($_attempt start attempt(s));"
-            log "ERROR /dev/fastrpc-cdsp is missing, so QNN cannot open domain 3."
-            log "ERROR Refusing to start the server -- it would only fail inside libcdsprpc."
-            log "ERROR   dmesg | grep a300000        (look for 'start timed out' / -110)"
-            log "ERROR   systemctl status cdsprpcd"
-            log "ERROR If the handshake keeps timing out the DSP is wedged: power-cycle"
-            log "ERROR the board (a 'reboot' does not reset it)."
-            exit 75
-        fi
+        # Do NOT start the server without the node. It used to warn and carry
+        # on, which loaded 258 MB of weights, burned ~5 s of CPU and then died
+        # inside libcdsprpc with a wall of 'domain_deinit for domain N: dev -1'
+        # lines that say nothing about the real cause.
+        log "ERROR /dev/fastrpc-cdsp did not appear within ${CDSP_TIMEOUT}s."
+        log "ERROR This script does not drive remoteproc any more -- qcom-remoteproc-recover"
+        log "ERROR owns the CDSP start, and a second writer races its PAS reset."
+        log "ERROR Refusing to start the server -- it would only fail inside libcdsprpc."
+        log "ERROR   systemctl status qcom-remoteproc-recover"
+        log "ERROR   journalctl -u qcom-remoteproc-recover -b"
+        log "ERROR   dmesg | grep a300000        (look for 'start timed out' / -110)"
+        log "ERROR   systemctl status cdsprpcd"
+        exit 75
     fi
 fi
 

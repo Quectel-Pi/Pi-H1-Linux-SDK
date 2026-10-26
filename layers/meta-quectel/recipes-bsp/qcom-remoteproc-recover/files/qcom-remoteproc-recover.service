@@ -1,16 +1,23 @@
 [Unit]
 Description=Recover Hexagon DSPs left running by a previous boot
-# cdsprpcd exports /dev/fastrpc-cdsp to userspace and lives in multi-user.target,
-# so make sure the DSP is up before the RPC daemon is started.
 After=local-fs.target
-Before=cdsprpcd.service
+# This unit is the ONLY writer of /sys/class/remoteproc/*/state for the CDSP.
+# Every consumer must come after it, because a failed PAS start is what resets
+# the DSP and two interleaved writers never let it reset cleanly: with cdsprpcd
+# (restart-every-10s) and qwen35-launch.sh both poking the same node, one boot
+# did 21 'powering up a300000.remoteproc' attempts and never came up; the very
+# same boot came up on the 4th attempt once the recovery ran alone.
+Before=cdsprpcd.service adsprpcd.service qwen35.service
 ConditionPathExists=/sys/class/remoteproc
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 Environment=QCOM_RPROC_MATCH=cdsp.mdt
-Environment=QCOM_RPROC_RETRIES=8
+# Each attempt costs one 5 s PAS timeout plus a 1 s pause, so 12 retries fit
+# well inside TimeoutStartSec and cover the worst case measured on the board
+# (four full PAS resets needed before the DSP accepted the new firmware).
+Environment=QCOM_RPROC_RETRIES=12
 ExecStart=/usr/sbin/qcom-remoteproc-recover
 TimeoutStartSec=300
 # A DSP that still refuses to start is a firmware/PAS problem: log it and let the
