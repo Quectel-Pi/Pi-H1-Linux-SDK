@@ -1812,8 +1812,17 @@ static irqreturn_t a6xx_irq(struct msm_gpu *gpu)
 	 * stale RBBM fault interrupt that slips past the disable_irq()
 	 * window would make the register read below hit a powered-off
 	 * block and take a synchronous external abort in irq context.
+	 *
+	 * There are two independent recovery entry points and each one sets
+	 * its own flag, so both must be checked here:
+	 *  - a6xx_gmu_fault()  -> gmu->hung,   GMU/HFI failure path
+	 *  - a6xx_recover()    -> a6xx_gpu->hung, CP/RBBM hang path, which is
+	 *    the common one and tears the CX/GX domain down through
+	 *    dev_pm_genpd_synced_poweroff().  Guarding on gmu->hung alone let
+	 *    a stale RBBM interrupt read the powered-off block and panic with
+	 *    "Internal error: synchronous external abort" in a6xx_irq().
 	 */
-	if (a6xx_gpu->gmu.hung)
+	if (a6xx_gpu->gmu.hung || a6xx_gpu->hung)
 		return IRQ_HANDLED;
 
 	status = gpu_read(gpu, REG_A6XX_RBBM_INT_0_STATUS);

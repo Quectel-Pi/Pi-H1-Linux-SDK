@@ -947,8 +947,9 @@ static void a6xx_gmu_force_off(struct a6xx_gmu *gmu)
 	 * recovery -> no fence signalling -> perpetual hang/recover loop
 	 * -> high-frequency GX power-domain collapse -> LDO17 OCP.
 	 * The stale-register-read during collapse is instead guarded in
-	 * a6xx_irq() via the gmu->hung flag, which stays set for the whole
-	 * recovery window (until a6xx_gmu_resume() clears it).
+	 * a6xx_irq() via the gmu->hung and a6xx_gpu->hung flags, which stay
+	 * set for the whole recovery window (until a6xx_gmu_resume() /
+	 * msm_gpu_hw_init() in a6xx_recover() clear them).
 	 */
 
 	/* Force off SPTP in case the GMU is managing it */
