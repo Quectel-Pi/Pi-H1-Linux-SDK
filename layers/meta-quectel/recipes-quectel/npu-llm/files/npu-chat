@@ -10,6 +10,7 @@
 import json
 import os
 import array
+import base64
 import ctypes
 import queue
 import shutil
@@ -25,7 +26,14 @@ import wave
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import GLib, Gtk, Graphene, Pango  # noqa: E402
+gi.require_version("Gdk", "4.0")
+from gi.repository import Gdk, Gio, GLib, Gtk, Graphene, Pango  # noqa: E402
+
+try:  # 识图 needs a decode/encode path for the attached image
+    gi.require_version("GdkPixbuf", "2.0")
+    from gi.repository import GdkPixbuf  # noqa: E402
+except (ImportError, ValueError):  # pragma: no cover - only on a stripped image
+    GdkPixbuf = None
 
 ROOT = os.environ.get("NPU_LLM_ROOT", "/usr/lib/npu-llm")
 DATA = os.environ.get("NPU_LLM_DATA", "/usr/share/npu-llm")
@@ -96,6 +104,29 @@ QWEN35_MAX_TOKENS = int(os.environ.get("QWEN35_MAX_TOKENS", "768"))
 # dropped from the front once the budget is exceeded; the newest turn always
 # survives.
 QWEN35_HISTORY_TOKENS = int(os.environ.get("QWEN35_HISTORY_TOKENS", "700"))
+
+# ---- 识图: image input for the vision model -------------------------------
+# Only qwen3.5-0.8b carries the vision tower. The other models in this image are
+# genie text models with no image encoder, so the button is disabled for them
+# rather than letting a send fail on the server.
+IMAGE_SUFFIX_MIME = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+}
+# qwen_server.py rejects a decoded image bigger than limits.max_image_bytes, and
+# takes exactly one inline image per request (data URL only, no remote URLs).
+IMAGE_MAX_BYTES = int(os.environ.get("NPU_CHAT_IMAGE_MAX", "8000000"))
+DEFAULT_IMAGE_PROMPT = "描述这张图片里有什么。"
+# The camera the board exposes: CamxBridge's v4l2loopback node. It is the node
+# qcom-npu-test drives as well, and only one reader can hold it at a time.
+CAM_DEVICE = os.environ.get("NPU_CHAT_CAMERA", "/dev/video10")
+CAM_W, CAM_H = 1280, 720
+# CamxBridge emits black frames while it (re)builds the stream, and a black frame
+# only earns a "这张图片是黑色的" answer, so a capture reads a few frames and
+# keeps the last one that is not dark.
+CAM_FRAMES, CAM_GOOD, CAM_LUMA_MIN = 12, 3, 24.0
 # qwen35-launch.sh writes this once /v1/models answers, so it reports "serving"
 # and not merely "spawned". It is informational here (qwen35_installed() no
 # longer requires it) because the unit is start-on-demand and this GUI normally
@@ -164,6 +195,12 @@ scrolled > viewport { background: transparent; }
 .welcome { font-family: "Noto Sans CJK SC", sans-serif; font-size: 30px; font-weight: 700;
            color: #dbe6ff; }
 .err { font-family: "Noto Sans CJK SC", sans-serif; font-size: 13px; color: #ff9f9f; }
+.thumb { border-radius: 12px; background-color: rgba(0,0,0,0.25); }
+.attach { background-color: rgba(255,255,255,0.05);
+          border: 1px solid rgba(255,255,255,0.10); border-radius: 16px;
+          padding: 8px 14px; }
+.attach-name { font-family: "Noto Sans CJK SC", sans-serif; font-size: 12px; color: #cfd9ee; }
+.attach-hint { font-family: "Noto Sans CJK SC", sans-serif; font-size: 10px; color: #7d8aa5; }
 """
 
 SEND_HINTS = ["介绍一下你自己", "用三句话描述大海", "写一首关于秋天的短诗", "什么是 Hexagon NPU？"]
@@ -307,27 +344,176 @@ def trim_history(history, budget=None):
     return kept
 
 
-def chat_body(history, model):
+def image_capable(model):
+    """识图 is a qwen3.5-only feature: the genie models have no vision tower."""
+    return model == QWEN35_MODEL and QWEN35_VISION
+
+
+def image_data_url(image):
+    return "data:%s;base64,%s" % (
+        image["mime"], base64.b64encode(image["data"]).decode("ascii"))
+
+
+def load_image(path):
+    """Read a still image off disk and check it against the server's limits."""
+    mime = IMAGE_SUFFIX_MIME.get(os.path.splitext(path)[1].lower())
+    if mime is None:
+        raise ValueError("只支持 PNG / JPEG / WebP 图片")
+    with open(path, "rb") as f:
+        data = f.read()
+    if not data:
+        raise ValueError("图片是空文件")
+    if len(data) > IMAGE_MAX_BYTES:
+        raise ValueError("图片太大（%.1f MB，上限 %.0f MB）"
+                         % (len(data) / 1e6, IMAGE_MAX_BYTES / 1e6))
+    return {"data": data, "mime": mime, "name": os.path.basename(path)}
+
+
+def mean_luma(raw, step=997):
+    """Rough average brightness of an RGB frame (0-255), sampled."""
+    if not raw:
+        return 0.0
+    total = n = 0
+    for i in range(0, len(raw), step):
+        total += raw[i]
+        n += 1
+    return total / n if n else 0.0
+
+
+def jpeg_from_rgb(raw, width, height, quality=90):
+    """Encode one raw RGB frame as JPEG: the server takes data URLs only."""
+    if GdkPixbuf is None:
+        raise RuntimeError("缺少 GdkPixbuf，无法编码摄像头画面")
+    pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(
+        GLib.Bytes.new(bytes(raw)), GdkPixbuf.Colorspace.RGB, False, 8,
+        width, height, width * 3)
+    ok, buf = pixbuf.save_to_bufferv("jpeg", ["quality"], [str(int(quality))])
+    if not ok or not buf:
+        raise RuntimeError("JPEG 编码失败")
+    return bytes(buf)
+
+
+def camera_jpeg(device=CAM_DEVICE, width=CAM_W, height=CAM_H,
+                frames=CAM_FRAMES, luma_min=CAM_LUMA_MIN):
+    """Grab one frame off the CamxBridge node and return it as JPEG bytes.
+
+    The node is a v4l2loopback device fed by camx-v4l2-bridge@0, so the raw mode
+    is known in advance and the frames can be read as plain RGB.  Reading more
+    than one frame is required rather than defensive: the frames right after the
+    bridge (re)builds the stream are black, and a black frame is a useless
+    request -- the model can only answer that the picture is black.
+    """
+    nbytes = width * height * 3
+    cmd = ["gst-launch-1.0", "-q", "v4l2src", "device=" + device, "!",
+           "videoconvert", "!",
+           "video/x-raw,format=RGB,width=%d,height=%d" % (width, height),
+           "!", "fdsink", "fd=1", "sync=false"]
+    if not shutil.which("gst-launch-1.0"):
+        raise RuntimeError("缺少 gst-launch-1.0，无法取摄像头画面")
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, bufsize=nbytes * 2)
+    except OSError as e:
+        raise RuntimeError("启动取流失败：%s" % e) from e
+    best, good = None, 0
+    try:
+        fd = proc.stdout.fileno()
+        for _ in range(max(1, frames)):
+            frame = read_frame(fd, nbytes)
+            if frame is None:
+                break
+            if mean_luma(frame) >= luma_min:
+                best = frame
+                good += 1
+                if good >= CAM_GOOD:
+                    break
+    finally:
+        proc.kill()
+        proc.wait()
+    if best is None:
+        raise RuntimeError(
+            "%s 没有出图（CamxBridge 可能还没建流）。稍等再拍，"
+            "或 systemctl restart camx-v4l2-bridge@0" % device)
+    return jpeg_from_rgb(best, width, height)
+
+
+def read_frame(fd, nbytes):
+    """Read exactly one frame off a pipe; None on EOF/short read."""
+    buf = bytearray(nbytes)
+    view = memoryview(buf)
+    got = 0
+    while got < nbytes:
+        n = os.readv(fd, [view[got:]])
+        if not n:
+            return None
+        got += n
+    return bytes(buf)
+
+
+def texture_for(image, box=None):
+    """Decode image bytes into a Gdk texture for the thumbnail/preview.
+
+    box=(w, h) scales the picture down to fit that box.  Without it a 1280x720
+    capture reports its own natural size and the bubble grows to the full card
+    width instead of showing a preview.
+    """
+    if GdkPixbuf is None or not image:
+        return None
+    try:
+        loader = GdkPixbuf.PixbufLoader()
+        loader.write(image["data"])
+        loader.close()
+        pixbuf = loader.get_pixbuf()
+    except (GLib.Error, TypeError):
+        return None
+    if pixbuf is None:
+        return None
+    if box:
+        bw, bh = box
+        sw, sh = pixbuf.get_width(), pixbuf.get_height()
+        if sw > bw or sh > bh:
+            scale = min(bw / float(sw), bh / float(sh))
+            pixbuf = pixbuf.scale_simple(max(1, int(sw * scale)),
+                                         max(1, int(sh * scale)),
+                                         GdkPixbuf.InterpType.BILINEAR)
+    return Gdk.Texture.new_for_pixbuf(pixbuf)
+
+
+def chat_body(history, model, image=None):
+    messages = [{"role": r, "content": t} for r, t in trim_history(history)]
+    if image is not None:
+        # The server takes one inline image per request and expects the turn that
+        # carries it to be the last one, with the picture before the question.
+        parts = [{"type": "image_url",
+                  "image_url": {"url": image_data_url(image)}}]
+        if messages and messages[-1]["content"]:
+            parts.append({"type": "text", "text": messages[-1]["content"]})
+        messages = messages[:-1] + [{"role": "user", "content": parts}]
     return {"model": model, "max_tokens": QWEN35_MAX_TOKENS, "stream": True,
-            "messages": [{"role": r, "content": t} for r, t in trim_history(history)]}
+            "messages": messages}
 
 
-def ask_server(history, on_chunk=None, job=None):
+def ask_server(history, on_chunk=None, job=None, image=None):
     """One turn against the resident Qwen3.5 server, streaming SSE deltas.
 
     The server keeps the KV/DeltaNet state itself, so the whole history goes out
-    every turn and it does its own 2048-token truncation.
+    every turn and it does its own 2048-token truncation.  An attached image is
+    only sent on the turn it was picked for: replaying it on every later turn
+    would add ~650 prompt tokens (≈9 s of prefill) for no new information, and
+    the answer that described it is already part of the history.
     """
     t0 = time.monotonic()
+    meta = None
     err = start_qwen35()
     if err:
-        return "", err, time.monotonic() - t0, False
+        return "", err, time.monotonic() - t0, False, meta
     try:
         with urllib.request.urlopen(QWEN35_URL + "/v1/models", timeout=10) as r:
             mid = json.load(r)["data"][0]["id"]
         req = urllib.request.Request(
             QWEN35_URL + "/v1/chat/completions",
-            data=json.dumps(chat_body(history, mid), ensure_ascii=False).encode(),
+            data=json.dumps(chat_body(history, mid, image),
+                            ensure_ascii=False).encode(),
             headers={"Content-Type": "application/json"},
         )
         text = ""
@@ -343,6 +529,8 @@ def ask_server(history, on_chunk=None, job=None):
                 chunk = json.loads(val)
                 if chunk.get("error"):
                     raise RuntimeError(chunk["error"])
+                if chunk.get("qwen35_metrics"):
+                    meta = chunk["qwen35_metrics"]
                 for choice in chunk.get("choices", []):
                     piece = choice.get("delta", {}).get("content") or ""
                     if piece:
@@ -350,8 +538,8 @@ def ask_server(history, on_chunk=None, job=None):
                         if on_chunk:
                             on_chunk(text)
     except Exception as e:  # network, JSON, or the server refusing the graph
-        return "", f"{type(e).__name__}: {e}", time.monotonic() - t0, False
-    return text, None, time.monotonic() - t0, bool(job and job.get("stop"))
+        return "", f"{type(e).__name__}: {e}", time.monotonic() - t0, False, meta
+    return text, None, time.monotonic() - t0, bool(job and job.get("stop")), meta
 
 
 def tokens(text):
@@ -360,15 +548,18 @@ def tokens(text):
     return cjk + (len(text) - cjk) / 4.0
 
 
-def ask(model, prompt, on_chunk=None, job=None, history=None):
-    """Run one turn, streaming. Returns (text, error, seconds, stopped).
+def ask(model, prompt, on_chunk=None, job=None, history=None, image=None):
+    """Run one turn, streaming. Returns (text, error, seconds, stopped, meta).
 
     on_chunk(text) is called from this thread with the answer so far, so the
     caller must marshal to the main loop. job is a dict the caller can use to
     cancel: job["p"] holds the child, job["stop"] says a stop was asked for.
+    image is an attached picture (dict with data/mime) for the vision model.
     """
     if model == QWEN35_MODEL:
-        return ask_server(history or [("user", prompt)], on_chunk, job)
+        return ask_server(history or [("user", prompt)], on_chunk, job, image)
+    if image is not None:
+        return "", f"{model} 不支持识图，只有 {QWEN35_MODEL} 能看图", 0.0, False, None
     d = os.path.join(DATA, model)
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = ROOT + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
@@ -405,11 +596,11 @@ def ask(model, prompt, on_chunk=None, job=None, history=None):
     dt = time.monotonic() - t0
     stopped = bool(job and job.get("stop"))
     if text:
-        return text, None, dt, stopped
+        return text, None, dt, stopped, None
     _, err = extract(raw.decode("utf-8", "replace"))
     if stopped:
-        return "", None, dt, True
-    return "", err or f"genie-t2t-run exited {p.returncode}", dt, False
+        return "", None, dt, True, None
+    return "", err or f"genie-t2t-run exited {p.returncode}", dt, False, None
 
 
 try:
@@ -758,6 +949,7 @@ class Chat(Gtk.Application):
     shot = None
     ask_text = None
     want_model = None
+    ask_image = None
 
     def do_activate(self):
         self.win = Gtk.ApplicationWindow(application=self)
@@ -869,10 +1061,60 @@ class Chat(Gtk.Application):
         self.speech_pos = 0
         self.show_welcome()
 
+        # ---- 识图: picture queued for the next turn (qwen3.5 only)
+        self.image = None
+        self.attach_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        self.attach_bar.add_css_class("attach")
+        self.attach_bar.set_margin_top(6)
+        self.attach_bar.set_margin_bottom(2)
+        self.attach_bar.set_visible(False)
+        self.attach_pic = Gtk.Picture()
+        self.attach_pic.add_css_class("thumb")
+        self.attach_pic.set_size_request(112, 63)
+        self.attach_pic.set_content_fit(Gtk.ContentFit.CONTAIN)
+        info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        info.set_valign(Gtk.Align.CENTER)
+        info.set_hexpand(True)
+        self.attach_name = Gtk.Label(label="", xalign=0)
+        self.attach_name.add_css_class("attach-name")
+        self.attach_hint = Gtk.Label(label="", xalign=0)
+        self.attach_hint.add_css_class("attach-hint")
+        info.append(self.attach_name)
+        info.append(self.attach_hint)
+        drop = Gtk.Button(label="✕")
+        drop.add_css_class("chip")
+        drop.set_valign(Gtk.Align.CENTER)
+        drop.set_tooltip_text("不带这张图")
+        drop.connect("clicked", lambda *_: self.drop_attach())
+        self.attach_bar.append(self.attach_pic)
+        self.attach_bar.append(info)
+        self.attach_bar.append(drop)
+        col.append(self.attach_bar)
+
         # ---- input
         bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         bar.set_margin_top(6)
         bar.set_margin_bottom(4)
+        self.img_btn = Gtk.ToggleButton(label="🖼 识图")
+        self.img_btn.add_css_class("chip")
+        pop = Gtk.Popover()
+        pop.set_parent(self.img_btn)
+        pbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        pbox.set_margin_top(6)
+        pbox.set_margin_bottom(6)
+        pick_btn = Gtk.Button(label="上传图片…")
+        pick_btn.add_css_class("flat")
+        pick_btn.connect("clicked", lambda _b: self.choose_image(pop))
+        cam_btn = Gtk.Button(label="📷 摄像头拍照")
+        cam_btn.add_css_class("flat")
+        cam_btn.connect("clicked", lambda _b: self.shoot(pop))
+        pbox.append(pick_btn)
+        pbox.append(cam_btn)
+        pop.set_child(pbox)
+        pop.connect("closed", lambda *_: self.img_btn.set_active(False))
+        self.img_btn.connect("toggled", self.toggle_img_menu)
+        self.img_pop = pop
+        self.sync_image_button()
         self.entry = Gtk.Entry()
         self.entry.add_css_class("entry")
         self.entry.set_placeholder_text("输入消息，或按住 ↑ 说话…")
@@ -886,6 +1128,7 @@ class Chat(Gtk.Application):
         hold.connect("pressed", self.talk_press)
         hold.connect("released", self.talk_release)
         self.send_btn.add_controller(hold)
+        bar.append(self.img_btn)
         bar.append(self.entry)
         bar.append(self.send_btn)
         self.cont_btn = Gtk.ToggleButton(label="🔁 连续对话")
@@ -907,6 +1150,11 @@ class Chat(Gtk.Application):
         self.win.present()
         self.prewarm()
         self.entry.grab_focus()
+        if self.ask_image:  # --image PATH: same path the picker takes
+            try:
+                self.set_attach(load_image(self.ask_image))
+            except (OSError, ValueError) as e:
+                self.status.set_text(f"读图片失败：{e}")
         if self.ask_text:
             GLib.timeout_add(200, lambda: (self.fire(self.ask_text), False)[1])
         elif self.shot:
@@ -1113,6 +1361,101 @@ class Chat(Gtk.Application):
         if self.speaker is not None:
             self.speaker.cancel()
 
+    # ------------------------------------------------------------------ 识图
+    def toggle_img_menu(self, btn):
+        """A chip + plain popover instead of Gtk.MenuButton: the theme styles
+        MenuButton's inner button, so a .chip class on it would not show."""
+        if btn.get_active():
+            self.img_pop.popup()
+        else:
+            self.img_pop.popdown()
+
+    def sync_image_button(self):
+        """识图 is only meaningful for the vision model: gate the button on it."""
+        ok = image_capable(self.model)
+        self.img_btn.set_sensitive(ok)
+        self.img_btn.set_tooltip_text(
+            "上传图片或拍一张照片，让 %s 看图回答" % self.model if ok else
+            "只有 %s 带视觉塔，能识图" % QWEN35_MODEL)
+
+    def choose_image(self, pop):
+        pop.popdown()
+        if not image_capable(self.model):
+            self.status.set_text(f"只有 {QWEN35_MODEL} 支持识图")
+            return
+        dlg = Gtk.FileDialog()
+        dlg.set_title("选择要识别的图片")
+        f = Gtk.FileFilter()
+        f.set_name("图片（PNG / JPEG / WebP）")
+        for mime in ("image/png", "image/jpeg", "image/webp"):
+            f.add_mime_type(mime)
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(f)
+        dlg.set_filters(filters)
+        dlg.set_default_filter(f)
+        dlg.open(self.win, None, self._image_picked)
+
+    def _image_picked(self, dlg, result):
+        try:
+            gfile = dlg.open_finish(result)
+        except GLib.Error:
+            return  # cancelled
+        if gfile is None:
+            return
+        path = gfile.get_path()
+        if not path:
+            self.status.set_text("只支持本地图片文件")
+            return
+        try:
+            self.set_attach(load_image(path))
+        except (OSError, ValueError) as e:
+            self.status.set_text(f"读图片失败：{e}")
+
+    def shoot(self, pop=None):
+        """One frame from the CamxBridge node, off the main loop."""
+        if pop is not None:
+            pop.popdown()
+        if not image_capable(self.model):
+            self.status.set_text(f"只有 {QWEN35_MODEL} 支持识图")
+            return
+        self.status.set_text(f"正在从 {CAM_DEVICE} 拍照…")
+
+        def run():
+            try:
+                data = camera_jpeg()
+                image = {"data": data, "mime": "image/jpeg",
+                         "name": "摄像头 %dx%d" % (CAM_W, CAM_H)}
+                err = None
+            except Exception as e:  # pipeline missing, node busy, encoder
+                image, err = None, f"{type(e).__name__}: {e}"
+            GLib.idle_add(self._shoot_done, image, err)
+
+        threading.Thread(target=run, daemon=True).start()
+
+    def _shoot_done(self, image, err):
+        if err:
+            self.status.set_text(f"拍照失败：{err}")
+            return False
+        self.set_attach(image)
+        return False
+
+    def set_attach(self, image):
+        texture = texture_for(image, (112, 63))
+        if texture is not None:
+            self.attach_pic.set_paintable(texture)
+        self.image = image
+        kb = len(image["data"]) / 1024.0
+        self.attach_name.set_text(image.get("name") or "图片")
+        self.attach_hint.set_text(
+            "%.0f KB · 发送时一起提交给 %s，首字会慢一些" % (kb, QWEN35_MODEL))
+        self.attach_bar.set_visible(True)
+        self.status.set_text("图片已就绪，可以输入问题（留空则让它描述这张图）")
+
+    def drop_attach(self):
+        self.image = None
+        self.attach_pic.set_paintable(None)
+        self.attach_bar.set_visible(False)
+
     def pick(self, name, pop):
         if self.model == QWEN35_MODEL != name:
             # The resident engine holds ~3 GB of NPU context; a genie model
@@ -1121,6 +1464,10 @@ class Chat(Gtk.Application):
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.model = name
         self.chip.set_label(name)
+        self.sync_image_button()
+        if self.image is not None and not image_capable(name):
+            # the picture would be rejected by a text model anyway
+            self.drop_attach()
         pop.popdown()
         self.status.set_text(f"已切换到 {name}")
 
@@ -1155,6 +1502,7 @@ class Chat(Gtk.Application):
             self.list.remove(self.list.get_first_child())
         self.history = []
         self.welcome = None
+        self.drop_attach()
         self.show_welcome()
         self.status.set_text("已清空")
 
@@ -1173,8 +1521,12 @@ class Chat(Gtk.Application):
         t.add_css_class("welcome")
         s = Gtk.Label(label="Qwen3.5-0.8B · Qwen2.5-0.5B · Llama-3.2-1B 跑在 NPU 上，不联网", xalign=0.5)
         s.add_css_class("subtitle")
+        v = Gtk.Label(label=f"Qwen3.5-0.8B 还能识图：点 🖼 识图 上传图片或拍照", xalign=0.5)
+        v.add_css_class("subtitle")
         w.append(t)
         w.append(s)
+        if image_capable(self.model):
+            w.append(v)
         chips = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         chips.set_halign(Gtk.Align.CENTER)
         chips.set_margin_top(10)
@@ -1187,10 +1539,18 @@ class Chat(Gtk.Application):
         self.welcome = w
         self.list.append(w)
 
-    def bubble(self, text, user, meta=None):
+    def bubble(self, text, user, meta=None, image=None):
         row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         card.add_css_class("card-user" if user else "card-bot")
+        texture = texture_for(image, (360, 202)) if image is not None else None
+        if texture is not None:
+            pic = Gtk.Picture.new_for_paintable(texture)
+            pic.set_content_fit(Gtk.ContentFit.CONTAIN)
+            pic.set_size_request(360, 202)
+            pic.set_halign(Gtk.Align.START)
+            pic.set_valign(Gtk.Align.START)
+            card.append(pic)
         label = Gtk.Label(label=text, xalign=0, yalign=0)
         label.set_wrap(True)
         label.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
@@ -1237,15 +1597,25 @@ class Chat(Gtk.Application):
 
     def send(self, *_):
         text = self.entry.get_text().strip()
-        if not text or self.model is None:
+        if self.model is None:
             return
         if getattr(self, "busy", False):
+            return
+        image = self.image
+        if image is not None and not image_capable(self.model):
+            self.drop_attach()
+            self.status.set_text(f"{self.model} 不支持识图，已移除图片")
+            image = None
+        if not text and image is None:
             return
         if getattr(self, "welcome", None) is not None:
             self.list.remove(self.welcome)
             self.welcome = None
 
+        if not text:  # a bare picture: let the model describe it
+            text = DEFAULT_IMAGE_PROMPT
         self.entry.set_text("")
+        self.drop_attach()
         self.busy = True
         self.job = {"p": None, "stop": False}
         self.speech_pos = 0
@@ -1253,7 +1623,12 @@ class Chat(Gtk.Application):
         self.send_btn.set_sensitive(False)
         self.stop_btn.set_sensitive(True)
         self.chip.add_css_class("busy")
-        self.bubble(text, True)
+        if image is None:
+            self.bubble(text, True)
+        else:
+            self.bubble(text, True,
+                        meta="识图 · 图像 %.0f KB" % (len(image["data"]) / 1024.0),
+                        image=image)
         self.history.append(("user", text))
 
         card = Gtk.Box()
@@ -1323,13 +1698,13 @@ class Chat(Gtk.Application):
 
         def work():
             prompt = build_prompt(self.model, self.history)
-            txt, err, dt, stopped = ask(
+            txt, err, dt, stopped, meta = ask(
                 self.model, prompt, on_chunk=lambda t: GLib.idle_add(show, t), job=self.job,
-                history=self.history,
+                history=self.history, image=image,
             )
-            GLib.idle_add(done, txt, err, dt, stopped)
+            GLib.idle_add(done, txt, err, dt, stopped, meta)
 
-        def done(txt, err, dt, stopped):
+        def done(txt, err, dt, stopped, meta=None):
             GLib.source_remove(timer)
             # stop accepting new targets, but let the reveal animation drain
             anim["live"] = False
@@ -1360,9 +1735,11 @@ class Chat(Gtk.Application):
                 self.speech_pos = len(txt)
             approx = tokens(txt) / dt if dt > 0 else 0
             tag = "已停止" if stopped else f"{dt:0.1f}s"
+            seen = (meta or {}).get("vision_run_seconds") or 0
             self.status.set_text(
                 f"{self.model}  ·  首字 {phase['first']:0.1f}s  ·  {tag}"
                 f"  ·  约 {approx:0.1f} tok/s"
+                + (f"  ·  识图 {seen:0.1f}s" if seen else "")
             )
             if self.ask_text:
                 print(f"ANSWER ({dt:0.1f}s): {txt}\nSTATUS: {self.status.get_text()}")
@@ -1398,6 +1775,36 @@ def selftest():
     b = chat_body([("user", "hi"), ("assistant", "yo"), ("user", "ok")], "m")
     assert [m["role"] for m in b["messages"]] == ["user", "assistant", "user"], b
     assert b["messages"][-1]["content"] == "ok" and b["stream"] is True and b["model"] == "m"
+    # 识图: one inline data URL on the last turn only, picture before question
+    img = {"data": b"\xff\xd8junk", "mime": "image/jpeg", "name": "x.jpg"}
+    bi = chat_body([("user", "hi"), ("user", "看图")], "m", img)
+    last = bi["messages"][-1]
+    assert last["role"] == "user" and isinstance(last["content"], list), last
+    assert last["content"][0]["type"] == "image_url", last
+    assert last["content"][0]["image_url"]["url"].startswith("data:image/jpeg;base64,"), last
+    assert last["content"][1] == {"type": "text", "text": "看图"}, last
+    assert all(isinstance(m["content"], str) for m in bi["messages"][:-1]), bi
+    # an empty question with a picture still sends the picture
+    bn = chat_body([("user", "")], "m", img)
+    assert bn["messages"][-1]["content"][0]["type"] == "image_url", bn
+    assert len(bn["messages"][-1]["content"]) == 1, bn
+    # 识图 is gated on the vision model
+    assert image_capable(QWEN35_MODEL) == bool(QWEN35_VISION)
+    assert not image_capable("qwen2.5-0.5b") and not image_capable("llama3.2-1b")
+    # suffix → mime table drives both the picker and load_image()
+    assert IMAGE_SUFFIX_MIME[".jpg"] == IMAGE_SUFFIX_MIME[".JPEG".lower()] == "image/jpeg"
+    try:
+        load_image("/tmp/npu-chat-nope.gif")
+        raise AssertionError("gif must be refused")
+    except (ValueError, OSError):
+        pass
+    # a black frame must be recognised as dark: that is the warm-up guard
+    assert mean_luma(b"\0" * 9000) == 0.0 and mean_luma(b"\xff" * 9000) > 200
+    if GdkPixbuf is not None:
+        rgb = bytes([200, 40, 40]) * (8 * 8)
+        jpg = jpeg_from_rgb(rgb, 8, 8)
+        assert jpg[:2] == b"\xff\xd8" and len(jpg) > 100, jpg[:4]
+        assert texture_for({"data": jpg}) is not None
     t, e = extract("some error: boom")
     assert t is None and "error" in e, (t, e)
     assert abs(tokens("hello world") - 2.75) < 0.01, tokens("hello world")
@@ -1473,6 +1880,9 @@ if __name__ == "__main__":
     shot = None
     if "--shot" in sys.argv:
         shot = sys.argv[sys.argv.index("--shot") + 1]
+    ask_image = None
+    if "--image" in sys.argv:
+        ask_image = sys.argv[sys.argv.index("--image") + 1]
     ask_text = None
     if "--ask" in sys.argv:
         ask_text = sys.argv[sys.argv.index("--ask") + 1]
@@ -1483,5 +1893,6 @@ if __name__ == "__main__":
     app = Chat(application_id="org.quectel.NpuChat")
     app.shot = shot
     app.ask_text = ask_text
+    app.ask_image = ask_image
     app.want_model = want
     app.run([])

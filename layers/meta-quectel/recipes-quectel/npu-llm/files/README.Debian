@@ -101,6 +101,35 @@ Measured on the same board: 5.6 s of speech recognised in 0.33 s (17x real
 time), a 3.9 s sentence synthesised in 2.4 s (1.4x real time) — well inside
 the ~20 tok/s the NPU produces.
 
+识图: ask qwen3.5 about a picture
+--------------------------------
+qwen3.5-0.8b (shipped by the qwen35-npu package, resident on the DSP) carries
+a vision tower; the two models in this package do not, so the 识图 button is
+disabled while one of them is selected.
+
+  🖼 识图 → 上传图片…     pick a PNG / JPEG / WebP file
+  🖼 识图 → 摄像头拍照      grab one frame from /dev/video10
+
+The picture is queued above the entry with a thumbnail. Press send to ask
+something about it, or leave the entry empty and the model describes it. One
+image goes out per request as a base64 data URL — the server takes no remote
+URLs and caps the decoded image at 8 MB — and only on the turn it was picked
+for: replaying it later would add ~650 prompt tokens (≈9 s of prefill) while
+the answer already describes what was in it.
+
+The camera is the CamxBridge v4l2loopback node (1280x720), the same one
+qcom-npu-test uses; only one process can hold it. The bridge emits a black
+frame or two while it builds the stream, so a capture reads a few frames and
+keeps the last non-dark one. If it never produces an image:
+
+  systemctl restart camx-v4l2-bridge@0
+
+A picture costs ~1.3 s in the vision encoder plus ~650 tokens of prefill, so
+its first token lands 11-14 s out; decoding afterwards is unchanged. Headless
+check of the same path:
+
+  npu-chat --image /tmp/frame.jpg --ask "这张图片里有什么？" --shot /tmp/s.png
+
 Why not GGUF on the NPU
 -----------------------
 ggml-hexagon (llama.cpp) ships backends for HTP v73/v75/v79/v81 only. On a

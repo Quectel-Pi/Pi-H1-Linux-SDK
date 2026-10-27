@@ -186,7 +186,10 @@ FILES:${PN} = " \
 # They are NOT pulled in as RDEPENDS: this image is a Debian rootfs overlay and
 # dragging the OE gtk4 stack in would duplicate it. Add gtk4 + python3-pygobject
 # yourself if you build a pure-OE image. numpy is what sherpa-onnx takes the
-# microphone buffer as; coreutils is for the launcher's stdbuf.
+# microphone buffer as; coreutils is for the launcher's stdbuf. 识图 borrows the
+# rootfs' gst-launch-1.0 (v4l2src -> fdsink) and gdk-pixbuf (JPEG encode) the
+# same way: both come with the GNOME desktop, and the UI degrades with a clear
+# message rather than crashing if one is missing.
 RDEPENDS:${PN} = "python3 python3-numpy coreutils"
 
 # Prebuilt arm64 binaries: skip the QA that inspects them.
