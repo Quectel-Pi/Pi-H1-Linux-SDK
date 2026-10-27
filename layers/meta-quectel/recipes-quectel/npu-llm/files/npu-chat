@@ -90,6 +90,12 @@ QWEN35_VISION_PAIRS = (
 QWEN35_REQUIRED = QWEN35_MODELS + QWEN35_ARTIFACTS + (
     QWEN35_VISION_PAIRS if QWEN35_VISION else ())
 QWEN35_MAX_TOKENS = int(os.environ.get("QWEN35_MAX_TOKENS", "768"))
+# How much history is re-sent every turn.  Each prompt token costs ~14 ms of
+# NPU prefill on this board (plus the fixed tail repair), so an untrimmed 2048
+# token conversation would push the first word out to half a minute.  Turns are
+# dropped from the front once the budget is exceeded; the newest turn always
+# survives.
+QWEN35_HISTORY_TOKENS = int(os.environ.get("QWEN35_HISTORY_TOKENS", "700"))
 # qwen35-launch.sh writes this once /v1/models answers, so it reports "serving"
 # and not merely "spawned". It is informational here (qwen35_installed() no
 # longer requires it) because the unit is start-on-demand and this GUI normally
@@ -285,9 +291,25 @@ def start_qwen35():
     return "qwen3.5 未启动，试 systemctl start qwen35 或看 journalctl -u qwen35"
 
 
+def trim_history(history, budget=None):
+    """Newest turns that fit in the prompt budget, starting on a user turn."""
+    budget = QWEN35_HISTORY_TOKENS if budget is None else budget
+    kept, total = [], 0.0
+    for role, text in reversed(history):
+        cost = tokens(text)
+        if kept and total + cost > budget:
+            break
+        kept.append((role, text))
+        total += cost
+    kept.reverse()
+    while len(kept) > 1 and kept[0][0] != "user":
+        kept.pop(0)
+    return kept
+
+
 def chat_body(history, model):
     return {"model": model, "max_tokens": QWEN35_MAX_TOKENS, "stream": True,
-            "messages": [{"role": r, "content": t} for r, t in history]}
+            "messages": [{"role": r, "content": t} for r, t in trim_history(history)]}
 
 
 def ask_server(history, on_chunk=None, job=None):
@@ -883,11 +905,33 @@ class Chat(Gtk.Application):
         self.win.add_controller(key)
 
         self.win.present()
+        self.prewarm()
         self.entry.grab_focus()
         if self.ask_text:
             GLib.timeout_add(200, lambda: (self.fire(self.ask_text), False)[1])
         elif self.shot:
             GLib.timeout_add(1500, self.take_shot)
+
+    def prewarm(self):
+        """Load the resident engine while the user is still typing.
+
+        qwen35.service is start-on-demand, so without this the first message
+        pays the whole cold start (DSP bring-up plus the weight upload) on top
+        of its own first token.  Nothing here is required for correctness:
+        ask_server() still calls start_qwen35() and waits for /v1/models.
+        """
+        if self.model != QWEN35_MODEL or qwen35_up():
+            return
+
+        def run():
+            GLib.idle_add(self.status.set_text, f"正在把 {self.model} 载入 NPU…")
+            err = start_qwen35()
+            if err:
+                GLib.idle_add(self.status.set_text, "载入失败，发送消息可重试")
+            else:
+                GLib.idle_add(self.status.set_text, f"{self.model} 已就绪")
+
+        threading.Thread(target=run, daemon=True).start()
 
     def quit(self):
         if self.speaker is not None:
@@ -1223,7 +1267,8 @@ class Chat(Gtk.Application):
         self.list.append(holder)
         self.glide()
 
-        phase = {"i": 0, "t0": time.monotonic(), "got": 0}
+        phase = {"i": 0, "t0": time.monotonic(), "got": 0, "first": 0.0}
+        anim = {"target": "", "shown": 0, "live": True}
 
         def show(txt):
             if not phase["got"]:
@@ -1234,11 +1279,29 @@ class Chat(Gtk.Application):
                 body.set_wrap_mode(Pango.WrapMode.WORD_CHAR)
                 body.set_max_width_chars(62)
                 body.set_selectable(True)
+                phase["first"] = time.monotonic() - phase["t0"]
             phase["got"] = len(txt)
-            body.set_text(txt)
+            # The engine hands out multi-character tokens roughly every 0.19 s.
+            # Slam them in whole and the bubble jumps by a word at a time, so the
+            # text is revealed a character at a time instead: lagging the stream
+            # by at most a couple of tokens, which is what makes it read like it
+            # is being typed rather than pasted.
+            anim["target"] = txt
             self.feed_speech(txt)
-            self.glide()
             return False
+
+        def pump():
+            target = anim["target"]
+            lag = len(target) - anim["shown"]
+            if lag > 0:
+                anim["shown"] += 1 if lag < 24 else (2 if lag < 60 else 4)
+                if anim["shown"] > len(target):
+                    anim["shown"] = len(target)
+                body.set_text(target[: anim["shown"]])
+                self.glide()
+            elif not anim["live"]:
+                return False
+            return True
 
         def tick():
             if not self.busy:
@@ -1246,7 +1309,8 @@ class Chat(Gtk.Application):
             el = max(time.monotonic() - phase["t0"], 0.001)
             if phase["got"]:
                 self.status.set_text(
-                    f"{self.model} 生成中  {el:0.1f}s  约 {tokens(body.get_text()) / el:0.1f} tok/s"
+                    f"{self.model}  首字 {phase['first']:0.1f}s  生成 {el:0.1f}s"
+                    f"  约 {tokens(anim['target']) / el:0.1f} tok/s"
                 )
             else:
                 body.set_text(["●", "●●", "●●●"][phase["i"] % 3])
@@ -1255,6 +1319,7 @@ class Chat(Gtk.Application):
             return True
 
         timer = GLib.timeout_add(250, tick)
+        GLib.timeout_add(40, pump)
 
         def work():
             prompt = build_prompt(self.model, self.history)
@@ -1266,6 +1331,8 @@ class Chat(Gtk.Application):
 
         def done(txt, err, dt, stopped):
             GLib.source_remove(timer)
+            # stop accepting new targets, but let the reveal animation drain
+            anim["live"] = False
             self.busy = False
             self.send_btn.set_sensitive(True)
             self.stop_btn.set_sensitive(False)
@@ -1280,6 +1347,10 @@ class Chat(Gtk.Application):
                 self.status.set_text("已停止")
                 return False
             show(txt)
+            if getattr(self, "shot", False) and self.ask_text:
+                # a screenshot is taken of a finished answer, not a half-revealed
+                # one
+                anim["shown"] = len(txt)
             self.history.append(("assistant", txt))
             tail = txt[self.speech_pos :].strip()
             if tail and self.speak_btn.get_active() and voice_ready():
@@ -1289,7 +1360,10 @@ class Chat(Gtk.Application):
                 self.speech_pos = len(txt)
             approx = tokens(txt) / dt if dt > 0 else 0
             tag = "已停止" if stopped else f"{dt:0.1f}s"
-            self.status.set_text(f"{self.model}  ·  {tag}  ·  约 {approx:0.1f} tok/s")
+            self.status.set_text(
+                f"{self.model}  ·  首字 {phase['first']:0.1f}s  ·  {tag}"
+                f"  ·  约 {approx:0.1f} tok/s"
+            )
             if self.ask_text:
                 print(f"ANSWER ({dt:0.1f}s): {txt}\nSTATUS: {self.status.get_text()}")
                 if self.shot:

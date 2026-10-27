@@ -16,9 +16,9 @@
     "decoder_timeout_seconds": 420,
     "persistent_decoder": true,
     "full_npu_prefill": true,
-    "p5_repair_tokens_text": 32,
+    "p5_repair_tokens_text": 1,
     "p5_repair_tokens_image": 1,
-    "full_p5_text_max_prompt_tokens": 31,
+    "full_p5_text_max_prompt_tokens": 16,
     "default_repetition_penalty": 1.0,
     "sampling_defaults": {
       "temperature": 0.7,
