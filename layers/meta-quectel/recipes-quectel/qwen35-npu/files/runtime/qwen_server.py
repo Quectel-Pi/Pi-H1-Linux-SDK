@@ -44,6 +44,13 @@ from request_frontend import IMAGE_TOKEN_ID, render_messages
 
 CONTEXT = 2048
 CHUNK = 16
+# Measured on QCS6490/HTP: one Chunk16 prefill run costs ~0.22 s while one
+# sequential P5 remainder step costs ~0.15 s.  Used only to decide whether
+# spending an extra prefill chunk to shorten the P5 suffix pays for itself.
+PREFILL_CHUNK_SECONDS = 0.22
+P5_REMAINDER_STEP_SECONDS = 0.15
+# Do not perturb a prompt for a gain that is inside run-to-run noise.
+MIN_ALIGNMENT_GAIN_SECONDS = 0.15
 STOP_IDS = (248044, 248046)
 DATA_IMAGE_RE = re.compile(
     r"^data:(image/(?:png|jpeg|jpg|webp));base64,(.+)$", re.IGNORECASE | re.DOTALL
@@ -623,6 +630,9 @@ class Chunk16Engine:
         self.full_p5_text_max_prompt_tokens = int(
             self.runtime.get("full_p5_text_max_prompt_tokens", 0)
         )
+        self.remainder_alignment = bool(
+            self.runtime.get("align_p5_remainder_to_repair_tokens", True)
+        )
         self.default_repetition_penalty = float(
             self.runtime.get("default_repetition_penalty", 1.0)
         )
@@ -673,6 +683,12 @@ class Chunk16Engine:
             raise ValueError("Frontend precision requires full_npu_prefill=true; learned CPU execution is disabled")
         if not isinstance(self.runtime.get("image_system_prompt", ""), str):
             raise ValueError("runtime.image_system_prompt must be a string")
+        if not isinstance(
+            self.runtime.get("align_p5_remainder_to_repair_tokens", True), bool
+        ):
+            raise ValueError(
+                "runtime.align_p5_remainder_to_repair_tokens must be a boolean"
+            )
         if self.host not in {"127.0.0.1", "localhost", "::1"}:
             raise ValueError("the Q6A service must bind to loopback")
         if not 1 <= self.port <= 65535:
@@ -913,6 +929,102 @@ class Chunk16Engine:
         content.append({"type": "text", "text": padding})
 
     @staticmethod
+    def _append_alignment_padding(messages: list[dict[str, Any]]) -> None:
+        """Add one stable tokenizer token for the P5 remainder alignment.
+
+        Image turns reuse the VLM suffix helper so the query stays adjacent to
+        the image; text turns append after the final text part.
+        """
+        content = messages[-1]["content"]
+        if isinstance(content, list) and any(
+            part.get("type") == "image" for part in content
+        ):
+            Chunk16Engine._append_vlm_suffix_padding(messages)
+            return
+        # This whitespace triplet is one stable tokenizer token; plain newlines
+        # are aggressively merged (see _append_vlm_suffix_padding).
+        if isinstance(content, str):
+            messages[-1]["content"] = content + " \t\n"
+            return
+        if not isinstance(content, list):
+            raise RuntimeError("normalized final user content contract failed")
+        for part in reversed(content):
+            if part.get("type") == "text":
+                part["text"] = str(part.get("text", "")) + " \t\n"
+                return
+        content.append({"type": "text", "text": " \t\n"})
+
+    def _alignment_cost(
+        self, messages: list[dict[str, Any]], repair_tokens: int
+    ) -> dict[str, Any] | None:
+        """Score one candidate prompt for the Chunk16 prefill + P5 split.
+
+        Returns ``None`` when the candidate violates the vision/M-RoPE suffix
+        contract or the context bound, so callers can simply skip it.
+        """
+        crosses_image, tokens = self._vlm_remainder_crosses_image(messages)
+        if crosses_image or tokens < CHUNK + 1 or tokens >= CONTEXT:
+            return None
+        prefix = self._aligned_prefix_token_count(tokens, repair_tokens)
+        remainder = tokens - prefix
+        if remainder < 1:
+            return None
+        return {
+            "prompt_tokens": tokens,
+            "prefix_tokens": prefix,
+            "remainder_tokens": remainder,
+            "score": (
+                (prefix // CHUNK) * PREFILL_CHUNK_SECONDS
+                + remainder * P5_REMAINDER_STEP_SECONDS
+            ),
+        }
+
+    def _align_p5_remainder(
+        self, messages: list[dict[str, Any]], repair_tokens: int
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        """Pad the prompt so the P5 suffix shrinks to the configured repair length.
+
+        ``prefix_length`` floor-aligns the Chunk16 prefix, which leaves between 1
+        and ``repair_tokens + 15`` tokens for the sequential P5 window.  Every one
+        of those costs a serialised HTP step while one extra prefill chunk costs a
+        single chunked run, so a long remainder is worth padding away.  Padding is
+        only committed when the measured cost model says it is a net win.
+        """
+        report = {"enabled": self.remainder_alignment, "applied": False}
+        if not self.remainder_alignment or repair_tokens <= 0:
+            return messages, report
+        baseline = self._alignment_cost(messages, repair_tokens)
+        if baseline is None:
+            return messages, report
+        report["before"] = baseline
+        if baseline["remainder_tokens"] <= repair_tokens:
+            return messages, report
+        best_score = baseline["score"]
+        best_messages = None
+        best_cost = None
+        candidate = json.loads(json.dumps(messages, ensure_ascii=False))
+        for _ in range(1, CHUNK):
+            self._append_alignment_padding(candidate)
+            cost = self._alignment_cost(candidate, repair_tokens)
+            if cost is None:
+                break
+            if cost["score"] < best_score - MIN_ALIGNMENT_GAIN_SECONDS:
+                best_score = cost["score"]
+                best_cost = cost
+                best_messages = candidate
+            if cost["remainder_tokens"] == repair_tokens:
+                break
+        if best_messages is None:
+            return messages, report
+        report.update(
+            applied=True,
+            padding_steps=best_cost["prompt_tokens"] - baseline["prompt_tokens"],
+            after=best_cost,
+            saved_seconds=round(baseline["score"] - best_score, 3),
+        )
+        return best_messages, report
+
+    @staticmethod
     def _aligned_prefix_token_count(total_tokens: int, repair_tokens: int) -> int:
         maximal_aligned = total_tokens // CHUNK * CHUNK
         if not repair_tokens:
@@ -1038,6 +1150,29 @@ class Chunk16Engine:
                 )
         if crosses_image:
             raise RuntimeError("unable to move the VLM remainder beyond the image region")
+
+        # Shrink the sequential P5 remainder window when it is cheaper than one
+        # extra Chunk16 prefill chunk.  Text prompts that fit the full-P5 path
+        # never reach the Chunk16 split, so leave them untouched.
+        has_image = any(
+            isinstance(message["content"], list)
+            and any(part.get("type") == "image" for part in message["content"])
+            for message in messages
+        )
+        repair_tokens = (
+            self.p5_repair_tokens_image if has_image else self.p5_repair_tokens_text
+        )
+        remainder_alignment: dict[str, Any] = {"enabled": False, "applied": False}
+        if not (
+            not has_image
+            and self.full_p5_text_max_prompt_tokens > 0
+            and effective_tokens <= self.full_p5_text_max_prompt_tokens
+        ):
+            messages, remainder_alignment = self._align_p5_remainder(
+                messages, repair_tokens
+            )
+            if remainder_alignment.get("applied"):
+                effective_tokens = int(remainder_alignment["after"]["prompt_tokens"])
         return messages, {
             "original_messages": original_count,
             "effective_messages": len(messages),
@@ -1048,6 +1183,7 @@ class Chunk16Engine:
             "system_dropped": system_dropped,
             "minimum_chunk_padding_steps": padding_steps,
             "vlm_alignment_padding_steps": vlm_alignment_padding_steps,
+            "p5_remainder_alignment": remainder_alignment,
         }
 
     def prepare_request(self, request: dict[str, Any], request_dir: Path) -> PreparedRequest:

@@ -319,6 +319,32 @@ before the prompt is prefilled. Measured on the PI H1 with a 96x96 PNG:
 same ~7 tok/s as a text request. One image per request, `max_image_bytes`
 applies; remote URLs are rejected by design.
 
+### First-token latency budget
+
+Per-request metrics (`/var/lib/qwen35/logs/requests.jsonl`) split TTFT into the
+vision tower, the Chunk16 prefill and the sequential P5 remainder. On the PI H1
+a 668-token image request measures:
+
+| Stage | Field | Cost |
+|---|---|---|
+| Vision tower (patch/body/merger, ONNX Runtime CPU EP) | `vision_run_seconds` | 1.3 s |
+| Chunk16 HTP prefill, 41 chunks × 16 tokens | `npu_prefill_compute_seconds` | 8.9 s |
+| P5 remainder, 12 tokens × ~0.15 s | `decoder_first_token_seconds` | 1.9 s |
+
+Prefill dominates because 576 of those tokens are image tokens and the exported
+graph has a fixed Chunk16 shape, so the only cheap lever is the remainder.
+`prefix_length()` floor-aligns the prefix, which leaves between 1 and
+`p5_repair_tokens + 15` tokens for the sequential P5 window; each of those costs
+a serialised HTP step while one extra prefill chunk costs a single chunked run.
+`align_p5_remainder_to_repair_tokens` (default `true`) therefore pads the
+rendered prompt by a few whitespace tokens so the remainder lands exactly on
+`p5_repair_tokens`, but only when a measured cost model
+(`PREFILL_CHUNK_SECONDS` / `P5_REMAINDER_STEP_SECONDS`) says it is a net win —
+short prompts keep their existing split. The applied padding is reported in
+`context_management.p5_remainder_alignment`. Measured over five cold image
+requests: TTFT 13.05 s → 11.47 s (prefill 8.92 → 9.10 s, first token 2.09 →
+0.33 s) with unchanged answers.
+
 Expected throughput on this SoC, measured by the upstream project on a Radxa
 Dragon Q6A (same QCS6490, HTP v68, 4 big cores): ~7.4 decode tok/s and ~82
 prefill tok/s with the Chunk16 schedule. That is a different board revision and
