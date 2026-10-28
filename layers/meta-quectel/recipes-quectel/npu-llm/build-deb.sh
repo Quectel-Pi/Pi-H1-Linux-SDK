@@ -43,7 +43,11 @@ LLAMA="https://modelscope.cn/models/radxa/Llama3.2-1B-4096-qairt-v68/resolve/mas
 # has no anonymous HTTP API for these repos (every endpoint 404s).
 HF="https://hf-mirror.com"
 SENSE="csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
-VITS="csukuangfj/vits-zh-hf-fanchen-C"
+# Matcha-TTS for speech out: one female voice for Chinese and English. The VITS
+# that used to be here (vits-zh-hf-fanchen-C) has a character lexicon with no
+# Latin entry at all, so English answers were dropped word by word.
+MATCHA="csukuangfj/matcha-icefall-zh-en"
+VOCOS="https://github.com/k2-fsa/sherpa-onnx/releases/download/vocoder-models"
 
 # url|sha256|path inside the package
 FILES=(
@@ -64,9 +68,10 @@ FILES=(
 "$LLAMA/models/weight_sharing_model_1_of_1.serialized.bin|d4a284cb9a40d1178daee0c8da2f6a6144d5835b32f5f05e659c3de918aff586|usr/share/npu-llm/llama3.2-1b/models/weight_sharing_model_1_of_1.serialized.bin"
 "$HF/$SENSE/resolve/main/model.int8.onnx|c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51|usr/share/npu-llm/voice/asr/model.int8.onnx"
 "$HF/$SENSE/resolve/main/tokens.txt|f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc|usr/share/npu-llm/voice/asr/tokens.txt"
-"$HF/$VITS/resolve/main/vits-zh-hf-fanchen-C.onnx|77c4bf60602d7d83f0e320063d15655e3bfc51d25b728d727203cd13e77521ab|usr/share/npu-llm/voice/tts/model.onnx"
-"$HF/$VITS/resolve/main/lexicon.txt|9af2824e49e731bf615927c768fdc36bbbe894cac57d8e0088d9c94331b07320|usr/share/npu-llm/voice/tts/lexicon.txt"
-"$HF/$VITS/resolve/main/tokens.txt|34b035b9aeb070df6188b022f29c00e0e142c7ade9f25611ced65db5e9cc8402|usr/share/npu-llm/voice/tts/tokens.txt"
+"$HF/$MATCHA/resolve/main/model-steps-3.onnx|524286bf6cf11be74329ae1c682ac69e34d6860c2ea9fd1290319d561540b16a|usr/share/npu-llm/voice/tts/model-steps-3.onnx"
+"$VOCOS/vocos-16khz-univ.onnx|b599142a1fb8ff03de3e84ac35ff537c619e56f4267a6fe894851a42844acf9e|usr/share/npu-llm/voice/tts/vocos-16khz-univ.onnx"
+"$HF/$MATCHA/resolve/main/lexicon.txt|599efdcdaff4df2a123ce988c2cb90abcd59b919ef609ce36eb587d68b7ca2c0|usr/share/npu-llm/voice/tts/lexicon.txt"
+"$HF/$MATCHA/resolve/main/tokens.txt|77fee8e5e5dd96b3547119e6159292c648e99e065c54c97777722e3ce710b9a4|usr/share/npu-llm/voice/tts/tokens.txt"
 )
 
 # sherpa-onnx python bindings, unpacked into usr/lib/npu-llm/voice/ (npu-chat
@@ -137,7 +142,7 @@ Maintainer: Quectel PI local build <root@localhost>
 Installed-Size: ${size}
 Section: misc
 Priority: optional
-Depends: libc6 (>= 2.39), libstdc++6, libgcc-s1, python3, python3-numpy, python3-gi, gir1.2-gtk-4.0
+Depends: libc6 (>= 2.39), libstdc++6, libgcc-s1, python3, python3-numpy, python3-gi, gir1.2-gtk-4.0, espeak-ng-data
 Homepage: https://aihub.qualcomm.com/
 Description: LLMs on the QCS6490 Hexagon NPU (V68), plus a chat UI
  Qwen2.5-0.5B and Llama-3.2-1B as QAIRT context binaries, the
@@ -147,9 +152,10 @@ Description: LLMs on the QCS6490 Hexagon NPU (V68), plus a chat UI
  CLI: npu-llm llama3.2-1b -p "hello"
  GUI: npu-chat
  .
- Voice runs on the CPU with sherpa-onnx (SenseVoice ASR, VITS TTS) so it
- keeps working while the NPU streams the answer. Needs a PipeWire session
- for pw-record/pw-play.
+ Voice runs on the CPU with sherpa-onnx (SenseVoice ASR, Matcha-TTS for
+ Chinese and English speech out) so it keeps working while the NPU streams
+ the answer. Needs a PipeWire session for pw-record/pw-play and espeak-ng
+ for the Latin half of the TTS.
  .
  GGUF models cannot use the NPU on this SoC: ggml-hexagon ships HTP
  v73/v75/v79/v81 backends only. This package is the V68 path.

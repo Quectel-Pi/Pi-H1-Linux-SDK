@@ -35,7 +35,18 @@ Offline, on the CPU, independent of the NPU:
 | part | model                                        | speed        | payload |
 |------|----------------------------------------------|--------------|---------|
 | ASR  | SenseVoice small int8, zh/en/ja/ko/yue       | ~17x RT      | 228 MB  |
-| TTS  | VITS fanchen-C, 4 threads                    | ~1.4x RT     | 118 MB  |
+| TTS  | Matcha-TTS zh+en + vocos 16 kHz, 4 threads   | ~10x RT      | 125 MB  |
+
+TTS is one female voice that reads both Chinese and English. It replaced
+`vits-zh-hf-fanchen-C`, whose lexicon is a Chinese character table with no
+Latin entry at all: every English word was logged as `OOV` and dropped, so an
+English answer was read out as 0.1 s of near-silence. The Matcha model needs
+the 16 kHz universal vocoder (`vocos-16khz-univ.onnx`, sherpa-onnx github
+release — it refuses to load without it) and `espeak-ng-data` for the Latin
+side. Cost of the swap, measured on the board over the same nine sentences:
+248–258 MB RSS against 220–300 MB, 0.33 s instead of 1.99 s to speak a 4 s
+mixed sentence, and 2.1 s instead of 1.1 s to load. Memory went down because
+the VITS allocates as it speaks; speed went up ~6x.
 
 Both come from the `sherpa-onnx` python bindings (cp313 manylinux aarch64
 wheels, unpacked into `/usr/lib/npu-llm/voice`) plus models from hf-mirror

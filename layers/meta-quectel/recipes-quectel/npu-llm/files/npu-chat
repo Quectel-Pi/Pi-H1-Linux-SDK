@@ -622,21 +622,45 @@ def _die_with_parent():
 
 # ---------------------------------------------------------------------- voice
 # Offline ASR + TTS, nothing leaves the board: sherpa-onnx with SenseVoice small
-# for speech in and VITS for speech out, both on the CPU while the LLM keeps the
-# DSP. Measured on this board: ASR ~17x real time (0.3 s for 5.6 s of audio),
-# TTS ~1.9x real time at 4 threads. Capture and playback use PipeWire
-# (pw-record/pw-play) and fall back to ALSA (arecord/aplay).
+# for speech in and Matcha-TTS for speech out, both on the CPU while the LLM
+# keeps the DSP. Measured on this board: ASR ~17x real time (0.3 s for 5.6 s of
+# audio), TTS ~10x real time at 4 threads (0.33 s for a 4 s mixed sentence)
+# with 248-258 MB RSS. Capture and playback use PipeWire (pw-record/pw-play)
+# and fall back to ALSA (arecord/aplay).
 VOICE = os.environ.get("NPU_LLM_VOICE", "/usr/share/npu-llm/voice")
 SHERPA = os.environ.get("NPU_LLM_SHERPA", "/usr/lib/npu-llm/voice")
 ASR_FILES = ("model.int8.onnx", "tokens.txt")
-TTS_FILES = ("model.onnx", "lexicon.txt", "tokens.txt")
+# Speech out is a Matcha-TTS acoustic model plus the 16 kHz universal vocoder it
+# insists on. It is one female voice for both Chinese and English, which is the
+# whole point: the VITS it replaces (vits-zh-hf-fanchen-C) uses a character
+# lexicon with no Latin entry in it, so every English word was logged as OOV
+# and dropped -- English answers were read as 0.1 s of near-silence. Both
+# layouts are understood here so an image with the old payload still speaks;
+# the recipe ships the Matcha one.
+TTS_MATCHA = ("model-steps-3.onnx", "vocos-16khz-univ.onnx", "lexicon.txt", "tokens.txt")
+TTS_VITS = ("model.onnx", "lexicon.txt", "tokens.txt")
+# espeak-ng is what phonemises the Latin half of the Matcha model. Debian keeps
+# its data in an arch-triplet directory, OE in /usr/lib; a copy under tts/ wins
+# if one is shipped there.
+ESPEAK_DATA = (
+    os.path.join(VOICE, "tts", "espeak-ng-data"),
+    "/usr/lib/aarch64-linux-gnu/espeak-ng-data",
+    "/usr/lib/espeak-ng-data",
+    "/usr/share/espeak-ng-data",
+)
 ENDERS = "。！？!?；;\n"
 # hands-free listening: speech must cross SPEECH_RMS before trailing silence can
 # end the utterance. Measured on this board: ambient ~40, normal speech ~400.
 SPEECH_RMS = 150
 SILENCE_S = 0.8
-# VITS speaking rate; TTS_SPEED=1.5 is the fastest that still sounds natural.
-TTS_SPEED = float(os.environ.get("NPU_LLM_TTS_SPEED", "1.3"))
+# Speaking rate. Both voices are natural at 1.0 and start to sound rushed past
+# 1.5; NPU_LLM_TTS_SPEED overrides it (0.9 for dictation, 1.4 for speed). None
+# means "whatever the installed engine likes", see synth().
+TTS_SPEED = (
+    float(os.environ["NPU_LLM_TTS_SPEED"])
+    if os.environ.get("NPU_LLM_TTS_SPEED")
+    else None
+)
 
 _sx = None
 _asr = None
@@ -669,6 +693,94 @@ def cn_number(s):
     return text[1:] if text.startswith("一十") else text
 
 
+def _is_han(ch):
+    o = ord(ch)
+    return 0x3400 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF
+
+
+def _zh_around(text, i, j, window=8):
+    """True when a Han character sits near text[i:j], i.e. that number belongs
+    to a Chinese phrase. Only the neighbourhood counts: "the board boots in
+    twelve seconds" has to stay English, while "温度是25度" must not be read by
+    the espeak fallback as "温度是twenty five度"."""
+    return any(_is_han(c) for c in text[max(0, i - window):i] + text[j:j + window])
+
+
+# What the Matcha model can pronounce: espeak-ng handles anything ASCII, the
+# lexicon handles Han, and both handle CJK punctuation. Everything else -- emoji
+# above all -- is not a phoneme and comes back as garbage syllables ("👍" was
+# read as "ss stop"), so those characters are dropped.
+TTS_ASCII = set(" .,!?;:'\"()-/+=")
+TTS_CJK = set("，。！？、；：—…·（）《》“”‘’")
+
+
+def _speakable_matcha(text):
+    """Clean up a sentence for the Chinese+English model.
+
+    Latin words need no help: espeak reads digits, %, acronyms and even I/O
+    correctly. What it cannot do is read a number inside a Chinese sentence --
+    "温度是12度" came out as "温度是刮呕度", and 3:30 as "three点 fifty分" -- so
+    arabic digits are expanded to Chinese characters when Han text is nearby,
+    and left alone otherwise. The model itself ships number/date rule fsts, but
+    they are Chinese-only and turn "12 seconds" into "十二 seconds", which is
+    why they are not loaded.
+    """
+    # Chat templates leak special tokens into the answer; they are markers, not
+    # words, so "<|endoftext|>" must not be read out as "endoftext".
+    keep, i = [], 0
+    while True:
+        a = text.find("<|", i)
+        b = text.find("|>", a + 2) if a >= 0 else -1
+        keep.append(text[i:a] if a >= 0 else text[i:])
+        if b < 0:
+            break
+        i = b + 2
+    text = "".join(keep)
+
+    out, i = [], 0
+    while i < len(text):
+        ch = text[i]
+        if ch.isdigit():
+            j = i  # a decimal point belongs to the number: 12.5 is 十二点五
+            while j < len(text) and (
+                text[j].isdigit()
+                or (text[j] == "." and j + 1 < len(text) and text[j + 1].isdigit())
+            ):
+                j += 1
+            run = text[i:j]
+            if _zh_around(text, i, j):
+                whole, _, frac = run.partition(".")
+                if frac:
+                    run = cn_number(whole) + "点" + "".join(DIGITS[int(c)] for c in frac)
+                else:
+                    run = cn_number(whole)
+            out.append(run)
+            i = j
+            continue
+        if ch == "%":  # espeak already says "percent", Chinese needs 百分之
+            if out and out[-1][-1:] in DIGITS + "十百千" and _zh_around(text, i, i + 1):
+                out[-1] = "百分之" + out[-1]
+            elif not _zh_around(text, i, i + 1):
+                out.append("%")
+            i += 1
+            continue
+        if ch in SAY_MAP:
+            out.append(SAY_MAP[ch] if _zh_around(text, i, i + 1) else ch)
+        elif _is_han(ch) or ch in TTS_CJK:
+            out.append(ch)
+        elif ch.isascii() and (ch.isalnum() or ch in TTS_ASCII):
+            out.append(ch)
+        elif out and out[-1] != " " and (
+            (out[-1][-1].isascii() and out[-1][-1].isalnum())
+            or (i + 1 < len(text) and text[i + 1].isascii() and text[i + 1].isalnum())
+        ):
+            # a dropped symbol must not glue two Latin words together, and must
+            # not leave a stray space inside Chinese punctuation either
+            out.append(" ")
+        i += 1
+    return "".join(out).strip()
+
+
 def _speakable_chars():
     """The VITS lexicon has no arabic digits and few symbols: anything outside
     its character set is dropped, digits are read out in Chinese."""
@@ -684,6 +796,8 @@ def _speakable_chars():
 
 
 def speakable(text):
+    if tts_engine() != "vits":
+        return _speakable_matcha(text)
     cs = _speakable_chars()
     out, i = [], 0
     while i < len(text):
@@ -710,11 +824,30 @@ def speakable(text):
     return "".join(out)
 
 
+def tts_engine():
+    """'matcha', 'vits' or None, from whatever is actually on disk."""
+    tts = os.path.join(VOICE, "tts")
+    for name, files in (("matcha", TTS_MATCHA), ("vits", TTS_VITS)):
+        if all(os.path.isfile(os.path.join(tts, f)) for f in files):
+            return name
+    return None
+
+
+def espeak_data():
+    """The espeak-ng data directory the Matcha model phonemises Latin with."""
+    for d in ESPEAK_DATA:
+        if os.path.isfile(os.path.join(d, "phontab")):
+            return d
+    return ""
+
+
 def voice_ready():
+    if tts_engine() is None:
+        return False
+    if tts_engine() == "matcha" and not espeak_data():
+        return False
     return all(
-        os.path.isfile(os.path.join(VOICE, d, f))
-        for d, fs in (("asr", ASR_FILES), ("tts", TTS_FILES))
-        for f in fs
+        os.path.isfile(os.path.join(VOICE, "asr", f)) for f in ASR_FILES
     )
 
 
@@ -734,18 +867,28 @@ def speech_engine():
     with _lock:
         if _tts is None:
             sx = _sherpa()
-            cfg = sx.OfflineTtsConfig(
-                model=sx.OfflineTtsModelConfig(
-                    vits=sx.OfflineTtsVitsModelConfig(
-                        model=os.path.join(VOICE, "tts", "model.onnx"),
-                        lexicon=os.path.join(VOICE, "tts", "lexicon.txt"),
-                        tokens=os.path.join(VOICE, "tts", "tokens.txt"),
+            tts = os.path.join(VOICE, "tts")
+            if tts_engine() == "matcha":
+                cfg = sx.OfflineTtsModelConfig(
+                    matcha=sx.OfflineTtsMatchaModelConfig(
+                        acoustic_model=os.path.join(tts, "model-steps-3.onnx"),
+                        vocoder=os.path.join(tts, "vocos-16khz-univ.onnx"),
+                        lexicon=os.path.join(tts, "lexicon.txt"),
+                        tokens=os.path.join(tts, "tokens.txt"),
+                        data_dir=espeak_data(),
                     ),
                     num_threads=4,  # 4 is the sweet spot here, 8 is slower
-                ),
-                max_num_sentences=1,
-            )
-            _tts = sx.OfflineTts(cfg)
+                )
+            else:
+                cfg = sx.OfflineTtsModelConfig(
+                    vits=sx.OfflineTtsVitsModelConfig(
+                        model=os.path.join(tts, "model.onnx"),
+                        lexicon=os.path.join(tts, "lexicon.txt"),
+                        tokens=os.path.join(tts, "tokens.txt"),
+                    ),
+                    num_threads=4,
+                )
+            _tts = sx.OfflineTts(sx.OfflineTtsConfig(model=cfg, max_num_sentences=1))
     return _tts
 
 
@@ -780,10 +923,11 @@ def synth(text, out):
     import array
 
     spoken = speakable(text)
-    if not spoken.strip("，。！？、；：—…·"):
+    if not spoken.strip("" + "".join(TTS_CJK) + " .,!?;:'\"()-/+="):
         return 0.0
+    speed = TTS_SPEED or (1.0 if tts_engine() == "matcha" else 1.3)
     with _gen:
-        audio = speech_engine().generate(spoken, sid=0, speed=TTS_SPEED)
+        audio = speech_engine().generate(spoken, sid=0, speed=speed)
     a = array.array("h", (int(max(-1.0, min(1.0, x)) * 32767) for x in audio.samples))
     with wave.open(out, "wb") as w:
         w.setnchannels(1)
@@ -1823,11 +1967,22 @@ def selftest():
     assert cn_number("2024") == "二千零二十四"
     assert cn_number("123456") == "一二三四五六"
     if voice_ready():
-        assert speakable("他买了10个面包。") == "他买了十个面包。"
-        assert speakable("3+2=5") == "三加二等于五"
-        assert speakable("温度25℃") == "温度二十五"
-        assert speakable("湿度60%") == "湿度百分之六十"
-        assert speakable("%") == "百分之"
+        if tts_engine() == "vits":
+            assert speakable("他买了10个面包。") == "他买了十个面包。"
+            assert speakable("3+2=5") == "三加二等于五"
+            assert speakable("温度25℃") == "温度二十五"
+            assert speakable("湿度60%") == "湿度百分之六十"
+            assert speakable("%") == "百分之"
+        else:
+            # digits are only spelled out where they land in Chinese text
+            assert speakable("他买了10个面包。") == "他买了十个面包。"
+            assert speakable("温度是25度，湿度60%。") == "温度是二十五度，湿度百分之六十。"
+            assert speakable("It boots in 12 seconds.") == "It boots in 12 seconds."
+            assert speakable("The GPU runs at 587 MHz.") == "The GPU runs at 587 MHz."
+            assert speakable("湿度60% and 60% humidity") == "湿度百分之六十 and 60% humidity"
+            assert speakable("好的👍，明白了。") == "好的，明白了。"
+            assert speakable("good👍job") == "good job"
+            assert speakable("3+2=5") == "3+2=5"
         assert speakable("<|endoftext|>") == ""
     # hands-free VAD: read the tail of a wav that is still being written
     p = os.path.join(tempfile.gettempdir(), "npu-chat-rms.wav")

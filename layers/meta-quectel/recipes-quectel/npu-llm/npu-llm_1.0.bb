@@ -1,9 +1,9 @@
 SUMMARY = "LLM inference on the QCS6490 Hexagon NPU (V68) with a GTK4 chat UI"
 DESCRIPTION = "Pre-compiled QAIRT context binaries (Qwen2.5-0.5B, Llama-3.2-1B) for \
 Hexagon V68, the genie-t2t-run runtime and its QNN HTP V68 libraries, plus the npu-chat \
-GUI and npu-llm CLI launchers. Offline speech is included too: SenseVoice ASR and VITS \
-TTS through sherpa-onnx, so the chat can be driven by a microphone and read the answer \
-out loud without a network. \
+GUI and npu-llm CLI launchers. Offline speech is included too: SenseVoice ASR and \
+Matcha-TTS (Chinese and English) through sherpa-onnx, so the chat can be driven \
+by a microphone and read the answer out loud without a network. \
 GGUF models cannot reach the NPU on this SoC: ggml-hexagon ships HTP v73/v75/v79/v81 \
 backends only, so this recipe is the NPU path."
 HOMEPAGE = "https://aihub.qualcomm.com/"
@@ -26,7 +26,13 @@ LLAMA = "https://modelscope.cn/models/radxa/Llama3.2-1B-4096-qairt-v68/resolve/m
 # ~140 kB/s.
 HF = "https://hf-mirror.com"
 SENSE = "csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17"
-VITS = "csukuangfj/vits-zh-hf-fanchen-C"
+# Chinese+English speech out: Matcha-TTS (single female voice, MIT) plus the
+# 16 kHz universal vocoder it requires. The VITS that used to be here
+# (vits-zh-hf-fanchen-C) has a character lexicon with no Latin entry at all, so
+# English answers were dropped word by word and came out as silence. The vocoder
+# only exists on the sherpa-onnx github release, not on HF.
+MATCHA = "csukuangfj/matcha-icefall-zh-en"
+VOCOS = "https://github.com/k2-fsa/sherpa-onnx/releases/download/vocoder-models"
 
 # ~2.7 GB of payload. Cached in DL_DIR after the first build; on a host without a
 # route to modelscope.cn, drop the files into ${DL_DIR} under the names given by
@@ -54,9 +60,10 @@ SRC_URI = " \
     ${LLAMA}/models/weight_sharing_model_1_of_1.serialized.bin;name=llama_bin;subdir=npu-llm/llama3.2-1b/models;downloadfilename=npu-llm-llama-model.bin \
     ${HF}/${SENSE}/resolve/main/model.int8.onnx;name=asr_model;subdir=npu-llm/voice;downloadfilename=npu-llm-asr-model.int8.onnx \
     ${HF}/${SENSE}/resolve/main/tokens.txt;name=asr_tok;subdir=npu-llm/voice;downloadfilename=npu-llm-asr-tokens.txt \
-    ${HF}/${VITS}/resolve/main/vits-zh-hf-fanchen-C.onnx;name=tts_model;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-model.onnx \
-    ${HF}/${VITS}/resolve/main/lexicon.txt;name=tts_lex;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-lexicon.txt \
-    ${HF}/${VITS}/resolve/main/tokens.txt;name=tts_tok;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-tokens.txt \
+    ${HF}/${MATCHA}/resolve/main/model-steps-3.onnx;name=tts_model;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-matcha.onnx \
+    ${HF}/${MATCHA}/resolve/main/lexicon.txt;name=tts_lex;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-matcha-lexicon.txt \
+    ${HF}/${MATCHA}/resolve/main/tokens.txt;name=tts_tok;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-matcha-tokens.txt \
+    ${VOCOS}/vocos-16khz-univ.onnx;name=tts_voc;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-vocoder.onnx \
     https://files.pythonhosted.org/packages/13/e3/115476caa9f80cd5f55e4e7b777a6c2d01a133d10f8fae574ba869fc48c3/sherpa_onnx-1.13.8-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl;name=whl_sherpa;subdir=npu-llm/voice;downloadfilename=npu-llm-sherpa-onnx-cp313.whl \
     https://files.pythonhosted.org/packages/9c/72/02227b14cd3fb3d504a8814ad144ed321a53331948c893821e02f4abb1d7/sherpa_onnx_core-1.13.8-py3-none-manylinux2014_aarch64.whl;name=whl_core;subdir=npu-llm/voice;downloadfilename=npu-llm-sherpa-onnx-core.whl \
 "
@@ -78,9 +85,10 @@ SRC_URI[llama_tok.sha256sum]    = "79e3e522635f3171300913bb421464a87de6222182a05
 SRC_URI[llama_bin.sha256sum]    = "d4a284cb9a40d1178daee0c8da2f6a6144d5835b32f5f05e659c3de918aff586"
 SRC_URI[asr_model.sha256sum]    = "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51"
 SRC_URI[asr_tok.sha256sum]      = "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc"
-SRC_URI[tts_model.sha256sum]    = "77c4bf60602d7d83f0e320063d15655e3bfc51d25b728d727203cd13e77521ab"
-SRC_URI[tts_lex.sha256sum]      = "9af2824e49e731bf615927c768fdc36bbbe894cac57d8e0088d9c94331b07320"
-SRC_URI[tts_tok.sha256sum]      = "34b035b9aeb070df6188b022f29c00e0e142c7ade9f25611ced65db5e9cc8402"
+SRC_URI[tts_model.sha256sum]    = "524286bf6cf11be74329ae1c682ac69e34d6860c2ea9fd1290319d561540b16a"
+SRC_URI[tts_lex.sha256sum]      = "599efdcdaff4df2a123ce988c2cb90abcd59b919ef609ce36eb587d68b7ca2c0"
+SRC_URI[tts_tok.sha256sum]      = "77fee8e5e5dd96b3547119e6159292c648e99e065c54c97777722e3ce710b9a4"
+SRC_URI[tts_voc.sha256sum]      = "b599142a1fb8ff03de3e84ac35ff537c619e56f4267a6fe894851a42844acf9e"
 SRC_URI[whl_sherpa.sha256sum]   = "916ec38242e779ee3a99f7b161bd1bf3b02a7fad34cb073d091021c0469e0b58"
 SRC_URI[whl_core.sha256sum]     = "a51a03d55c376c32e15dd63ea852236042ba91a5cd73e253bbf7cf21f6582ba9"
 
@@ -142,19 +150,21 @@ do_install() {
     grep -q '"top-k": 40,' ${D}${datadir}/npu-llm/llama3.2-1b/model-config.json || \
         bbfatal "llama top-k patch did not apply -- upstream bundle changed?"
 
-    # Offline voice: the SenseVoice/VITS models plus the sherpa-onnx python
-    # bindings. npu-chat appends ${libdir}/npu-llm/voice to sys.path, so the
-    # bindings sit next to the models instead of in site-packages.
+    # Offline voice: the SenseVoice/Matcha-TTS models plus the sherpa-onnx
+    # python bindings. npu-chat appends ${libdir}/npu-llm/voice to sys.path, so
+    # the bindings sit next to the models instead of in site-packages.
     install -d ${D}${datadir}/npu-llm/voice/asr ${D}${datadir}/npu-llm/voice/tts
     install -m 0644 ${S}/npu-llm/voice/npu-llm-asr-model.int8.onnx \
         ${D}${datadir}/npu-llm/voice/asr/model.int8.onnx
     install -m 0644 ${S}/npu-llm/voice/npu-llm-asr-tokens.txt \
         ${D}${datadir}/npu-llm/voice/asr/tokens.txt
-    install -m 0644 ${S}/npu-llm/voice/npu-llm-tts-model.onnx \
-        ${D}${datadir}/npu-llm/voice/tts/model.onnx
-    install -m 0644 ${S}/npu-llm/voice/npu-llm-tts-lexicon.txt \
+    install -m 0644 ${S}/npu-llm/voice/npu-llm-tts-matcha.onnx \
+        ${D}${datadir}/npu-llm/voice/tts/model-steps-3.onnx
+    install -m 0644 ${S}/npu-llm/voice/npu-llm-tts-vocoder.onnx \
+        ${D}${datadir}/npu-llm/voice/tts/vocos-16khz-univ.onnx
+    install -m 0644 ${S}/npu-llm/voice/npu-llm-tts-matcha-lexicon.txt \
         ${D}${datadir}/npu-llm/voice/tts/lexicon.txt
-    install -m 0644 ${S}/npu-llm/voice/npu-llm-tts-tokens.txt \
+    install -m 0644 ${S}/npu-llm/voice/npu-llm-tts-matcha-tokens.txt \
         ${D}${datadir}/npu-llm/voice/tts/tokens.txt
 
     install -d ${D}${libdir}/npu-llm/voice
@@ -191,6 +201,13 @@ FILES:${PN} = " \
 # same way: both come with the GNOME desktop, and the UI degrades with a clear
 # message rather than crashing if one is missing.
 RDEPENDS:${PN} = "python3 python3-numpy coreutils"
+# The Matcha TTS phonemises Latin with espeak-ng, whose data lives in the
+# Debian rootfs (/usr/lib/aarch64-linux-gnu/espeak-ng-data, from the
+# espeak-ng-data package) -- same story as gtk4 above: there is no espeak-ng
+# recipe in these layers to RDEPEND on, and pulling OE's eSpeak 1.48 in would
+# not help. It is not optional: sherpa-onnx aborts with "Please provide data
+# dir for this model" instead of raising, so npu-chat requires the directory
+# before it offers the speak button and the rest of the app keeps working.
 
 # Prebuilt arm64 binaries: skip the QA that inspects them.
 #
