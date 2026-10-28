@@ -96,13 +96,25 @@ Headless check of the whole chain (record 4 s, transcribe, speak):
 
   NPU_LLM_VOICE=/usr/share/npu-llm/voice npu-chat --voice-selftest
 
-The TTS lexicon is Chinese only, so the text is normalised before synthesis:
-arabic digits become Chinese numerals ("25" -> 二十五, "12" -> 十二, years
-digit by digit), 60% -> 百分之六十, and anything the lexicon cannot pronounce
-(ASCII letters, emoji, markup) is dropped instead of failing the sentence.
+The lexicon of the Matcha model is a Chinese character table plus espeak-ng for
+Latin, so the text is normalised before synthesis rather than fed through the
+model's own number/date FSTs (they are Chinese-only and read "12 seconds" as
+十二 seconds): a number is spelled out only when Chinese text sits next to it
+("温度是25度" -> 温度是二十五度), otherwise it is left for espeak ("It boots in
+12 seconds"), and 60% follows the same rule. Emoji and markup are dropped
+instead of failing the sentence, and <|endoftext|>-style template tokens are
+cut out.
+
+Level: the old VITS peaks at 0.34 with 0.045 rms, Matcha at 0.66 with 0.145
+rms, about 10 dB hotter, and the codec/amp on this board is set for the old
+one, so Matcha as it comes out of the model sounded distorted. npu-chat
+attenuates it by 0.16 (measured back to 0.023 rms, 0.105 peak on the same
+sentence) and additionally scales anything above 0.85 peak down rather than
+letting it clip. 0.32 already sounded close to the old voice, 0.16 was picked
+by ear on the board speaker; NPU_LLM_TTS_GAIN overrides it at runtime.
 
 Measured on the same board: 5.6 s of speech recognised in 0.33 s (17x real
-time), a 3.9 s sentence synthesised in 2.4 s (1.4x real time) — well inside
+time), a 3.9 s sentence synthesised in 0.38 s (10x real time) — well inside
 the ~20 tok/s the NPU produces.
 
 识图: ask qwen3.5 about a picture

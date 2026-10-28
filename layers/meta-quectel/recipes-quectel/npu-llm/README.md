@@ -46,7 +46,10 @@ release — it refuses to load without it) and `espeak-ng-data` for the Latin
 side. Cost of the swap, measured on the board over the same nine sentences:
 248–258 MB RSS against 220–300 MB, 0.33 s instead of 1.99 s to speak a 4 s
 mixed sentence, and 2.1 s instead of 1.1 s to load. Memory went down because
-the VITS allocates as it speaks; speed went up ~6x.
+the VITS allocates as it speaks; speed went up ~6x. The new voice is also ~10 dB
+hotter than the old one, which the amp on this board did not like, so `synth()`
+attenuates Matcha by 0.16 and caps the peak at 0.85 (`NPU_LLM_TTS_GAIN`
+overrides the gain at runtime).
 
 Both come from the `sherpa-onnx` python bindings (cp313 manylinux aarch64
 wheels, unpacked into `/usr/lib/npu-llm/voice`) plus models from hf-mirror
