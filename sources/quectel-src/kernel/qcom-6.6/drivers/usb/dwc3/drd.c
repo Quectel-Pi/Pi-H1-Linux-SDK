@@ -536,12 +536,24 @@ static int dwc3_setup_role_switch(struct dwc3 *dwc)
 	} else {
 		mode = DWC3_GCTL_PRTCAP_DEVICE;
 	}
+	dev_dbg(dwc->dev,
+		"role switch default mode %d -> %d (mode=%s)\n",
+		usb_get_role_switch_default_mode(dwc->dev),
+		dwc->role_switch_default_mode,
+		mode == DWC3_GCTL_PRTCAP_HOST ? "host" : "device");
 	dwc3_set_mode(dwc, mode);
 
 	dwc3_role_switch.fwnode = dev_fwnode(dwc->dev);
 	dwc3_role_switch.set = dwc3_usb_role_switch_set;
 	dwc3_role_switch.get = dwc3_usb_role_switch_get;
 	dwc3_role_switch.driver_data = dwc;
+	/*
+	 * Expose /sys/class/usb_role/<dev>-role-switch/role so the role can be
+	 * inspected (and forced) from userspace.  This is the documented
+	 * upstream interface and the only way to recover a stuck role on a
+	 * board that is already deployed.
+	 */
+	dwc3_role_switch.allow_userspace_control = true;
 	dwc->role_sw = usb_role_switch_register(dwc->dev, &dwc3_role_switch);
 	if (IS_ERR(dwc->role_sw))
 		return PTR_ERR(dwc->role_sw);

@@ -125,6 +125,19 @@ static inline void dwc3_qcom_clrbits(void __iomem *base, u32 offset, u32 val)
 	readl(base + offset);
 }
 
+/* Debug helper: pretty-print the glue's cached USB role. */
+static const char *dwc3_qcom_role_str(enum usb_role role)
+{
+	switch (role) {
+	case USB_ROLE_HOST:
+		return "host";
+	case USB_ROLE_DEVICE:
+		return "device";
+	default:
+		return "none";
+	}
+}
+
 static void dwc3_qcom_vbus_override_enable(struct dwc3_qcom *qcom, bool enable)
 {
 	if (enable) {
@@ -796,9 +809,23 @@ static int dwc3_qcom_handle_cable_disconnect(void *data)
 	 */
 	if (qcom->current_role == USB_ROLE_DEVICE) {
 		ret = pm_runtime_get_sync(qcom->dev);
-		if ((ret < 0) || (qcom->is_suspended))
+		if (ret < 0)
 			return ret;
+		/*
+		 * The wrapper is already suspended, so touching QSCRATCH here
+		 * would fault.  The override bits were cleared when the wrapper
+		 * went down, so just drop the reference taken above.  Bailing
+		 * out without the put leaked a runtime PM reference on every
+		 * device-mode unplug that happened while suspended.
+		 */
+		if (qcom->is_suspended) {
+			pm_runtime_put_autosuspend(qcom->dev);
+			qcom->current_role = USB_ROLE_NONE;
+			return 0;
+		}
 		dwc3_qcom_vbus_override_enable(qcom, false);
+		/* we are no longer the USB device, stop sourcing VBUS */
+		dwc3_qcom_vbus_regulator_enable(qcom, false);
 		pm_runtime_put_autosuspend(qcom->dev);
 	} else if (qcom->current_role == USB_ROLE_HOST) {
 		/*
@@ -834,13 +861,26 @@ static void dwc3_qcom_handle_set_mode(void *data, u32 desired_dr_role)
 	 * If we are in device mode and get a cable disconnect,
 	 * handle it by clearing OTG_VBUS_VALID bit in wrapper.
 	 * The next set_mode to default role can be ignored and
-	 * so the OTG_VBUS_VALID should be set iff the current role
-	 * is NONE and we need to enter DEVICE mode.
+	 * so the OTG_VBUS_VALID should be set iff we are entering
+	 * DEVICE mode.
+	 *
+	 * The condition must be "not already device" rather than "is
+	 * none": a boot with the cable already plugged runs HOST ->
+	 * DEVICE (host is the role-switch default mode), and that used
+	 * to fall through both branches - no VBUS_VALID override, no
+	 * glue state update, VBUS regulator left enabled while we are
+	 * the USB device.  Only a later gadget run_stop edge (or a
+	 * physical replug) rescued the session.
 	 */
-	if ((qcom->current_role == USB_ROLE_NONE) &&
-	    (desired_dr_role == DWC3_GCTL_PRTCAP_DEVICE)) {
-		dwc3_qcom_vbus_override_enable(qcom, true);
-		qcom->current_role = USB_ROLE_DEVICE;
+	if (desired_dr_role == DWC3_GCTL_PRTCAP_DEVICE) {
+		if (qcom->current_role != USB_ROLE_DEVICE) {
+			/* never source VBUS while we act as the USB device */
+			dwc3_qcom_vbus_regulator_enable(qcom, false);
+			dwc3_qcom_vbus_override_enable(qcom, true);
+			dev_dbg(qcom->dev, "entered device role (from %s)\n",
+				dwc3_qcom_role_str(qcom->current_role));
+			qcom->current_role = USB_ROLE_DEVICE;
+		}
 	} else if ((desired_dr_role == DWC3_GCTL_PRTCAP_HOST) &&
 		   (qcom->current_role != USB_ROLE_HOST)) {
 		/*
@@ -878,6 +918,9 @@ static void dwc3_qcom_handle_mode_changed(void *data, u32 current_dr_role)
 {
 	struct dwc3_qcom *qcom = (struct dwc3_qcom *)data;
 
+	dev_dbg(qcom->dev, "mode changed: dr_role=%u glue_role=%s\n",
+		current_dr_role, dwc3_qcom_role_str(qcom->current_role));
+
 	/*
 	 * Do NOT enable runtime autosuspend for the xHCI controller here.
 	 *
@@ -892,8 +935,6 @@ static void dwc3_qcom_handle_mode_changed(void *data, u32 current_dr_role)
 	 *
 	 * dwc3_host_init() now keeps the controller runtime-active.
 	 */
-	dev_dbg(qcom->dev, "mode changed: dr_role=%u glue_role=%d\n",
-		current_dr_role, qcom->current_role);
 }
 
 static void dwc3_post_conndone_notification(void *data)

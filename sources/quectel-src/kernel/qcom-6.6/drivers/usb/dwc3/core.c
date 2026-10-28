@@ -264,6 +264,7 @@ static void __dwc3_set_mode(struct work_struct *work)
 	    dwc->current_dr_role == DWC3_GCTL_PRTCAP_DEVICE &&
 	    dwc->gadget_driver &&
 	    (dwc->pullups_connected || dwc->softconnect)) {
+		dev_dbg(dwc->dev, "device re-attach on live core: rebuild\n");
 		ret = dwc3_gadget_suspend(dwc);
 		if (ret) {
 			/*
@@ -282,10 +283,26 @@ static void __dwc3_set_mode(struct work_struct *work)
 				dev_err(dwc->dev,
 					"failed to rebuild core on device re-attach: %d\n",
 					ret);
-			} else {
-				dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_DEVICE, true);
-				dwc3_gadget_resume(dwc);
+				/*
+				 * The core is left powered down by the failed rebuild and
+				 * the gadget is still stopped, so there is nothing to
+				 * resume here.
+				 *
+				 * Leave current_dr_role at DEVICE and return instead of falling
+				 * through: a repeated DEVICE request then early-outs in
+				 * __dwc3_set_mode() instead of reaching dwc3_set_prtcap(),
+				 * which would write GCTL with the clocks off.  Recovery comes
+				 * from the runtime PM path, which unconditionally rebuilds for
+				 * DWC3_GCTL_PRTCAP_DEVICE in dwc3_resume_common(), so the next
+				 * attach after an autosuspend repairs the port.  This mirrors
+				 * upstream, where a failed dwc3_core_init_for_resume() also
+				 * just returns and leaves the retry to the PM core.
+				 */
+				goto out;
 			}
+
+			dwc3_set_prtcap(dwc, DWC3_GCTL_PRTCAP_DEVICE, true);
+			dwc3_gadget_resume(dwc);
 		}
 	}
 
@@ -362,21 +379,28 @@ static void __dwc3_set_mode(struct work_struct *work)
 		/*
 		 * device -> host hand-over.
 		 *
-		 * The device session left the core and both PHYs built for
-		 * PRTCAPDIR=DEVICE.  dwc3_set_prtcap() above only rewrites
-		 * GCTL.PRTCAPDIR; for the SNPS HS PHY, phy_set_mode() just
-		 * caches the mode in software (qcom_snps_hsphy_set_mode())
-		 * and the hardware only picks it up in power_on().  So the
-		 * HS PHY stays set up for device termination, the xHCI root
-		 * port never sees D+ pull-up and a stick plugged in this
-		 * state is never enumerated - while a cold boot works
-		 * because there the first dwc3_core_init() already ran.
+		 * The device session left the core built for PRTCAPDIR=DEVICE,
+		 * and dwc3_set_prtcap() above only rewrites GCTL.PRTCAPDIR.
+		 * The bits that actually switch the SNPS HS PHY between device
+		 * termination and host SOF generation (GUSB2PHYCFG.SUSPENDENABLE,
+		 * ENBLSLPM, USBTRDTIM/PHYIF) are programmed by dwc3_phy_setup(),
+		 * which only runs inside dwc3_core_init().  A plain set_prtcap
+		 * therefore leaves a half-configured controller behind and a
+		 * stick plugged in this state is never enumerated, while a cold
+		 * boot works because there the first dwc3_core_init() already
+		 * ran.
 		 *
 		 * Rebuild the controller the same way the DEVICE branch and
 		 * the runtime resume path do it.  Only the DRD hand-over
 		 * from device is affected: from NONE/OTG the old behaviour
 		 * (plain set_prtcap + host init) is kept, so host-only
 		 * devices and the OTG initial probe are untouched.
+		 *
+		 * phy_set_mode() before the rebuild is only a software cache in
+		 * this tree (qcom_snps_hsphy_set_mode(), qmp_usb_set_mode()), so
+		 * it is not what fixes this; it is kept first so the order
+		 * stays correct if a PHY driver starts consuming the mode in
+		 * .init()/.power_on().
 		 */
 		if (prev_dr_role == DWC3_GCTL_PRTCAP_DEVICE) {
 			dev_info(dwc->dev, "host hand-over: rebuilding core\n");
@@ -446,12 +470,35 @@ static void __dwc3_set_mode(struct work_struct *work)
 		 * attach path in __dwc3_set_mode() retries the rebuild.
 		 */
 		if (!dwc->core_inited) {
+			/*
+			 * phy_set_mode() is only a software cache in this tree
+			 * (qcom_snps_hsphy_set_mode(), qmp_usb_set_mode()), so it
+			 * is not what repairs the hand-over - the rebuild below
+			 * is, because dwc3_phy_setup() reprograms
+			 * GUSB2PHYCFG/GUSB3PIPECTL there.  Keep it first anyway so
+			 * the order stays correct if a PHY driver ever consumes
+			 * the mode in .init()/.power_on().
+			 */
+			phy_set_mode(dwc->usb2_generic_phy, PHY_MODE_USB_DEVICE);
+			phy_set_mode(dwc->usb3_generic_phy, PHY_MODE_USB_DEVICE);
+			dev_info(dwc->dev, "device hand-over: rebuilding core\n");
 			dwc3_core_exit(dwc);
 			ret = dwc3_core_init_for_resume(dwc);
-			if (ret)
+			if (ret) {
 				dev_err(dwc->dev,
 					"failed to rebuild stale core on device hand-over: %d\n",
 					ret);
+				/*
+				 * dwc3_core_init_for_resume() has already disabled the
+				 * clocks and asserted the reset on this path.  Falling
+				 * through would hit DCTL/GEVNT* on a powered-down core,
+				 * and the late dwc3_gadget_init() would overwrite ret, so
+				 * the failure would even be reported as a successful mode
+				 * change.  Bail out like the host hand-over above and like
+				 * dwc3_resume_common() upstream.
+				 */
+				break;
+			}
 		}
 
 		dwc3_core_soft_reset(dwc);

@@ -36,6 +36,28 @@
  */
 #define UCSI_SWAP_TIMEOUT_MS	5000
 
+/*
+ * sink_pref - prefer the sink (power consumer) role whenever we act as the USB
+ * device, i.e. the Type-C partner is a DFP.
+ *
+ * When the PPM reports us as the power source even though we are the data
+ * device, we are feeding VBUS into the host, which is exactly what a board
+ * acting as a USB client must never do.  Request a Power Role Swap to sink.
+ *
+ * Disabled by default: with partners that do not speak USB PD, or PD firmware
+ * that cannot swap, a forced PR swap may hard-reset the connector.  Turn it on
+ * with:  echo 1 > /sys/module/typec_ucsi/parameters/sink_pref
+ */
+static bool sink_pref;
+module_param(sink_pref, bool, 0644);
+MODULE_PARM_DESC(sink_pref,
+	"Request PWR_ROLE_SWAP to sink when we are the USB device (default 0)");
+
+#define UCSI_ROLE_RETRY_COUNT	3
+#define UCSI_ROLE_RETRY_MS	200
+#define UCSI_SINK_RETRY_MS	1500
+#define UCSI_SINK_MAX_TRIES	2
+
 static int ucsi_read_message_in(struct ucsi *ucsi, void *buf,
 					  size_t buf_size)
 {
@@ -817,6 +839,70 @@ static void ucsi_unregister_partner(struct ucsi_connector *con)
 	con->partner = NULL;
 }
 
+static int ucsi_pr_swap(struct typec_port *port, enum typec_role new_role);
+
+static void ucsi_role_retry_work(struct work_struct *work)
+{
+	struct ucsi_connector *con = container_of(to_delayed_work(work),
+						  struct ucsi_connector,
+						  role_retry_work);
+	int ret;
+
+	if (!con->role_retry_left)
+		return;
+
+	con->role_retry_left--;
+	ret = usb_role_switch_set_role(con->usb_role_sw, con->pending_role);
+	dev_dbg(con->ucsi->dev, "con%u: role retry left=%u role=%d ret=%d\n",
+		con->num, con->role_retry_left, con->pending_role, ret);
+
+	if (ret && con->role_retry_left)
+		queue_delayed_work(system_wq, &con->role_retry_work,
+				   msecs_to_jiffies(UCSI_ROLE_RETRY_MS));
+}
+
+static void ucsi_sink_work(struct work_struct *work)
+{
+	struct ucsi_connector *con = container_of(to_delayed_work(work),
+						  struct ucsi_connector,
+						  sink_work);
+	bool want_sink = false;
+	bool connected;
+	int ret;
+
+	if (!sink_pref)
+		return;
+
+	mutex_lock(&con->lock);
+	connected = !!(con->status.flags & UCSI_CONSTAT_CONNECTED);
+	if (connected &&
+	    UCSI_CONSTAT_PARTNER_TYPE(con->status.flags) ==
+		UCSI_CONSTAT_PARTNER_TYPE_DFP &&
+	    (con->status.flags & UCSI_CONSTAT_PWR_DIR) &&
+	    UCSI_CONSTAT_PWR_OPMODE(con->status.flags) ==
+		UCSI_CONSTAT_PWR_OPMODE_PD)
+		want_sink = true;
+	mutex_unlock(&con->lock);
+
+	if (!want_sink) {
+		con->sink_tries = 0;
+		return;
+	}
+
+	dev_dbg(con->ucsi->dev,
+		"con%u: USB device but power source, requesting PR swap to sink (try %u)\n",
+		con->num, con->sink_tries + 1);
+
+	/* ucsi_pr_swap() takes con->lock itself, so it must run unlocked */
+	ret = ucsi_pr_swap(con->port, TYPEC_SINK);
+	dev_dbg(con->ucsi->dev, "con%u: PR swap to sink ret=%d\n", con->num, ret);
+
+	con->sink_tries++;
+	if (ret && con->sink_tries < UCSI_SINK_MAX_TRIES)
+		queue_delayed_work(system_wq, &con->sink_work,
+				   msecs_to_jiffies(UCSI_SINK_RETRY_MS));
+}
+
 static void ucsi_partner_change(struct ucsi_connector *con)
 {
 	enum usb_role u_role = USB_ROLE_NONE;
@@ -870,9 +956,19 @@ static void ucsi_partner_change(struct ucsi_connector *con)
 	ret = usb_role_switch_set_role(con->usb_role_sw, u_role);
 	dev_info(con->ucsi->dev, "QLIDBG partner_change role_sw(%d) ret=%d\n",
 		 u_role, ret);
-	if (ret)
+	if (ret) {
+		/*
+		 * The consumer may not be registered yet (boot with the cable
+		 * already plugged runs the first attach before the role switch
+		 * consumer probes), so retry instead of losing the event.
+		 */
 		dev_err(con->ucsi->dev, "con:%d: failed to set usb role:%d\n",
 			con->num, u_role);
+		con->pending_role = u_role;
+		con->role_retry_left = UCSI_ROLE_RETRY_COUNT;
+		queue_delayed_work(system_wq, &con->role_retry_work,
+				   msecs_to_jiffies(UCSI_ROLE_RETRY_MS));
+	}
 }
 
 static int ucsi_check_connection(struct ucsi_connector *con)
@@ -979,6 +1075,19 @@ static void ucsi_handle_connector_change(struct work_struct *work)
 
 	if (con->status.change & UCSI_CONSTAT_CAM_CHANGE)
 		ucsi_partner_task(con, ucsi_check_altmodes, 1, 0);
+
+	if ((con->status.flags & UCSI_CONSTAT_CONNECTED) &&
+	    UCSI_CONSTAT_PARTNER_TYPE(con->status.flags) ==
+		UCSI_CONSTAT_PARTNER_TYPE_DFP &&
+	    (con->status.flags & UCSI_CONSTAT_PWR_DIR)) {
+		dev_warn(ucsi->dev,
+			 "con%u: USB device but power source (opmode=%u, sink_pref=%d)\n",
+			 con->num,
+			 (unsigned int)UCSI_CONSTAT_PWR_OPMODE(con->status.flags),
+			 sink_pref);
+		if (sink_pref)
+			queue_delayed_work(system_wq, &con->sink_work, 0);
+	}
 
 out_unlock:
 	mutex_unlock(&con->lock);
@@ -1247,6 +1356,8 @@ static int ucsi_register_port(struct ucsi *ucsi, struct ucsi_connector *con)
 		return -ENOMEM;
 
 	INIT_WORK(&con->work, ucsi_handle_connector_change);
+	INIT_DELAYED_WORK(&con->role_retry_work, ucsi_role_retry_work);
+	INIT_DELAYED_WORK(&con->sink_work, ucsi_sink_work);
 	init_completion(&con->complete);
 	mutex_init(&con->lock);
 	INIT_LIST_HEAD(&con->partner_tasks);
@@ -1724,6 +1835,8 @@ void ucsi_unregister(struct ucsi *ucsi)
 
 	for (i = 0; i < ucsi->cap.num_connectors; i++) {
 		cancel_work_sync(&ucsi->connector[i].work);
+		cancel_delayed_work_sync(&ucsi->connector[i].role_retry_work);
+		cancel_delayed_work_sync(&ucsi->connector[i].sink_work);
 
 		if (ucsi->connector[i].wq) {
 			struct ucsi_work *uwork;

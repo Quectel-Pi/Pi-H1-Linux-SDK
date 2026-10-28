@@ -143,7 +143,13 @@ static int eud_usb_role_set(struct eud_chip *chip, enum usb_role role)
 	usb_role_switch_put(sw);
 
 	if (ret) {
-		dev_err(chip->dev, "failed to set role\n");
+		/*
+		 * Do not keep a role the hardware never accepted: the cache
+		 * would then suppress the next identical request and the role
+		 * would never be programmed.
+		 */
+		dev_err(chip->dev, "failed to set role %d: %d\n", role, ret);
+		chip->current_role = USB_ROLE_NONE;
 		return ret;
 	}
 	chip->current_role = role;

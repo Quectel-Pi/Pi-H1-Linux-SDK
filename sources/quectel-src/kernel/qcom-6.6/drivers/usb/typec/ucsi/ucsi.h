@@ -354,6 +354,11 @@ struct ucsi_connector {
 	struct ucsi *ucsi;
 	struct mutex lock; /* port lock */
 	struct work_struct work;
+	struct delayed_work role_retry_work;
+	struct delayed_work sink_work;
+	enum usb_role pending_role;
+	unsigned int role_retry_left;
+	unsigned int sink_tries;
 	struct completion complete;
 	struct workqueue_struct *wq;
 	struct list_head partner_tasks;
