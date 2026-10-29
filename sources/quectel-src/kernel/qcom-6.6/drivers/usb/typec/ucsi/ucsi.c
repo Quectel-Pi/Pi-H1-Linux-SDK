@@ -903,29 +903,82 @@ static void ucsi_sink_work(struct work_struct *work)
 				   msecs_to_jiffies(UCSI_SINK_RETRY_MS));
 }
 
-static void ucsi_partner_change(struct ucsi_connector *con)
+/*
+ * Resolve the USB data role of the attached partner.
+ *
+ * The PPM cannot always classify what is plugged into the port.  A legacy
+ * 4-wire USB 2.0 A-to-C cable (no CC resistor / e-marker of its own, no PD)
+ * is reported as a "debug accessory", and the very same cable can still be
+ * reported as a DFP when it is already plugged in at boot, so the report is
+ * not even stable across attaches.
+ *
+ * Neither DEBUG nor an unclassified partner type was handled by the partner
+ * type switch, so the USB data role stayed USB_ROLE_NONE and the controller
+ * fell back to its idle default (host): the board never enumerated on the
+ * PC after the cable was replugged.
+ *
+ * For those cables the USB data role follows the VBUS direction, which the
+ * PPM does report reliably: the port that sinks VBUS is the USB device, the
+ * port that sources it is the USB host.  This is the same rule the OTG state
+ * machine applies on the ID pin of a Micro-B port.
+ *
+ * Returns USB_ROLE_NONE for an attach that carries no USB data (charging
+ * only or audio accessory cable), which keeps the controller on its idle
+ * default.
+ */
+static enum usb_role ucsi_partner_usb_role(struct ucsi_connector *con)
 {
-	enum usb_role u_role = USB_ROLE_NONE;
-	int ret;
+	u16 flags = con->status.flags;
+	bool usb_data = !!(UCSI_CONSTAT_PARTNER_FLAGS(flags) &
+			   UCSI_CONSTAT_PARTNER_FLAG_USB);
+	bool sourcing = !!(flags & UCSI_CONSTAT_PWR_DIR);
 
-	switch (UCSI_CONSTAT_PARTNER_TYPE(con->status.flags)) {
+	if (!usb_data)
+		return USB_ROLE_NONE;
+
+	switch (UCSI_CONSTAT_PARTNER_TYPE(flags)) {
 	case UCSI_CONSTAT_PARTNER_TYPE_UFP:
 	case UCSI_CONSTAT_PARTNER_TYPE_CABLE_AND_UFP:
-		u_role = USB_ROLE_HOST;
-		fallthrough;
+		return USB_ROLE_HOST;
+	case UCSI_CONSTAT_PARTNER_TYPE_DFP:
+		return USB_ROLE_DEVICE;
+	case UCSI_CONSTAT_PARTNER_TYPE_CABLE:
+		/* powered cable: carries VBUS only, no data pair */
+		return USB_ROLE_NONE;
+	default:
+		/* legacy cable / debug accessory: follow the VBUS direction */
+		return sourcing ? USB_ROLE_HOST : USB_ROLE_DEVICE;
+	}
+}
+
+static void ucsi_partner_change(struct ucsi_connector *con)
+{
+	unsigned int ptype = UCSI_CONSTAT_PARTNER_TYPE(con->status.flags);
+	enum usb_role u_role;
+	int ret;
+
+	u_role = ucsi_partner_usb_role(con);
+
+	switch (ptype) {
+	case UCSI_CONSTAT_PARTNER_TYPE_UFP:
+	case UCSI_CONSTAT_PARTNER_TYPE_CABLE_AND_UFP:
 	case UCSI_CONSTAT_PARTNER_TYPE_CABLE:
 		typec_set_data_role(con->port, TYPEC_HOST);
 		break;
 	case UCSI_CONSTAT_PARTNER_TYPE_DFP:
-		u_role = USB_ROLE_DEVICE;
 		typec_set_data_role(con->port, TYPEC_DEVICE);
 		break;
 	default:
+		/* legacy cable reported as debug accessory */
+		if (u_role != USB_ROLE_NONE)
+			typec_set_data_role(con->port,
+					    u_role == USB_ROLE_HOST ?
+					    TYPEC_HOST : TYPEC_DEVICE);
 		break;
 	}
 
 	if (con->status.flags & UCSI_CONSTAT_CONNECTED) {
-		switch (UCSI_CONSTAT_PARTNER_TYPE(con->status.flags)) {
+		switch (ptype) {
 		case UCSI_CONSTAT_PARTNER_TYPE_DEBUG:
 			typec_set_mode(con->port, TYPEC_MODE_DEBUG);
 			break;
@@ -939,9 +992,11 @@ static void ucsi_partner_change(struct ucsi_connector *con)
 		}
 	}
 
-	/* Only notify USB controller if partner supports USB data */
-	if (!(UCSI_CONSTAT_PARTNER_FLAGS(con->status.flags) & UCSI_CONSTAT_PARTNER_FLAG_USB))
-		u_role = USB_ROLE_NONE;
+	dev_info(con->ucsi->dev,
+		 "con%u: partner type %u, %s VBUS -> USB role %d\n",
+		 con->num, ptype,
+		 (con->status.flags & UCSI_CONSTAT_PWR_DIR) ? "sourcing" :
+		 "sinking", u_role);
 
 	dev_info(con->ucsi->dev,
 		 "QLIDBG partner_change con%u flags=%08x type=%u pwr_dir=%u opmode=%u pflags=%u connected=%d partner=%d u_role=%d\n",
@@ -1477,19 +1532,23 @@ static int ucsi_register_port(struct ucsi *ucsi, struct ucsi_connector *con)
 	if (ucsi->ops->connector_status)
 		ucsi->ops->connector_status(con);
 
+	u_role = ucsi_partner_usb_role(con);
+
 	switch (UCSI_CONSTAT_PARTNER_TYPE(con->status.flags)) {
 	case UCSI_CONSTAT_PARTNER_TYPE_UFP:
 	case UCSI_CONSTAT_PARTNER_TYPE_CABLE_AND_UFP:
-		u_role = USB_ROLE_HOST;
-		fallthrough;
 	case UCSI_CONSTAT_PARTNER_TYPE_CABLE:
 		typec_set_data_role(con->port, TYPEC_HOST);
 		break;
 	case UCSI_CONSTAT_PARTNER_TYPE_DFP:
-		u_role = USB_ROLE_DEVICE;
 		typec_set_data_role(con->port, TYPEC_DEVICE);
 		break;
 	default:
+		/* cable already plugged at boot, see ucsi_partner_usb_role() */
+		if (u_role != USB_ROLE_NONE)
+			typec_set_data_role(con->port,
+					    u_role == USB_ROLE_HOST ?
+					    TYPEC_HOST : TYPEC_DEVICE);
 		break;
 	}
 
@@ -1502,10 +1561,10 @@ static int ucsi_register_port(struct ucsi *ucsi, struct ucsi_connector *con)
 		ucsi_port_psy_changed(con);
 	}
 
-	/* Only notify USB controller if partner supports USB data */
-	if (!(UCSI_CONSTAT_PARTNER_FLAGS(con->status.flags) & UCSI_CONSTAT_PARTNER_FLAG_USB))
-		u_role = USB_ROLE_NONE;
-
+	/*
+	 * Only notify USB controller if partner supports USB data; u_role was
+	 * already resolved with that in mind.
+	 */
 	ret = usb_role_switch_set_role(con->usb_role_sw, u_role);
 	dev_info(con->ucsi->dev, "QLIDBG register_port role_sw(%d) ret=%d flags=%08x type=%u pflags=%u\n",
 		 u_role, ret, con->status.flags,
