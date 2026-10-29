@@ -21,6 +21,10 @@ if exist "%GEN_H%" (
     for /f "tokens=3" %%A in ('findstr /r /c:"QUECTEL_PROJECT_REV" "%GEN_H%"') do set "FW_REV=%%~A"
 )
 set "FW_DIR=%SDK_ROOT%\quectel_build\%FW_REV%"
+rem Debug builds are packaged as "<rev>_DBG" (same rule as quectel_build\tools\flash.sh)
+set "FW_CUSTOM="
+if exist "%GEN_H%" for /f "tokens=3" %%A in ('findstr /r /c:"QUECTEL_CUSTOM_NAME" "%GEN_H%"') do set "FW_CUSTOM=%%~A"
+if defined FW_CUSTOM echo !FW_CUSTOM! | findstr /i "DBG" >nul && set "FW_DIR=%FW_DIR%_DBG"
 if defined QPI_FW_DIR set "FW_DIR=%QPI_FW_DIR%"
 
 rem ---- QFIL 后端 (本 SDK 自带, 无需安装 QPST) ----
@@ -82,9 +86,14 @@ for %%F in ("%FIREHOSE%" "efi.bin" "system.img" "dtb.bin") do (
     )
 )
 
-set "PART_DIR=%FW_DIR%\partition_%FS_TYPE%"
-if not exist "%PART_DIR%" (
-    echo [ERROR] partition dir missing: %PART_DIR%
+rem UFS packages keep rawprogram/patch XMLs in the firmware root (no partition_ufs);
+rem emmc and older packages use partition_<type>\. Same rule as quectel_build\tools\flash.sh.
+set "PART_SUB="
+if /i not "%FS_TYPE%"=="ufs" set "PART_SUB=partition_%FS_TYPE%\"
+set "PART_DIR=%FW_DIR%\%PART_SUB%"
+if not exist "%FW_DIR%\%PART_SUB%rawprogram0.xml" (
+    echo [ERROR] rawprogram XMLs not found in: %FW_DIR%\%PART_SUB%
+    echo         run a full build + buildpackage first
     exit /b 1
 )
 
@@ -122,15 +131,15 @@ echo.
 echo [3/3] Firehose: full flash ^(LUN 0-5 rawprogram + patch^) ...
 set "XMLLIST="
 for %%L in (0 1 2 3 4 5) do (
-    if exist "partition_%FS_TYPE%\rawprogram%%L.xml" (
+    if exist "%PART_SUB%rawprogram%%L.xml" (
         if defined XMLLIST (
-            set "XMLLIST=!XMLLIST!,partition_%FS_TYPE%\rawprogram%%L.xml"
+            set "XMLLIST=!XMLLIST!,%PART_SUB%rawprogram%%L.xml"
         ) else (
-            set "XMLLIST=partition_%FS_TYPE%\rawprogram%%L.xml"
+            set "XMLLIST=%PART_SUB%rawprogram%%L.xml"
         )
     )
-    if exist "partition_%FS_TYPE%\patch%%L.xml" (
-        set "XMLLIST=!XMLLIST!,partition_%FS_TYPE%\patch%%L.xml"
+    if exist "%PART_SUB%patch%%L.xml" (
+        set "XMLLIST=!XMLLIST!,%PART_SUB%patch%%L.xml"
     )
 )
 

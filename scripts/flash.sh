@@ -130,6 +130,9 @@ else
     FW_REV="$(sed -n 's/^[[:space:]]*#define[[:space:]]\+QUECTEL_PROJECT_REV[[:space:]]\+"\([^"]*\)".*/\1/p' "${GEN_H}" | head -n1)"
     [ -n "${FW_REV}" ] || { echo "[ERROR] 无法从 ${GEN_H} 解析 QUECTEL_PROJECT_REV"; exit 1; }
     FW_DIR="${SDK_ROOT}/quectel_build/${FW_REV}"
+    # 调试版固件打包到 "<rev>_DBG" (与 quectel_build/tools/flash.sh 规则一致)
+    FW_CUSTOM="$(sed -n 's/^[[:space:]]*#define[[:space:]]\+QUECTEL_CUSTOM_NAME[[:space:]]\+"\([^"]*\)".*/\1/p' "${GEN_H}" | head -n1)"
+    case "/${FW_CUSTOM}/" in */DBG/*) FW_DIR="${FW_DIR}_DBG" ;; esac
 fi
 
 QDL="${TOOLS_DIR}/qdl"
@@ -144,8 +147,18 @@ for f in prog_firehose_Qcm6490_ddr.elf efi.bin system.img dtb.bin; do
         exit 1
     }
 done
-[ -d "${FW_DIR}/partition_${FS_TYPE}" ] || {
-    echo "[ERROR] 缺少 partition_${FS_TYPE} 目录 (固件目录: ${FW_DIR})"; exit 1; }
+# 分区 XML 位置: UFS 的 rawprogram/patch XML 已直接放在固件根目录, 打包时
+# 不再生成 partition_ufs/ (与 quectel_build/tools/flash.sh 保持同步);
+# emmc 或旧版固件包仍使用 partition_<type>/ 子目录。
+PART_SUB=""
+if [ "${FS_TYPE}" != "ufs" ]; then
+    PART_SUB="partition_${FS_TYPE}/"
+fi
+ls "${FW_DIR}/${PART_SUB}"rawprogram*.xml >/dev/null 2>&1 || {
+    echo "[ERROR] 找不到 rawprogram*.xml (固件目录: ${FW_DIR}/${PART_SUB})"
+    echo "        请先执行全量编译 + buildpackage (点击「全量编译」)"
+    exit 1
+}
 
 echo "=========================================="
 echo "[h1-yocto] 全盘烧录固件 (${FS_TYPE})"
@@ -172,7 +185,7 @@ echo "[h1-yocto] qdl 全盘烧录中..."
 # 显式列出 0-5 全部 LUN (保证顺序, 不依赖 glob 顺序)
 XMLS=()
 for lun in 0 1 2 3 4 5; do
-    XMLS+=(partition_${FS_TYPE}/rawprogram${lun}.xml partition_${FS_TYPE}/patch${lun}.xml)
+    XMLS+=("${PART_SUB}rawprogram${lun}.xml" "${PART_SUB}patch${lun}.xml")
 done
 ${SUDO} "${QDL}" -s "${FS_TYPE}" -i . \
     "prog_firehose_Qcm6490_ddr.elf" \
