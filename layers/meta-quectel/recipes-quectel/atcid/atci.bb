@@ -33,12 +33,14 @@ do_install() {
 	install -m 0755 ${S}/atci/scripts/atci_init.sh  ${D}/usr/sbin
 	install -m 0755 ${S}/atci/scripts/pi-cleanup.sh  ${D}/usr/sbin
 	install -m 0755 ${S}/atci/scripts/fan_ctrl.sh  ${D}/usr/sbin
+	install -m 0755 ${S}/atci/scripts/fct_usb_client.sh  ${D}/usr/sbin
 	install -d ${D}${systemd_unitdir}/system/
     install -m 0644 ${S}/atci/scripts/atci.service  ${D}${systemd_unitdir}/system/atci.service
 	install -m 0644 ${S}/atci/scripts/auto-time.service ${D}${systemd_unitdir}/system/auto-time.service
 	install -m 0644 ${S}/atci/scripts/dconf-update.service ${D}${systemd_unitdir}/system/dconf-update.service
 	install -m 0644 ${S}/atci/scripts/pi-cleanup.service ${D}${systemd_unitdir}/system/pi-cleanup.service
 	install -m 0644 ${S}/atci/scripts/fan_ctrl.service ${D}${systemd_unitdir}/system/fan_ctrl.service
+	install -m 0644 ${S}/atci/scripts/fct-usb-client.service ${D}${systemd_unitdir}/system/fct-usb-client.service
 	install -d ${D}${sysconfdir}/udev/rules.d
     install -m 0644 ${S}/99-partlabel-auto.rules ${D}${sysconfdir}/udev/rules.d/
 
@@ -47,7 +49,7 @@ do_install() {
 
 RPROVIDES_${PN} += "atci service"
 
-SYSTEMD_SERVICE:${PN} = "atci.service pi-cleanup.service auto-time.service dconf-update.service fan_ctrl.service"
+SYSTEMD_SERVICE:${PN} = "atci.service pi-cleanup.service auto-time.service dconf-update.service fan_ctrl.service fct-usb-client.service"
 SYSTEMD_AUTO_ENABLE = "enable"
 
 
@@ -56,9 +58,11 @@ FILES:${PN} += " \
   /usr/sbin/atci_init.sh \
   /usr/sbin/pi-cleanup.sh \
   /usr/sbin/fan_ctrl.sh \
+  /usr/sbin/fct_usb_client.sh \
   /usr/lib/systemd/system/atci.service \
   /usr/lib/systemd/system/pi-cleanup.service \
   /usr/lib/systemd/system/fan_ctrl.service \
+  /usr/lib/systemd/system/fct-usb-client.service \
   /usr/lib/systemd/system/auto-time.service \
   /usr/lib/systemd/system/dconf-update.service \
   ${sysconfdir}/udev/rules.d/99-partlabel-auto.rules \

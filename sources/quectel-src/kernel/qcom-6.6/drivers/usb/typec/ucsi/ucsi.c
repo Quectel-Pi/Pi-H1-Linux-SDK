@@ -53,6 +53,11 @@ module_param(sink_pref, bool, 0644);
 MODULE_PARM_DESC(sink_pref,
 	"Request PWR_ROLE_SWAP to sink when we are the USB device (default 0)");
 
+/* Factory test mode: force the port to client, the 3-wire cable reports no partner. */
+static bool fct_client;
+module_param(fct_client, bool, 0644);
+MODULE_PARM_DESC(fct_client, "Always act as the USB device, factory test mode (default 0)");
+
 #define UCSI_ROLE_RETRY_COUNT	3
 #define UCSI_ROLE_RETRY_MS	200
 #define UCSI_SINK_RETRY_MS	1500
@@ -932,6 +937,9 @@ static enum usb_role ucsi_partner_usb_role(struct ucsi_connector *con)
 	bool usb_data = !!(UCSI_CONSTAT_PARTNER_FLAGS(flags) &
 			   UCSI_CONSTAT_PARTNER_FLAG_USB);
 	bool sourcing = !!(flags & UCSI_CONSTAT_PWR_DIR);
+
+	if (fct_client)
+		return USB_ROLE_DEVICE;
 
 	if (!usb_data)
 		return USB_ROLE_NONE;
