@@ -24,6 +24,14 @@
 #define WCD_MBHC_ADC_HPH_THRESHOLD_MV	75
 #define WCD_MBHC_ADC_MICBIAS_MV		1800
 #define WCD_MBHC_FAKE_INS_RETRY		4
+/*
+ * A 3-pole headphone and a 4-pole headset can both read ~0 mV on the first
+ * MBHC ADC measurement, so give a headphone verdict a couple of re-reads
+ * before reporting it.  In practice the impedance run before the measurement
+ * makes the first read correct and this never triggers; it is a safety net.
+ */
+#define WCD_MBHC_ADC_HPH_RECHECK	2
+#define WCD_MBHC_ADC_HPH_RECHECK_MS	100
 
 #define WCD_MBHC_JACK_MASK (SND_JACK_HEADSET | SND_JACK_LINEOUT | \
 			   SND_JACK_MECHANICAL)
@@ -522,9 +530,19 @@ static irqreturn_t wcd_mbhc_mech_plug_detect_irq(int irq, void *data)
 
 	mbhc->in_swch_irq_handler = true;
 
-	wcd_mbhc_cancel_pending_work(mbhc);
-
 	detection_type = wcd_mbhc_read_field(mbhc, WCD_MBHC_MECH_DETECTION_TYPE);
+
+	/*
+	 * A repeated insert event while a plug is already reported carries no
+	 * new information: the insert branch below just exits.  Bail out
+	 * before wcd_mbhc_cancel_pending_work(), otherwise this stale event
+	 * aborts a switch-detection run that is still measuring the plug type
+	 * and the result is thrown away.
+	 */
+	if (detection_type && mbhc->current_plug != MBHC_PLUG_TYPE_NONE)
+		goto exit;
+
+	wcd_mbhc_cancel_pending_work(mbhc);
 
 	/* Set the detection type appropriately */
 	wcd_mbhc_write_field(mbhc, WCD_MBHC_MECH_DETECTION_TYPE, !detection_type);
@@ -1094,6 +1112,7 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 	unsigned long timeout;
 	int pt_gnd_mic_swap_cnt = 0;
 	int output_mv, cross_conn, hs_threshold, try = 0, micbias_mv;
+	int i;
 	bool is_spl_hs = false;
 	bool is_pa_on;
 	int ret;
@@ -1109,6 +1128,7 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 		pm_runtime_put_noidle(component->dev);
 		return;
 	}
+
 	micbias_mv = wcd_mbhc_get_micbias(mbhc);
 	hs_threshold = wcd_mbhc_adc_get_hs_thres(mbhc);
 
@@ -1129,8 +1149,33 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 	}
 
 	/* Find plug type */
-	output_mv = wcd_measure_adc_continuous(mbhc);
+	/*
+	 * Run impedance detection before reading the MBHC ADC.  Besides giving
+	 * zl/zr for the lineout decision, it is what makes the ADC convert at
+	 * all on this codec: it flips MUX_CTL to AUTO and restarts the MBHC
+	 * FSM, and until that happens every ADC read returns a stale 0 mV.
+	 * Reading 0 mV means "3-pole headphone" to wcd_mbhc_get_plug_from_adc,
+	 * so without this a 4-pole headset is reported as a headphone and only
+	 * corrected by the slow loop further down.  A one-shot read that waits
+	 * for ADC_COMPLETE is used, since the continuous variant can latch a
+	 * stale result.
+	 */
+	if (!wcd_mbhc_read_field(mbhc, WCD_MBHC_HPH_PA_EN))
+		wcd_mbhc_compute_impedance(mbhc);
+
+	output_mv = wcd_measure_adc_once(mbhc, MUX_CTL_IN2P);
+	if (output_mv < 0)
+		output_mv = 0;
 	plug_type = wcd_mbhc_get_plug_from_adc(mbhc, output_mv);
+
+	for (i = 0; plug_type == MBHC_PLUG_TYPE_HEADPHONE &&
+		    i < WCD_MBHC_ADC_HPH_RECHECK; i++) {
+		msleep(WCD_MBHC_ADC_HPH_RECHECK_MS);
+		output_mv = wcd_measure_adc_once(mbhc, MUX_CTL_IN2P);
+		if (output_mv < 0)
+			output_mv = 0;
+		plug_type = wcd_mbhc_get_plug_from_adc(mbhc, output_mv);
+	}
 
 	/*
 	 * Report plug type if it is either headset or headphone
@@ -1404,12 +1449,40 @@ static void wcd_mbhc_plug_poll_report(struct wcd_mbhc *mbhc, bool present)
 
 	mutex_lock(&mbhc->lock);
 
+	dev_info(mbhc->dev, "jack %s (was plug_type %d)\n",
+		 present ? "inserted" : "removed", mbhc->current_plug);
+
 	if (present) {
-		mbhc->current_plug = MBHC_PLUG_TYPE_HEADPHONE;
-		mbhc->hph_status |= SND_JACK_HEADPHONE;
-		snd_soc_jack_report(mbhc->jack,
-				    mbhc->hph_status | SND_JACK_MECHANICAL,
-				    WCD_MBHC_JACK_MASK);
+		struct snd_soc_component *component = mbhc->component;
+		int ret;
+
+		/*
+		 * A plug that is only visible through the poll has no reliable
+		 * SW_DET interrupt, but the plug *type* can still be measured: the
+		 * MBHC ADC path below is plain register access plus sleeps and
+		 * never waits for an interrupt.  Run the very same sequence the
+		 * insert interrupt would have run, so a 4-pole headset ends up as
+		 * MBHC_PLUG_TYPE_HEADSET with SND_JACK_MICROPHONE instead of being
+		 * hardcoded to a plain headphone.  Without the microphone switch
+		 * the audio stack never selects the headset mic capture device.
+		 */
+		ret = pm_runtime_get_sync(component->dev);
+		if (ret < 0 && ret != -EACCES) {
+			pm_runtime_put_noidle(component->dev);
+			mutex_unlock(&mbhc->lock);
+			return;
+		}
+
+		mbhc->current_plug = MBHC_PLUG_TYPE_NONE;
+		mbhc->is_btn_press = false;
+		mbhc->mbhc_cb->mbhc_bias(component, true);
+		if (mbhc->mbhc_cb->mbhc_micb_ramp_control)
+			mbhc->mbhc_cb->mbhc_micb_ramp_control(component, true);
+		wcd_mbhc_adc_detect_plug_type(mbhc);
+
+		pm_runtime_mark_last_busy(component->dev);
+		pm_runtime_put_autosuspend(component->dev);
+
 		mutex_unlock(&mbhc->lock);
 		return;
 	}

@@ -2087,22 +2087,33 @@ static void wcd937x_mbhc_moisture_polling_ctrl(struct snd_soc_component *compone
 static int wcd937x_mbhc_plug_state(struct snd_soc_component *component)
 {
 	struct wcd937x_priv *wcd937x = snd_soc_component_get_drvdata(component);
+	struct device *dev = component->dev;
 	unsigned int val;
 	int ret;
 
 	/*
-	 * Go through the regmap directly instead of snd_soc_component_read():
-	 * the codec regmap lives on the SoundWire TX slave, whose runtime
-	 * suspend puts it in cache-only mode, so every read then returns
-	 * -EBUSY - which the ASoC core would log on every poll tick.  A miss
-	 * here simply leaves the jack state as it was.
+	 * The codec regmap lives on the SoundWire TX slave.  While the codec is
+	 * runtime suspended every access to a volatile register goes out on the
+	 * bus and fails, and 0x305B is volatile - its value must come from the
+	 * chip, not from the regcache.  Resume around the read, otherwise the
+	 * poll keeps whatever it saw last and a removed plug is never noticed.
 	 */
+	ret = pm_runtime_get_sync(dev);
+	if (ret < 0 && ret != -EACCES) {
+		pm_runtime_put_noidle(dev);
+		return ret;
+	}
+
 	ret = regmap_read(wcd937x->regmap, WCD937X_MBHC_MOISTURE_DET_FSM_STATUS,
 			  &val);
+
+	pm_runtime_mark_last_busy(dev);
+	pm_runtime_put_autosuspend(dev);
+
 	if (ret)
 		return ret;
 
-	return (val & 0x10) ? 1 : 0;
+	return (val & WCD937X_MBHC_MOISTURE_DET_STATUS_PLUG) ? 1 : 0;
 }
 
 static const struct wcd_mbhc_cb mbhc_cb = {
@@ -3084,7 +3095,16 @@ static int wcd937x_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, wcd937x->reset_gpio,
 				     "Failed to get reset gpio\n");
 
-	wcd937x->us_euro_gpio = devm_gpiod_get_optional(dev, "us-euro", GPIOD_OUT_LOW);
+	/*
+	 * GPIO_AUDIO (us-euro) selects which way U0702/U0703 route MIC and GND
+	 * between the jack and the codec.  It must default to the level that
+	 * connects the headset mic to MIC2_P: MBHC's cross-connection detector
+	 * is the only other writer, and it only runs on the interrupt path, so
+	 * leaving the pin low until then shorted the mic input to ground and
+	 * every capture came back as a dead node (only +-1 LSB of codec noise).
+	 */
+	wcd937x->us_euro_gpio = devm_gpiod_get_optional(dev, "us-euro",
+						    GPIOD_OUT_HIGH);
 	if (IS_ERR(wcd937x->us_euro_gpio))
 		return dev_err_probe(dev, PTR_ERR(wcd937x->us_euro_gpio),
 				"us-euro swap Control GPIO not found\n");

@@ -85,6 +85,13 @@
 #define WCD937X_MBHC_CTL_SPARE_2		0x3059
 #define WCD937X_MBHC_CTL_BCS			0x305A
 #define WCD937X_MBHC_MOISTURE_DET_FSM_STATUS	0x305B
+/*
+ * Bit4 of the moisture-detection FSM status mirrors the jack contact state:
+ * set while a plug is inserted, clear while the jack is empty.  It keeps
+ * running on its own, unlike the plug-detect FSM (0x3125) which is only
+ * started by the SW_DET alert interrupt.
+ */
+#define WCD937X_MBHC_MOISTURE_DET_STATUS_PLUG	BIT(4)
 #define WCD937X_MBHC_TEST_CTL			0x305C
 #define WCD937X_LDOH_MODE			0x3067
 #define WCD937X_LDOH_BIAS			0x3068
