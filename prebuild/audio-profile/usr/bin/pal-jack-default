@@ -25,13 +25,17 @@
 # 板载 mic 这个节点叫 pal_source_speaker_mic, 但它的 description 是
 # "pal source handset mic" —— 就是这个, 别去找什么 pal_source_handset_mic。
 #
-# ponytail: 1s 轮询而不是监听 evdev 事件 —— 每次轮询只开几个 fd 读一下 ioctl,
-# 代价可以忽略, 还免了事件解析和输入设备重连(声卡是后探测的, 开机时设备可能
-# 还不存在)。插线后 1s 内切换, 感觉不出来。
+# ponytail: 轮询 + evdev 事件两条腿 —— 光轮询的话插拔到切换之间最长空 1s, 这段时间
+# 里耳机节点已经被 PAL 插件删掉、新的默认又还没写, wireplumber/pulse 解析出的默认
+# sink 短时为空, GNOME 的音量条(mount 在 get_default_sink() != NULL 上)会消失,
+# 而且不一定自己回来。所以在 1s 轮询之外再用 select() 等插孔事件: 有事件就立刻
+# 重算并写入, 空窗从最长 1s 缩到几毫秒。1s 超时照旧保留 —— 声卡是后探测的,
+# 开机早期插孔设备可能还不存在, 事件等不到, 得靠轮询兜底。
 import fcntl
 import json
 import os
 import re
+import select
 import struct
 import subprocess
 import sys
@@ -248,6 +252,44 @@ def self_test():
     print("self-test ok (%d cases)" % (len(cases) + 3))
 
 
+def wait_jack_event():
+    """等插孔事件, 最长等 POLL_INTERVAL 秒。
+
+    只关心插孔设备本身: 其它 input 设备(键盘/触摸/亮度)上的事件跟我们无关,
+    挂上它们会让每次敲键都白醒一次。设备不存在/被移除都当没有, 交给轮询。
+    """
+    fds = []
+    try:
+        for entry in sorted(os.listdir(DEV_INPUT_DIR)):
+            if not entry.startswith("event"):
+                continue
+            try:
+                fd = os.open(os.path.join(DEV_INPUT_DIR, entry),
+                             os.O_RDONLY | os.O_NONBLOCK)
+            except OSError:
+                continue        # 权限/竞态, 这轮等不到就靠超时
+            try:
+                name = fcntl.ioctl(fd, EVIOCGNAME(256), b"\0" * 256).split(b"\0")[0]
+                name = name.decode("utf-8", "replace")
+            except OSError:
+                name = ""
+            if any(device in name for device, _bit, _node in SINKS):
+                fds.append(fd)
+            else:
+                os.close(fd)
+        if fds:
+            try:
+                select.select(fds, [], [], POLL_INTERVAL)
+            except OSError:
+                pass            # fd 在等的时候被移除, 下一轮重扫
+    finally:
+        for fd in fds:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+
+
 def main():
     if "--self-test" in sys.argv[1:]:
         self_test()
@@ -283,7 +325,7 @@ def main():
                 # sink 为 None 时不回读(没什么可校验的), 自然也不会跟用户手选对着干。
                 print("默认通道被外部改掉, 重设:", flush=True)
                 apply_defaults(*want)
-        time.sleep(POLL_INTERVAL)
+        wait_jack_event()
 
 
 if __name__ == "__main__":
