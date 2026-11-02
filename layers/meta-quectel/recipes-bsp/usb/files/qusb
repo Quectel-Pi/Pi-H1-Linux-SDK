@@ -64,6 +64,66 @@ usb_bind() {
 	fi
 }
 
+# Bind the UDC and keep probing until the kernel really accepted it.
+#
+# Writing the UDC is the only trustworthy readiness probe: it succeeds exactly
+# when every functionfs instance in the composition has already published its
+# descriptors, and is rejected with -ENODEV before that (f_fs.c:3022
+# "ffs_opts->dev->desc_ready ? 0 : -ENODEV"). A rejected bind makes the kernel
+# roll back the whole composite (udc/core.c:1631), which is why retrying the
+# same write is safe rather than harmful.
+#
+# This replaces a fixed "sleep 10" that gambled on diag-router and adbd having
+# opened their ep0 files by then. Waiting for the condition removes the guess,
+# and on a normal boot binds as soon as both daemons are up instead of always
+# after the full sleep.
+#
+# usb.service is "Type=oneshot" with RemainAfterExit and the caller runs this in
+# a subshell in the background, so a long wait never blocks the boot: the bound
+# stops at 45 probes to keep the worst case bounded, not to beat a timeout.
+usb_bind_wait() {
+	count=`ls /sys/class/udc | wc -l`
+	if [ $count -gt 1 ]; then
+		udcname=a600000.usb
+	else
+		udcname=`ls -1 /sys/class/udc | head -n 1`
+	fi
+
+	if [ ! -d /sys/kernel/config/usb_gadget/adb ]; then
+		return 0
+	fi
+	if [ -z "$udcname" ]; then
+		return 0
+	fi
+
+	# Every rejected write costs two kernel log lines, so probe slowly and only
+	# once the endpoint files exist: without them the bind cannot work at all, and
+	# writing anyway just spams the log.
+	n=0
+	while [ $n -lt 45 ]; do
+		n=$(($n + 1))
+		if [ "`cat /sys/kernel/config/usb_gadget/adb/UDC 2>/dev/null`" = "$udcname" ]; then
+			echo "qusb: UDC already bound to $udcname" > /dev/kmsg
+			return 0
+		fi
+
+		# Endpoint files exist only after the daemon owning the functionfs
+		# instance opened ep0 and wrote its descriptors. This is a cheap filter,
+		# not a readiness proof, so the UDC write below still decides.
+		if [ -e /dev/usb-ffs/adb/ep1 ] && [ -e /dev/ffs-diag/ep1 ]; then
+			echo $udcname > /sys/kernel/config/usb_gadget/adb/UDC 2>/dev/null
+			# A write that reports success but leaves the UDC empty was rolled back.
+			if [ "`cat /sys/kernel/config/usb_gadget/adb/UDC 2>/dev/null`" = "$udcname" ]; then
+				echo "qusb: UDC bound to $udcname at probe $n" > /dev/kmsg
+				return 0
+			fi
+		fi
+		sleep 1
+	done
+	echo "qusb: UDC bind to $udcname failed after $n probes" > /dev/kmsg
+	return 0
+}
+
 remove_configs() {
 	usb_unbind
 	cd /sys/kernel/config/usb_gadget/adb/
@@ -180,8 +240,15 @@ run_902D() {
 		echo "FCT done Flag does not exist."
 		ln -s functions/acm.usb0 configs/c.1/f4
 	fi
-	sleep 10
-	usb_bind
+	# The daemons that own ffs.diag and ffs.usb0 are started separately, so wait
+	# for the bind to actually be accepted instead of sleeping a fixed 10 s.
+	# /etc/usb/dbg_sleep10 forces the old behaviour for A/B testing on hardware.
+	if [ -f /etc/usb/dbg_sleep10 ]; then
+		sleep 10
+		usb_bind
+	else
+		usb_bind_wait
+	fi
 	cd /
 }
 
