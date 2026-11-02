@@ -1518,6 +1518,32 @@ static void wcd_mbhc_plug_poll_fn(struct work_struct *work)
 	if (!mbhc->mbhc_cb->mbhc_plug_state)
 		return;
 
+	/*
+	 * Once the system has left SYSTEM_RUNNING we must not touch the codec
+	 * any more: on the reboot/halt/poweroff path system_state is set in
+	 * kernel_restart_prepare()/kernel_shutdown_prepare() *before*
+	 * device_shutdown() runs, so this poll can otherwise race with the
+	 * teardown of the codec's SoundWire master.  Two fatal crashes were
+	 * seen on QCS6490 exactly there:
+	 *   - Asynchronous SError Interrupt from qcom_swrm_cpu_reg_read()
+	 *     readl() on an already powered-down SWR MMIO window
+	 *   - Oops in wcd937x_mbhc_plug_state() -> pm_runtime_get_sync()
+	 * The codec has no shutdown() callback, so wcd_mbhc_stop() (which does
+	 * cancel_delayed_work_sync()) never runs on the reboot path and the poll
+	 * has to bail out on its own.
+	 *
+	 * SYSTEM_SUSPEND is the exception: the poll lives on system_wq, which is
+	 * NOT freezable, so it keeps running while the system is in s2idle.  In
+	 * that case skip the bus access but keep the poll alive, otherwise the
+	 * delayed work would be gone for good and plug detection would stay dead
+	 * after resume.  Only a genuine shutdown/halt abandons the timer.
+	 */
+	if (system_state == SYSTEM_SUSPEND)
+		goto requeue;
+
+	if (system_state != SYSTEM_RUNNING)
+		return;
+
 	present = mbhc->mbhc_cb->mbhc_plug_state(mbhc->component);
 	/*
 	 * The codec can be runtime suspended, in which case there is no

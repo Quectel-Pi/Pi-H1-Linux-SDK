@@ -2092,6 +2092,17 @@ static int wcd937x_mbhc_plug_state(struct snd_soc_component *component)
 	int ret;
 
 	/*
+	 * Belt and braces on top of the system_state check in
+	 * wcd_mbhc_plug_poll_fn(): return the "unknown" value (-EACCES, which the
+	 * caller treats as a non-fatal skip) instead of touching the regmap once
+	 * the system is going down.  The regmap sits on the SoundWire TX slave,
+	 * which is shut down before the codec on the reboot path; a read at that
+	 * point raises an SError from qcom_swrm_cpu_reg_read().
+	 */
+	if (system_state != SYSTEM_RUNNING)
+		return -EACCES;
+
+	/*
 	 * The codec regmap lives on the SoundWire TX slave.  While the codec is
 	 * runtime suspended every access to a volatile register goes out on the
 	 * bus and fails, and 0x305B is volatile - its value must come from the
