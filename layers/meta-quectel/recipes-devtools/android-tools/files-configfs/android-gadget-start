@@ -1,0 +1,119 @@
+#!/bin/sh
+#
+# meta-quectel override of meta-qcom-hwe android-gadget-start
+#
+# Why the upstream version is not enough
+# --------------------------------------
+# Upstream waits a fixed "sleep 3" and then gambles that functionfs is ready.
+# When adbd dies (OOM killer, kill -9) the ffs instance does not leave
+# FFS_ACTIVE cleanly. The next adbd only sets desc_ready after it has re-written
+# the endpoint descriptors, and f_fs.c:3022 rejects the bind with -ENODEV until
+# then:
+#
+#   ffs_do_functionfs_bind:  ret = ffs_opts->dev->desc_ready ? 0 : -ENODEV;
+#
+# Writing the UDC too early fails the whole composite bind, the kernel rolls it
+# back (udc/core.c:1631) and the port stays unenumerated:
+#
+#   udc a600000.usb: failed to start adb: -19
+#   UDC core: adb: couldn't find an available UDC or it's busy
+#   android-gadget-start: echo: I/O error
+#
+# Two defects were measured on hardware (log/usb-adbd-race-20261102/):
+#   (1) "sleep 3" is a timing gamble instead of waiting for the real condition,
+#       so roughly one in five adbd restarts lost the race.
+#   (2) Nothing told the previous ExecStartPost process to stop. A stale copy
+#       kept writing the UDC for 30 s across three adbd generations, fighting
+#       the live one: 30 consecutive EIO writes, port dead for 35 s.
+#
+# Readiness probing, measured (50 ms sampler, kill -9 at t=0):
+#   t=0.11 s  /dev/usb-ffs/adb/ep1 disappears (old inode 139990 gone)
+#   t=2.0  s  ep1 reappears with a NEW inode (140979), adbd=active, UDC empty
+# so "ep1 exists" is the moment the bind can succeed. Two naive probes fail:
+#   * existence alone: after SIGKILL a dead ep1 can still be there, so the test
+#     passes while every bind is guaranteed to fail (15 x EIO on a stale inode);
+#   * inode changed: ExecStartPost normally runs *after* adbd already rebuilt
+#     ep1, so the reference inode is already the new one and the wait never
+#     ends (measured: adbd took 41 s to come up).
+# The configfs write is therefore the only trustworthy probe, and it must be
+# retried until it sticks instead of being abandoned after a fixed count.
+#
+# What this version does
+# ----------------------
+#   * exits at once when this invocation has been superseded, so a stale
+#     instance can never keep the UDC away from the live one;
+#   * retries the bind with backoff for as long as it is still the current
+#     invocation: fast (200 ms) while ep1 exists, slower (1 s) while it does
+#     not, so a storm neither recovers late nor spams the kernel log;
+#   * treats "wrote the UDC, but it reads back empty" as failure, because the
+#     rollback path returns success to the writer while unbinding again;
+#   * always exits 0: the unit runs us with "-" and a failed bind must never
+#     fail adbd.
+
+set -u
+
+GADGET=/sys/kernel/config/usb_gadget/adb
+EP_READY=/dev/usb-ffs/adb/ep1
+
+# Every start of the unit gets a fresh InvocationID. If ours is not the current
+# one any more, a newer adbd was started while we were still waiting: leave at
+# once so two instances can never race for the UDC.
+MY_INV="$(systemctl show -p InvocationID --value android-tools-adbd 2>/dev/null)"
+MY_PID="$(systemctl show -p MainPID --value android-tools-adbd 2>/dev/null)"
+
+# Liveness must be checked on the adbd process itself, not on the unit state:
+# while start-post is running the unit still reports "activating" even after
+# adbd was killed, so a state-based test kept this script (and therefore the
+# whole start job) hanging until TimeoutStartSec killed it after 90 s -- measured
+# as "start-post operation timed out" and a 60 s+ recovery after a storm.
+still_wanted() {
+	[ -n "$MY_PID" ] && [ "$MY_PID" != 0 ] || return 0
+	[ -d "/proc/$MY_PID" ] || return 1
+	[ -n "$MY_INV" ] || return 0
+	[ "$(systemctl show -p InvocationID --value android-tools-adbd 2>/dev/null)" = "$MY_INV" ] || return 1
+	return 0
+}
+
+# 1) Pick the UDC, waiting (briefly) for it to be registered at boot.
+n=0
+udcname=""
+while [ "$n" -lt 30 ]; do
+	count=$(ls /sys/class/udc 2>/dev/null | wc -l)
+	if [ "$count" -gt 1 ]; then
+		udcname=a600000.usb
+	else
+		udcname=$(ls -1 /sys/class/udc 2>/dev/null | head -n 1)
+	fi
+	[ -n "$udcname" ] && break
+	sleep 1
+	n=$((n + 1))
+done
+[ -n "$udcname" ] || exit 0
+
+# 2) Bind the UDC. The write is the only reliable readiness probe: it succeeds
+#    exactly when adbd has published its descriptors. While ep1 is missing the
+#    bind cannot work at all, so probe slowly there and fast once it is back.
+#    The total is deliberately well below TimeoutStartSec (90 s): overrunning it
+#    makes systemd kill the start job instead of retrying, which looks like the
+#    port being dead for a minute.
+budget=200			# ticks: <= 40 s with ep1, <= 200 s without
+while [ "$budget" -gt 0 ]; do
+	still_wanted || exit 0
+
+	if [ "$(cat "$GADGET/UDC" 2>/dev/null)" = "$udcname" ]; then
+		exit 0
+	fi
+
+	if [ -e "$EP_READY" ]; then
+		echo "$udcname" > "$GADGET/UDC" 2>/dev/null
+		if [ "$(cat "$GADGET/UDC" 2>/dev/null)" = "$udcname" ]; then
+			exit 0
+		fi
+		sleep 0.2
+	else
+		sleep 1
+	fi
+	budget=$((budget - 1))
+done
+
+exit 0
