@@ -1,0 +1,74 @@
+#!/bin/sh
+#
+# meta-quectel override of meta-oe android-gadget-setup
+#
+# Upstream assumes it is the only owner of /sys/kernel/config/usb_gadget/adb
+# and rebuilds the whole gadget on every adbd start. On this product qusb owns
+# the same gadget and builds the 902D composition (RNDIS+DIAG+ADB) in it, so
+# the upstream script destroyed DIAG/AT every time adbd was (re)started.
+#
+# Make it idempotent: only create what is missing, never touch an existing
+# composition, and never fail when the work is already done.
+
+manufacturer=RPB
+model="Android device"
+serial=0123456789ABCDEF
+
+if [ -r /etc/android-gadget-setup.machine ] ; then
+	. /etc/android-gadget-setup.machine
+fi
+
+[ -d /sys/kernel/config/usb_gadget ] || modprobe libcomposite
+
+cd /sys/kernel/config/usb_gadget || exit 0
+
+created=0
+if [ ! -d adb ]; then
+	mkdir adb || exit 1
+	created=1
+fi
+cd adb || exit 1
+
+mkdir -p strings/0x409 configs/c.1/strings/0x409
+
+# qusb also creates this one, so only add it when missing.
+if [ ! -d functions/ffs.usb0 ]; then
+	mkdir functions/ffs.usb0 || exit 1
+	created=1
+fi
+
+# String attribute files are always 4096 bytes, so "-s" cannot be used.
+put_string() {
+	[ -n "$(cat "$1" 2>/dev/null)" ] && return 0
+	echo "$2" > "$1" 2>/dev/null || true
+}
+
+# VID/PID only when we built the gadget ourselves: writing them into an
+# existing composition would replace qusb's 902D descriptors.
+if [ "$created" = "1" ]; then
+	echo 0x18d1 > idVendor
+	echo 0xd002 > idProduct
+fi
+
+# Strings are filled when empty, never overwritten, so a previous cleanup can
+# not leave the host without a serial number. The configuration string belongs
+# to the composition (qusb writes "RNDIS_DIAG_ADB"), so it is left alone.
+put_string strings/0x409/serialnumber "$serial"
+put_string strings/0x409/manufacturer "$manufacturer"
+put_string strings/0x409/product "$model"
+
+# Link ffs.usb0 into c.1 unless something already links it (qusb names the
+# links f1/f2/f3, upstream android-gadget-setup names it after the function).
+linked=0
+for l in configs/c.1/* ; do
+	[ -L "$l" ] || continue
+	case "$(readlink "$l")" in
+	*ffs.usb0) linked=1 ;;
+	esac
+done
+[ "$linked" = "1" ] || ln -s functions/ffs.usb0 configs/c.1/ffs.usb0
+
+mkdir -p /dev/usb-ffs/adb
+if ! grep -q ' /dev/usb-ffs/adb ' /proc/mounts ; then
+	mount -t functionfs usb0 /dev/usb-ffs/adb || exit 1
+fi

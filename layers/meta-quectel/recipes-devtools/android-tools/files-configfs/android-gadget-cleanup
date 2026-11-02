@@ -1,0 +1,46 @@
+#!/bin/sh
+#
+# meta-quectel override of meta-oe android-gadget-cleanup
+#
+# Upstream removes the function link under its own fixed name
+# "configs/c.1/ffs.usb0", but qusb links functions as f1/f2/f3... (902D =
+# rndis.rndis -> f1, ffs.diag -> f2, ffs.usb0 -> f3). Those links survived the
+# rm, so "rmdir configs/c.1" and "rmdir adb" failed, so the next
+# android-gadget-setup died on "mkdir adb: File exists". Combined with adbd's
+# start limit that turned a single OOM kill into a USB port that stayed dead
+# until reboot.
+#
+# Remove whatever links are there instead of assuming a name, and never exit
+# non-zero (callers run with "set -e").
+
+[ -d /sys/kernel/config/usb_gadget ] || exit 0
+
+cd /sys/kernel/config/usb_gadget || exit 0
+cd adb 2>/dev/null || exit 0
+
+echo "" > UDC 2>/dev/null || true
+
+killall adbd 2>/dev/null || true
+
+umount /dev/usb-ffs/adb 2>/dev/null || true
+
+# links: configs/c.N/<anything> (f1/f2/f3 from qusb, ffs.usb0 from oe) and the
+# os_desc symlinks. Remove by glob so a name change can't break cleanup again.
+for l in configs/c*/* os_desc/c* ; do
+	[ -L "$l" ] && rm -f "$l"
+done
+
+# dirs: children first (configs/c.N/strings/0x409 before configs/c.N)
+for d in configs/c*/strings/* configs/c* strings/* ; do
+	[ -d "$d" ] && rmdir "$d" 2>/dev/null
+done
+
+# functions/ is owned by qusb: they are created only by "qusb init", while
+# "qusb setpid" just links them. Deleting them here would make the 902D
+# composition impossible to restore without a reboot. They are therefore left
+# in place and the gadget directory simply stays behind, which is harmless
+# because android-gadget-setup is idempotent and qusb init reuses it.
+cd ..
+rmdir adb 2>/dev/null
+
+exit 0
