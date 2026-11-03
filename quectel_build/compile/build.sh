@@ -36,6 +36,37 @@ unset_unisoc_env() {
   unset DISTRO MACHINENAME MACHINE USERDEBUG SECBOOT_ENABLE NWMODE
 }
 
+# BitBake requires unprivileged user namespaces. Ubuntu 23.10+ restricts them by
+# default (kernel.apparmor_restrict_unprivileged_userns=1), which makes BitBake
+# abort with "User namespaces are not usable by BitBake". The sysctl belongs to
+# the initial user namespace, so writing it from the (privileged) build container
+# also changes the host. A host reboot resets it, so every build entry re-checks.
+relax_userns_for_bitbake()
+{
+    local quiet=0
+    [ "$1" = "--quiet" ] && quiet=1
+    local us=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+    [ -f "${us}" ] || return 0
+    [ "$(cat "${us}" 2>/dev/null)" = "1" ] || return 0
+
+    if [ "$(id -u)" -eq 0 ]; then
+        echo 0 > "${us}" 2>/dev/null
+    elif sudo -n true >/dev/null 2>&1; then
+        sudo -n sh -c "echo 0 > ${us}" >/dev/null 2>&1
+    elif [ -t 0 ]; then
+        sudo sh -c "echo 0 > ${us}" >/dev/null 2>&1
+    fi
+
+    if [ "$(cat "${us}" 2>/dev/null)" = "1" ]; then
+        if [ "${quiet}" -eq 0 ]; then
+            echo -e "\033[33;1m[WARN] kernel.apparmor_restrict_unprivileged_userns=1 makes BitBake fail.\033[0m"
+            echo -e "\033[33;1m[WARN] Run on the host: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0\033[0m"
+        fi
+    elif [ "${quiet}" -eq 0 ]; then
+        echo -e "\033[32;1m[INFO] Unprivileged user namespaces allowed for BitBake (reset on host reboot).\033[0m"
+    fi
+}
+
 has_custom_token()
 {
     local expected="$1"
@@ -377,6 +408,7 @@ function flash()
 
 function buildenv()
 {
+    relax_userns_for_bitbake --quiet
     PRJECT_GEN_FILE=${TOPDIR}/quectel_build/compile/quectel-features-config/quectel-buildconfig-gen.h
     echo "PRJECT_GEN_FILE:${PRJECT_GEN_FILE}"
     if [ -f "${PRJECT_GEN_FILE}" ]
@@ -560,6 +592,7 @@ if [ -f /tmp/.secboot_enabled ] && [ -n "${BUILDDIR}" ]; then
 fi
 
 function buildall() {
+    relax_userns_for_bitbake
 
     bitbake $TARGET_IMAGE -c cleanall
     bitbake $TARGET_IMAGE
@@ -582,6 +615,7 @@ function buildesdk() {
 }
 
 function buildkernel() {
+    relax_userns_for_bitbake
     bitbake -c cleanall virtual/kernel && bitbake esp-qcom-image
     mkdir -p "${TOPDIR}/quectel_build/output"
     rm -f "${TOPDIR}/quectel_build/output/efi.bin"
@@ -589,6 +623,7 @@ function buildkernel() {
 }
 
 function builddtb() {
+    relax_userns_for_bitbake
     bitbake -c cleanall virtual/kernel && bitbake dtb-qcom-image
     mkdir -p "${TOPDIR}/quectel_build/output"
     rm -f "${TOPDIR}/quectel_build/output/dtb.bin"
