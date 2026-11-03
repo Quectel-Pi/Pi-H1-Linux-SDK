@@ -1,19 +1,18 @@
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
 SRC_URI:append:qcom = " \
-    file://automountucard.rules \
-    file://automountucard.sh \
-    file://ucard-mount@.service \
+    file://usb_automount.sh \
+    file://usb-automount.service \
 "
 
 do_install:append:qcom() {
-    install -d ${D}${libdir}/udev/rules.d
-    install -m 0644 ${WORKDIR}/automountucard.rules ${D}${libdir}/udev/rules.d/automountucard.rules
-    install -d ${D}${bindir}
-    install -m 0755 ${WORKDIR}/automountucard.sh ${D}${bindir}/automountucard.sh
+    install -d ${D}${sbindir}
+    install -m 0755 ${WORKDIR}/usb_automount.sh ${D}${sbindir}/usb_automount.sh
     install -d ${D}${systemd_unitdir}/system
-    install -m 0755 ${WORKDIR}/ucard-mount@.service ${D}${systemd_unitdir}/system/ucard-mount@.service
+    install -m 0644 ${WORKDIR}/usb-automount.service ${D}${systemd_unitdir}/system/usb-automount.service
+    install -d ${D}${systemd_unitdir}/system/multi-user.target.wants
+    ln -sf ${systemd_unitdir}/system/usb-automount.service ${D}${systemd_unitdir}/system/multi-user.target.wants/usb-automount.service
 }
 
 PACKAGES =+ "${PN}-automount-ucard"
-FILES:${PN}-automount-ucard =+ "${libdir}/udev/rules.d/automountucard.rules ${bindir}/automountucard.sh ${systemd_unitdir}/system/ucard-mount@.service"
+FILES:${PN}-automount-ucard =+ "${sbindir}/usb_automount.sh ${systemd_unitdir}/system/usb-automount.service ${systemd_unitdir}/system/multi-user.target.wants/usb-automount.service"

@@ -14,6 +14,7 @@
 
 #include "ql_common_api.h"
 #include "scripts/audio_loop_sh.h"
+#include "scripts/audio_loop_alsa_sh.h"
 #include "scripts/gpio_led_on_sh.h"
 #include "scripts/gpio_led_off_sh.h"
 
@@ -1634,11 +1635,19 @@ ATRESPONSE_t QL_AT_QNVR_Handle(char* cmdline, ATOP_t opType, char* response)
 }
 
 void *run_cmd_thread_func(void *arg);
+static int is_gnome_session_running(void);
 
 ATRESPONSE_t QL_AT_HEADSET_START_Handle(char* cmdline, ATOP_t opType, char* response)
 {
     pthread_t pid;
-    const char* cmd = (const char*)scripts_audio_loop_sh;
+    const char* cmd;
+
+    // 运行时区分系统: GNOME(Debian) 走会话 PipeWire, 否则(Yocto/weston)
+    // 起独立 pipewire 实例走 pw-pal(脚本内自行拉起/销毁)
+    if (is_gnome_session_running())
+        cmd = (const char*)scripts_audio_loop_sh;      // Debian: 会话 pw-record/pw-play
+    else
+        cmd = (const char*)scripts_audio_loop_alsa_sh; // Yocto: 独立 pipewire+pw-pal
 
     switch (opType) {
         case AT_ACTION_OP:
@@ -1823,7 +1832,12 @@ ATRESPONSE_t QL_AT_CARDGET_Handle(char* cmdline, ATOP_t opType, char* response)
 {
     int len = 0;
     char line[512];
-    FILE *fp = popen("df -h | grep -E '/media|/mnt'", "r");
+    FILE *fp;
+
+    /* 挂载已挪到系统层(usb-automount.service 上电/插卡即自动挂到 /media/<dev>)，
+     * 本指令只做查询，不再触发挂载。 */
+    fp = popen("df -h | grep -E '/media|/mnt'", "r");
+
     if (fp) {
         while (1) {
             if (fgets(line, sizeof(line), fp) == NULL) break;

@@ -56,13 +56,16 @@ ${TARGET}: $(OBJS) $(CXXOBJS)
 scripts/audio_loop_sh.h: scripts/audio_loop.sh
 	xxd -i $^ $@
 
+scripts/audio_loop_alsa_sh.h: scripts/audio_loop_alsa.sh
+	xxd -i $^ $@
+
 scripts/gpio_led_on_sh.h: scripts/gpio_led_on.sh
 	xxd -i $^ $@
 
 scripts/gpio_led_off_sh.h: scripts/gpio_led_off.sh
 	xxd -i $^ $@
 
-quectel/src/ql_at_factory.c: scripts/audio_loop_sh.h scripts/gpio_led_on_sh.h scripts/gpio_led_off_sh.h
+quectel/src/ql_at_factory.c: scripts/audio_loop_sh.h scripts/audio_loop_alsa_sh.h scripts/gpio_led_on_sh.h scripts/gpio_led_off_sh.h
 
 .PHONY: clean
 clean:

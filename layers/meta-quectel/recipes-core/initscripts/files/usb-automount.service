@@ -1,0 +1,15 @@
+[Unit]
+Description=Auto mount removable USB/TF partitions under /media
+After=local-fs.target
+Before=shutdown.target
+
+[Service]
+Type=simple
+ExecStart=/usr/sbin/usb_automount.sh
+Restart=always
+RestartSec=3
+KillMode=process
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target
