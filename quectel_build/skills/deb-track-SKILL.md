@@ -25,6 +25,33 @@ comm -13 /tmp/owned.txt /tmp/ondisk.txt | wc -l
 
 2026-11 QCS6490/Debian 13 实测：131184 个文件里 **40669 个无主**。
 
+### 只对 Debian/Ubuntu 镜像有效，Yocto 镜像上自动跳过
+
+这是本 skill 的边界，必须先分清：
+
+| buildconfig 的 OS | `SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS` | overlay | deb-track |
+|---|---|---|---|
+| `DEBIAN` / `UBUNTU` | 不设（默认 0）| 执行 | **启用** |
+| `LINUX`（Yocto 原生）| `build.sh` 写 `=1` | 不执行 | **自动跳过** |
+
+原因：`deploy_debian_gnome_rootfs` 只在 Debian/Ubuntu 构建时被 append 进
+`IMAGE_PREPROCESS_COMMAND`。Yocto 镜像没有 rsync 覆盖，`do_rootfs` 写的 dpkg
+数据库本来就完整，每个文件都有归属，没有任何东西需要重新登记。
+
+所以 class 检测不到 overlay 时会设 `DEB_TRACK_ACTIVE=0` 并直接退出
+（`DEB_TRACK_REQUIRE_OVERLAY` 默认 `1`）：不装包、不碰 `statoverride`、
+不写 `PUBLISH`（避免 `buildpackage` 给 Yocto 固件发 apt 源）。
+
+要在 Yocto 镜像上故意启用（比如想用 Yocto rootfs 建 apt 源）：
+
+```bitbake
+DEB_TRACK_REQUIRE_OVERLAY = "0"
+```
+
+> 踩过的坑：`IMAGE_PREPROCESS_COMMAND` 里它是 **`deploy_debian_gnome_rootfs;`**
+> （带分号，配方 append 的就是这个字符串）。用 `overlay in cmds` 直接比对永远
+> 不命中，会误走"没 overlay"分支。正确写法是 `c.rstrip(';') == overlay`。
+
 ## 根因（不要猜，就是这个链路）
 
 `quecpi-image.bb`：
@@ -143,6 +170,7 @@ Yocto 版的 `libc6` 等拉进来（见"安全边界"），风险远大于收益
 | `DEB_TRACK_ENABLED` | `1` | `0` 跳过整个环节 |
 | `DEB_TRACK_FATAL` | `1` | 出错是否让构建失败 |
 | `DEB_TRACK_PUBLISH` | `1` | 是否生成 `PUBLISH` 清单 |
+| `DEB_TRACK_REQUIRE_OVERLAY` | `1` | 没有 `deploy_debian_gnome_rootfs` 时跳过（Yocto 镜像） |
 | `DEB_TRACK_CLOSURE_DENY` | 36 条 | 禁止进入闭包的模式（安全边界） |
 
 ### 列表格式

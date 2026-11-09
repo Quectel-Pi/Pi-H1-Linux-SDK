@@ -17,6 +17,18 @@
 # pure bookkeeping - but it makes those files package-managed and therefore
 # upgradeable from a Quectel apt repository later on.
 #
+# Scope: Debian/Ubuntu images only
+# ---------------------------------
+# Nothing here applies to a plain Yocto image (buildconfig LINUX).  That build
+# sets SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS=1, so deploy_debian_gnome_rootfs is not
+# in IMAGE_PREPROCESS_COMMAND and no distro tarball is rsync'd over the rootfs.
+# do_rootfs' database is then already correct - every file has an owner - so the
+# class detects the missing overlay and skips itself entirely
+# (DEB_TRACK_REQUIRE_OVERLAY, default 1).  Without that guard it would reinstall
+# identical versions, park statoverride and run with --force-depends on an image
+# that needs none of it, and it would leave a PUBLISH manifest that makes
+# buildpackage publish an apt repo for a Yocto image.
+#
 # Usage
 # -----
 #   inherit deb-track
@@ -79,6 +91,21 @@ DEB_TRACK_FATAL ??= "1"
 # buildpackage copies this into quectel_build/deb/, which is what an HTTP
 # server (or a USB stick) would serve for `apt upgrade`.
 DEB_TRACK_PUBLISH ??= "1"
+
+# Only act on images that actually rsync a distro tarball over the Yocto rootfs.
+#
+# This whole class exists because deploy_debian_gnome_rootfs replaces
+# /var/lib/dpkg and orphans the files Yocto installed.  A plain Yocto image
+# (buildconfig LINUX sets SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS=1) has no such
+# overlay: do_rootfs wrote a correct database and every file already has an
+# owner, so re-registering would only reinstall identical versions while
+# parking statoverride and running with --force-depends on an image that needs
+# none of it.  With this at "1" (default) the class stays completely out of the
+# way when deploy_debian_gnome_rootfs is absent.
+#
+# Set it to "0" only if you deliberately want the registration on a plain Yocto
+# rootfs (for example to build an apt repo from it).
+DEB_TRACK_REQUIRE_OVERLAY ??= "1"
 
 # Glob patterns for packages the dependency closure must NEVER pull in.
 #
@@ -202,6 +229,14 @@ python deb_track_prepare() {
     if d.getVar('DEB_TRACK_ENABLED') != '1':
         bb.note('deb-track: disabled')
         return
+    # Set to 0 by the ordering hook when the image has no
+    # deploy_debian_gnome_rootfs (plain Yocto build).  Checked here too so a
+    # manual `bitbake -c deb_track_prepare` on such an image is also a no-op
+    # instead of reinstalling packages that do_rootfs already owns.
+    if d.getVar('DEB_TRACK_ACTIVE') == '0':
+        bb.note('deb-track: inactive for this image, skipped')
+        d.setVar('DEB_TRACK_RESOLVED', '')
+        return
 
     import os, glob, subprocess
 
@@ -300,6 +335,8 @@ python deb_track_prepare() {
 
 python deb_track_install() {
     if d.getVar('DEB_TRACK_ENABLED') != '1':
+        return
+    if d.getVar('DEB_TRACK_ACTIVE') == '0':
         return
 
     import os, glob, shutil, subprocess
@@ -538,12 +575,40 @@ python () {
     cmds = (d.getVar('IMAGE_PREPROCESS_COMMAND') or '').split()
     if 'deb_track_prepare' in cmds:
         return
+
+    # IMAGE_PREPROCESS_COMMAND entries are shell commands and may carry a
+    # trailing ';': quecpi-image.bb appends ' deploy_debian_gnome_rootfs;', so a
+    # plain `overlay in cmds` test never matches and everything used to fall
+    # through to the tail - which merely looked right because the overlay
+    # happened to be the last entry, and silently enabled the class on plain
+    # Yocto builds too.  Compare with the ';' stripped.
     overlay = 'deploy_debian_gnome_rootfs'
-    if overlay in cmds:
-        idx = cmds.index(overlay) + 1
-        cmds[idx:idx] = ['deb_track_prepare', 'deb_track_install']
-    else:
+    overlay_idx = next((i for i, c in enumerate(cmds) if c.rstrip(';') == overlay), None)
+
+    if overlay_idx is None:
+        # No overlay in this image.  That is the plain Yocto build: buildconfig
+        # LINUX sets SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS=1, so quecpi-image.bb does
+        # not append deploy_debian_gnome_rootfs and nothing rsyncs over the
+        # rootfs here.
+        #
+        # In that case do_rootfs's dpkg database is already correct: every file
+        # on the rootfs has an owner, so there is nothing to re-register.  All
+        # deb-track would do is reinstall the same versions (wasted work) while
+        # taking real risks on an image that is otherwise fine: parking
+        # statoverride, running with --force-depends, and leaving a PUBLISH
+        # manifest that would make buildpackage offer an apt repo a Yocto image
+        # does not need.  So stay out of the way by default.
+        #
+        # Set DEB_TRACK_REQUIRE_OVERLAY=0 to force it on such an image anyway
+        # (e.g. to build a repo from a plain Yocto rootfs).
+        d.setVar('DEB_TRACK_ACTIVE', '0')
+        if d.getVar('DEB_TRACK_REQUIRE_OVERLAY') == '1':
+            bb.note('deb-track: this image has no deploy_debian_gnome_rootfs '
+                    '(plain Yocto build), nothing to register - skipped')
+            return
         cmds += ['deb_track_prepare', 'deb_track_install']
+    else:
+        cmds[overlay_idx + 1:overlay_idx + 1] = ['deb_track_prepare', 'deb_track_install']
     # setVar (not appendVar) so the placement right after the overlay is kept
     # even though we are not at the end of the list.
     d.setVar('IMAGE_PREPROCESS_COMMAND', ' '.join(cmds))
