@@ -393,6 +393,21 @@ fetch_github_rootfs_asset()
 function buildpackage()
 { 
     TARGET_IMAGE=$TARGET_IMAGE $TOPDIR/quectel_build/a_key_generation.sh $QUECTEL_PROJECT_NAME $QUECTEL_PROJECT_REV $QUECTEL_CUSTOM_NAME
+    local _pkg_rc=$?
+
+    # Publish the apt-repository payload for the packages deb-track registered
+    # into the image (conf/deb-track/*.txt + their dependency closure).  This is
+    # what an HTTP server would hand out for `apt upgrade`; nothing outside that
+    # list is copied.
+    if [ -x "$TOPDIR/quectel_build/tools/deb-publish.sh" ]; then
+        echo -e "\033[32;1m===============publish apt repo begin=============\033[0m"
+        TOPDIR="$TOPDIR" "$TOPDIR/quectel_build/tools/deb-publish.sh" "$TOPDIR/quectel_build/deb"
+        if [ $? -ne 0 ]; then
+            echo -e "\033[31;1m[WARN] deb publish failed, firmware package is still usable\033[0m"
+        fi
+    fi
+
+    return $_pkg_rc
 }
 
 function flash()

@@ -18,6 +18,13 @@
 
 SUMMARY = "VA-API driver backed by the Qualcomm stateful V4L2 M2M video codec"
 HOMEPAGE = "https://github.com/super617/venus-vaapi-driver"
+
+# Package revision comes from the central table in
+# layers/meta-quectel/conf/deb-track/versions.inc, which
+# quectel_build/tools/deb-iterate.sh bumps automatically.  Bumping it is what
+# makes `apt upgrade` actually replace the driver on a running board - apt
+# compares versions, not file contents.  Falls back to r0 when there is no entry.
+PR = "${@d.getVar('DEB_PR') or 'r0'}"
 LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://LICENSE;md5=ae5ae5eddeebed7d3d3b2f4b475bbfce"
 

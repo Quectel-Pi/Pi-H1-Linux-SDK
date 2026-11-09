@@ -1,0 +1,46 @@
+# Kernel packages to register into the Debian/Ubuntu dpkg database.
+#
+# These are installed by Yocto (dpkg/apt) into the intermediate rootfs, then
+# have their database entries wiped when deploy_debian_gnome_rootfs() rsyncs the
+# prebuilt distro tarball over it.  deb-track reinstalls the Yocto-built debs
+# after the rsync so the files become package-managed and upgradeable from a
+# Quectel apt repository.
+#
+# One package name per line; '#' starts a comment; globs are allowed.
+# The dependency closure is resolved automatically from deploy/deb, so listing a
+# module also pulls in kernel-<ver> (owner of modules.builtin/modules.order) and
+# kernel-image-* (owner of /boot/Image-<ver>).
+#
+# Add packages by adding lines here - no class or recipe change needed.
+
+# --- kernel image ------------------------------------------------------------
+# kernel-image-6.6.116-qli-1.7-ver.1.1 is the meta package: it owns nothing
+# itself but Depends on kernel-image-image-* (/boot/Image-<ver>) and
+# kernel-image-vmlinux-*, so the closure brings those in automatically.
+#
+# Use a glob, NOT the full package name: the name embeds the kernel version
+# string, which comes from DISTRO_VERSION via CONFIG_LOCALVERSION
+# (qcom-base.inc -> LINUX_VERSION_EXTENSION -> CONFIG_LOCALVERSION).
+# A hardcoded "kernel-image-6.6.116-qli-1.7-ver.1.1" stops matching as soon as
+# DISTRO_VERSION is bumped, and with DEB_TRACK_FATAL=1(default) that fails
+# do_image with "no .deb for: ..." .
+#
+# `kernel-image-6.6*` matches only the meta package: the split ones are
+# kernel-image-image-* / kernel-image-vmlinux-*, and "image"/"vmlinux" does not
+# match "6.6", so they are not picked up here - the closure adds them via
+# Depends.  Only the kernel major.minor (6.6) is pinned; a 6.7 kernel needs this
+# line updated.
+kernel-image-6.6*
+
+# --- kernel module metadata --------------------------------------------------
+# Owns /usr/lib/modules/<ver>/modules.{builtin,builtin.modinfo,order}.
+# Same reasoning as above - glob, never the literal versioned name.
+kernel-6.6.*
+
+# --- kernel modules ----------------------------------------------------------
+# 684 packages, covering every .ko Yocto ships:
+#   kernel/   in-tree modules
+#   camera/   kernel-module-camera-* (camera_qcm6490.ko and friends)
+#   extra/    out-of-tree modules such as v4l2loopback
+# The glob survives a kernel version bump.
+kernel-module-*

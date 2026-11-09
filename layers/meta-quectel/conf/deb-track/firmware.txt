@@ -1,0 +1,95 @@
+# Firmware packages to register into the Debian/Ubuntu dpkg database.
+#
+# Scope: the firmware files that are actually present on this board's rootfs
+# but unowned by dpkg.  Measured on QCS6490 / Debian 13 (2026-11):
+#   587 unowned files under /usr/lib/firmware
+#   578 of them are shipped by the packages listed below
+#   the remaining 9 have no deb at all (see the end of this file)
+#
+# Packages for other SoCs (qcs8300 / qcs9100 / qcs615) are deliberately NOT
+# listed even though they define file paths that happen to exist here: they are
+# a different platform's firmware and would only add dead weight and
+# cross-platform dependency noise.
+#
+# Add lines here to track more; see ../README.md for the mechanics.
+
+# --- WLAN / Bluetooth (ath11k, WCN6855 / WCN6750 / QCA2066) -------------------
+# These carry the bulk of the board's wireless firmware, including the -updates
+# overlays that are what actually gets loaded at runtime.
+linux-firmware-qcm6490-qca-wcn685x-updates
+linux-firmware-qcm6490-qca-qca2066-updates
+linux-firmware-qcm6490-qca-qca2066-hpbtfw-updates
+linux-firmware-qcm6490-qca-qca61x4-usb-updates
+linux-firmware-qcom-qcm6490-wlan-updates
+linux-firmware-qcom-qcm6490-wlanhsp-updates
+linux-firmware-qcom-qcm6490-wifi-updates
+linux-firmware-qcacld-wcn6855-updates
+linux-firmware-qcm6490-ath11k-wcn6855-updates
+linux-firmware-ath11k-wcn6750
+linux-firmware-ath11k-wcn6750-updates
+linux-firmware-qca-wcn6750
+linux-firmware-qca-wcn6750-updates
+linux-firmware-qca-ramps-updates
+linux-firmware-ath10k-license
+wlan-conf
+
+# --- audio DSP -----------------------------------------------------------------
+linux-firmware-qcom-qcm6490-audio
+linux-firmware-qcom-qcm6490-audio-updates
+
+# --- compute / NPU (CDSP, ADSP) -----------------------------------------------
+linux-firmware-qcom-qcm6490-compute
+linux-firmware-qcom-qcm6490-compute-updates
+
+# --- GPU (Adreno 643) ---------------------------------------------------------
+linux-firmware-qcom-qcm6490-adreno
+linux-firmware-qcom-adreno-a660
+qcom-adreno
+
+# --- video / VPU (Venus) ------------------------------------------------------
+# qcom-video-firmware and linux-firmware-qcom-venus-5.4 both ship
+# /usr/lib/firmware/qcom/venus-5.4/venus.mbn.  dpkg refuses to unpack two
+# packages owning the same path (the later one rolls back to not-installed), so
+# only one may be listed.  qcom-video-firmware is kept because it also carries
+# the vpu-2.0 / vpu-3.0 blobs that the generic package does not.
+linux-firmware-qcom-vpu
+qcom-video-firmware
+
+# --- trustzone apps, qupv3 (UART), misc ---------------------------------------
+linux-firmware-qcm6490-qcom-tzapps-updates
+linux-firmware-qcom-qcm6490-qupv3fw
+linux-firmware-qcom-qcm6490-qupv3fw-updates
+linux-firmware-qcom-qcm6490-verinfo
+linux-firmware-qcom-qcm6490-qps615-updates
+linux-firmware-qcom-license
+linux-firmware-linaro-license
+firmware-qcom-verinfo
+qps615-firmware
+
+# --- board peripherals --------------------------------------------------------
+# LT9611UXC Micro HDMI bridge and Quectel HDMI firmware.
+# quectel-hdmi-firmware and linux-firmware-lt9611uxc both ship
+# /usr/lib/firmware/lt9611uxc_fw.bin, so linux-firmware-lt9611uxc is left out.
+quectel-hdmi-firmware
+
+# 注意：camxlib-kt 曾被列在这里（它带 /usr/lib/firmware/camera/* 的一个文件），
+# 但已经移除，两个原因：
+#   1. 它的 Depends（cameradlkm, fastrpc）在 Debian 上不满足，只能 --force-depends
+#   2. 它的 deb 在 deploy/deb 里不稳定（2026-11 复测时已经不存在），
+#      DEB_TRACK_FATAL=1 会直接让构建失败
+# 相机固件这个单文件不值这个风险。真要登，等 camx 整套依赖能闭环再做。
+
+# ------------------------------------------------------------------------------
+# NOT tracked: 9 files present on the rootfs that no Yocto package ships.
+# They come from the prebuilt distro tarball or from a BSP blob that has no
+# recipe, so there is nothing to register and nothing to upgrade them from:
+#   /usr/lib/firmware/bdwlan30.bin
+#   /usr/lib/firmware/eeprom_qca9377_1p1_WB396_olpc.bin
+#   /usr/lib/firmware/otp30.bin
+#   /usr/lib/firmware/qca/tfbtfw11.tlv
+#   /usr/lib/firmware/qca/tfbtnv11.bin
+#   /usr/lib/firmware/qwlan30.bin
+#   /usr/lib/firmware/utf30.bin
+#   /usr/lib/firmware/wlan/qcom_cfg.ini
+#   /usr/lib/firmware/wlan/wlan_mac.bin
+# These are the ones to package by hand later if they must be upgradeable.

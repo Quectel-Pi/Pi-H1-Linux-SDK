@@ -1,0 +1,26 @@
+# BSP 用户态组件：按 recipe 逐个加，不要整批扫。
+#
+# 每加一个，先在设备上确认它的文件真的无主：
+#     dpkg -S <path>        # 必须报 "no path found"
+# 然后再看它的 Depends 会不会把 Yocto 的基础库拖进来（见 DEB_TRACK_CLOSURE_DENY）。
+#
+# 本文件目前只有 msm-va-driver。它的场景最能说明为什么需要 deb-track：
+#   msm-va-driver 在 do_rootfs 阶段装进 Yocto rootfs，
+#   deploy_debian_gnome_rootfs 随后把 Debian tarball rsync 上去
+#   （不带 --delete，Debian 也没有同名文件），于是 .so 留在盘上、
+#   但 /var/lib/dpkg 被覆盖 → 文件无主、apt 无法升级。
+
+# --- VA-API 硬件解码驱动 ------------------------------------------------------
+# 提供两个路径，对应两套 rootfs 布局（同一个 build 产物）：
+#   /usr/lib/dri/msm_drv_video.so                  Yocto rootfs
+#   /usr/lib/aarch64-linux-gnu/dri/msm_drv_driver  Debian/Ubuntu rootfs
+# 两者实测在 Debian 13 上均无主；Debian 的 mesa 只提供 msm_dri.so（OpenGL），
+# 不冲突。
+#
+# 注意：它的 Depends 里有 libva，但 Yocto 的 libva 已被
+# DEB_TRACK_CLOSURE_DENY 挡住 —— 那是 2023 年的 2.20.0，装到 /usr/lib/
+# 会和 Debian 的 libva2 2.22（/usr/lib/aarch64-linux-gnu/）并存，
+# 有被 dlopen 到旧版的风险。实测 msm_drv_video.so 的 NEEDED 只有
+# libc.so.6 和 loader，它靠 libva 运行时 dlopen 加载，所以用 Debian 的
+# libva2 就够，不需要登记 Yocto 的 libva。
+msm-va-driver

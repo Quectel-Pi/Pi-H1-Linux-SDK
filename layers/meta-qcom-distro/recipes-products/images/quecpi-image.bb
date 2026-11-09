@@ -72,6 +72,21 @@ IMAGE_INSTALL:remove = "qcom-resize-partitions wlan-sigma-dut"
 
 DEPENDS += "rsync-native"
 
+# Register the Yocto-built kernel packages into the Debian/Ubuntu dpkg database
+# after the rsync overlay below, so /usr/lib/modules, /boot/Image-* and
+# modules.* become package-managed and can later be upgraded from a Quectel apt
+# repository.  See conf/deb-track/*.txt for what is tracked; add lines there to
+# track more packages.
+#
+# The inherit ordering does not matter: deb-track inserts itself right after
+# deploy_debian_gnome_rootfs at do_image time (see deb_track_order_hook).
+inherit deb-track
+DEB_TRACK_PACKAGES = " \
+    file://conf/deb-track/kernel.txt \
+    file://conf/deb-track/firmware.txt \
+    file://conf/deb-track/bsp-userspace.txt \
+"
+
 deploy_debian_gnome_rootfs () {
 
         local list_file="${TOPDIR}/../prebuild/sync-list"

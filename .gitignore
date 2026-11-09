@@ -8,3 +8,6 @@ sstate-cache/
 /quectel_build/compile/quectel-features-config/quectel-buildversion-gen.h
 # buildconfig 生成后由 build.sh:477 拷进 atcid 源码树，属构建产物
 /layers/meta-quectel/recipes-quectel/atcid/files/atci/quectel/inc/quectel-buildconfig-gen.h
+
+# apt 仓库发布物（buildpackage 生成，体积大且每次构建都变），不入库
+quectel_build/deb/
