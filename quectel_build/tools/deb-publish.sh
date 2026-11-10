@@ -110,6 +110,29 @@ closure = ns['_deb_track_closure']
 m = re.search(r'DEB_TRACK_CLOSURE_DENY \?\?= " \\\n(.*?)"', src, re.S)
 deny = m.group(1).replace('\\', '').split() if m else []
 
+# Names the Debian/Ubuntu base already ships.  This file lives in the same
+# directory but is a *criterion*, not a package list: feeding it to the
+# resolver would ask for a distro package that deploy/deb never builds.
+DISTRO_OWNED_FILE = os.path.join(listsdir, 'distro-owned.txt')
+distro_owned = set()
+if os.path.exists(DISTRO_OWNED_FILE):
+    for line in open(DISTRO_OWNED_FILE):
+        line = line.split('#', 1)[0].strip()
+        if line:
+            distro_owned.add(line.split()[0])
+
+# Authoritative criterion: paths the distro base already owns.  Package names
+# miss cases where Yocto and the distro name the same library differently.
+import gzip
+DISTRO_PATHS_FILE = os.path.join(listsdir, 'distro-owned-paths.txt.gz')
+distro_paths = set()
+if os.path.exists(DISTRO_PATHS_FILE):
+    with gzip.open(DISTRO_PATHS_FILE, 'rt', errors='replace') as fh:
+        for line in fh:
+            line = line.strip()
+            if line.startswith('/'):
+                distro_paths.add(line)
+
 # dpkg-deb: prefer the native sysroot (matches what do_image uses), fall back
 # to the host copy.
 dpkg_deb = None
@@ -129,8 +152,10 @@ variants = ('-dbg_', '-dev_', '-staticdev_', '-src_', '-doc_')
 
 resolved = []
 missing = []
+# Everything under listsdir except the criterion files is a package list.
+skip_files = {'distro-owned.txt', 'distro-owned-paths.txt.gz'}
 for name in sorted(os.listdir(listsdir)):
-    if not name.endswith('.txt'):
+    if not name.endswith('.txt') or name in skip_files:
         continue
     for line in open(os.path.join(listsdir, name)):
         line = line.split('#', 1)[0].strip()
@@ -152,11 +177,14 @@ if missing:
     sys.stderr.write('[deb-publish] ERROR: no .deb for: %s\n' % ', '.join(missing))
     sys.exit(1)
 
-closure_debs = closure(resolved, archs, deploy, bindir, deny=deny)
+closure_debs = closure(resolved, archs, deploy, bindir, deny=deny,
+                      distro_owned=distro_owned, distro_paths=distro_paths)
 with open(outfile, 'w') as fh:
     for deb in closure_debs:
         fh.write('%s\t%s\n' % (deb, os.path.basename(deb)))
-sys.stderr.write('[deb-publish] resolved %d package(s) from lists\n' % len(closure_debs))
+sys.stderr.write('[deb-publish] resolved %d package(s) from lists '
+                 '(%d distro names, %d distro paths left alone)\n'
+                 % (len(closure_debs), len(distro_owned), len(distro_paths)))
 PYEOF
     MANIFEST="$TMP_MANIFEST"
 else

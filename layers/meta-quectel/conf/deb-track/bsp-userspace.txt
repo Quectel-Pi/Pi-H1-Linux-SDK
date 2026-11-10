@@ -24,3 +24,263 @@
 # libc.so.6 和 loader，它靠 libva 运行时 dlopen 加载，所以用 Debian 的
 # libva2 就够，不需要登记 Yocto 的 libva。
 msm-va-driver
+
+# --- BSP 用户态：GStreamer / PAL / AI / 视觉 / Sensors / 工具 -------------------
+#
+# 下面 187 个包按功能分组，判定方法（2026-11，设备 Debian 13 trixie）：
+#   1. 取目标 rootfs 的 dpkg 数据库：117204 条已登记路径
+#   2. 逐个 deb 展开文件列表，与上述路径做精确交集        → 0 冲突
+#   3. 再做 basename 比对，仅限共享库目录（/usr/lib、
+#      /usr/lib/aarch64-linux-gnu）下的同名 .so          → 0 冲突
+#   4. 模糊归一（剥 .so.* / ABI 数字 / t64 / lib 前缀）核对
+#      Debian trixie 的 71107 个包名                     → 无同功能包
+#
+# 私有子目录里的 vendored 副本不算冲突：onnxruntime 的
+# /usr/lib/qwen35/lib/libonnxruntime.so.1.27.0 和 npu-llm 的
+# /usr/lib/npu-llm/voice/sherpa_onnx/lib/libonnxruntime.so 都靠 rpath
+# 加载，与 Debian 的 /usr/lib/aarch64-linux-gnu/libonnxruntime.so.1.21
+# 互不影响。
+#
+# 特意排除的空包（0 文件，dpkg 无可登记内容）：
+#   qcom-audio-plugin-headers qcom-pal-headers qcom-vui-interface-header
+#   qcom-fastcv-binaries quec-pcie-mhi quec-sprd-pcie quec-ufs-size
+#   r8168 yt6801
+#
+# qcom-pw-pal-plugin 的文件已在盘上工作（PAL 的 sink/source 全靠它的
+# pw-pal-plugin.conf 和 libpipewire-module-pal.so），本次先登记，但它装的
+# /usr/lib/systemd/system/pipewire-pulse.socket 与 Debian 已安装的
+# pipewire-pulse 的 user 作用域单元监听同一地址（%t/pulse/native），
+# 属运行期资源争用，不是文件冲突，需单独处理，暂不动。
+#
+# pillow 和 python3-opencv：Debian trixie 源里有 python3-pil /
+# python3-opencv，但目标镜像没装，且两者文件与 Debian 已登记路径交集为 0
+# （pillow 在 dist-packages/PIL，opencv 在 python3.12/site-packages/cv2，
+# Debian 用 dist-packages），卸载只删自己的文件。若日后有人在设备上
+# apt install python3-opencv，需靠 Replaces/Provides 协调。
+
+# BSP userspace packages registered into the target dpkg database.
+#
+# One package name per line, '#' starts a comment.  Glob patterns are allowed.
+# Names are deb Package names (not recipe names); see conf/deb-track/README.md.
+#
+# Selection rule: every entry here installs QTI/Quectel private files that
+# Debian 13 (trixie) does not ship.  Verified by comparing all ~117k paths
+# claimed by the target rootfs' dpkg database plus the trixie Packages index:
+# no path, no basename in a shared library directory, and no apt package
+# provides the same functionality.
+#
+# Excluded deliberately:
+#   - qcom-*-headers, qcom-fastcv-binaries, quec-pcie-mhi, quec-sprd-pcie,
+#     quec-ufs-size, r8168, yt6801: empty packages (no files), nothing for dpkg
+#     to own.
+#   - pipewire-pulse.socket / systemd units shipped by qcom-pw-pal-plugin stay
+#     unmanaged: Debian's pipewire-pulse owns the user-scope unit at the same
+#     listen address and the class must not fight it.
+#
+# kernel modules live in kernel.txt, firmware in firmware.txt.
+
+# --- GStreamer 高通插件: 85 packages, 211 unowned files on device ---
+qcom-gst-activate-deactivate-streams-runtime
+qcom-gst-add-remove-streams-runtime
+qcom-gst-add-streams-as-bundle-example
+qcom-gst-ai-audio-classification
+qcom-gst-ai-classification
+qcom-gst-ai-daisychain-detection-classification
+qcom-gst-ai-daisychain-detection-pose
+qcom-gst-ai-event-encoder
+qcom-gst-ai-face-detection
+qcom-gst-ai-face-recognition
+qcom-gst-ai-metadata-parser-example
+qcom-gst-ai-monodepth
+qcom-gst-ai-multi-input-output-object-detection
+qcom-gst-ai-multistream-batch-inference
+qcom-gst-ai-multistream-inference
+qcom-gst-ai-object-detection
+qcom-gst-ai-parallel-inference
+qcom-gst-ai-pose-detection
+qcom-gst-ai-segmentation
+qcom-gst-ai-smartcodec-example
+qcom-gst-ai-superresolution
+qcom-gst-ai-usb-camera-app
+qcom-gst-appsink-example
+qcom-gst-audio-decode-example
+qcom-gst-audio-encode-example
+qcom-gst-audio-video-encode
+qcom-gst-audio-video-playback
+qcom-gst-camera-burst-capture-example
+qcom-gst-camera-fd-stream-example
+qcom-gst-camera-metadata-example
+qcom-gst-camera-shdr-ldc-eis-example
+qcom-gst-camera-single-stream-example
+qcom-gst-camera-switch-example
+qcom-gst-concurrent-videoplay-composition
+qcom-gst-jpg-decode-example
+qcom-gst-multi-camera-example
+qcom-gst-multi-stream-example
+qcom-gst-python-examples
+qcom-gst-rtmp-stream-example
+qcom-gst-sample-apps-utils
+qcom-gst-smartcodec-example
+qcom-gst-snapshot-stream-example
+qcom-gst-transform-example
+qcom-gst-video-playback-example
+qcom-gst-video-transcode-example
+qcom-gst-videocodec-concurrent-playback
+qcom-gst-webrtc-sendrecv-example
+qcom-gst-weston-composition-example
+qcom-gstreamer1.0-plugins-oss-base
+qcom-gstreamer1.0-plugins-oss-batch
+qcom-gstreamer1.0-plugins-oss-dfs
+qcom-gstreamer1.0-plugins-oss-metamux
+qcom-gstreamer1.0-plugins-oss-metatransform
+qcom-gstreamer1.0-plugins-oss-mlaclassification
+qcom-gstreamer1.0-plugins-oss-mlaconverter
+qcom-gstreamer1.0-plugins-oss-mldemux
+qcom-gstreamer1.0-plugins-oss-mlmetaextractor
+qcom-gstreamer1.0-plugins-oss-mlmetaparser
+qcom-gstreamer1.0-plugins-oss-mlpostprocess
+qcom-gstreamer1.0-plugins-oss-mlqnn
+qcom-gstreamer1.0-plugins-oss-mlsnpe
+qcom-gstreamer1.0-plugins-oss-mltflite
+qcom-gstreamer1.0-plugins-oss-mltools
+qcom-gstreamer1.0-plugins-oss-mlvclassification
+qcom-gstreamer1.0-plugins-oss-mlvconverter
+qcom-gstreamer1.0-plugins-oss-mlvdetection
+qcom-gstreamer1.0-plugins-oss-mlvpose
+qcom-gstreamer1.0-plugins-oss-mlvsegmentation
+qcom-gstreamer1.0-plugins-oss-mlvsuperresolution
+qcom-gstreamer1.0-plugins-oss-msgbroker
+qcom-gstreamer1.0-plugins-oss-objtracker
+qcom-gstreamer1.0-plugins-oss-overlay
+qcom-gstreamer1.0-plugins-oss-qmmfsrc
+qcom-gstreamer1.0-plugins-oss-redissink
+qcom-gstreamer1.0-plugins-oss-restricted-zone
+qcom-gstreamer1.0-plugins-oss-rtspbin
+qcom-gstreamer1.0-plugins-oss-smartvencbin
+qcom-gstreamer1.0-plugins-oss-socket
+qcom-gstreamer1.0-plugins-oss-test-framework
+qcom-gstreamer1.0-plugins-oss-tools
+qcom-gstreamer1.0-plugins-oss-vcomposer
+qcom-gstreamer1.0-plugins-oss-voverlay
+qcom-gstreamer1.0-plugins-oss-vsplit
+qcom-gstreamer1.0-plugins-oss-vtemplate
+qcom-gstreamer1.0-plugins-oss-vtransform
+
+# --- PAL / PipeWire 音频: 19 packages, 97 unowned files on device ---
+libacdbdata1
+libaudioroute1
+libdac-plugin1
+libpa-bt-audio-client-wrapper1
+qcom-agm
+qcom-args
+qcom-audio-ftm
+qcom-audio-node
+qcom-audio-systems
+qcom-dac-mer-testapp
+qcom-mercuryflasher
+qcom-pa-pal-acd
+qcom-pa-pal-voiceui
+qcom-pal
+qcom-pw-pal-plugin
+qcom-sva-eai
+qcom-vui-interface
+tinyalsa
+tinycompress
+
+# --- ONNX / QNN / NPU 推理: 12 packages, 571 unowned files on device ---
+npu-llm
+onnxruntime
+onnxruntime-qnn
+qcom-fastcv-binaries-cpu
+qcom-fastcv-binaries-dsp
+qcom-npu-test
+qcom-qnn-sdk
+qcom-snpe-sdk
+qwen35-npu
+qwen35-npu-model
+tensorflow-lite
+tokenizers
+
+# --- Pillow / OpenCV / 视觉: 54 packages, 397 unowned files on device ---
+camx-v4l2-bridge
+chicdk-kt
+libopencv-alphamat411
+libopencv-aruco411
+libopencv-bgsegm411
+libopencv-bioinspired411
+libopencv-calib3d411
+libopencv-ccalib411
+libopencv-core411
+libopencv-datasets411
+libopencv-dpm411
+libopencv-face411
+libopencv-fastcv411
+libopencv-features2d411
+libopencv-flann411
+libopencv-fuzzy411
+libopencv-gapi411
+libopencv-hfs411
+libopencv-highgui411
+libopencv-img-hash411
+libopencv-imgcodecs411
+libopencv-imgproc411
+libopencv-intensity-transform411
+libopencv-line-descriptor411
+libopencv-ml411
+libopencv-objdetect411
+libopencv-optflow411
+libopencv-phase-unwrapping411
+libopencv-photo411
+libopencv-plot411
+libopencv-quality411
+libopencv-rapid411
+libopencv-reg411
+libopencv-rgbd411
+libopencv-saliency411
+libopencv-sfm411
+libopencv-shape411
+libopencv-signal411
+libopencv-stereo411
+libopencv-stitching411
+libopencv-structured-light411
+libopencv-superres411
+libopencv-surface-matching411
+libopencv-tracking411
+libopencv-ts411
+libopencv-video411
+libopencv-videoio411
+libopencv-videostab411
+libopencv-xfeatures2d411
+libopencv-ximgproc411
+libopencv-xobjdetect411
+libopencv-xphoto411
+# python3-opencv is deliberately absent.  Its only extension is
+# cv2.cpython-312-aarch64-linux-gnu.so under /usr/lib/python3.12/site-packages/,
+# while Debian 13 runs Python 3.13 and Ubuntu 26 runs 3.14 - neither interpreter
+# puts python3.12 on sys.path, so `import cv2` would fail.  Installing it would
+# claim 97 files that nothing can load.  The 50 libopencv-*411 libraries above
+# are kept: they are plain C++ shared objects and are what the GStreamer and
+# camera stacks link against.
+
+# --- Sensors / SensingHub: 7 packages, 104 unowned files on device ---
+qcom-sensinghub
+qcom-sensors-api
+qcom-sensors-core
+qcom-sensors-registry
+qcom-sensors-services
+qcom-sensors-test-apps
+qcom-sensors-test-core
+
+# --- 网络 / 存储 / Quectel 工具: 10 packages, 47 unowned files on device ---
+lgpio
+qca1023-wlan
+qcom-remoteproc-recover
+quecpi-config
+quectel-cm
+quectel-firehose
+quectel-hdmi-firmware
+quectel-log
+quectel-tests
+v4l2loopback
+
+# total: 187 packages, 1427 unowned files covered

@@ -85,7 +85,7 @@ DEB_TRACK_PACKAGES = " \
 
 **加包 = 往列表加一行**（支持 `kernel-module-*` 这种 glob），不用改 class。
 
-当前规模：kernel 688 + firmware 52 → 合并闭包 **728 个包**，实测全部 `ii`。
+当前规模：kernel 686 + firmware 35 + BSP 用户态 186 → 合并闭包 **1012 个包**，实测全部 `ii`，`do_image` 零 ERROR。
 
 ## 设计总览
 
@@ -172,6 +172,8 @@ Yocto 版的 `libc6` 等拉进来（见"安全边界"），风险远大于收益
 | `DEB_TRACK_PUBLISH` | `1` | 是否生成 `PUBLISH` 清单 |
 | `DEB_TRACK_REQUIRE_OVERLAY` | `1` | 没有 `deploy_debian_gnome_rootfs` 时跳过（Yocto 镜像） |
 | `DEB_TRACK_CLOSURE_DENY` | 36 条 | 禁止进入闭包的模式（安全边界） |
+| `DEB_TRACK_DISTRO_OWNED_LISTS` | `distro-owned.txt` | 发行版已有的包名，闭包遇到就跳过 |
+| `DEB_TRACK_DISTRO_PATHS` | `distro-owned-paths.txt.gz` | 发行版已拥有的文件路径，安装前硬闸的判据 |
 
 ### 列表格式
 
@@ -283,7 +285,12 @@ Debian 包自己的文件，和 BSP 包无关。
 
 **注意**：这只是**构建期**需要。设备上有这些账号，`apt upgrade` 不会遇到。
 
-## 安全边界：DEB_TRACK_CLOSURE_DENY
+## 安全边界：三层，从“名字”到“文件”
+
+BSP 包本身是 QTI 私有，和 Debian 不重叠。但它们的**依赖闭包**会伸到
+Yocto 自己的基础库上。三道闸门分别拦不同形态的碰撞：
+
+## 第一层：`DEB_TRACK_CLOSURE_DENY`（36 条，禁止进入闭包）
 
 **这是硬边界，不是偏好。** firmware 包的 Depends 里有 `libc6`、`libstdc++6`、
 `shadow`、`base-files`。若让闭包解析，会把 **Yocto 版**基础系统装到 Debian 上：
@@ -299,7 +306,198 @@ class 里 36 条模式禁止 `libc6`/`base-files`/`shadow`/`libstdc++6`/`libgcc1
 `libpam*`/`libxcb*`/`wayland` 等进入闭包。它们保持"未满足"，由
 `--force-depends` 放行，真实库本来就在 Debian rootfs 上。
 
-每次改列表都要验证：
+## 第二层：`distro-owned.txt`（5875 个包名）
+
+只按名字 deny 不够——Yocto 和发行版给同一个库起的名字不一样：
+
+| Yocto | Debian 13 | 撞什么 |
+|---|---|---|
+| `bluez5` | `bluez` | `/etc/bluetooth/input.conf` |
+| `bluez5-obex` | `bluez-obexd` | `/usr/lib/systemd/user/obex.service` |
+| `libgtk-3.0` | `libgtk-3-common` | `/etc/gtk-3.0/im-multipress.conf` |
+| `libgsttag-1.0-0` | `libgstreamer-plugins-base1.0-0` | `/usr/share/gst-plugins-base/...` |
+| `libharfbuzz0` | `libharfbuzz0b` | `Conflicts` 声明 |
+| `libjpeg62` | `libjpeg62-turbo` | `Conflicts` 声明 |
+| `python3-core` | `python3` | `/usr/lib/python3.12/...` |
+| `libglib-2.0-utils` | `libglib2.0-bin` | 文件冲突 |
+
+`libgsttag` 和 `libgstreamer-plugins-base` 这种名字根本对不上，模糊匹配也不
+可靠，所以这个名单同时收两类：
+
+1. Debian 13 ∪ Ubuntu 26 已安装的包名（1502 + 1635，去重 2022）
+2. 这些包在 `Conflicts`/`Replaces`/`Breaks`/`Provides` 里声明的名字
+   （专治 `libjpeg62`/`libharfbuzz0` 这种改名后声明旧名的）
+
+外加 Yocto 特有的拆包（Debian 不这么拆，名字永远对不上）：
+
+- **Python 标准库拆分包 59 个**（`python3-json`/`python3-email`/...）
+- **Python 3.12 ABI 包 34 个**（见下节）
+- **opkg alternatives 包 56 个**（`util-linux-flock`/`procps-ps`/...，见下节）
+
+闭包遇到名单里的依赖包就跳过，保留发行版那份。**列表点名的包不受此限**。
+
+## 第三层：`distro-owned-paths.txt.gz`（179103 条路径）
+
+这是**最权威**的判据。dpkg 拒绝解包时的原话是
+`trying to overwrite '/x', which is also in package y`——冲突的最终形态就是文件路径。
+
+来源于 `prebuild/` 下两个发行版 tar 包的 `var/lib/dpkg/info/*.list`：
+Debian 13 ∪ Ubuntu 26，179103 条，gzip 后 885K。
+
+两处使用：
+
+1. **解析期**：候选包的文件路径与收到版有交集 → 跳过（不点名时）
+2. **安装前硬闸**：任何包的任一文件路径已被发行版包拥有 → **整个包从
+   staged 剔除**，不管它是不是点名的。判据 = 名单路径 + rootfs 里
+   *属于发行版包*的 `.list`（用 `distro-owned.txt` 过滤，所以 deb-track
+   自己上轮登记的 kernel/firmware 不会被误当成发行版）
+
+## 三个必记的坑
+
+### 坑 1：Python ABI 不匹配——装了也没用
+
+设备是 Python **3.13.5**（Debian 13），而 BitBake 的 python3 是 **3.12**：
+
+```
+python3-opencv      cpython-312  → import cv2 失败
+python3-pygobject   cpython-312  → 失败
+gstreamer1.0-python cpython-312  → 失败
+python3-pip/setuptools/pytest/virtualenv 等 96 个 → 全无用
+```
+
+`onnxruntime`/`npu-llm` 是 **cpython-313**，能用，所以保留。
+
+判据：包装的文件全在 `/usr/lib/python3.12/` 下，或带 `cpython-312` 标签。
+带真实系统文件的混合包保留（`gobject-introspection` 带 `g-ir-compiler`，
+`btrfs-tools` 带 `/usr/bin/btrfs`），它们的 python 部分只是惰性。
+
+### 坑 2：opkg alternatives 包会停在 `iF`
+
+`util-linux-flock` 装 `/usr/bin/flock.util-linux`，靠 opkg 的
+`update-alternatives` 链到 `/usr/bin/flock`。在 Debian 上：
+
+- `update-alternatives-opkg` 在 DENY 里，不存在
+- postinst 接着跑 `mkdir /usr/lib/opkg`，在 `--force-script-chrootless` 下
+  解析到 chroot 外的宿主路径 → `Permission denied`
+- 包停在 `iF`（half-configured）
+
+此类共 57 个（`*.util-linux` / `*.procps` 后缀），命令 Debian 全有，全部排除。
+
+### 坑 3：`--configure -a` 会跑到 Debian 包身上
+
+`-a` 会配置**所有** unpacked 包，包括发行版的 `gnome-menus`、
+`desktop-file-utils`——等于替 Debian 跑 postinst，把它们弄成 half-configured。
+
+正确写法：
+
+```bash
+dpkg --unpack --no-triggers  <我们的包>   # 只记录 trigger，不执行
+dpkg --configure --no-triggers <包名列表> # 不是 -a，只配我们的
+```
+
+`--no-triggers` 让发行版包的脚本一概不跑，`triggers-pending` 是正常状态。
+
+### 另一个真 bug：unpack 失败不能 `return`
+
+原代码是：
+
+```python
+if not run(base + ['--unpack'] + staged, 'dpkg --unpack'):
+    return        # ← 后面的 --configure 永远不执行
+```
+
+`--unpack` 因为发行版包的 trigger 失败返回 rc=1，于是 1000+ 个包全部停在
+`install ok unpacked`，apt 把它们当"未安装"。现在不 `return`，继续
+configure，最后做**逐包检查**：点名的包必须全部 `ii`，否则 `bb.fatal` 报具体名字。
+
+## 坑 4：悬空/过严的依赖会让 `apt-get check` 整盘失败
+
+这是最隐蔽的一个。闭包跳过了发行版已有的包，但 **control 里的 Depends
+不会因此消失**。两种形态都会出现，而且都只在烧录后才会暴露：
+
+**形态 A：包名根本不存在**
+
+```
+tokenizers     : Depends: python3-core but it is not installable
+qcom-gst-ai-*  : Depends: gstreamer1.0 (>= 1.22.12) but it is not installable
+libopencv-*    : Depends: libgtk-3.0 (>= 3.24.41) but it is not installable
+msm-va-driver  : Depends: libva but it is not installable
+```
+
+发行版把同一个库叫了别的名字：
+
+| Yocto 依赖名 | 发行版实际装的包 |
+|---|---|
+| `gstreamer1.0` | `libgstreamer1.0-0` |
+| `wayland` | `libwayland-server0` |
+| `libva` | `libva2` |
+| `libgcc1` | `libgcc-s1` |
+| `libglib-2.0-0` | `libglib2.0-0` |
+| `python3-core` | `python3` |
+| `shadow` | `passwd` |
+| `bluez5` | `bluez` |
+| `libgtk-3.0` | `libgtk-3-0t64` |
+
+**形态 B：包名存在。但发行版的版本更旧**
+
+```
+qca1023-wlan : Depends: libnl-3-200 (>= 3.9.0) but 3.7.0-2 is installed
+camx-kt      : Depends: libxml2 (>= 2.12.10) but 2.12.7+dfsg+... is installed
+libhwloc15   : Depends: libpciaccess0 (>= 0.18) but 0.17-3+b3 is installed
+```
+
+Yocto 树比 Debian 13 新，版本号对不上。但 **SONAME 是同一个**：
+
+```bash
+ls /usr/lib/aarch64-linux-gnu/libnl-3.so.200 libxml2.so.2 libpciaccess.so.0
+# 全部存在 → ABI 兼容，只是版本号不够高
+```
+
+`dpkg --force-depends` 两种都放过，**apt 都不认**。一个包不满足就
+`apt-get check` 报错，进而**整个 `apt upgrade` 都失败**——正好把这次改动的
+目的（让 BSP 内容可升级）拆掉。
+
+修复：改写 control 时收集「rootfs 已有包名 + 本次要装的包名」，逐条处理
+Depends/Pre-Depends/Recommends/Suggests：
+
+- 包名不在集合里 → **删掉整个 clause**
+- 包名在集合里但带版本约束 → **保留依赖，去掉约束**
+  （`libnl-3-200 (>= 3.9.0)` → `libnl-3-200`）
+- `a | b` 只保留存在的那几个
+- 全删空 → 删整个字段
+
+不要去画一张 Yocto名→发行版名 的映射表，永远维护不完，而且对形态 B 无用。
+
+验证（烧录后必查）：
+
+```bash
+apt-get check                                        # 必须无输出
+apt-get check 2>&1 | grep -c "not installable"       # 0
+apt-get check 2>&1 | grep -c "is installed$"         # 0（版本不满足）
+```
+
+### 坑 5：`Depends` 里的版本约束也要一起改写
+
+把 `Version: git-r0` 改写成 `0.git-r0` 时，**Depends 里的引用也得改**：
+
+```
+Depends: qcom-args (>= git)   →   (>= 0.git)
+```
+
+漏了就会在每个 `dpkg` 命令上看到：
+
+```
+dpkg-query: warning: parsing file '/var/lib/dpkg/status' near line 43921
+ package 'qcom-agm': 'Depends' field, reference to 'qcom-args':
+ version 'git': version number does not start with digit
+```
+
+实测中招：`qcom-agm`、`qcom-pal`、`qcom-pw-pal-plugin`、`qcom-vui-interface`。
+
+规则：关系字段里 `(<op> <version>)` 的 version 若不以数字开头，就加 `0.` 前缀；
+已以数字开头（`2.39+git0+...`、`1:20251125-r0`）一律不动。
+
+## 每次改列表都要验证
 
 ```bash
 # 装完后 libc6 必须是 Debian 版本，不能变成 Yocto 的 2.39+git0
