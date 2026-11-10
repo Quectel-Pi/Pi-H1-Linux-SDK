@@ -179,12 +179,52 @@ if missing:
 
 closure_debs = closure(resolved, archs, deploy, bindir, deny=deny,
                       distro_owned=distro_owned, distro_paths=distro_paths)
+
+# Publish the rewritten copies, not the Yocto originals.
+#
+# do_image leaves the deb it actually installed in
+# WORKDIR/deb-track/debs/<name>: same payload, but with the control file
+# normalised (Version git-r0 -> 0.git-r0, dangling dependencies removed,
+# unmeetable version constraints dropped).  Copying straight out of deploy/deb
+# would hand apt a package whose Version dpkg cannot even parse - that is what
+# `dpkg-deb -f <original> Version` failing with "version number does not start
+# with digit" looks like.  It would also put the dependency problems back into
+# the repository, so a device installing from it would break apt-get check.
+staged_dir = None
+for root, dirs, files in os.walk(os.path.join(topdir, 'build-qcom-wayland',
+                                              'tmp-glibc', 'work')):
+    cand = os.path.join(root, 'deb-track', 'debs')
+    if os.path.isdir(cand) and any(f.endswith('.deb') for f in os.listdir(cand)):
+        staged_dir = cand
+        break
+
 with open(outfile, 'w') as fh:
+    rewritten = 0
     for deb in closure_debs:
-        fh.write('%s\t%s\n' % (deb, os.path.basename(deb)))
+        name = os.path.basename(deb)
+        src = deb
+        if staged_dir:
+            cand = os.path.join(staged_dir, name)
+            if os.path.exists(cand):
+                src = cand
+                rewritten += 1
+        fh.write('%s\t%s\n' % (src, name))
 sys.stderr.write('[deb-publish] resolved %d package(s) from lists '
                  '(%d distro names, %d distro paths left alone)\n'
                  % (len(closure_debs), len(distro_owned), len(distro_paths)))
+if staged_dir:
+    sys.stderr.write('[deb-publish] %d/%d taken from the normalised copies in '
+                     '%s\n' % (rewritten, len(closure_debs), staged_dir))
+    if rewritten != len(closure_debs):
+        sys.stderr.write('[deb-publish] WARNING: %d package(s) have no normalised '
+                         'copy and will be published straight from deploy/deb; '
+                         'run do_image first\n'
+                         % (len(closure_debs) - rewritten))
+else:
+    sys.stderr.write('[deb-publish] WARNING: no deb-track/debs directory found, '
+                     'publishing the Yocto originals - Version may be '
+                     'unparseable and dependencies unpruned.  Run the image '
+                     'build first.\n')
 PYEOF
     MANIFEST="$TMP_MANIFEST"
 else

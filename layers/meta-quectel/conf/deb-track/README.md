@@ -46,6 +46,23 @@ kernel-module-*                        # 684 个 .ko，含 kernel/ camera/ extra
 | `DEB_TRACK_DEPLOY_DIR` | `${DEPLOY_DIR_DEB}` | deb 来源目录 |
 | `DEB_TRACK_ENABLED` | `1` | 设 `0` 跳过整个环节 |
 | `DEB_TRACK_FATAL` | `1` | 出错是否让构建失败 |
+| `DEB_TRACK_PUBLISH` | `1` | 是否生成用于发布的清单 |
+| `DEB_TRACK_REQUIRE_OVERLAY` | `1` | 没有发行版 overlay 时跳过（Yocto 镜像）|
+| `DEB_TRACK_CLOSURE_DENY` | 36 条 | 禁止进入闭包的模式 |
+| `DEB_TRACK_DISTRO_OWNED_LISTS` | `distro-owned.txt` | 发行版已有的包名 |
+| `DEB_TRACK_DISTRO_PATHS` | `distro-owned-paths.txt.gz` | 发行版已拥有的文件路径 |
+
+## 三个列表文件与两个判据文件
+
+| 文件 | 作用 |
+|---|---|
+| `kernel.txt` | 内核与 .ko（3 行，含 glob）|
+| `firmware.txt` | 固件包 |
+| `bsp-userspace.txt` | BSP 用户态组件 |
+| `distro-owned.txt` | **判据**：发行版已有的包名，闭包遇到就跳过 |
+| `distro-owned-paths.txt.gz` | **判据**：发行版已拥有的路径，安装前硬闸 |
+
+后两个不是包列表，**不要往里面加要装的包**。详见 SKILL.md 的「安全边界」一节。
 
 ## 实测结果
 
@@ -53,24 +70,30 @@ QCS6490 / Debian 13 trixie / kernel 6.6.116：
 
 ```
 deb-track: kernel-module-*  -> 684 package(s)
-deb-track: 688 deb(s) selected (686 listed, closure expanded)
-deb-track: registered 687 package(s)
+deb-track: kernel-image-6.6* -> 1 package(s)
+deb-track: kernel-6.6.*      -> 1 package(s)
+deb-track: read distro-owned.txt (5875 names)
+deb-track: read distro-owned-paths.txt.gz (179103 paths)
+deb-track: kept the distro copy of N package(s) whose name matched
+deb-track: kept the distro copy of M package(s) whose paths matched
+deb-track: dropped 0 package(s) whose files the distro already owns
+deb-track: 1012 deb(s) selected (224 listed, closure expanded)
+deb-track: 1012 package(s) registered
 ```
 
-验收：
+验收（上板实测）：
 
 ```
-dpkg -l | grep -c '^ii  kernel'                    => 687
-dpkg -l | grep kernel | grep -vc '^ii'             => 0
-/usr/lib/modules/<ver>/modules.dep                 => 由 depmodwrapper 生成
-dpkg -S .../kernel/drivers/bluetooth/btqca.ko      => kernel-module-btqca-...
-dpkg -S .../camera/camera_qcm6490.ko               => kernel-module-camera-qcm6490-...
-dpkg -S .../updates/r8168.ko                       => kernel-module-r8168-...
-dpkg -S .../modules.builtin                        => kernel-6.6.116-...
-dpkg -S /boot/Image-<ver>                          => kernel-image-image-...
+apt-get check                                  => 返回 0，无输出
+dpkg -l | grep -c '^ii'                        => 2497
+dpkg -l | grep -c '^i[FU]'                     => 0
+dpkg -l libc6 | tail -1                        => Debian 2.41（不是 Yocto 2.39+git）
+ls -la /usr/lib/ld-linux-aarch64.so.1          => 仍是软链
+apt-cache policy qcom-pal                      => Candidate 来自 BSP 源
+vainfo                                         => va_openDriver() returns 0
 ```
 
-耗时：unpack 687 个 deb 约 24 秒，configure 约 30 秒。全程无 pseudo、无 chroot、无 root。
+耗时：unpack 1012 个 deb 约 40 秒，configure 约 50 秒。全程无 pseudo、无 chroot、无 root。
 
 ## 机制要点（踩过的坑）
 
@@ -143,11 +166,16 @@ Debian 包的文件（`/etc/chrony`、`/var/lib/geoclue` 等），和本次登�
 
 ## 已知限制
 
-1. **依赖里非 Yocto 构建的部分不满足**。Yocto 的依赖名是 `libgcc1`、
-   `libprotobuf25.8.0`、`qcom-sensinghub`，Debian 侧根本不存在（Debian 叫
-   `libgcc-s1`）。用 `--force-depends` 装进去，库本身已经在 rootfs 上。
-   代价：`dpkg --audit` 会看到这些未满足依赖，不能直接用
-   `apt -f install` 清理。
+1. **依赖会被改写成发行版能接受的形式**。Yocto 的依赖名在 Debian 侧往往
+   不存在（`libgcc1` vs `libgcc-s1`）或版本对不上（`libnl-3-200 >= 3.9.0`
+   vs Debian 3.7.0）。改写 control 时：
+   - 指向不存在的包 → 删掉该 clause
+   - 包存在但版本不满足 → 保留依赖、去掉版本约束
+   - `Version: git-r0` 和 `Depends (>= git)` → 前者改为 `0.git-r0`，
+     后者改为 `0.git`
+
+   这是必需的：不改的话 `apt-get check` 会失败，`apt upgrade` 全部不可用。
+   代价是包自称的依赖比实际松，但库本来就在 rootfs 上、SONAME 也对得上。
 2. **`depmod: ignoring bad line starting with 'exclude'`**：Yocto 生成的
    `/usr/lib/depmod.d/exclude.conf` 内容是 `exclude .debug`，KMOD 新版期望
    `override`/`search` 语法。设备上现有固件同样有这行，属既有现象。

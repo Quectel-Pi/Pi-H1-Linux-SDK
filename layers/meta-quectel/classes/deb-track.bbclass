@@ -841,6 +841,37 @@ python deb_track_install() {
                         % (pkg, dname, len(hits), hits[0]))
             staged = kept
 
+            # A package we keep may depend on one we just dropped.  The control
+            # files were already rewritten by this point (their Depends were
+            # pruned against will_exist, which still counted the dropped ones),
+            # so that dependency is now dangling and apt would refuse the image.
+            # Rewriting again would mean re-unpacking everything, so stop loudly
+            # instead: reaching here means the list asks for a package that
+            # cannot coexist with the distro, and a human has to decide.
+            dropped_names = {pkg for pkg, _, _ in dropped}
+            offenders = []
+            for deb in staged:
+                f = _deb_track_control(deb, nativebindir,
+                                       ['Package', 'Depends', 'Pre-Depends'])
+                holder = f.get('Package')
+                for fld in ('Depends', 'Pre-Depends'):
+                    for clause in (f.get(fld) or '').split(','):
+                        for option in clause.split('|'):
+                            name = option.strip().split(' ')[0].split(':')[0]
+                            if name in dropped_names:
+                                offenders.append((holder, name))
+                                break
+            if offenders:
+                msg = ('deb-track: %d kept package(s) depend on a package that '
+                       'was just dropped for touching distro files:\n  %s\n'
+                       'Fix the lists: drop the dependent package too, or remove '
+                       'the conflicting file from it.'
+                       % (len(offenders),
+                          '\n  '.join('%s -> %s' % o for o in offenders[:10])))
+                if d.getVar('DEB_TRACK_FATAL') == '1':
+                    bb.fatal(msg)
+                bb.warn(msg)
+
     # Pre-flight: two packages owning the same path make dpkg unpack the second
     # one and then roll it back to not-installed, with only a terse error in the
     # log.  Detect it up front while the package list is still small enough to
@@ -931,7 +962,7 @@ python deb_track_install() {
                         '--force-not-root', '-l'],
                        env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     resolved_names = set()
-    for deb in resolved:
+    for deb in staged:
         f = _deb_track_control(deb, nativebindir, ['Package'])
         if f.get('Package'):
             resolved_names.add(f['Package'])

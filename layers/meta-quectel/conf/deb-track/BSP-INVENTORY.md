@@ -7,10 +7,20 @@
 
 | 列表 | 内容 | 包数（含闭包） |
 |---|---|---|
-| `kernel.txt` | 内核镜像 + 684 个 .ko + modules.* | 688 |
-| `firmware.txt` | 本板实际固件的 36 个包 | 52 → 合并去重后 728 合计 |
+| `kernel.txt` | 内核镜像 + 684 个 .ko + modules.* | 686 |
+| `firmware.txt` | 本板实际固件的 35 个包 | 35 |
+| `bsp-userspace.txt` | GStreamer 高通插件、PAL 音频、ONNX/QNN/NPU、Sensors、视觉、Quectel 工具 | 186 |
 
-实测安装结果：**728/728 全部 `ii`，零文件冲突，零依赖破坏。**
+实测安装结果（2026-11 上板）：**1012 个包全部 `ii`，零文件冲突，
+`apt-get check` 返回 0。**
+
+依赖闭包会伸向 Yocto 自己的基础库，所以有两份判据文件：
+`distro-owned.txt`（5875 个发行版已有包名）和
+`distro-owned-paths.txt.gz`（179103 条发行版已拥有路径）。
+遇到就保留发行版那份。详见 SKILL.md 的「安全边界」一节。
+
+以下是 BSP 全貌的初步盘点，加入 `bsp-userspace.txt` 后无主文件数已
+大幅下降，本表尚未按最新数据重算。
 
 ## BSP 全貌（按"能否登记"分类）
 
