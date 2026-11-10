@@ -332,11 +332,13 @@ static int open_device(const char *device, int print_flags)
     if(ioctl(fd, EVIOCGVERSION, &version)) {
         if(print_flags & PRINT_DEVICE_ERRORS)
             fprintf(stderr, "could not get driver version for %s, %s\n", device, strerror(errno));
+        close(fd);
         return -1;
     }
     if(ioctl(fd, EVIOCGID, &id)) {
         if(print_flags & PRINT_DEVICE_ERRORS)
             fprintf(stderr, "could not get driver id for %s, %s\n", device, strerror(errno));
+        close(fd);
         return -1;
     }
     name[sizeof(name) - 1] = '\0';
@@ -363,12 +365,14 @@ static int open_device(const char *device, int print_flags)
     new_ufds = realloc(ufds, sizeof(ufds[0]) * (nfds + 1));
     if(new_ufds == NULL) {
         fprintf(stderr, "out of memory\n");
+        close(fd);
         return -1;
     }
     ufds = new_ufds;
     new_device_names = realloc(device_names, sizeof(device_names[0]) * (nfds + 1));
     if(new_device_names == NULL) {
         fprintf(stderr, "out of memory\n");
+        close(fd);
         return -1;
     }
     device_names = new_device_names;

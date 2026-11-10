@@ -152,11 +152,17 @@ void stop_bluetooth()
 int fsg_rmts_fresh_data(void)
 {
 	Quec_wifi_fsg_data *buf=malloc(sizeof(Quec_wifi_fsg_data));
+	if (buf == NULL) {
+		LOGATCI(LOG_DEBUG,"fsg_rmts_fresh_data No Memory\n");
+		return 0;
+	}
 	memset(buf,0,sizeof(Quec_wifi_fsg_data));
 	quec_read(DEV_DATA,buf);
 	LOGATCI(LOG_DEBUG,"temp buff %s %s\n",buf->magic_head,buf->magic_tail);
-	if((strncmp(buf->magic_head,fsg_head_string,9)!=0)||(strncmp(buf->magic_tail,fsg_tail_string,9)!=0))
+	if((strncmp(buf->magic_head,fsg_head_string,9)!=0)||(strncmp(buf->magic_tail,fsg_tail_string,9)!=0)) {
+		free(buf);
 		return 0;
+	}
 	memcpy(qwifi_data,buf,sizeof(Quec_wifi_fsg_data));
 	LOGATCI(LOG_DEBUG,"qwifi_data %s %s\n",qwifi_data->magic_head,qwifi_data->magic_tail);
 	free(buf);
@@ -166,11 +172,17 @@ int fsg_rmts_fresh_data(void)
 int fsc_rmts_fresh_data(void)
 {
 	Quec_wifi_fsg_data *buf=malloc(sizeof(Quec_wifi_fsg_data));
+	if (buf == NULL) {
+		LOGATCI(LOG_DEBUG,"fsc_rmts_fresh_data No Memory\n");
+		return 0;
+	}
 	memset(buf,0,sizeof(Quec_wifi_fsg_data));
 	quec_read(DEV_BACKUP,buf);
 	LOGATCI(LOG_DEBUG,"temp buff %s %s\n",buf->magic_head,buf->magic_tail);
-	if((strncmp(buf->magic_head,fsc_head_string,9)!=0)||(strncmp(buf->magic_tail,fsc_tail_string,9)!=0))
+	if((strncmp(buf->magic_head,fsc_head_string,9)!=0)||(strncmp(buf->magic_tail,fsc_tail_string,9)!=0)) {
+		free(buf);
 		return 0;
+	}
 	memcpy(qwifi_data,buf,sizeof(Quec_wifi_fsg_data));
 	LOGATCI(LOG_DEBUG,"qwifi_data %s %s\n",qwifi_data->magic_head,qwifi_data->magic_tail);
 	free(buf);

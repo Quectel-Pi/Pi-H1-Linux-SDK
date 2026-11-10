@@ -181,10 +181,18 @@ void writeDataToserialByResponseType(ATRESPONSE_t response_type) {
 void writeDataToSerialByDataType(ATCI_DataType dataType, char* input, int length) {
     int c = 0;
     int fd = INVALIDE_SOCKET_FD;
+    bool convertedToNumeric = false;
+
+    /* the guard has to run before the VLAs below are sized from length */
+    if (input == NULL || length <= 0 || length > MAX_DATA_SIZE) {
+        LOGATCI(LOG_ERR, "invalid input buffer or length %d", length);
+        return;
+    }
+
+    {
     char buffer[length + 1];
     char response[length + 1];
     char output[length + 5];
-    bool convertedToNumeric = false;
 
     LOGATCI(LOG_DEBUG,"Enter with dataType:%d", dataType);
     LOGATCI(LOG_DEBUG,"Enter with data:%s", input);
@@ -208,15 +216,16 @@ void writeDataToSerialByDataType(ATCI_DataType dataType, char* input, int length
               strncmp(input, "mm", 2) == 0 )) {
             // remove <CR><LF> head and tail
             LOGATCI(LOG_DEBUG,"Not audio");
-            if (strncmp(input, "\r\n", 2) == 0) {
-                if (strncmp((input + length - 2), "\r\n", 2) == 0) {
+            if (length >= 2 && strncmp(input, "\r\n", 2) == 0) {
+                /* need at least 4 bytes to hold both the head and the tail */
+                if (length >= 4 && strncmp((input + length - 2), "\r\n", 2) == 0) {
                     memcpy(buffer, input + 2, length - 4);
                     LOGATCI(LOG_DEBUG,"remove head and tail");
                 } else {
                     memcpy(buffer, input + 2, length - 2);
                     LOGATCI(LOG_DEBUG,"remove head");
                 }
-            } else if (strncmp((input+length - 2), "\r\n", 2) == 0) {
+            } else if (length >= 2 && strncmp((input+length - 2), "\r\n", 2) == 0) {
                 memcpy(buffer, input, length - 2);
                 LOGATCI(LOG_DEBUG,"remove tail");
             } else {
@@ -266,6 +275,7 @@ void writeDataToSerialByDataType(ATCI_DataType dataType, char* input, int length
         }
     } else {
         LOGATCI(LOG_ERR, "Wrong fd with %d, currDevice = %d", fd, serial.currDevice);
+    }
     }
 
     return;

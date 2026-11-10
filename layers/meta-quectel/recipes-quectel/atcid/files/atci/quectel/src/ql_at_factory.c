@@ -465,7 +465,7 @@ static int ql_read_adc_channel(int channel)
 {
     FILE *file;
     char adc_path[128];
-    int value;
+    int value = 0;
 
     switch(channel){
         case 0:
@@ -482,7 +482,9 @@ static int ql_read_adc_channel(int channel)
             break;
     }
     if ((file = fopen(adc_path, "r")) != NULL) {
-        fscanf(file, "%d", &value);
+        if (fscanf(file, "%d", &value) != 1) {
+            value = 0;
+        }
         fclose(file);
     }
     return value;
@@ -553,6 +555,7 @@ static int remove_dir(char *path) {
     if (entry->d_type == DT_DIR) {
       result = remove_dir(filepath);
       if (result == -1) {
+        closedir(dir);
         return -1;
       }
     } else {
@@ -1052,10 +1055,21 @@ ATRESPONSE_t QL_AT_QBASELINE_Handle(char* cmdline, ATOP_t opType, char* response
             }
             else
             {
-                fgets(ap_base, 128, fp);
+                size_t used;
+
+                ap_base[0] = '\0';
+                cp_base[0] = '\0';
+                if (fgets(ap_base, sizeof(ap_base), fp) == NULL)
+                    ap_base[0] = '\0';
+                if (fgets(cp_base, sizeof(cp_base), fp) == NULL)
+                    cp_base[0] = '\0';
+
                 snprintf(response, MAX_RESPONSE_LEN, "%s", ap_base);
-                fgets(cp_base, 128, fp);
-                sprintf(response, "%s%s", response, cp_base);
+                used = strlen(response);
+                if (used < MAX_RESPONSE_LEN - 1) {
+                    /* append instead of overlapping sprintf(response, "%s%s", response, ...) */
+                    snprintf(response + used, MAX_RESPONSE_LEN - used, "%s", cp_base);
+                }
             }
             fclose(fp);
     return AT_OK;
@@ -1301,17 +1315,8 @@ ATRESPONSE_t QL_AT_QFCT_Handle(char* cmdline, ATOP_t opType, char* response)
 					LOGATCI(LOG_DEBUG,"br_read buf:%s len=%d\n",buf,len);
 					system(buf);
 					sleep(1);
-					char *resp_buf=NULL;
-					if(NULL == resp_buf)
-					{
-						resp_buf = (char *)malloc(MAX_READ_LEN);
-						if(resp_buf == NULL)
-						{
-						 LOGATCI(LOG_DEBUG,"resp_buf No Memory   \n");
-						 return AT_ERROR; // error
-						}
-						memset(resp_buf, 0, MAX_READ_LEN);
-					 }
+					char resp_buf[MAX_READ_LEN];
+					memset(resp_buf, 0, sizeof(resp_buf));
 					FILE *fp;
 					fp = fopen("/var/log/br_read.txt", "r");
 					if (fp == NULL) {
@@ -1366,7 +1371,7 @@ ATRESPONSE_t QL_AT_QFCT_Handle(char* cmdline, ATOP_t opType, char* response)
 					LOGATCI(LOG_DEBUG,"read_br :%s len = %d\n",read_br,strlen(read_br));
 					//Calculate the bit error rate
                     err = at_tok_nextstr(&cmdline, &flag[0]);   //3
-                    if (err < 0) {
+                    if (err < 0 || flag[0] == NULL) {
                         return AT_ERROR;
                     }
 					if(atoi(flag[0]) > 0)
@@ -1399,17 +1404,8 @@ ATRESPONSE_t QL_AT_QFCT_Handle(char* cmdline, ATOP_t opType, char* response)
 					LOGATCI(LOG_DEBUG,"ble_read buf:%s len= %d\n",buf,len);
 					system(buf);
 					sleep(1);
-					char *resp_buf=NULL;
-					if(NULL == resp_buf)
-					{
-						resp_buf = (char *)malloc(MAX_READ_LEN);
-						if(resp_buf == NULL)
-						{
-						 LOGATCI(LOG_DEBUG,"resp_buf No Memory   \n");
-                         return AT_ERROR; // error
-						}
-						memset(resp_buf, 0, MAX_READ_LEN);
-					 }
+					char resp_buf[MAX_READ_LEN];
+					memset(resp_buf, 0, sizeof(resp_buf));
 					FILE *fp;
 					fp = fopen("/var/log/ble_read.txt", "r");
 					if (fp == NULL) {
@@ -1438,7 +1434,7 @@ ATRESPONSE_t QL_AT_QFCT_Handle(char* cmdline, ATOP_t opType, char* response)
 					LOGATCI(LOG_DEBUG,"read_ble buf %s\n",read_ble);
 					double result;
                     err = at_tok_nextstr(&cmdline, &flag[0]);   //3
-                    if (err < 0) {
+                    if (err < 0 || flag[0] == NULL) {
                         return AT_ERROR;
                     }
 					if(atoi(flag[0]) > 0)
@@ -1504,7 +1500,7 @@ ATRESPONSE_t QL_AT_QFCT_Handle(char* cmdline, ATOP_t opType, char* response)
 ATRESPONSE_t QL_AT_QNVW_Handle(char* cmdline, ATOP_t opType, char* response)
 {
     int err;
-    char *command;
+    char *command = NULL;
     int op,index;
     char macinfo[64];
     int fd;
@@ -1515,17 +1511,21 @@ ATRESPONSE_t QL_AT_QNVW_Handle(char* cmdline, ATOP_t opType, char* response)
         case AT_SET_OP:
             err = at_tok_nextint(&cmdline, &op);
             if (err < 0) {
-                LOGATCI(LOG_DEBUG, "[QL_AT_QNVW_Handle] not support op input %s", command);
+                LOGATCI(LOG_DEBUG, "[QL_AT_QNVW_Handle] not support op input");
                 return AT_ERROR;
             }
             if (op == 4678) {
                 err = at_tok_nextint(&cmdline, &index);
                 if (err < 0) {
-                    LOGATCI(LOG_DEBUG, "[QL_AT_QNVW_Handle] not support index input %s", command);
+                    LOGATCI(LOG_DEBUG, "[QL_AT_QNVW_Handle] not support index input");
                     return AT_ERROR;
                 }
                 if(index == 0){
                     err = at_tok_nextstr(&cmdline, &command);
+                    if (err < 0 || command == NULL) {
+                        LOGATCI(LOG_DEBUG, "[QL_AT_QNVW_Handle] not support mac input");
+                        return AT_ERROR;
+                    }
                     if(strlen(command)==12){
                         memset(qwifi_data->wifi_mac,0,sizeof(qwifi_data->wifi_mac));
                         strncpy(qwifi_data->wifi_mac,command,strlen(command));
@@ -1555,11 +1555,15 @@ ATRESPONSE_t QL_AT_QNVW_Handle(char* cmdline, ATOP_t opType, char* response)
             if (op == 447) {
                 err = at_tok_nextint(&cmdline, &index);
                 if (err < 0) {
-                    LOGATCI(LOG_DEBUG, "[QL_AT_QNVW_Handle] not support index input %s", command);
+                    LOGATCI(LOG_DEBUG, "[QL_AT_QNVW_Handle] not support index input");
                     return AT_ERROR;
                 }
                 if(index == 0){
                     err = at_tok_nextstr(&cmdline, &command);
+                    if (err < 0 || command == NULL) {
+                        LOGATCI(LOG_DEBUG, "[QL_AT_QNVW_Handle] not support mac input");
+                        return AT_ERROR;
+                    }
                     if(strlen(command)==12){
                         memset(qwifi_data->bt_mac,0,sizeof(qwifi_data->bt_mac));
                         strncpy(qwifi_data->bt_mac,command,strlen(command));
@@ -1586,24 +1590,20 @@ ATRESPONSE_t QL_AT_QNVW_Handle(char* cmdline, ATOP_t opType, char* response)
 ATRESPONSE_t QL_AT_QNVR_Handle(char* cmdline, ATOP_t opType, char* response)
 {
     int err;
-    char *command;
     int op,index;
-    char macinfo[64];
-    int fd;
-    int rw_size;
 
     LOGATCI(LOG_DEBUG, "[QL_AT_QNVR_Handle] cmdline %s", cmdline);
     switch(opType) {
         case AT_SET_OP:
             err = at_tok_nextint(&cmdline, &op);
             if (err < 0) {
-                LOGATCI(LOG_DEBUG, "[QL_AT_QNVR_Handle] not support op input %s", command);
+                LOGATCI(LOG_DEBUG, "[QL_AT_QNVR_Handle] not support op input");
                 return AT_ERROR;
             }
             if (op == 4678) {
                 err = at_tok_nextint(&cmdline, &index);
                 if (err < 0) {
-                    LOGATCI(LOG_DEBUG, "[QL_AT_QNVR_Handle] not support index input %s", command);
+                    LOGATCI(LOG_DEBUG, "[QL_AT_QNVR_Handle] not support index input");
                     return AT_ERROR;
                 }
                 if(index == 0){
@@ -1614,7 +1614,7 @@ ATRESPONSE_t QL_AT_QNVR_Handle(char* cmdline, ATOP_t opType, char* response)
             if (op == 447) {
                 err = at_tok_nextint(&cmdline, &index);
                 if (err < 0) {
-                    LOGATCI(LOG_DEBUG, "[QL_AT_QNVR_Handle] not support index input %s", command);
+                    LOGATCI(LOG_DEBUG, "[QL_AT_QNVR_Handle] not support index input");
                     return AT_ERROR;
                 }
                 if(index == 0){
@@ -2145,6 +2145,7 @@ ATRESPONSE_t QL_AT_QUSBMODE_Handle(char* cmdline, ATOP_t opType, char* response)
                 else
                     sprintf(response, "+QUSBMODE: %s",speed);
             }
+            fclose(fp);
             return AT_OK;
             break;
         default:

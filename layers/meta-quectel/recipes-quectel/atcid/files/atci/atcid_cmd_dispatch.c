@@ -132,27 +132,34 @@ int ril_command_hdlr(char* line) {
             ATOP_t at_op = getAtOp(&line);
             if((at_op & ril_mmi_cmd_table[i].opType)) {
                 if(ISMMIRSPCMD((at_op << 4) & ril_mmi_cmd_table[i].opType)) {
-                    if (atRilMmi_info.cmdNameEIdx <= MAX_QUEUE_MMI_CMD_IDX) {
+                    if (atRilMmi_info.cmdNameEIdx < MAX_QUEUE_MMI_CMD_IDX &&
+                        atRilMmi_info.cmdNameEIdx >= 0) {
+                        /* the copy below must leave room for one of "?", "=?", "=" */
+                        size_t cmd_len = strlen(line_cut);
+                        size_t pattern_len = strlen(MTKATCIRILPATTERN);
+
                         atRilMmi_info.atOp = at_op << 4;
                         atRilMmi_info.hasRilMMICmd = 1;
                         memset(atRilMmi_info.cmdName[atRilMmi_info.cmdNameEIdx], 0,
                                 MAX_AT_RIL_COMMAND_LEN);
-                        if (sizeof(*line_cut) <= MAX_AT_RIL_COMMAND_LEN) {
+                        if (cmd_len + 2 + pattern_len < MAX_AT_RIL_COMMAND_LEN) {
                             strncpy(atRilMmi_info.cmdName[atRilMmi_info.cmdNameEIdx], line_cut,
-                                    strlen(line_cut));
-                        }
-                        if (AT_READ_OP == at_op) {
-                            strcat(atRilMmi_info.cmdName[atRilMmi_info.cmdNameEIdx], "?");
-                        } else if (AT_TEST_OP == at_op) {
-                            strcat(atRilMmi_info.cmdName[atRilMmi_info.cmdNameEIdx], "=?");
-                        } else if (AT_SET_OP == at_op) {
-                            strcat(atRilMmi_info.cmdName[atRilMmi_info.cmdNameEIdx], "=");
-                        }
+                                    cmd_len);
+                            if (AT_READ_OP == at_op) {
+                                strcat(atRilMmi_info.cmdName[atRilMmi_info.cmdNameEIdx], "?");
+                            } else if (AT_TEST_OP == at_op) {
+                                strcat(atRilMmi_info.cmdName[atRilMmi_info.cmdNameEIdx], "=?");
+                            } else if (AT_SET_OP == at_op) {
+                                strcat(atRilMmi_info.cmdName[atRilMmi_info.cmdNameEIdx], "=");
+                            }
 
-                        strcat(atRilMmi_info.cmdName[atRilMmi_info.cmdNameEIdx], MTKATCIRILPATTERN);
-                        atRilMmi_info.cmdNameEIdx++;
-                        if(MAX_QUEUE_MMI_CMD_IDX <= atRilMmi_info.cmdNameEIdx)
-                            atRilMmi_info.cmdNameEIdx = 0;
+                            strcat(atRilMmi_info.cmdName[atRilMmi_info.cmdNameEIdx], MTKATCIRILPATTERN);
+                            atRilMmi_info.cmdNameEIdx++;
+                            if(MAX_QUEUE_MMI_CMD_IDX <= atRilMmi_info.cmdNameEIdx)
+                                atRilMmi_info.cmdNameEIdx = 0;
+                        } else {
+                            LOGATCI(LOG_DEBUG, "RIL command too long, drop it");
+                        }
                     }
                 }
             } else {

@@ -22,7 +22,7 @@ int ql_init_main_uart(const char*uart_dev,long baud,int databits, int stopbits, 
     int baud_speed;
 
     int fd = open(uart_dev, O_RDWR | O_NOCTTY | O_NDELAY);
-    if(fd<=0){
+    if(fd<0){
         LOGATCI(LOG_ERR,"fail to open uart");
         return -1;
     }
@@ -190,12 +190,17 @@ int ql_set_baud_rate(const char*uart_dev,int baud){
 	int baud_speed;
 
     int fd = open(uart_dev, O_RDWR | O_NOCTTY | O_NDELAY);
-    if(fd<=0){
+    if(fd<0){
         LOGATCI(LOG_ERR,"fail to open uart");
         return -1;
     }
 
-	tcgetattr(fd, &options); 
+	if (tcgetattr(fd, &options) != 0)
+	{
+		LOGATCI(LOG_ERR,"serial_set_parity 0");
+		close(fd);
+		return -1;
+	}
 
 	switch (baud)
     {
