@@ -8,6 +8,7 @@
  */
 
 #include <linux/clk.h>
+#include <linux/completion.h>
 #include <linux/delay.h>
 #include <linux/firmware.h>
 #include <linux/interrupt.h>
@@ -21,11 +22,13 @@
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
 #include <linux/firmware/qcom/qcom_scm.h>
+#include <linux/refcount.h>
 #include <linux/regulator/consumer.h>
 #include <linux/remoteproc.h>
 #include <linux/soc/qcom/mdt_loader.h>
 #include <linux/soc/qcom/smem.h>
 #include <linux/soc/qcom/smem_state.h>
+#include <linux/workqueue.h>
 #include <soc/qcom/qcom_minidump.h>
 
 #include "qcom_common.h"
@@ -34,6 +37,20 @@
 #include "remoteproc_internal.h"
 
 #define ADSP_DECRYPT_SHUTDOWN_DELAY_MS	100
+
+/* Upper bound on how long we wait for a PAS shutdown SMC to come back. */
+#define PAS_SHUTDOWN_TIMEOUT_MS	3000
+#define PAS_RESET_TIMEOUT_MS	5000
+
+/*
+ * How long to wait for the firmware to signal "start" after PAS released the
+ * subsystem from reset. Kept at the upstream value: it was measured on QCS6490
+ * that a longer wait does not help (a first start after an AP warm reset does
+ * not signal at all -- 12 s timed out just as 5 s did), and a shorter one makes
+ * things worse (1 s needed more resets, not fewer). The failure is handled by
+ * PAS_START_RETRIES below, not by this threshold.
+ */
+#define PAS_START_TIMEOUT_MS	5000
 
 #define MAX_ASSIGN_COUNT 3
 
@@ -114,6 +131,19 @@ struct qcom_adsp {
 
 	struct qcom_scm_pas_context *pas_ctx;
 	struct qcom_scm_pas_context *dtb_pas_ctx;
+
+	/*
+	 * Set once this boot has released the DSP from reset, i.e. once a DSP
+	 * carrying our firmware may be running. Cleared again by adsp_stop().
+	 * adsp_shutdown() uses it to also clean up a DSP whose start failed
+	 * after the reset: rproc->state stays RPROC_OFFLINE then, so the state
+	 * check alone would skip the PAS shutdown and that firmware would be
+	 * carried into the next boot, making the following start time out.
+	 */
+	bool start_attempted;
+
+	/* Number of PAS reset operations currently in flight for this DSP. */
+	atomic_t pas_op_in_flight;
 };
 
 static void adsp_segment_dump(struct rproc *rproc, struct rproc_dump_segment *segment,
@@ -182,6 +212,10 @@ static void adsp_pds_disable(struct qcom_adsp *adsp, struct device **pds,
 	}
 }
 
+/* Defined below; declared here because adsp_shutdown_poll_decrypt() uses it. */
+static int qcom_pas_shutdown_reset(struct qcom_adsp *adsp, u32 pas_id,
+				   unsigned int timeout_ms);
+
 static int adsp_shutdown_poll_decrypt(struct qcom_adsp *adsp)
 {
 	unsigned int retry_num = 50;
@@ -189,7 +223,8 @@ static int adsp_shutdown_poll_decrypt(struct qcom_adsp *adsp)
 
 	do {
 		msleep(ADSP_DECRYPT_SHUTDOWN_DELAY_MS);
-		ret = qcom_scm_pas_shutdown(adsp->pas_id);
+		ret = qcom_pas_shutdown_reset(adsp, adsp->pas_id,
+					      PAS_SHUTDOWN_TIMEOUT_MS);
 	} while (ret == -EINVAL && --retry_num);
 
 	return ret;
@@ -260,7 +295,165 @@ static int qcom_pas_map_carveout(struct rproc *rproc, phys_addr_t mem_phys, size
 	return ret;
 }
 
-static int adsp_start(struct rproc *rproc)
+/*
+ * PAS reset-type operations (shutdown, prepare/auth/reset) are bare synchronous
+ * SMCs into the secure world. Unlike the rest of the PAS handshake they carry no
+ * timeout of their own -- and they are precisely the operations that manipulate
+ * the DSP subsystem state, so they are also the ones that never come back once
+ * the DSP is wedged. When one of them hangs, the calling CPU is lost for good:
+ * the write() to /sys/class/remoteproc/N/state never completes, console_lock
+ * stays held so every other CPU stops logging, and the system silently wedges
+ * until the watchdog bites. That is exactly what was seen on QCS6490: a failed
+ * CDSP start whose recovery PAS shutdown never returned.
+ *
+ * So run them on a workqueue and bound the wait. On timeout the caller gets
+ * -ETIMEDOUT and carries on; the worker keeps its own reference to the request
+ * and frees it once the SMC eventually returns.
+ *
+ * Only one such operation may be in flight at a time. Once one has hung every
+ * later attempt returns -EBUSY immediately instead of stacking more permanently
+ * stuck workers on a secure world that is evidently already wedged.
+ */
+enum qcom_pas_op {
+	QCOM_PAS_OP_SHUTDOWN,
+	QCOM_PAS_OP_PREPARE_AND_RESET,
+};
+
+struct qcom_pas_op_req {
+	struct work_struct work;
+	struct completion done;
+	refcount_t refs;
+	struct qcom_adsp *adsp;
+	enum qcom_pas_op op;
+	struct qcom_scm_pas_context *ctx;
+	u32 pas_id;
+	int ret;
+};
+
+static const char *qcom_pas_op_name(enum qcom_pas_op op)
+{
+	switch (op) {
+	case QCOM_PAS_OP_SHUTDOWN:
+		return "shutdown";
+	case QCOM_PAS_OP_PREPARE_AND_RESET:
+		return "prepare/auth/reset";
+	}
+
+	return "unknown";
+}
+
+static void qcom_pas_op_work(struct work_struct *work)
+{
+	struct qcom_pas_op_req *req =
+		container_of(work, struct qcom_pas_op_req, work);
+
+	switch (req->op) {
+	case QCOM_PAS_OP_SHUTDOWN:
+		req->ret = qcom_scm_pas_shutdown(req->pas_id);
+		break;
+	case QCOM_PAS_OP_PREPARE_AND_RESET:
+		req->ret = qcom_scm_pas_prepare_and_auth_reset(req->ctx);
+		break;
+	}
+
+	atomic_set(&req->adsp->pas_op_in_flight, 0);
+	complete(&req->done);
+
+	if (refcount_dec_and_test(&req->refs))
+		kfree(req);
+}
+
+static int qcom_pas_op_bounded(struct qcom_adsp *adsp, enum qcom_pas_op op,
+			       struct qcom_scm_pas_context *ctx, u32 pas_id,
+			       unsigned int timeout_ms)
+{
+	struct qcom_pas_op_req *req;
+	int ret;
+
+	/*
+	 * Per device, not global: ADSP and CDSP are independent subsystems and
+	 * are started concurrently at boot, so a single global flag made one of
+	 * them fail with -EBUSY. What must be prevented is stacking a second
+	 * operation on the *same* DSP whose first operation evidently hung.
+	 */
+	if (atomic_cmpxchg(&adsp->pas_op_in_flight, 0, 1) != 0) {
+		dev_warn(adsp->dev, "PAS %s (id %u) is still in flight, refusing to start another one\n",
+			 qcom_pas_op_name(op), pas_id);
+		return -EBUSY;
+	}
+
+	req = kzalloc(sizeof(*req), GFP_KERNEL);
+	if (!req) {
+		atomic_set(&adsp->pas_op_in_flight, 0);
+		return -ENOMEM;
+	}
+
+	INIT_WORK(&req->work, qcom_pas_op_work);
+	init_completion(&req->done);
+	refcount_set(&req->refs, 2);	/* one for this thread, one for the worker */
+	req->adsp = adsp;
+	req->op = op;
+	req->ctx = ctx;
+	req->pas_id = pas_id;
+
+	if (!queue_work(system_unbound_wq, &req->work)) {
+		atomic_set(&adsp->pas_op_in_flight, 0);
+		kfree(req);
+		return -EIO;
+	}
+
+	if (!wait_for_completion_timeout(&req->done,
+					 msecs_to_jiffies(timeout_ms))) {
+		dev_err(adsp->dev, "PAS %s (id %u) did not return within %u ms, abandoning it\n",
+			qcom_pas_op_name(op), pas_id, timeout_ms);
+		ret = -ETIMEDOUT;
+	} else {
+		ret = req->ret;
+	}
+
+	if (refcount_dec_and_test(&req->refs))
+		kfree(req);
+
+	return ret;
+}
+
+static int qcom_pas_shutdown_reset(struct qcom_adsp *adsp, u32 pas_id,
+				   unsigned int timeout_ms)
+{
+	return qcom_pas_op_bounded(adsp, QCOM_PAS_OP_SHUTDOWN, NULL, pas_id,
+				   timeout_ms);
+}
+
+static int qcom_pas_reset_bounded(struct qcom_adsp *adsp,
+				  struct qcom_scm_pas_context *ctx, u32 pas_id,
+				  unsigned int timeout_ms)
+{
+	return qcom_pas_op_bounded(adsp, QCOM_PAS_OP_PREPARE_AND_RESET, ctx,
+				   pas_id, timeout_ms);
+}
+
+/*
+ * How many times adsp_start() reloads the firmware and goes through
+ * reset+start again before giving up.
+ *
+ * Measured on QCS6490 (dump 20261110_092248AM + bench): after an AP warm reset
+ * the CDSP start signal is often not delivered on the first attempt. It is not
+ * merely slow -- waiting 12 s instead of 5 s does not help -- and resetting the
+ * DSP before the AP reset does not prevent it either. What does work is the PAS
+ * shutdown issued on the failure path (~1.2 s) followed by a fresh image load
+ * and reset: the DSP then signals start within ~60 ms. The number of resets
+ * needed varies between boots (observed 1, 5, 11, 12, 13).
+ *
+ * Letting userspace (qcom-remoteproc-recover) drive those retries through sysfs
+ * works, but it costs a round trip and a sleep per attempt and, worse, it gives
+ * up after a fixed number of tries and leaves the NPU dead for the whole boot.
+ * Doing it here keeps the bring-up inside the first rproc_boot(), which is where
+ * it belongs; the userspace service stays as a safety net for the reset paths
+ * that never reach rproc_boot() (panic, watchdog, reboot -f, reset button).
+ */
+#define PAS_START_RETRIES	12
+
+static int adsp_start_once(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = rproc->priv;
 	int ret;
@@ -298,7 +491,9 @@ static int adsp_start(struct rproc *rproc)
 		if (ret)
 			goto disable_px_supply;
 
-		ret = qcom_scm_pas_prepare_and_auth_reset(adsp->dtb_pas_ctx);
+		ret = qcom_pas_reset_bounded(adsp, adsp->dtb_pas_ctx,
+					     adsp->dtb_pas_id,
+					     PAS_RESET_TIMEOUT_MS);
 		if (ret) {
 			dev_err(adsp->dev,
 				"failed to authenticate dtb image and release reset\n");
@@ -317,17 +512,38 @@ static int adsp_start(struct rproc *rproc)
 	if (ret)
 		goto release_pas_metadata;
 
-	ret = qcom_scm_pas_prepare_and_auth_reset(adsp->pas_ctx);
+	ret = qcom_pas_reset_bounded(adsp, adsp->pas_ctx, adsp->pas_id,
+				     PAS_RESET_TIMEOUT_MS);
 	if (ret) {
 		dev_err(adsp->dev,
 			"failed to authenticate image and release reset\n");
 		goto unmap_carveout;
 	}
 
-	ret = qcom_q6v5_wait_for_start(&adsp->q6v5, msecs_to_jiffies(5000));
+	/*
+	 * The DSP is out of reset from here on. Even if the start-up handshake
+	 * below fails, that firmware is now running, so this boot owes the DSP a
+	 * PAS shutdown -- adsp_shutdown() keys off this flag because
+	 * rproc->state stays RPROC_OFFLINE when a start fails.
+	 */
+	adsp->start_attempted = true;
+
+	ret = qcom_q6v5_wait_for_start(&adsp->q6v5,
+				      msecs_to_jiffies(PAS_START_TIMEOUT_MS));
 	if (ret == -ETIMEDOUT) {
+		int sret;
+
 		dev_err(adsp->dev, "start timed out\n");
-		qcom_scm_pas_shutdown(adsp->pas_id);
+		/*
+		 * The failed start is what actually resets the DSP, so the
+		 * shutdown still has to be issued -- but it must not be able to
+		 * wedge this CPU, see qcom_pas_op_bounded().
+		 */
+		sret = qcom_pas_shutdown_reset(adsp, adsp->pas_id,
+					       PAS_SHUTDOWN_TIMEOUT_MS);
+		if (sret)
+			dev_err(adsp->dev, "PAS shutdown after failed start returned %d\n",
+				sret);
 		goto unmap_carveout;
 	}
 
@@ -384,6 +600,43 @@ static void qcom_pas_handover(struct qcom_q6v5 *q6v5)
 	adsp_pds_disable(adsp, adsp->proxy_pds, adsp->proxy_pd_count);
 }
 
+static int adsp_start(struct rproc *rproc)
+{
+	struct qcom_adsp *adsp = rproc->priv;
+	const struct firmware *fw = adsp->firmware;
+	unsigned int attempt;
+	int ret;
+
+	for (attempt = 0; ; attempt++) {
+		ret = adsp_start_once(rproc);
+		if (ret != -ETIMEDOUT)
+			return ret;
+		if (attempt >= PAS_START_RETRIES)
+			return ret;
+
+		dev_info(adsp->dev,
+			 "start timed out, PAS reset done, reloading and retrying %u/%u\n",
+			 attempt + 1, PAS_START_RETRIES);
+
+		/*
+		 * adsp_start_once() already issued the PAS shutdown (that is what
+		 * clears the stale state) and unwound its own resources, and it
+		 * cleared adsp->firmware on the way out. The next attempt has to
+		 * reload the image, so put the handle back first.
+		 */
+		adsp->firmware = fw;
+
+		if (adsp->dtb_pas_id) {
+			ret = adsp_load(rproc, fw);
+			if (ret) {
+				dev_err(adsp->dev, "reload before retry failed: %d\n",
+					ret);
+				return ret;
+			}
+		}
+	}
+}
+
 static int adsp_stop(struct rproc *rproc)
 {
 	struct qcom_adsp *adsp = rproc->priv;
@@ -394,7 +647,8 @@ static int adsp_stop(struct rproc *rproc)
 	if (ret == -ETIMEDOUT)
 		dev_err(adsp->dev, "timed out on wait\n");
 
-	ret = qcom_scm_pas_shutdown(adsp->pas_id);
+	ret = qcom_pas_shutdown_reset(adsp, adsp->pas_id,
+				      PAS_SHUTDOWN_TIMEOUT_MS);
 	if (ret && adsp->decrypt_shutdown)
 		ret = adsp_shutdown_poll_decrypt(adsp);
 
@@ -402,7 +656,8 @@ static int adsp_stop(struct rproc *rproc)
 		dev_err(adsp->dev, "failed to shutdown: %d\n", ret);
 
 	if (adsp->dtb_pas_id) {
-		ret = qcom_scm_pas_shutdown(adsp->dtb_pas_id);
+		ret = qcom_pas_shutdown_reset(adsp, adsp->dtb_pas_id,
+					      PAS_SHUTDOWN_TIMEOUT_MS);
 		if (ret)
 			dev_err(adsp->dev, "failed to shutdown dtb: %d\n", ret);
 
@@ -414,6 +669,9 @@ static int adsp_stop(struct rproc *rproc)
 	handover = qcom_q6v5_unprepare(&adsp->q6v5);
 	if (handover)
 		qcom_pas_handover(&adsp->q6v5);
+
+	/* Proxy resources are released again; the next start must re-claim them. */
+	adsp->start_attempted = false;
 
 	return ret;
 }
@@ -443,7 +701,7 @@ static void adsp_shutdown(struct platform_device *pdev)
 		return;
 
 	/* Nothing to stop when the firmware was never started. */
-	if (adsp->rproc->state != RPROC_RUNNING)
+	if (adsp->rproc->state != RPROC_RUNNING && !adsp->start_attempted)
 		return;
 
 	adsp_stop(adsp->rproc);

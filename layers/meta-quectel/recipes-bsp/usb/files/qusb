@@ -99,8 +99,20 @@ usb_bind_wait() {
 	# Every rejected write costs two kernel log lines, so probe slowly and only
 	# once the endpoint files exist: without them the bind cannot work at all, and
 	# writing anyway just spams the log.
+	#
+	# The budget is deliberately large (300 x 1 s). This whole function runs from
+	# run_902D, which usb_init starts in the background (`init_run_pid 902D &`),
+	# so a long wait costs nothing at boot -- usb.service is already long gone
+	# when the probes continue. What it buys: /dev/ffs-diag/ep1 is produced by
+	# diag-router, whose unit is ordered After usb.service, so the producer starts
+	# only once this wait is already running. With the previous 45 s budget the
+	# probes could all expire before diag-router got going, and then nothing was
+	# left to bind the UDC: measured on the host side (2026-11-11) the board
+	# enumerated as the bare 18d1:d002 gadget and never switched to 05c6:902d,
+	# leaving the port dead until a power cycle even though the board itself kept
+	# running.
 	n=0
-	while [ $n -lt 45 ]; do
+	while [ $n -lt 300 ]; do
 		n=$(($n + 1))
 		if [ "`cat /sys/kernel/config/usb_gadget/adb/UDC 2>/dev/null`" = "$udcname" ]; then
 			echo "qusb: UDC already bound to $udcname" > /dev/kmsg
@@ -117,6 +129,9 @@ usb_bind_wait() {
 				echo "qusb: UDC bound to $udcname at probe $n" > /dev/kmsg
 				return 0
 			fi
+		fi
+		if [ $((n % 30)) -eq 0 ]; then
+			echo "qusb: still waiting for ffs endpoints (probe $n)" > /dev/kmsg
 		fi
 		sleep 1
 	done
