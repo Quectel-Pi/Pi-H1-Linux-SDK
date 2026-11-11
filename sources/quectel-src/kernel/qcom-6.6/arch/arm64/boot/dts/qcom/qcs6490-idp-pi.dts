@@ -1966,7 +1966,8 @@
 	};
 };
 
-&uart4 { // QUP0_SE4: GPIO16/17/18/19 UART04 CTS/RTS/TX/RX
+&uart4 { // QUP0_SE4: 2-wire UART (TX=GPIO18, RX=GPIO19), no HS-UART on this SE
+	pinctrl-0 = <&qup_uart4_tx>, <&qup_uart4_rx>;
 	status = "disabled";
 };
 
