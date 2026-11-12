@@ -7,6 +7,8 @@
 # 流程:
 #   1. 检查 ADB 设备连接
 #   2. 通过 adb shell reboot edl 进入 9008 EDL 模式
+#      （Debian/Ubuntu 桌面镜像登录着 GNOME 时，logind 会拦 reboot，
+#        此时自动改用 systemctl reboot -i --reboot-argument=edl 绕过抑制剂）
 #   3. 等待 Qualcomm USB 9008 设备出现
 #   4. 使用 qdl 烧录固件
 #
@@ -40,7 +42,7 @@ if [[ "$STORAGE" != "ufs" ]]; then
     PART_DIR="$FW_DIR/partition_${STORAGE}"
 fi
 EDL_TIMEOUT=30               # 等待 9008 设备的超时秒数
-SKIP_ENTER_EDL=0             # 已在 EDL 模式时跳过 adb shell reboot edl
+SKIP_ENTER_EDL=0             # 已在 EDL 模式时跳过 reboot
 
 # 优先使用 tools 目录下的本地二进制，找不到再用系统全局的
 if [[ -x "${SCRIPT_DIR}/qdl" ]]; then
@@ -175,20 +177,91 @@ check_adb_device() {
 }
 
 # ===== 进入 EDL 模式 =====
+# 板端的 /sbin/reboot 是 systemctl 的软链（Debian/Ubuntu 的 systemd-sysv 包，
+# sysvinit-core 与之互斥），所以 `reboot edl` 等价于 `systemctl reboot edl`：
+# "edl" 作为 reboot(2) 的参数传下去，内核按 DT 的 psci/mode-edl
+# (arch/arm64/boot/dts/qcom/qcm6490.dtsi: mode-edl = <0 0x1>) 走
+# PSCI SYSTEM_RESET2 真正进 9008。
+#
+# 但登录了桌面会话（gdm3 + gnome-session-b）时，logind 会拦：
+#   Operation inhibited by "p" (PID ... "gnome-session-b", ...)
+#   User p is logged in on tty2.
+# 这时必须加 -i (--check-inhibitors=no) 才放行，参数照样传下去。
+#
+# 还有一个坑：`systemctl reboot edl` 是错的！reboot 这个 verb 的 max_args=1
+# (src/systemctl/systemctl.c 的 verb 表)，多一个位置参数直接报
+# "Too many arguments." 并退出，压根不会重启。要显式指定就写：
+#   systemctl reboot --reboot-argument=edl
+# `reboot edl` 能用，是因为 argv[0]=="reboot" 走的是 halt_parse_argv()
+# 兼容解析 (src/systemctl/systemctl-compat-halt.c:142 允许一个位置参数)。
+#
+# 注意：quectel_build/tools/adb 是 28.0.2，不支持 shell v2 协议，
+# `adb shell` 的退出码恒为 0（板端失败也返回 0），所以这里一律抓板端
+# 回显判断结果，不能靠 $?。板端 pty 把 stderr 也并进 stdout，2>/dev/null
+# 也挡不住，必须显式读出来。
+edl_reboot_attempt() {
+    local cmd="$1" out=""
+
+    info "发送: adb shell ${cmd}"
+    out=$("$ADB_BIN" shell "$cmd" 2>&1 || true)
+
+    if grep -qiE 'inhibited|logged in on|retry operation after' <<<"$out"; then
+        warn "板端拒绝了重启（logind 抑制剂）:"
+        sed 's/^/    /' <<<"$out"
+        return 2        # 可重试：换更强的参数
+    fi
+    if grep -qiE 'must be superuser|permission denied|not permitted|Operation not permitted' <<<"$out"; then
+        error "板端权限不足:"
+        sed 's/^/    /' <<<"$out"
+        return 3        # 不可重试
+    fi
+    if grep -qiE 'not found|No such file or directory' <<<"$out"; then
+        error "板端没有该命令:"
+        sed 's/^/    /' <<<"$out"
+        return 3        # 不可重试
+    fi
+
+    [ -n "$out" ] && sed 's/^/    /' <<<"$out"
+    return 0
+}
+
 enter_edl() {
     # 设备已在 EDL 模式时（check_adb_device 检测到 9008/9018），跳过 reboot
     if [[ "${SKIP_ENTER_EDL:-0}" -eq 1 ]]; then
-        info "设备已在 EDL 模式，跳过 adb shell reboot edl"
+        info "设备已在 EDL 模式，跳过 reboot"
         return 0
     fi
-    info "发送 adb shell reboot edl 命令..."
-    # QCS6490 需要用 adb shell reboot edl (adb reboot edl 不可用)
-    "$ADB_BIN" shell reboot edl 2>/dev/null || {
-        error "无法进入 EDL 模式，请确认:"
-        error "  1. ADB 已连接且有 root 权限"
-        error "  2. 或手动按键进入 EDL 模式"
+
+    # 依次尝试：原路径 → 跳过抑制剂 → 跳过 logind 直落底层
+    # 注意第 2/3 条不能写成 `systemctl reboot -i edl`（Too many arguments）
+    local -a attempts=(
+        "reboot edl"
+        "systemctl reboot -i --reboot-argument=edl"
+        "systemctl reboot -i --force --reboot-argument=edl"
+    )
+    local i rc=0
+    for (( i = 0; i < ${#attempts[@]}; i++ )); do
+        rc=0
+        edl_reboot_attempt "${attempts[i]}" || rc=$?
+        if [[ $rc -eq 0 ]]; then
+            break
+        elif [[ $rc -eq 3 ]]; then
+            error "无法进入 EDL 模式，请确认:"
+            error "  1. adb shell 有 root 权限（systemctl reboot 需要）"
+            error "  2. 或断电重上电 / 手动按键进入 EDL 模式"
+            exit 1
+        fi
+    done
+
+    if [[ $rc -ne 0 ]]; then
+        error "无法进入 EDL 模式：板端 logind 抑制剂一直在拦 reboot"
+        error "板上查看还有谁在拦: systemd-inhibit --list"
+        error "登录中的会话:   loginctl list-sessions"
+        error "临时放行:       loginctl terminate-user <user>"
+        error "或者直接断电重上电进 EDL（本脚本会自动识别 9008 并跳过 reboot）"
         exit 1
-    }
+    fi
+
     info "等待设备进入 EDL 模式..."
     sleep 3
 }
@@ -220,8 +293,10 @@ wait_for_edl() {
     error "超时：未检测到 9008/9018 设备"
     error "请检查:"
     error "  1. USB 线是否连接"
-    error "  2. 设备是否进入了 EDL 模式 (LED 闪烁等)"
-    error "  3. udev 规则是否正确 (lsusb 查看)"
+    error "  2. 设备是否真的重启了 —— dmesg 里看 reboot(2) 是否被拦，"
+    error "     桌面镜像登录着 GNOME 时 flash 会自动换用 systemctl reboot -i edl"
+    error "  3. 设备是否进入了 EDL 模式 (LED 闪烁等)"
+    error "  4. udev 规则是否正确 (lsusb 查看)"
     lsusb 2>/dev/null | grep -i "05c6" || warn "未找到 Qualcomm USB 设备"
     exit 1
 }
