@@ -1,0 +1,7 @@
+[org/gnome/shell]
+# Ship the status-area switch enabled.  GNOME 50 ignores extensions that are not
+# listed in enabled-extensions, and the image has no per-user configuration to
+# put it in, so it goes into the system dconf database.  The existing
+# dconf-update.service (atci) runs 'dconf update' at boot, which is what turns
+# this file into the local database.
+enabled-extensions=['pi-voice-input@quectel.com']

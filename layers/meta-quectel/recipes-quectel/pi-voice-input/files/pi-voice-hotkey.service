@@ -1,0 +1,32 @@
+[Unit]
+Description=Voice input hotkey listener (hold right Ctrl to talk)
+Documentation=file:///usr/share/doc/pi-voice-input/README.md
+# Needs the session bus (to forward press/release to pi-voice-inputd) and the
+# daemon, so D-Bus activation can find its name.
+After=pi-voice-input.service
+Wants=pi-voice-input.service
+# Reading the keyboard needs the "input" group; the desktop user is in it on
+# these images. Without it the unit exits immediately (see ConditionPathExists
+# below) and only the GNOME keybinding path remains.
+ConditionPathExists=/dev/input
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/pi-voice-hotkey
+Restart=on-failure
+RestartSec=3
+
+# Tiny and idle: it sits in poll() on the event devices.
+MemoryMax=64M
+Nice=5
+# The event devices are read-only, but they must not be exposed in any other
+# way; ProtectSystem keeps the rest of the filesystem out of reach.
+NoNewPrivileges=yes
+# No PrivateTmp: systemd 259 on this image cannot spawn a user unit with it
+# (Result=resources). See pi-voice-input.service for the measurement.
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=default.target

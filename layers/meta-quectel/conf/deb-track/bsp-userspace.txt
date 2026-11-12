@@ -271,8 +271,9 @@ qcom-sensors-services
 qcom-sensors-test-apps
 qcom-sensors-test-core
 
-# --- 网络 / 存储 / Quectel 工具: 10 packages, 47 unowned files on device ---
+# --- 网络 / 存储 / Quectel 工具: 11 packages, 61 unowned files on device ---
 lgpio
+pi-voice-input
 qca1023-wlan
 qcom-remoteproc-recover
 quecpi-config
@@ -283,4 +284,4 @@ quectel-log
 quectel-tests
 v4l2loopback
 
-# total: 187 packages, 1427 unowned files covered
+# total: 188 packages, 1441 unowned files covered

@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.quectel.PiVoiceInput
+Exec=/usr/bin/pi-voice-inputd
+SystemdService=pi-voice-input.service

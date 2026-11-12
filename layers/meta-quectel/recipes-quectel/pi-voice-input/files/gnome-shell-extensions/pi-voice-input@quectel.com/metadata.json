@@ -1,0 +1,15 @@
+{
+  "uuid": "pi-voice-input@quectel.com",
+  "name": "Voice Input",
+  "description": "Push-to-talk dictation: hold Ctrl+Q, release to insert the recognized text. The top-bar switch loads or frees the on-device speech model.",
+  "shell-version": [
+    "45",
+    "46",
+    "47",
+    "48",
+    "49",
+    "50"
+  ],
+  "version": 1,
+  "url": "https://www.quectel.com.cn/docs/quectel-pi/h1"
+}
