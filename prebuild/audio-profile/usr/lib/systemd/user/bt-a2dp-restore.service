@@ -1,0 +1,12 @@
+[Unit]
+Description=Keep the Bluetooth A2DP sink as the default audio output
+After=pipewire.service wireplumber.service
+Wants=pipewire.service wireplumber.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/bt-a2dp-restore.sh
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
