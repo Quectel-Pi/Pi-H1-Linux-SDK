@@ -22,6 +22,7 @@ require qwen35-wheel.inc
 # 3290736 bytes; the sha256 is PyPI's, the file was fetched and re-hashed locally.
 QWEN35_WHEEL_URL = "https://files.pythonhosted.org/packages/d6/84/7990e799f1309a8b87af6b948f31edaa12a3ed22d11b352eaf4f4b2e5753"
 QWEN35_WHEEL_NAME = "tokenizers-${PV}-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl"
+SRC_URI = "${QWEN35_WHEEL_URL}/${QWEN35_WHEEL_NAME};name=wheel;unpack=0;subdir=${QWEN35_WHEEL_SUBDIR}"
 SRC_URI[wheel.sha256sum] = "2249487018adec45d6e3554c71d46eb39fa8ea67156c640f7513eb26f318cec7"
 
 # qwen35-npu RDEPENDS on python3-tokenizers (DEPENDS_NOTES.md §4): keep the OE

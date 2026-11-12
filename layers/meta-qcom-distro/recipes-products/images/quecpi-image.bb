@@ -46,6 +46,16 @@ IMAGE_INSTALL:append = " \
                     qcom-remoteproc-recover \
                 "
 
+# numpy / pillow: qwen35-npu and npu-chat import one each, and the sample rootfs
+# provides one but not the other (DEBIAN has numpy, UBUNTU has PIL). Pick the
+# missing one per OS dimension; QUECTEL_ROOTFS_PYHAS lists what the rootfs has.
+QWEN35_EXTRA_PYDEPS = "${@ ' '.join(pkg for mod, pkg in (('pillow','pillow'), ('numpy','python3-numpy-qwen35')) if mod not in (d.getVar('QUECTEL_ROOTFS_PYHAS') or '').split()) }"
+# poky's python3-numpy/python3-pillow land in /usr/lib/python3.12/site-packages,
+# which only the LINUX (OE 3.12) rootfs can see; drop them on the overlays.
+# (A transitive RDEPENDS is not affected by this -- see npu-llm_1.0.bb.)
+IMAGE_INSTALL:remove = "${@ 'python3-numpy python3-pillow' if d.getVar('QUECTEL_OS_DIM') != 'LINUX' else 'python3-pillow'}"
+IMAGE_INSTALL:append = " ${QWEN35_EXTRA_PYDEPS}"
+
 IMAGE_INSTALL:remove = " \
                     kernel-module-qcacld-wlan \
                 "

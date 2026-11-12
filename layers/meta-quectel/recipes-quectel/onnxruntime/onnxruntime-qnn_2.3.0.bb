@@ -25,8 +25,19 @@ LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda
 require qwen35-wheel.inc
 
 # 78730222 bytes; the sha256 is PyPI's, the file was fetched and re-hashed locally.
+#
+# Deliberately the cp313 wheel for every OS dimension, unlike
+# ../onnxruntime_1.27.0.bb, which needs one wheel per ABI.  This distribution
+# contains no compiled *python* extension: onnxruntime_qnn/ is __init__.py plus
+# build_and_package_info.py, and everything else is a plain QAIRT .so loaded
+# through ctypes/dlopen.  The ABI tag in the filename is pip's business, not the
+# interpreter's, so the same files import cleanly under 3.13 and 3.14 (verified
+# on the board: python3.14 + the cp313 tree -> `import onnxruntime_qnn` OK).
+# Pinning one file keeps a single DL_DIR entry and one checksum instead of three
+# byte-identical downloads.
 QWEN35_WHEEL_URL = "https://files.pythonhosted.org/packages/a0/31/ffce5b1530cb541c49da16cadc2cd94774eeb660bcf5c66be97dc77ee613"
 QWEN35_WHEEL_NAME = "onnxruntime_qnn-${PV}-cp313-cp313-manylinux_2_34_aarch64.whl"
+SRC_URI = "${QWEN35_WHEEL_URL}/${QWEN35_WHEEL_NAME};name=wheel;unpack=0;subdir=${QWEN35_WHEEL_SUBDIR}"
 SRC_URI[wheel.sha256sum] = "382e31b7991a7a1003be636a0a97e888d3b95ffadef2162bdece74b5106f0aef"
 
 # onnxruntime: the plugin is loaded into ORT 1.27.0 by RegisterExecutionProviderLibrary()

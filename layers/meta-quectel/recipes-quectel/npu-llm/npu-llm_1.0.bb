@@ -37,6 +37,34 @@ VOCOS = "https://github.com/k2-fsa/sherpa-onnx/releases/download/vocoder-models"
 # ~2.7 GB of payload. Cached in DL_DIR after the first build; on a host without a
 # route to modelscope.cn, drop the files into ${DL_DIR} under the names given by
 # downloadfilename and bitbake will use the cache.
+#
+# sherpa-onnx 1.13.8 is a compiled extension, so its wheel is per-ABI: the
+# module is _sherpa_onnx.cpython-XXX-aarch64-linux-gnu.so and an interpreter
+# refuses a foreign tag outright (the import fails with "No module named
+# 'sherpa_onnx.lib._sherpa_onnx'" while the file is sitting right there -- which
+# is exactly how the voice features died on the Ubuntu 26.04 rootfs).  The ABI
+# follows the OS dimension like the qwen35 wheels do (QUECTEL_OS_DIM, see
+# ../onnxruntime/qwen35-wheel.inc):
+#   LINUX -> cp312 (OE rootfs python 3.12)
+#   DEBIAN -> cp313 (rootfs python 3.13)
+#   UBUNTU -> cp314 (rootfs python 3.14)
+# downloadfilename carries the ABI on purpose: DL_DIR is flat and the three
+# wheels unpack to the same paths.
+NPU_LLM_SHERPA_CP312 = "https://files.pythonhosted.org/packages/1f/5f/22e1571146b2c0b581657562d5919b69da13ed93dc70049f42d45fe9e84c/sherpa_onnx-1.13.8-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl;name=whl_sherpa312;subdir=npu-llm/voice;downloadfilename=npu-llm-sherpa-onnx-cp312.whl"
+NPU_LLM_SHERPA_CP313 = "https://files.pythonhosted.org/packages/13/e3/115476caa9f80cd5f55e4e7b777a6c2d01a133d10f8fae574ba869fc48c3/sherpa_onnx-1.13.8-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl;name=whl_sherpa313;subdir=npu-llm/voice;downloadfilename=npu-llm-sherpa-onnx-cp313.whl"
+NPU_LLM_SHERPA_CP314 = "https://files.pythonhosted.org/packages/4f/9a/51821829b5735b3d7ce607992a62fe93d5f7215cda324c11191c77d49b9b/sherpa_onnx-1.13.8-cp314-cp314-manylinux2014_aarch64.manylinux_2_17_aarch64.whl;name=whl_sherpa314;subdir=npu-llm/voice;downloadfilename=npu-llm-sherpa-onnx-cp314.whl"
+NPU_LLM_SHERPA_WHEEL ??= "${NPU_LLM_SHERPA_CP313}"
+NPU_LLM_SHERPA_WHEEL = "${@ d.getVar('NPU_LLM_SHERPA_CP312') if d.getVar('QUECTEL_OS_DIM') == 'LINUX' else (d.getVar('NPU_LLM_SHERPA_CP314') if d.getVar('QUECTEL_OS_DIM') == 'UBUNTU' else d.getVar('NPU_LLM_SHERPA_CP313')) }"
+# The minor version of the *rootfs* interpreter the selected wheel was built for.
+# Only used for the build-time guard in do_install, so a mismatch fails here
+# instead of turning into "No module named 'sherpa_onnx.lib._sherpa_onnx'" on the
+# board (the .so is present; the interpreter just skips a foreign ABI tag).
+# '.cpython-314-' -- how the tag appears inside the module name (_sherpa_onnx.
+# cpython-314-aarch64-linux-gnu.so).  NOT the cpXXX wheel tag: the two differ by
+# the 'cpython' vs 'cp' spelling, and a guard that looks for the wrong one just
+# never matches.
+NPU_LLM_SHERPA_ABI = "${QUECTEL_PY_EXT}"
+
 SRC_URI = " \
     file://npu-llm;subdir=npu-llm-files \
     file://npu-chat;subdir=npu-llm-files \
@@ -64,7 +92,7 @@ SRC_URI = " \
     ${HF}/${MATCHA}/resolve/main/lexicon.txt;name=tts_lex;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-matcha-lexicon.txt \
     ${HF}/${MATCHA}/resolve/main/tokens.txt;name=tts_tok;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-matcha-tokens.txt \
     ${VOCOS}/vocos-16khz-univ.onnx;name=tts_voc;subdir=npu-llm/voice;downloadfilename=npu-llm-tts-vocoder.onnx \
-    https://files.pythonhosted.org/packages/13/e3/115476caa9f80cd5f55e4e7b777a6c2d01a133d10f8fae574ba869fc48c3/sherpa_onnx-1.13.8-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.whl;name=whl_sherpa;subdir=npu-llm/voice;downloadfilename=npu-llm-sherpa-onnx-cp313.whl \
+    ${NPU_LLM_SHERPA_WHEEL} \
     https://files.pythonhosted.org/packages/9c/72/02227b14cd3fb3d504a8814ad144ed321a53331948c893821e02f4abb1d7/sherpa_onnx_core-1.13.8-py3-none-manylinux2014_aarch64.whl;name=whl_core;subdir=npu-llm/voice;downloadfilename=npu-llm-sherpa-onnx-core.whl \
 "
 
@@ -89,7 +117,13 @@ SRC_URI[tts_model.sha256sum]    = "524286bf6cf11be74329ae1c682ac69e34d6860c2ea9f
 SRC_URI[tts_lex.sha256sum]      = "599efdcdaff4df2a123ce988c2cb90abcd59b919ef609ce36eb587d68b7ca2c0"
 SRC_URI[tts_tok.sha256sum]      = "77fee8e5e5dd96b3547119e6159292c648e99e065c54c97777722e3ce710b9a4"
 SRC_URI[tts_voc.sha256sum]      = "b599142a1fb8ff03de3e84ac35ff537c619e56f4267a6fe894851a42844acf9e"
-SRC_URI[whl_sherpa.sha256sum]   = "916ec38242e779ee3a99f7b161bd1bf3b02a7fad34cb073d091021c0469e0b58"
+# sherpa-onnx wheel checksums, one per ABI.  The name=whl_sherpa312/313/314 tags
+# in the URLs above are what routes the hash: only the entry NPU_LLM_SHERPA_WHEEL
+# selects lands in SRC_URI, so only that entry's varflag is consulted, and a
+# URL/hash mismatch fails do_fetch naming the file.
+SRC_URI[whl_sherpa312.sha256sum] = "2520b1e7b779a29a493a8cec893612218dfad7304786bf3f64df2ff7ac6c3302"
+SRC_URI[whl_sherpa313.sha256sum] = "916ec38242e779ee3a99f7b161bd1bf3b02a7fad34cb073d091021c0469e0b58"
+SRC_URI[whl_sherpa314.sha256sum] = "45f16c9fabc3d7ce31ba9722ff8196627ddcaa5ffd02413ad0664ad1952ba419"
 SRC_URI[whl_core.sha256sum]     = "a51a03d55c376c32e15dd63ea852236042ba91a5cd73e253bbf7cf21f6582ba9"
 
 S = "${WORKDIR}"
@@ -172,6 +206,28 @@ do_install() {
         python3 -m zipfile -e "$whl" ${D}${libdir}/npu-llm/voice
     done
     rm -rf ${D}${libdir}/npu-llm/voice/*.dist-info
+    # Exactly one sherpa wheel is in SRC_URI (NPU_LLM_SHERPA_WHEEL), so exactly
+    # one ABI-tagged extension must be left.  npu-chat puts this directory on
+    # sys.path itself (SHERPA = /usr/lib/npu-llm/voice), which is why the tree
+    # lives here and not in dist-packages -- and why a foreign ABI tag cannot be
+    # rescued by any packaging path: python only ever looks for the tag matching
+    # the running interpreter.
+    if [ ! -f ${D}${libdir}/npu-llm/voice/sherpa_onnx/lib/_sherpa_onnx.${NPU_LLM_SHERPA_ABI}-aarch64-linux-gnu.so ]; then
+        bbfatal "npu-llm: no _sherpa_onnx.${NPU_LLM_SHERPA_ABI} in the unpacked sherpa wheel -- npu-chat's voice features would fail to import on the rootfs python ${QUECTEL_PY_MINOR}"
+    fi
+    # The wheel carries exactly one ABI-tagged extension, so a second one here
+    # means an earlier build's tree was reused (same live-loop hazard as the
+    # wheels installed into dist-packages -- see qwen35_prune_foreign_abi in
+    # ../onnxruntime/qwen35-wheel.inc, which this recipe cannot require because
+    # it is a native C program that does not use the wheel helpers).  One line,
+    # same rule: keep only the tag this dimension builds for.
+    for so in ${D}${libdir}/npu-llm/voice/sherpa_onnx/lib/*.cpython-*-aarch64-linux-gnu.so; do
+        [ -e "$so" ] || continue
+        case "$so" in
+            *".${NPU_LLM_SHERPA_ABI}-aarch64-linux-gnu.so") ;;
+            *) rm -f "$so" ;;
+        esac
+    done
 
     install -d ${D}${docdir}/${PN}
     install -m 0644 ${S}/npu-llm-files/README.Debian ${D}${docdir}/${PN}/README.Debian
@@ -195,12 +251,36 @@ FILES:${PN} = " \
 # npu-chat needs GTK4 + PyGObject, which the Debian GNOME rootfs already ships.
 # They are NOT pulled in as RDEPENDS: this image is a Debian rootfs overlay and
 # dragging the OE gtk4 stack in would duplicate it. Add gtk4 + python3-pygobject
-# yourself if you build a pure-OE image. numpy is what sherpa-onnx takes the
-# microphone buffer as; coreutils is for the launcher's stdbuf. 识图 borrows the
-# rootfs' gst-launch-1.0 (v4l2src -> fdsink) and gdk-pixbuf (JPEG encode) the
-# same way: both come with the GNOME desktop, and the UI degrades with a clear
-# message rather than crashing if one is missing.
-RDEPENDS:${PN} = "python3 python3-numpy coreutils"
+# yourself if you build a pure-OE image. coreutils is for the launcher's stdbuf.
+# 识图 borrows the rootfs' gst-launch-1.0 (v4l2src -> fdsink) and gdk-pixbuf
+# (JPEG encode) the same way: both come with the GNOME desktop, and the UI
+# degrades with a clear message rather than crashing if one is missing.
+#
+# numpy is conditional, and the reason is a defect that shipped:
+# npu-chat's transcribe() converts the recorded PCM with
+# `np.frombuffer(...)` (files/npu-chat, in transcribe()), so numpy IS required --
+# but only *a* numpy for the rootfs interpreter, and the three variants get it
+# from different places (conf/quectel-os-dim.inc):
+#
+#   DEBIAN 13  dist-packages/numpy 2.2.4 for python 3.13  -> the rootfs has it
+#   UBUNTU 26  dist-packages/ was seeded without numpy      -> python3-numpy-qwen35
+#   LINUX      OE rootfs, python 3.12 site-packages         -> poky's python3-numpy
+#
+# A hard `python3-numpy` here resolved to poky's recipe on EVERY variant.  On the
+# Debian/Ubuntu overlays that copy lands in /usr/lib/python3.12/site-packages,
+# which neither board interpreter puts on sys.path -- so it never satisfied
+# `import numpy` (npu-chat's speech path kept failing) while still costing 35 MB,
+# and because the overlay rsync is --inplace without --delete, the files stayed
+# behind as orphans with no dpkg owner (verified on a built rootfs:
+# /usr/lib/python3.12/site-packages/numpy is 1.26.4 from OE while
+# `dpkg -S` finds nothing and var/lib/dpkg/status has no python3-numpy entry).
+# Same split as ../qwen35-npu/qwen35-npu_1.0.bb; keep the two in step.
+RDEPENDS:${PN} = " \
+    python3 \
+    coreutils \
+    ${@ 'python3-numpy' if d.getVar('QUECTEL_OS_DIM') == 'LINUX' else ''} \
+    ${@ 'python3-numpy-qwen35' if 'numpy' not in (d.getVar('QUECTEL_ROOTFS_PYHAS') or '').split() and d.getVar('QUECTEL_OS_DIM') != 'LINUX' else ''} \
+"
 # The Matcha TTS phonemises Latin with espeak-ng, whose data lives in the
 # Debian rootfs (/usr/lib/aarch64-linux-gnu/espeak-ng-data, from the
 # espeak-ng-data package) -- same story as gtk4 above: there is no espeak-ng

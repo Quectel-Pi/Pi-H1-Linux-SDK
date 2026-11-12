@@ -117,6 +117,15 @@ S = "${WORKDIR}"
 # verified against upstream's runtime-lock.json.  RDEPENDS keeps both packages in
 # the image, which is what provides the .so.1 the engine loads at runtime.
 DEPENDS = "onnxruntime onnxruntime-qnn"
+# numpy: imported by ten of the runtime modules, and it is the one import that is
+# NOT satisfied by the wheels above -- it comes from the sample rootfs on DEBIAN
+# (python3-numpy 2.2.4, cp313) and from ../onnxruntime/python3-numpy-qwen35_2.3.5.bb on UBUNTU
+# (cp314).  Keeping it out of RDEPENDS (and letting the image pick) is what makes
+# both work: a hard python3-numpy here would resolve to poky's 3.12 recipe and
+# land in /usr/lib/python3.12/site-packages, which neither board interpreter
+# searches.  See QWEN35_EXTRA_PYDEPS in quecpi-image.bb.
+# pillow: same split, mirrored -- DEBIAN has no PIL so the wheel is used, UBUNTU
+# has python3-pil 12.1.1 already.
 RDEPENDS:${PN} = " \
     onnxruntime \
     onnxruntime-qnn \
@@ -127,7 +136,8 @@ RDEPENDS:${PN} = " \
     python3-netclient \
     python3-netserver \
     python3-tokenizers \
-    pillow \
+    ${@ 'pillow' if 'pillow' not in (d.getVar('QUECTEL_ROOTFS_PYHAS') or '').split() else ''} \
+    ${@ 'python3-numpy-qwen35' if 'numpy' not in (d.getVar('QUECTEL_ROOTFS_PYHAS') or '').split() else ''} \
     fastrpc \
     util-linux-flock \
     util-linux-taskset \
@@ -135,14 +145,16 @@ RDEPENDS:${PN} = " \
 
 # Deliberately *not* depended on:
 #
-#   python3-numpy  - the rootfs is Debian (prebuild/debian-gnome-rootfs.tar.xz)
-#                    and already ships numpy for its CPython 3.13 in
-#                    /usr/lib/python3/dist-packages/numpy.  The only OE recipe
-#                    is poky's python3-numpy, which lands in
-#                    /usr/lib/python3.12/site-packages - a directory the board's
-#                    3.13 interpreter never puts on sys.path - so depending on it
-#                    would add build time and image size and still not satisfy
-#                    `import numpy`.  Do not add it back for a Debian rootfs.
+#   python3-numpy  - poky's recipe builds for the Yocto python (3.12) and lands
+#                    in /usr/lib/python3.12/site-packages, a directory no board
+#                    interpreter here puts on sys.path (DEBIAN is 3.13, UBUNTU
+#                    3.14, both read /usr/lib/python3/dist-packages).  The two
+#                    working providers are the sample rootfs itself (DEBIAN) and
+#                    python3-numpy-qwen35_2.3.5.bb (UBUNTU, cp314 wheel); RDEPENDS above names
+#                    the latter.  Do not add poky's recipe back -- with both in
+#                    the graph the image can pick the 3.12 copy again, which is
+#                    exactly the "ModuleNotFoundError: No module named 'numpy'"
+#                    that kept qwen3.5 from starting on Ubuntu.
 #   python3-onnx   - no layer has this recipe (checked).  `import onnx` appears
 #                    only in runtime/chunk_prefill.py, and nothing imports that
 #                    module: stage_worker.py loads request_frontend.py,

@@ -142,6 +142,13 @@ Maintainer: Quectel PI local build <root@localhost>
 Installed-Size: ${size}
 Section: misc
 Priority: optional
+# numpy is a *distro* package on the target rootfs (Debian 13 and Ubuntu 26.04
+# both name it python3-numpy; on Ubuntu it is not seeded, so it has to be
+# installed by hand or by the image), never the OE recipe -- see the RDEPENDS
+# comment in npu-llm_1.0.bb for why OE's copy in
+# /usr/lib/python3.12/site-packages is invisible to the 3.13/3.14 interpreter.
+# This deb is the adb-install path for a board that already runs a Debian/Ubuntu
+# rootfs, so plain python3-numpy is correct here.
 Depends: libc6 (>= 2.39), libstdc++6, libgcc-s1, python3, python3-numpy, python3-gi, gir1.2-gtk-4.0, espeak-ng-data
 Homepage: https://aihub.qualcomm.com/
 Description: LLMs on the QCS6490 Hexagon NPU (V68), plus a chat UI

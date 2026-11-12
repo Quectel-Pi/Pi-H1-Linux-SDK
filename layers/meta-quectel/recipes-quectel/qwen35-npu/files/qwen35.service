@@ -18,7 +18,11 @@ Wants=cdsprpcd.service qcom-remoteproc-recover.service
 # it never shows up; RestartPreventExitStatus keeps systemd from re-running that
 # 10 s, and the StartLimit* pair is the backstop for every other failure (a
 # genuine crash loop should stop and be visible, not spin forever).
-RestartPreventExitStatus=75
+# 78 = EX_CONFIG: qwen35-launch.sh already printed which python module is
+# missing and the apt line that installs it.  Restarting cannot help -- the
+# package will not appear by itself -- and a restart loop only hides the message
+# behind the start-limit burst, so stop there too.
+RestartPreventExitStatus=75 78
 StartLimitIntervalSec=300
 StartLimitBurst=3
 # NOT STARTED AT BOOT -- on demand only.

@@ -538,6 +538,17 @@ function buildconfig()
     else
         sed -i '/^SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS/d' ${BUILDDIR}/conf/local.conf
     fi
+
+    # The OS dimension also has to reach the recipes, because DEBIAN and UBUNTU
+    # overlay two different rootfs samples and therefore two different python
+    # ABIs (3.13 vs 3.14).  SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS only says "overlay
+    # something", so until now a UBUNTU build was indistinguishable from a
+    # DEBIAN one for every recipe that picks a cpXXX wheel -- and would install
+    # cp313 bindings into a 3.14 interpreter that cannot import them.
+    # QUECTEL_OS_DIM is the machine-readable copy of the dimension.
+    sed -i '/^QUECTEL_OS_DIM/d' ${BUILDDIR}/conf/local.conf
+    echo "QUECTEL_OS_DIM = \"${OS_DIM:-LINUX}\"" >> ${BUILDDIR}/conf/local.conf
+
     if has_custom_token "UBUNTU" "${BUILD_ARGS[@]}"; then
         cp -rf ${UBUNTU_SYNC_FILE} ${TOPDIR}/prebuild/sync-list
         fetch_github_rootfs_asset "$(rootfs_asset_name UBUNTU)"
@@ -561,6 +572,12 @@ function buildconfig()
     if [ $? != 0 ];then
         break
     fi
+
+    # config_parser.py regenerates auto.conf; local.conf is not touched by it,
+    # but re-apply QUECTEL_OS_DIM defensively so the value can never be lost
+    # between two buildconfig runs in the same build directory.
+    sed -i '/^QUECTEL_OS_DIM/d' ${BUILDDIR}/conf/local.conf
+    echo "QUECTEL_OS_DIM = \"${OS_DIM:-LINUX}\"" >> ${BUILDDIR}/conf/local.conf
 
     # The buildconfig values (project name / rev, custom name, git commit) are
     # written into /etc/quectel-release by os-release.bbappend, which reads the
