@@ -609,7 +609,6 @@ fi
 function buildall() {
     relax_userns_for_bitbake
 
-    bitbake $TARGET_IMAGE -c cleanall
     bitbake $TARGET_IMAGE
 }
 

@@ -38,7 +38,7 @@ source quectel_build/compile/build.sh
 # 2. 配置编译参数（项目名、版本号、定制类型）
 buildconfig QSM565DWF QSM565DWFPARL1A01_BP01.001_Linux6.6.38_V01 LINUX STD
 
-# 3a. 全量编译（cleanall + 编译，首次或需要干净构建时使用，耗时长）
+# 3a. 全量编译（不再 cleanall，prebuild/ 覆盖层变了会自动重跑 do_image）
 buildall
 
 # 3b. 增量编译（只编译改动部分，推荐日常使用）
@@ -49,7 +49,8 @@ buildpackage
 ```
 
 **注意**:
-- `buildall` = `cleanall` + 编译，会清除所有缓存重新编译，耗时很长
+- `buildall` 不再 cleanall：改了代码或 prebuild/ 覆盖层都会自动增量重编，没变化则直接跳过；
+  确需彻底重编时手动执行 `bitbake $TARGET_IMAGE -c cleanall` 再 `bitbake $TARGET_IMAGE`
 - 日常开发建议用 `bitbake $TARGET_IMAGE` 增量编译，只编译改动部分
 - 编译后必须 `buildpackage` 才能更新固件目录
 
@@ -239,7 +240,7 @@ adb shell cat /etc/os-release
 - 烧录中断后需要断电重新上电再进 EDL
 
 ### 编译相关
-- `buildall` 会先 cleanall 再编译，耗时很长
+- `buildall` 不再 cleanall，只做增量编译（prebuild/ 有变化会自动重跑 do_image）
 - 日常开发用 `bitbake $TARGET_IMAGE` 增量编译
 - 编译后必须 `buildpackage` 才能更新固件目录
 - 建议用户在终端手动执行编译命令

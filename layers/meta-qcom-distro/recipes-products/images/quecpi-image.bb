@@ -281,3 +281,6 @@ deploy_debian_gnome_rootfs () {
 #ROOTFS_PREPROCESS_COMMAND += "deploy_debian_gnome_rootfs;"
 SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS ??= "0"
 IMAGE_PREPROCESS_COMMAND:append = "${@'' if d.getVar('SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS') == '1' else ' deploy_debian_gnome_rootfs;'}"
+
+PREBUILD_OVERLAY_TRACK = "${@'' if d.getVar('SKIP_DEPLOY_DEBIAN_GNOME_ROOTFS') == '1' else os.path.normpath(os.path.join(d.getVar('TOPDIR'), '..', 'prebuild')) + ':True'}"
+do_image[file-checksums] += "${PREBUILD_OVERLAY_TRACK}"
