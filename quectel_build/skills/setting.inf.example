@@ -1,0 +1,74 @@
+; ============================================================================
+; setting.inf.example — Quectel PI H1 (QCS6490) SDK 用户能力画像【模板，入库】
+;
+; 用法：cp quectel_build/skills/setting.inf.example quectel_build/skills/setting.inf
+;      然后改 value 即可；也可以不手工建，让 Agent 按 user-profile-SKILL.md
+;      引导提问自动生成。
+;
+; 规范来源：quectel_build/skills/user-profile-SKILL.md（第 7 节）
+; 语法：  [section]  +  key = value ；; 或 # 开头为注释；值可加双引号
+; 缺失 key 取默认值；[derived] 为缓存，以 SKILL.md 判定表为准
+; 本文件本身不会被读取，Agent 只读 setting.inf
+; ============================================================================
+
+[meta]
+schema = 1
+created_at = 2026-02-05
+updated_at = 2026-02-05
+source = ai-interview          ; ai-interview | quick-start | manual
+state = complete               ; complete | in-progress | quick-start | stale
+confidence = medium            ; low | medium | high
+answers = 8/12
+language = zh-CN
+
+[role]
+primary = bsp                  ; bsp|system|app|algo|pm|eval
+target = "DSI 屏点亮 + 触摸可用"
+deadline = 2026-03-01
+
+[levels]
+; 0 不了解 | 1 能读/懂概念 | 2 能独立改 | 3 能设计/带人
+linux_kernel = 2
+device_tree = 1
+boot_chain = 1
+c_cpp = 3
+python = 2
+shell_debug = 2
+yocto = 2
+debian_pkg = 1
+hw_schematic = 1
+lab_equipment = 1
+gpu_npu = 0
+audio = 0
+camera = 0
+networking = 1
+
+[topics]
+; 只写与 [levels] 推断不同的域（0-3），用于局部覆盖
+; display = 2
+; camera = 0
+
+[preferences]
+autonomy = big-direction      ; manual | big-direction | auto
+participation = auto          ; mentor | guided | handoff | auto
+verbosity = normal            ; terse | normal | detailed
+jargon = explain              ; free | explain | plain
+report_format = conclusion-first  ; conclusion-first | full-process | result-next
+debug_style = hands-on        ; hands-on | guided | handoff
+ask_technical_route = false   ; false = 技术路线我自决，只报方案与影响
+review_diff = true
+comments_language = zh
+
+[constraints]
+; 这些字段会真的变成执行约束（profile-check.sh 读并输出），不是摆设
+serial_console = yes          ; yes | no | unknown（unknown = 用到先问一句）
+can_reboot_freely = yes       ; no = 重启前先标注代价并确认
+can_flash_freely = yes        ; no = 烧录/重刷前先说明抹掉什么、有无不烧的路径
+board_count = 1               ; ≤1 = 变砖/长时间占用要先确认
+offline = no                  ; yes = 禁止给 apt/pip/git pull/curl 这类联网方案
+session_minutes = 120         ; 单次会话时长，方案要能拆到这么久内交付
+deb_track_ask = true          ; true = 新增组件+编 DEBIAN/UBUNTU 时必须问是否登记 deb-track
+
+[derived]
+; 本段为缓存，由 user-profile-SKILL.md 第 4 节判定表算出；
+; profile-set.sh 每次写入后自动刷新，profile-check.sh 实时计算为准，勿手改
