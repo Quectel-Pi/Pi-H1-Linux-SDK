@@ -1,0 +1,127 @@
+#!/bin/sh
+# pi-agent -- one launcher, two jobs.
+#
+# The desktop entry "Pi 编程助手" has to do the right thing whether or not pi
+# is installed, and a .desktop Exec line cannot branch on state. So this small
+# dispatcher decides:
+#
+#   pi missing                     -> open the install wizard
+#   pi installed, not configured   -> open the wizard straight on its API page
+#   pi installed and configured    -> open a terminal running pi in the workspace
+#
+# It is shell on purpose: launching pi must not pay for starting a Python
+# interpreter plus GTK only to decide not to show a window. Status is still read
+# through engine.py, because that file is the only place that knows where the
+# state lives -- but it is a short-lived python3 run with no Gtk import.
+#
+# Flags:
+#   --setup            always open the wizard (desktop action / manual)
+#   --only-if-needed   autostart: open the wizard only when it has something to
+#                      ask, otherwise exit silently
+#   --here             run pi in the current directory instead of the workspace
+#   --status           print state and exit
+
+set -u
+
+ENGINE=/usr/share/pi-agent-setup/engine.py
+WIZARD=/usr/bin/pi-agent-setup
+
+# Respect the same sandbox variable engine.py honours, so the dispatcher can be
+# tested without touching a real home.
+PI_AGENT_HOME=${PI_AGENT_HOME:-$HOME}
+WORKSPACE=${PI_WORKSPACE:-$PI_AGENT_HOME/pi-workspace}
+
+mode=run
+for arg in "$@"; do
+    case "$arg" in
+        --setup)          mode=setup ;;
+        --only-if-needed) mode=autostart ;;
+        --here)           WORKSPACE=$PWD ;;
+        --status)         mode=status ;;
+        -h|--help)
+            sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+            exit 0 ;;
+        *)
+            echo "pi-agent: 未知参数 $arg" >&2
+            exit 2 ;;
+    esac
+done
+
+if [ "$mode" = status ]; then
+    exec python3 "$ENGINE" status
+fi
+
+installed=no
+configured=no
+if command -v python3 >/dev/null 2>&1 && [ -r "$ENGINE" ]; then
+    # engine.py prints JSON; parse the two booleans with python itself since the
+    # board has no jq. One process, no GTK import.
+    read_status=$(python3 - "$ENGINE" <<'PY'
+import json, subprocess, sys
+try:
+    out = subprocess.run([sys.executable, sys.argv[1], "status"],
+                         capture_output=True, text=True, timeout=30)
+    data = json.loads(out.stdout)
+except Exception:
+    print("no no")
+    raise SystemExit
+print("yes" if data.get("pi_installed") else "no",
+      "yes" if data.get("configured") else "no")
+PY
+)
+    installed=${read_status%% *}
+    configured=${read_status##* }
+fi
+
+if [ "$mode" = autostart ]; then
+    # Autostart must be silent unless there is something to ask.
+    if [ "$configured" = yes ]; then
+        exit 0
+    fi
+    exec "$WIZARD" --only-if-needed
+fi
+
+if [ "$mode" = setup ] || [ "$installed" != yes ] || [ "$configured" != yes ]; then
+    if [ "$installed" = yes ] && [ "$configured" != yes ]; then
+        # Half done: ask for the endpoint instead of offering the install again.
+        exec "$WIZARD" --page config
+    fi
+    exec "$WIZARD"
+fi
+
+# --- installed and configured: open a terminal with pi -----------------------
+# pi is a terminal UI, so "open pi" means a terminal on a desktop. The private
+# Node.js runtime is put on PATH by ~/.local/bin/pi, a wrapper written by the
+# installer, so the terminal only needs that one directory.
+PI_BIN=$PI_AGENT_HOME/.local/bin/pi
+if [ ! -x "$PI_BIN" ]; then
+    echo "pi-agent: 找不到 $PI_BIN，重新运行安装向导" >&2
+    exec "$WIZARD"
+fi
+
+mkdir -p "$WORKSPACE" 2>/dev/null || true
+
+# Keep the window open if pi dies straight away, so the error is readable
+# instead of the terminal vanishing.
+inner="cd '$WORKSPACE' && '$PI_BIN'; rc=\$?; if [ \$rc -ne 0 ]; then echo; echo \"pi 退出（\$rc）\"; exec sh -i; fi"
+
+term=
+for candidate in x-terminal-emulator gnome-terminal kgx ptyxis \
+                 xfce4-terminal mate-terminal konsole xterm; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+        term=$candidate
+        break
+    fi
+done
+
+if [ -z "$term" ]; then
+    echo "pi-agent: 没有找到终端程序，请在终端里手动运行 $PI_BIN" >&2
+    exit 1
+fi
+
+case "$term" in
+    gnome-terminal|kgx|ptyxis|xfce4-terminal|mate-terminal)
+        exec "$term" -- sh -c "$inner" ;;
+    *)
+        exec "$term" -e sh -c "$inner" ;;
+esac

@@ -45,6 +45,7 @@ IMAGE_INSTALL:append = " \
                     qwen35-npu-model \
                     qcom-remoteproc-recover \
                     pi-voice-input \
+                    pi-agent-setup \
                 "
 
 # numpy / pillow: qwen35-npu and npu-chat import one each, and the sample rootfs

@@ -1,0 +1,27 @@
+[Desktop Entry]
+Type=Application
+Name=Pi 编程助手
+Name[en]=Pi Coding Agent
+GenericName=AI Coding Agent
+GenericName[zh_CN]=编程智能体
+Comment=Install Pi, or open it in a terminal once it is installed
+Comment[zh_CN]=未安装时打开安装向导；装好后点击即在终端里打开 pi
+Exec=/usr/bin/pi-agent
+Icon=pi-agent
+Terminal=false
+Categories=Development;
+Keywords=pi;agent;AI;coding;terminal;setup;install;
+StartupNotify=true
+StartupWMClass=pi-agent-setup
+# One entry, two behaviours: pi-agent (the small shell dispatcher) opens the
+# install wizard while pi is missing and a terminal running pi afterwards. A
+# .desktop Exec line cannot branch on state, which is why the dispatcher exists.
+#
+# To always get the wizard (to re-point the endpoint, or to reinstall), run
+#   /usr/bin/pi-agent --setup
+Actions=Setup;
+
+[Desktop Action Setup]
+Name=安装 / 重新配置向导
+Name[en]=Install or reconfigure
+Exec=/usr/bin/pi-agent --setup

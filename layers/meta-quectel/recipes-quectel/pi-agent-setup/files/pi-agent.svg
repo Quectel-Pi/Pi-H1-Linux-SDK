@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!--
+    Pi 编程助手 icon.
+
+    A terminal prompt (">_") because pi is a terminal application, in pi's own
+    three-colour palette (coral / blue / gold, the same colours the official
+    installer animates its logo with). The gold dot is the agent itself.
+
+    Shipped as one scalable SVG and installed into
+    /usr/share/icons/hicolor/scalable/apps/pi-agent.svg, next to npu-chat.svg, the
+    same convention this layer already uses, so no per-size PNG set has to
+    be kept in sync. GNOME renders it at 16, 24, 48 and 256px from this one file.
+
+    Keep the <svg> element on line 2 and this comment after it: gdk-pixbuf
+    sniffs the first ~256 bytes of a file to decide which loader to use, and a
+    long comment *before* <svg> pushes the element out of that window, at which
+    point the icon silently fails to load (`Couldn't recognize the image file format`) even though the SVG is perfectly valid and xmllint accepts it.
+  -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#202838"/>
+      <stop offset="1" stop-color="#121621"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="0" y="0" width="128" height="128" rx="30" fill="url(#bg)"/>
+
+  <!-- chevron of the prompt -->
+  <path d="M42 48 L64 64 L42 80"
+        fill="none" stroke="#f09082" stroke-width="11"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- underscore -->
+  <path d="M72 80 L88 80"
+        fill="none" stroke="#4d9abf" stroke-width="11"
+        stroke-linecap="round"/>
+
+  <!-- the agent -->
+  <circle cx="88" cy="48" r="7" fill="#f1be58"/>
+</svg>

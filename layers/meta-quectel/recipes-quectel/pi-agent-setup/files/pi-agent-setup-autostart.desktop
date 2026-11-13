@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=Pi 编程助手（首次运行）
+Name[en]=Pi Coding Agent (first run)
+Comment=Install and configure the Pi coding agent
+Exec=/usr/bin/pi-agent --only-if-needed
+Icon=pi-agent
+Terminal=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+# Autostart only starts the wizard when it still has something to ask: pi not
+# installed, or installed but never configured. The check is in the program
+# (--only-if-needed), not here, because a .desktop file cannot look at
+# ~/.pi/agent/state. A "later" or "never" answer is recorded there too, so the
+# window does not reappear on the next login.
+X-GNOME-Autostart-Phase=Applications
+X-GNOME-Autostart-Delay=8
