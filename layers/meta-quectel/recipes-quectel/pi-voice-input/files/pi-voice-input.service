@@ -2,15 +2,21 @@
 Description=Voice input daemon (push-to-talk dictation)
 Documentation=file:///usr/share/doc/pi-voice-input/README.md
 # A desktop-session service, not a boot service: it needs the user's session
-# bus and PipeWire. D-Bus activation starts it the first time the shell
-# extension or the Ctrl+Q client talks to it, so it needs no WantedBy; it is
-# pulled in by default.target so the switch works before the first explicit
-# call, and D-Bus activation covers the case where it exited.
+# bus and PipeWire. It is pulled in by graphical-session.target, i.e. once per
+# graphical login, and stopped with that session.
+#
+# WantedBy=default.target was wrong and measurably so: systemd --user keeps the
+# user manager (and therefore default.target) alive across a logout, so logging
+# back in did not re-pull this unit and the daemon stayed dead -- push-to-talk
+# and the switch were both gone until the next reboot. graphical-session.target
+# has StopWhenUnneeded=yes and is re-activated by every GNOME login, which is
+# exactly the lifetime this service needs. PartOf= makes it stop at logout.
 #
 # At login the daemon reads the remembered switch position (StateDirectory=
 # below) and loads the model itself if it was left on -- an "off" choice must
 # stay off across a reboot, otherwise the freed 350 MB comes back on its own.
 After=pipewire.service
+PartOf=graphical-session.target
 
 [Service]
 Type=simple
@@ -46,4 +52,4 @@ RestrictAddressFamilies=AF_UNIX
 ReadWritePaths=/run/user/%U
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target

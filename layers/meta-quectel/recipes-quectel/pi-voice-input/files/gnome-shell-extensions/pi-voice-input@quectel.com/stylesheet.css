@@ -1,0 +1,31 @@
+/* Style for the on-screen push-to-talk button.
+ *
+ * Only shown when no keyboard is attached (touch-panel-only board), so this is
+ * the whole interface: it has to be big enough for a fingertip and it has to
+ * look like something you press and hold rather than something you click.
+ *
+ * 96 px round button, bottom right of the primary monitor. The recording state
+ * turns it red so the user can tell "the microphone is open" from across the
+ * room -- dictation records whatever is said while the finger is down. */
+
+.pi-voice-ptt {
+    background-color: rgba(53, 132, 228, 0.92);
+    border-radius: 48px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    color: #ffffff;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+}
+
+.pi-voice-ptt:hover {
+    background-color: rgba(70, 148, 240, 0.98);
+}
+
+.pi-voice-ptt:active,
+.pi-voice-ptt.recording {
+    background-color: rgba(224, 27, 36, 0.95);
+    border-color: rgba(255, 255, 255, 0.7);
+}
+
+.pi-voice-ptt-icon {
+    color: #ffffff;
+}

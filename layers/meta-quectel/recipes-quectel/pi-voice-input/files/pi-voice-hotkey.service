@@ -9,6 +9,10 @@ Wants=pi-voice-input.service
 # these images. Without it the unit exits immediately (see ConditionPathExists
 # below) and only the GNOME keybinding path remains.
 ConditionPathExists=/dev/input
+# Same lifetime as the session, for the same reason as pi-voice-input.service
+# (see there): default.target survives a logout, graphical-session.target does
+# not, so this listener has to die and be re-pulled with the session.
+PartOf=graphical-session.target
 
 [Service]
 Type=simple
@@ -29,4 +33,4 @@ ProtectHome=read-only
 RestrictAddressFamilies=AF_UNIX
 
 [Install]
-WantedBy=default.target
+WantedBy=graphical-session.target

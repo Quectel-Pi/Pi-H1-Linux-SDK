@@ -129,6 +129,42 @@ sherpa_onnx/lib/`）。板子上只有一份，两个前端（npu-chat 和本服
 链接路径上；`dlopen` 也让缺少 npu-llm 的板子得到一句清楚的错误，而不是
 `main()` 之前就被 loader 打死。
 
+## 触屏板上没有键盘时：屏幕按钮
+
+状态栏开关仍在，但如果**没有任何键盘**（只有触屏），右 Ctrl 无从按起，扩展会在
+**屏幕中部偏右**放一个圆形话筒按钮：按住说话、松手上屏，按住时变红。
+
+判据全部来自板上实测，不是设计推测：
+
+| 条件 | 判据 |
+|---|---|
+| 有没有键盘 | 守护进程的 D-Bus 属性 `keyboard`，`Properties.Get` / `GetAll` 都能读 |
+| 按钮何时出现 | `enabled && !keyboard && 有文本框获得焦点` |
+| 何时消失 | 焦点离开输入框（和软键盘同步），或开关关闭 |
+
+两个容易搞错的地方，都已踩过并写进代码注释：
+
+- **按钮不能只接 `button-press-event`**。Clutter 把手指当成 *touch* 事件，不是
+  button 事件，所以只接 button 信号时，触屏按住按钮**完全没反应**，而同一坐标
+  用鼠标按下能正常录音（板上 A/B 实测）。`St.Button` 自己的触摸处理在 C 里，
+  在 GJS 里接不到；`Clutter.ClickAction` 在 Clutter 16 已没有
+  `pressed`/`released` 信号（只有 clicked/long-press/may-recognize），接上就抛
+  `No signal 'pressed'`。最终用 actor 自己的 `touch-event` 信号，配合
+  `event.type()`（不是 `get_event_type()`，那个名字与 GObject 冲突）判
+  `TOUCH_BEGIN` / `TOUCH_END`。
+- **不能靠 `/proc/bus/input/devices` 里有没有 `kbd` 判断键盘**。GT911 触屏会
+  注册 `Handlers=kbd mouse0 eventN`，按这个判据会把触屏当成键盘，按钮永远不
+  会出现。真正的判据是「能不能承载右 Ctrl」，用 sysfs
+  `capabilities/key` 查 KEY_Q + KEY_LEFTCTRL，与 `pi-voice-hotkey` 的
+  `is_keyboard()` 同一套条件。
+- **按钮不能放右下角**。文本框获得焦点后软键盘占住屏幕下方，按钮正好被盖住；
+  放正中会压在正在口述的文字上。所以取垂直居中、水平 0.78 处（1280×800 上是
+  x≈950、y≈352）。
+
+`Main.inputMethod._currentFocus` 是「有文本框在编辑」的准确判据（`vfunc_focus_in`
+置位、`vfunc_focus_out` 清空），它没有信号，所以扩展每 250 ms 采一次样；那不是
+`Main.keyboard.visible`——本镜像没开软键盘，那个值永远是 false。
+
 ## 构建与安装
 
 配方：`layers/meta-quectel/recipes-quectel/pi-voice-input/pi-voice-input_1.0.bb`
@@ -175,6 +211,16 @@ journalctl --user -u pi-voice-hotkey -f   # 按下时应出现 "recording"
 
 ## 已知限制
 
+- **按键/设备热插拔不需要重启服务**。`pi-voice-hotkey` 用 inotify 盯
+  `/dev/input`，并且每秒检查已打开的 fd 是否已被删除（`nlink==0` 或
+  `EVIOCGNAME` 失败），所以拔插键盘、USB 掉电重连都会自动重扫。踩过的坑：
+  拔掉后重新枚举的键盘是**另一个** `eventN`，旧 fd 仍可用但永远没有事件，
+  服务不退出、`Restart=on-failure` 也不救——功能会静默失效到下次重启。
+  按住期间设备消失会自动结束这次录音，不会卡到 60 s 上限。
+- **两个 unit 挂 `graphical-session.target`，登录后才可用**。`default.target`
+  不行：用户级的 systemd 实例在注销后仍然存活，`default.target` 已是 active，
+  再登录不会重新拉取 wants，守护进程就一直是死的（板上实测）。
+  `graphical-session.target` 每次登录重新激活、注销时停止，正是需要的生命周期。
 - **焦点必须在能接受文字的输入框里**。桌面空白处按 Ctrl+Q 不会出现在任何地方
   （`Main.inputMethod.commit` 只会送到有输入上下文的应用）。这是 Wayland 的
   设计，无法绕过。

@@ -109,18 +109,23 @@ do_install() {
 		${D}${systemd_user_unitdir}/pi-voice-input.service
 	install -m 0644 ${S}/pi-voice-hotkey.service \
 		${D}${systemd_user_unitdir}/pi-voice-hotkey.service
-	# Both units carry WantedBy=default.target, so "enabled" for a *user* unit
-	# means this symlink. It has to be created here and not in pkg_postinst:
-	# pkg_postinst returns early when $D is set, which is exactly the image
-	# build, so 'systemctl --global enable' never ran and the units stayed
-	# disabled on the flashed image (pi-voice-hotkey dead, no push-to-talk).
-	# The path mirrors what systemctl --global enable writes, so a later
-	# 'systemctl --user disable' still works.
-	install -d ${D}${sysconfdir}/systemd/user/default.target.wants
+	# Both units carry WantedBy=graphical-session.target, so "enabled" for a
+	# *user* unit means this symlink. It has to be created here and not in
+	# pkg_postinst: pkg_postinst returns early when $D is set, which is exactly
+	# the image build, so 'systemctl --global enable' never ran and the units
+	# stayed disabled on the flashed image (pi-voice-hotkey dead, no
+	# push-to-talk). The path mirrors what systemctl --global enable writes, so
+	# a later 'systemctl --user disable' still works.
+	#
+	# graphical-session.target and not default.target: the user manager survives
+	# a logout, so default.target is already active when the next login happens
+	# and its wants are not re-pulled -- measured on the board, the daemon
+	# stayed dead after re-login until the next reboot.
+	install -d ${D}${sysconfdir}/systemd/user/graphical-session.target.wants
 	ln -sf ${systemd_user_unitdir}/pi-voice-input.service \
-		${D}${sysconfdir}/systemd/user/default.target.wants/pi-voice-input.service
+		${D}${sysconfdir}/systemd/user/graphical-session.target.wants/pi-voice-input.service
 	ln -sf ${systemd_user_unitdir}/pi-voice-hotkey.service \
-		${D}${sysconfdir}/systemd/user/default.target.wants/pi-voice-hotkey.service
+		${D}${sysconfdir}/systemd/user/graphical-session.target.wants/pi-voice-hotkey.service
 	# Session bus activation: the first call from the shell extension or from
 	# the Ctrl+Q client starts the daemon, so nothing has to be started at
 	# login by hand.
@@ -131,6 +136,7 @@ do_install() {
 	install -m 0644 \
 		${S}/gnome-shell-extensions/pi-voice-input@quectel.com/metadata.json \
 		${S}/gnome-shell-extensions/pi-voice-input@quectel.com/extension.js \
+		${S}/gnome-shell-extensions/pi-voice-input@quectel.com/stylesheet.css \
 		${D}${datadir}/gnome-shell/extensions/pi-voice-input@quectel.com/
 
 	# GNOME 50 ignores any extension that is not listed here, and this image
@@ -166,8 +172,8 @@ FILES:${PN} = " \
     ${datadir}/gnome-shell/extensions/pi-voice-input@quectel.com \
     ${systemd_user_unitdir}/pi-voice-input.service \
     ${systemd_user_unitdir}/pi-voice-hotkey.service \
-    ${sysconfdir}/systemd/user/default.target.wants/pi-voice-input.service \
-    ${sysconfdir}/systemd/user/default.target.wants/pi-voice-hotkey.service \
+    ${sysconfdir}/systemd/user/graphical-session.target.wants/pi-voice-input.service \
+    ${sysconfdir}/systemd/user/graphical-session.target.wants/pi-voice-hotkey.service \
     ${sysconfdir}/dconf/db/local.d/00-pi-voice-input \
     ${datadir}/doc/${PN} \
 "

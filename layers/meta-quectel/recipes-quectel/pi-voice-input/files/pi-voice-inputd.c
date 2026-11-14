@@ -34,9 +34,11 @@
 #include <spa/param/audio/format-utils.h>
 #include <spa/param/props.h>
 #include <dbus/dbus.h>
+#include <ctype.h>
 #include <dlfcn.h>
-#include <malloc.h>
+#include <dirent.h>
 #include <errno.h>
+#include <malloc.h>
 #include <math.h>
 #include <pthread.h>
 #include <signal.h>
@@ -103,6 +105,105 @@ struct snapshot {
 	const char *state;
 	bool enabled;
 };
+
+/* Whether a device that could actually carry the push-to-talk key is attached.
+ * Answered without opening anything for reading: this runs inside a D-Bus method
+ * handler, and blocking there would stall the whole daemon.
+ *
+ * "Could carry right Ctrl" is stricter than "has a kbd handler", and it has to
+ * be: a Goodix touchscreen registers Handlers=kbd mouse0 eventN, so a presence
+ * check based on the kbd handler alone reports "keyboard" on a panel-only board
+ * and the on-screen button never appears (measured on the board: 3-0014 Goodix
+ * Capacitive TouchScreen, ABS=265800000000003, no letter keys).
+ *
+ * The rule is the same one pi-voice-hotkey uses to decide whether a device is
+ * worth reading (is_keyboard(): EV_KEY + KEY_Q + KEY_LEFTCTRL), expressed in
+ * sysfs so that nothing has to be opened. What is needed from it:
+ *  - KEY_Q is bit 16 of the FIRST 64-bit word of capabilities/key, because the
+ *    words are printed most-significant first: Q lives in the last word. A
+ *    real keyboard has f800000000000000 there (Q..U plus the Ctrl/Alt keys),
+ *    the touchscreen has 2000000000000001 (only BTN_TOUCH and BTN_TOOL_FINGER).
+ *  - test bit 88 (KEY_LEFTCTRL) as well, so a bar-code scanner or a
+ *    volume-key device that happens to decode letters is not mistaken for a
+ *    keyboard the user can dictate with.
+ *
+ * Any read failure falls back to "present": showing a floating button on a desk
+ * that has a keyboard is worse than hiding it once on a board that does not. */
+#define SYSFS_SCAN_KEYS 256
+
+/* The capabilities file lists one word per line, most significant first. Read
+ * them back into a little-endian bit array so KEY_x can be tested by number. */
+static bool sysfs_key_capable(const char *event)
+{
+	char path[256];
+	FILE *f;
+	unsigned char bits[SYSFS_SCAN_KEYS / 8];
+	unsigned long words[16];
+	int nwords = 0, i;
+
+	memset(bits, 0, sizeof(bits));
+	snprintf(path, sizeof(path),
+		 "/sys/class/input/%s/device/capabilities/key", event);
+	f = fopen(path, "re");
+	if (!f)
+		return false;
+	while (nwords < (int)(sizeof(words) / sizeof(words[0])) &&
+	       fscanf(f, "%lx", &words[nwords]) == 1)
+		nwords++;
+	fclose(f);
+	if (nwords == 0)
+		return false;
+	/* words[0] is the most significant, so word k of n covers bit numbers
+	 * [ (n-1-k)*64, (n-1-k)*64 + 63 ]. */
+	for (i = 0; i < nwords; i++) {
+		unsigned long w = words[i];
+		int bit;
+
+		for (bit = 0; bit < 64; bit++) {
+			unsigned long number;
+
+			if (!(w & (1UL << bit)))
+				continue;
+			number = (unsigned long)(nwords - 1 - i) * 64UL +
+				 (unsigned long)bit;
+			if (number < SYSFS_SCAN_KEYS)
+				bits[number / 8] |=
+					(unsigned char)(1u << (number % 8));
+		}
+	}
+	/* KEY_Q = 16, KEY_LEFTCTRL = 29, KEY_RIGHTCTRL = 97 (input-event-codes.h;
+	 * the headers are not shipped with the daemon, hence the numbers). Only
+	 * KEY_Q and KEY_LEFTCTRL matter -- the same pair is_keyboard() checks. */
+	if (!(bits[16 / 8] & (1u << (16 % 8))))
+		return false;
+	if (!(bits[29 / 8] & (1u << (29 % 8))))
+		return false;
+	return true;
+}
+
+static bool input_keyboard_present(void)
+{
+	DIR *d;
+	struct dirent *e;
+	bool saw_event = false;
+
+	d = opendir("/sys/class/input");
+	if (!d)
+		return true; /* cannot tell -> do not add a button */
+	while ((e = readdir(d))) {
+		if (strncmp(e->d_name, "event", 5) != 0)
+			continue;
+		saw_event = true;
+		if (sysfs_key_capable(e->d_name)) {
+			closedir(d);
+			return true;
+		}
+	}
+	closedir(d);
+	if (!saw_event)
+		return true; /* sysfs not mounted as expected -> do not add a button */
+	return false;
+}
 
 static struct snapshot snap(void)
 {
@@ -387,20 +488,158 @@ static void emit_state_changed(void)
 	queue_flush = true;
 }
 
+/* SenseVoice is trained on punctuated text and dutifully appends 。，？！ to every
+ * sentence. For push-to-talk dictation that is noise: the text goes into a chat
+ * box, a search field or a terminal, not into a document, and nobody says
+ * "period" out loud. So punctuation is removed before the text is handed to the
+ * shell.
+ *
+ * Removal is UTF-8 aware: CJK punctuation is 3 bytes, so the buffer is compacted
+ * byte-wise but only over whole characters, and an unknown multibyte character
+ * is always copied intact. The raw transcript is still logged, so a removal that
+ * was wrong for a given phrase can be diagnosed afterwards.
+ *
+ * Only punctuation is removed: Latin letters, digits, spaces and every CJK
+ * character stay, so "20:30" becomes "2030" but "测试" is untouched. */
+static const char *const punct_utf8[] = {
+	"\xef\xbc\x8c", /* U+FF0C ， */
+	"\xe3\x80\x82", /* U+3002 。 */
+	"\xe3\x80\x81", /* U+3001 、 */
+	"\xef\xbc\x9b", /* U+FF1B ； */
+	"\xef\xbc\x9a", /* U+FF1A ： */
+	"\xef\xbc\x9f", /* U+FF1F ？ */
+	"\xef\xbc\x81", /* U+FF01 ！ */
+	"\xe2\x80\xa6", /* U+2026 … */
+	"\xe2\x80\x94", /* U+2014 — */
+	"\xe2\x80\x93", /* U+2013 – */
+	"\xef\xbd\x9e", /* U+FF5E ～ */
+	"\xe2\x80\x9c", /* U+201C “ */
+	"\xe2\x80\x9d", /* U+201D ” */
+	"\xe2\x80\x98", /* U+2018 ‘ */
+	"\xe2\x80\x99", /* U+2019 ’ */
+	"\xe3\x80\x8a", /* U+300A 《 */
+	"\xe3\x80\x8b", /* U+300B 》 */
+	"\xe3\x80\x8c", /* U+300C 「 */
+	"\xe3\x80\x8d", /* U+300D 」 */
+	"\xe3\x80\x8e", /* U+300E 『 */
+	"\xe3\x80\x8f", /* U+300F 』 */
+	"\xef\xbc\x88", /* U+FF08 （ */
+	"\xef\xbc\x89", /* U+FF09 ） */
+	"\xe3\x80\x90", /* U+3010 【 */
+	"\xe3\x80\x91", /* U+3011 】 */
+	"\xe3\x80\x88", /* U+3008 〈 */
+	"\xe3\x80\x89", /* U+3009 〉 */
+	"\xe3\x80\x94", /* U+3014 〔 */
+	"\xe3\x80\x95", /* U+3015 〕 */
+	"\xe3\x80\x80", /* U+3000 ideographic space (same role as a space here) */
+	"\xc2\xb7",     /* U+00B7 · */
+	"\xe2\x80\xbb", /* U+203B ※ */
+	NULL,
+};
+
+/* Returns s, compacted in place. */
+static char *strip_punctuation(char *s)
+{
+	size_t r = 0, w = 0;
+
+	while (s[r] != '\0') {
+		unsigned char c = (unsigned char)s[r];
+		size_t len = 1, i;
+		bool drop = false;
+
+		if (c < 0x80) {
+			drop = ispunct(c) != 0;
+		} else {
+			/* Length of this UTF-8 sequence; a stray continuation byte
+			 * (already corrupt input) is treated as its own character so
+			 * nothing is silently truncated. */
+			if ((c & 0xe0) == 0xc0)
+				len = 2;
+			else if ((c & 0xf0) == 0xe0)
+				len = 3;
+			else if ((c & 0xf8) == 0xf0)
+				len = 4;
+			if (r + len > strlen(s))
+				len = 1;
+			for (i = 0; punct_utf8[i]; i++) {
+				if (strncmp(s + r, punct_utf8[i], len) == 0 &&
+				    strlen(punct_utf8[i]) == len) {
+					drop = true;
+					break;
+				}
+			}
+		}
+		if (drop) {
+			r += len;
+			continue;
+		}
+		if (r != w) {
+			for (i = 0; i < len; i++)
+				s[w + i] = s[r + i];
+		}
+		w += len;
+		r += len;
+	}
+	s[w] = '\0';
+
+	/* Removing punctuation leaves doubled and trailing ASCII spaces, and the
+	 * shell inserts the string verbatim. */
+	{
+		size_t i, o = 0;
+		bool prev_space = true; /* also trims the leading run */
+
+		for (i = 0; s[i] != '\0'; i++) {
+			if (s[i] == ' ' || s[i] == '\t') {
+				if (prev_space)
+					continue;
+				prev_space = true;
+				s[o++] = ' ';
+				continue;
+			}
+			prev_space = false;
+			s[o++] = s[i];
+		}
+		while (o > 0 && s[o - 1] == ' ')
+			o--;
+		s[o] = '\0';
+	}
+	return s;
+}
+
 static void emit_text(const char *text)
 {
 	DBusMessage *m;
+	char *clean;
+	const char *payload;
 
 	if (!text || !*text || !bus_conn)
 		return;
-	m = dbus_message_new_signal(BUS_PATH, BUS_IFACE, "TextRecognized");
-	if (!m)
+	logmsg("recognized: %s", text);
+	clean = strdup(text);
+	if (!clean)
 		return;
-	dbus_message_append_args(m, DBUS_TYPE_STRING, &text, DBUS_TYPE_INVALID);
+	strip_punctuation(clean);
+	if (!*clean) {
+		/* The utterance was nothing but punctuation, which is what a
+		 * cough or a door slam decodes to. Inserting an empty string would
+		 * look like the feature did nothing at all. */
+		logmsg("empty after removing punctuation; not inserting");
+		free(clean);
+		return;
+	}
+	if (strcmp(clean, text) != 0)
+		logmsg("inserting without punctuation: %s", clean);
+	payload = clean;
+	m = dbus_message_new_signal(BUS_PATH, BUS_IFACE, "TextRecognized");
+	if (!m) {
+		free(clean);
+		return;
+	}
+	dbus_message_append_args(m, DBUS_TYPE_STRING, &payload, DBUS_TYPE_INVALID);
 	dbus_connection_send(bus_conn, m, NULL);
 	dbus_connection_flush(bus_conn);
 	dbus_message_unref(m);
-	logmsg("recognized: %s", text);
+	free(clean);
 }
 
 static void emit_error(const char *msg)
@@ -1212,6 +1451,15 @@ static void reply_all_properties(DBusMessage *msg)
 	dbus_bool_t en = s.enabled ? TRUE : FALSE;
 	dbus_uint32_t boot = (dbus_uint32_t)boot_count;
 	dbus_bool_t rem = remembered ? TRUE : FALSE;
+	/* Whether a readable keyboard is attached, i.e. whether "hold right Ctrl"
+	 * is even possible. Decided here and not by the shell: only this process
+	 * knows if the device was there *and* readable. A board driven from a
+	 * touch panel has none, and the shell then shows an on-screen button.
+	 *
+	 * Deliberately a property of this daemon and not of pi-voice-hotkey: the
+	 * Button gets one call and no second bus name to watch, and the answer
+	 * stays right when the hotkey unit is the thing that broke. */
+	dbus_bool_t kbd = input_keyboard_present() ? TRUE : FALSE;
 	DBusMessageIter entry, var;
 
 	dbus_message_iter_init_append(reply, &it);
@@ -1229,6 +1477,13 @@ static void reply_all_properties(DBusMessage *msg)
 	dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING, &(const char *){"remembered"});
 	dbus_message_iter_open_container(&entry, DBUS_TYPE_VARIANT, "b", &var);
 	dbus_message_iter_append_basic(&var, DBUS_TYPE_BOOLEAN, &rem);
+	dbus_message_iter_close_container(&entry, &var);
+	dbus_message_iter_close_container(&arr, &entry);
+
+	dbus_message_iter_open_container(&arr, DBUS_TYPE_DICT_ENTRY, NULL, &entry);
+	dbus_message_iter_append_basic(&entry, DBUS_TYPE_STRING, &(const char *){"keyboard"});
+	dbus_message_iter_open_container(&entry, DBUS_TYPE_VARIANT, "b", &var);
+	dbus_message_iter_append_basic(&var, DBUS_TYPE_BOOLEAN, &kbd);
 	dbus_message_iter_close_container(&entry, &var);
 	dbus_message_iter_close_container(&arr, &entry);
 
@@ -1253,6 +1508,10 @@ static void reply_get_property(DBusMessage *msg)
 	dbus_bool_t en = s.enabled ? TRUE : FALSE;
 	dbus_uint32_t boot = (dbus_uint32_t)boot_count;
 	dbus_bool_t rem = remembered ? TRUE : FALSE;
+	/* Same value GetAll publishes; Properties.Get has to agree with it or a
+	 * caller that reads one property gets a different answer than one that
+	 * reads all of them. */
+	dbus_bool_t kbd = input_keyboard_present() ? TRUE : FALSE;
 
 	if (!dbus_message_get_args(msg, NULL, DBUS_TYPE_STRING, &iface,
 				   DBUS_TYPE_STRING, &prop, DBUS_TYPE_INVALID))
@@ -1264,6 +1523,9 @@ static void reply_get_property(DBusMessage *msg)
 	if (strcmp(prop, "enabled") == 0) {
 		dbus_message_iter_open_container(&it, DBUS_TYPE_VARIANT, "b", &var);
 		dbus_message_iter_append_basic(&var, DBUS_TYPE_BOOLEAN, &en);
+	} else if (strcmp(prop, "keyboard") == 0) {
+		dbus_message_iter_open_container(&it, DBUS_TYPE_VARIANT, "b", &var);
+		dbus_message_iter_append_basic(&var, DBUS_TYPE_BOOLEAN, &kbd);
 	} else if (strcmp(prop, "remembered") == 0) {
 		dbus_message_iter_open_container(&it, DBUS_TYPE_VARIANT, "b", &var);
 		dbus_message_iter_append_basic(&var, DBUS_TYPE_BOOLEAN, &rem);
@@ -1370,6 +1632,11 @@ static void reply_introspect(DBusMessage *msg)
 		"      <arg type=\"s\" name=\"interface\" direction=\"in\"/>\n"
 		"      <arg type=\"a{sv}\" name=\"properties\" direction=\"out\"/>\n"
 		"    </method>\n"
+		"    <property name=\"state\" type=\"s\" access=\"read\"/>\n"
+		"    <property name=\"enabled\" type=\"b\" access=\"readwrite\"/>\n"
+		"    <property name=\"remembered\" type=\"b\" access=\"read\"/>\n"
+		"    <property name=\"keyboard\" type=\"b\" access=\"read\"/>\n"
+		"    <property name=\"boots\" type=\"u\" access=\"read\"/>\n"
 		"    <method name=\"Set\">\n"
 		"      <arg type=\"s\" name=\"interface\" direction=\"in\"/>\n"
 		"      <arg type=\"s\" name=\"property\" direction=\"in\"/>\n"
