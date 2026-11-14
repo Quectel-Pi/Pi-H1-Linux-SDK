@@ -16,6 +16,7 @@
 
 import errno
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -27,6 +28,19 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+
+# Board language, same contract as the wizard: the msgid is the Chinese source
+# text, a Chinese (or C/POSIX) session shows it unchanged, everything else reads
+# /usr/share/locale/en/LC_MESSAGES/pi-agent-setup.mo. This module is imported by
+# the GTK wizard AND run directly (`engine.py status` from the shell launcher),
+# so it must not depend on gi and must survive ln-i18n being absent.
+sys.path.insert(0, "/usr/share/ln-i18n")
+try:
+    import ln_i18n  # noqa: E402
+    _ = ln_i18n.setup("pi-agent-setup")
+except ImportError:                      # ln-i18n not installed: keep source text
+    def _(message):
+        return message
 
 # --------------------------------------------------------------------------
 # layout
@@ -49,6 +63,16 @@ MARKER_PATH = os.path.join(AGENT_DIR, "pi-agent-setup.json")
 PI_PACKAGE = "@earendil-works/pi-coding-agent"
 PROVIDER_ID = "pi-setup"
 
+# Board-side skill set. Shipped by the firmware as a *pointer only*: this image
+# does not contain a single file from the repository, so distributing the image
+# does not redistribute it (the repo carries no licence). The content lives in
+# the user's own checkout under $HOME and is fetched only after they say yes.
+SKILLS_SLUG = os.environ.get("PI_SKILLS_SLUG", "super617/pi-skills")
+SKILLS_REPO = os.environ.get("PI_SKILLS_REPO", "https://github.com/%s" % SKILLS_SLUG)
+SKILLS_DIR = os.path.join(AGENT_DIR, "pi-skills")
+SKILLS_LINK_DIR = os.path.join(AGENT_DIR, "skills")
+SKILLS_TIMEOUT = int(os.environ.get("PI_SKILLS_NET_TIMEOUT", "12"))
+
 # Node 22 is the oldest LTS pi accepts (package.json: engines.node >= 22.19.0).
 NODE_DIST_BASE = os.environ.get("PI_AGENT_NODE_MIRROR", "https://nodejs.org/dist")
 NODE_LINE = os.environ.get("PI_AGENT_NODE_LINE", "latest-v22.x")
@@ -62,6 +86,32 @@ MIRROR_NPM = "https://registry.npmmirror.com"
 
 class SetupError(Exception):
     """An error with a message meant for the person in front of the board."""
+
+
+# Progress-callback stages, language independent: the wizard drives its progress
+# bar off these instead of matching the (translated) message text.
+STAGE_DOWNLOAD = "download"
+STAGE_NODE_DONE = "node-done"
+STAGE_PI = "pi"
+
+
+def _step(steps, text, stage=None):
+    """Emit one progress line, with an optional stage tag.
+
+    Callbacks written against the old one-argument signature still work: the
+    stage is only handed over when the callable accepts it.
+    """
+    if stage is None:
+        steps(text)
+        return
+    try:
+        takes_stage = len(inspect.signature(steps).parameters) >= 2
+    except (TypeError, ValueError):
+        takes_stage = False
+    if takes_stage:
+        steps(text, stage)
+    else:
+        steps(text)
 
 
 # --------------------------------------------------------------------------
@@ -131,7 +181,8 @@ def download(url, dest, progress=None, timeout=30, expect_sha256=None):
         if actual != expect_sha256:
             os.unlink(part)
             raise SetupError(
-                "下载校验失败（sha256 不匹配）\n  期望 %s\n  实际 %s" % (expect_sha256, actual))
+                _("下载校验失败（sha256 不匹配）\n  期望 %s\n  实际 %s")
+                % (expect_sha256, actual))
     os.replace(part, dest)
     return dest
 
@@ -217,7 +268,7 @@ def ensure_node(use_mirror=False, steps=None):
     steps = steps or (lambda text: log(text))
     existing = node_version_for_pi()
     if existing:
-        steps("node 已就绪：%s" % existing)
+        _step(steps, _("node 已就绪：%s") % existing, STAGE_NODE_DONE)
         return os.path.join(NODE_DIR, "current/bin/node")
 
     bases = [NODE_DIST_BASE]
@@ -226,34 +277,34 @@ def ensure_node(use_mirror=False, steps=None):
     last_error = None
     for base in bases:
         try:
-            steps("获取 node 版本信息：%s" % base)
+            _step(steps, _("获取 node 版本信息：%s") % base)
             sums = read_url(base.rstrip("/") + "/" + NODE_LINE + "/SHASUMS256.txt",
                             timeout=25).decode("utf-8", "replace")
         except Exception as exc:              # noqa: BLE001
             last_error = "%s: %s" % (base, exc)
-            steps("  失败：%s" % last_error)
+            _step(steps, _("  失败：%s") % last_error)
             continue
         pattern = re.compile(
             r"^([0-9a-f]{64})\s+(node-v([0-9.]+)-linux-%s\.tar\.xz)$" % re.escape(arch_name()),
             re.MULTILINE)
         match = pattern.search(sums)
         if not match:
-            last_error = "%s 里没有 linux-%s 的 node 包" % (base, arch_name())
-            steps("  失败：%s" % last_error)
+            last_error = _("%s 里没有 linux-%s 的 node 包") % (base, arch_name())
+            _step(steps, _("  失败：%s") % last_error)
             continue
         digest, filename, version = match.group(1), match.group(2), match.group(3)
         url = "%s/%s/%s" % (base.rstrip("/"), "v" + version, filename)
         target_dir = os.path.join(NODE_DIR, "v" + version)
         tarball = os.path.join(CACHE_DIR, filename)
-        steps("下载 node v%s（%.1f MB 级）" % (version, 0))
+        _step(steps, _("下载 node v%s（%.1f MB 级）") % (version, 0), STAGE_DOWNLOAD)
         try:
             download(url, tarball, expect_sha256=digest,
                      progress=lambda done, total: _progress("node", done, total))
         except Exception as exc:              # noqa: BLE001
             last_error = "%s: %s" % (url, exc)
-            steps("  下载失败：%s" % last_error)
+            _step(steps, _("  下载失败：%s") % last_error)
             continue
-        steps("解包 node v%s" % version)
+        _step(steps, _("解包 node v%s") % version)
         if os.path.isdir(target_dir):
             shutil.rmtree(target_dir)
         os.makedirs(target_dir, exist_ok=True)
@@ -266,13 +317,14 @@ def ensure_node(use_mirror=False, steps=None):
         _replace_symlink(os.path.join(NODE_DIR, "current"), inner)
         node_bin = os.path.join(NODE_DIR, "current/bin/node")
         if not os.path.exists(node_bin):
-            last_error = "解包后找不到 bin/node"
-            steps("  失败：%s" % last_error)
+            last_error = _("解包后找不到 bin/node")
+            _step(steps, _("  失败：%s") % last_error)
             continue
         os.chmod(node_bin, 0o755)
-        steps("node 安装完成：%s" % node_version_for_pi())
+        _step(steps, _("node 安装完成：%s") % node_version_for_pi(), STAGE_NODE_DONE)
         return node_bin
-    raise SetupError("node 运行时安装失败：%s" % (last_error or "所有来源都不可用"))
+    raise SetupError(_("node 运行时安装失败：%s")
+                     % (last_error or _("所有来源都不可用")))
 
 
 def _progress(what, done, total):
@@ -288,11 +340,11 @@ def _safe_extract(archive, dest):
     for member in archive.getmembers():
         target = os.path.abspath(os.path.join(dest_abs, member.name))
         if not (target == dest_abs or target.startswith(dest_abs + os.sep)):
-            raise SetupError("压缩包包含越界路径：%s" % member.name)
+            raise SetupError(_("压缩包包含越界路径：%s") % member.name)
         if member.issym() or member.islnk():
             link = os.path.abspath(os.path.join(os.path.dirname(target), member.linkname))
             if not link.startswith(dest_abs):
-                raise SetupError("压缩包包含越界链接：%s" % member.name)
+                raise SetupError(_("压缩包包含越界链接：%s") % member.name)
         archive.extract(member, dest_abs)
 
 
@@ -339,7 +391,7 @@ def install_pi(use_mirror=False, steps=None):
     node_bin_dir = os.path.dirname(node_bin)
     npm = os.path.join(node_bin_dir, "npm")
     if not os.path.exists(npm):
-        raise SetupError("node 包里没有 npm：%s" % npm)
+        raise SetupError(_("node 包里没有 npm：%s") % npm)
 
     env = {
         "PATH": node_bin_dir + ":" + os.environ.get("PATH", "/usr/bin:/bin"),
@@ -363,26 +415,26 @@ def install_pi(use_mirror=False, steps=None):
     os.makedirs(CACHE_DIR, exist_ok=True)
     open(logdir, "w").close()
 
-    steps("安装 %s（npm，安装到 %s）" % (PI_PACKAGE, NPM_PREFIX))
+    _step(steps, _("安装 %s（npm，安装到 %s）") % (PI_PACKAGE, NPM_PREFIX), STAGE_PI)
     rc, tail = run(cmd, env=env, log_path=logdir)
     if rc != 0 and registry:
-        steps("镜像安装失败（rc=%d），改用官方源重试" % rc)
+        _step(steps, _("镜像安装失败（rc=%d），改用官方源重试") % rc, STAGE_PI)
         cmd = [part for part in cmd if part not in ("--registry", registry)]
         rc, tail = run(cmd, env=env, log_path=logdir)
     if rc != 0:
-        raise SetupError("npm 安装失败（退出码 %d）：\n%s" % (rc, tail[-1200:]))
+        raise SetupError(_("npm 安装失败（退出码 %d）：\n%s") % (rc, tail[-1200:]))
 
     launcher = os.path.join(NPM_PREFIX, "bin/pi")
     if not os.path.exists(launcher):
-        raise SetupError("安装结束但找不到启动器：%s" % launcher)
+        raise SetupError(_("安装结束但找不到启动器：%s") % launcher)
     os.chmod(launcher, 0o755)
     os.makedirs(BIN_DIR, exist_ok=True)
     write_launcher(node_bin, launcher)
 
     version = pi_version(launcher)
     if not version:
-        raise SetupError("pi 已安装但无法运行：%s --version 没有输出" % launcher)
-    steps("pi 安装成功：%s" % version)
+        raise SetupError(_("pi 已安装但无法运行：%s --version 没有输出") % launcher)
+    _step(steps, _("pi 安装成功：%s") % version, STAGE_PI)
 
     write_marker({
         "pi_version": version,
@@ -440,7 +492,7 @@ def write_marker(data):
 # configuration: models.json / auth.json / settings.json
 # --------------------------------------------------------------------------
 API_TYPES = [
-    ("openai-completions", "OpenAI 兼容（大部分中转/自建服务）"),
+    ("openai-completions", _("OpenAI 兼容（大部分中转/自建服务）")),
     ("openai-responses", "OpenAI Responses API"),
     ("anthropic-messages", "Anthropic Messages API"),
     ("google-generative-ai", "Google Generative AI"),
@@ -565,7 +617,7 @@ def list_models(base_url, api_key, api="openai-completions", timeout=15):
     the list is empty instead of silently showing nothing.
     """
     if not base_url or not api_key:
-        raise SetupError("填写 API URL 和 API Key 才能探测模型列表")
+        raise SetupError(_("填写 API URL 和 API Key 才能探测模型列表"))
     base = base_url.strip()
     if "://" not in base:
         base = "https://" + base
@@ -588,9 +640,9 @@ def list_models(base_url, api_key, api="openai-completions", timeout=15):
             continue
         models = _parse_models(body.decode("utf-8", "replace"))
         if models:
-            return models, "✓ %s（%d 个模型）" % (url, len(models))
-        detail.append("%s 返回的内容里没有模型列表" % url)
-    return [], "\n".join(detail) or "无法连接"
+            return models, _("✓ %s（%d 个模型）") % (url, len(models))
+        detail.append(_("%s 返回的内容里没有模型列表") % url)
+    return [], "\n".join(detail) or _("无法连接")
 
 
 def test_endpoint(base_url, api_key, model, api="openai-completions"):
@@ -623,18 +675,21 @@ def test_endpoint(base_url, api_key, model, api="openai-completions"):
             continue
         text = body.decode("utf-8", "replace")
         if model and model in text:
-            detail.append("✓ %s（返回的模型列表里含 %s）" % (url, model))
+            detail.append(_("✓ %s（返回的模型列表里含 %s）") % (url, model))
         else:
-            detail.append("✓ %s（可访问，未在模型列表里匹配到 %s，端点可能只列出部分模型）"
-                          % (url, model))
+            detail.append(
+                _("✓ %s（可访问，未在模型列表里匹配到 %s，端点可能只列出部分模型）")
+                % (url, model))
         return True, "\n".join(detail)
-    return False, "\n".join(detail) or "无法连接"
+    return False, "\n".join(detail) or _("无法连接")
 
 
 def configure(base_url, api_key, model, api="openai-completions",
-              provider_name="自定义端点", context_window=128000, max_tokens=8192):
+              provider_name=None, context_window=128000, max_tokens=8192):
+    if provider_name is None:
+        provider_name = _("自定义端点")
     if not base_url or not api_key or not model:
-        raise SetupError("API URL、API Key、模型 ID 都不能为空")
+        raise SetupError(_("API URL、API Key、模型 ID 都不能为空"))
     if "://" not in base_url:
         base_url = "https://" + base_url
     base_url = base_url.rstrip("/")
@@ -748,6 +803,231 @@ def should_prompt():
     return int(time.time()) >= int(until)
 
 
+# --------------------------------------------------------------------------
+# board skills (opt-in, user's own checkout)
+# --------------------------------------------------------------------------
+# Design rules, and they are the whole point of this section:
+#
+#   * The firmware ships NO skill content. The repository these skills come from
+#     carries no licence, so putting even one file into the image would mean
+#     redistributing it. Everything here is fetched into $HOME at runtime.
+#   * Nothing is fetched without an explicit yes. install() asks once, and the
+#     launcher's update check asks again before pulling a newer revision.
+#   * "Declined" is sticky: once the person says no, neither the installer nor
+#     the login hook offers again until they run `engine.py skills-install`.
+#   * Offline is not an error. A board with no network must behave exactly like
+#     one that is up to date: silent, no dialog, no failure in the launcher.
+
+def _skills_http(url):
+    """GET url, return text, raise SetupError on any problem."""
+    try:
+        with _request(url, timeout=SKILLS_TIMEOUT) as resp:
+            return resp.read(4096).decode("utf-8", "replace")
+    except Exception as exc:
+        raise SetupError(_("无法访问 %s：%s") % (url, exc))
+
+
+def skills_local_version():
+    """Version of the installed checkout, or '' when there is none."""
+    path = os.path.join(SKILLS_DIR, "VERSION")
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read().strip()
+    except OSError:
+        return ""
+
+
+def skills_remote_version():
+    """Version published upstream, or '' when offline.
+
+    Reads VERSION over plain HTTP instead of asking git: this runs on every
+    launch, and `git ls-remote` is both slower and fails differently (it wants a
+    git binary the image may not have).
+    """
+    url = "https://raw.githubusercontent.com/%s/main/VERSION" % SKILLS_SLUG
+    try:
+        return _skills_http(url).strip()
+    except SetupError:
+        return ""
+
+
+def _version_tuple(text):
+    parts = []
+    for chunk in str(text or "").split("."):
+        digits = "".join(c for c in chunk if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    return tuple(parts) or (0,)
+
+
+def skills_update_available():
+    """True/False, or None when it cannot be determined (offline).
+
+    A checkout that is *ahead* of upstream is not an update either -- the
+    person may be tracking a branch of their own.
+    """
+    remote = skills_remote_version()
+    if not remote:
+        return None
+    local = skills_local_version()
+    if not local:
+        return True
+    return _version_tuple(remote) > _version_tuple(local)
+
+
+def _link_skills(dirname=None):
+    """(Re)point ~/.pi/agent/skills/<name> at the checkout.
+
+    pi reads user skills from that directory, so linking rather than copying is
+    what makes an update take effect without touching pi's settings. Only links
+    this function created are removed; a directory the person put there
+    themselves is left alone.
+    """
+    source = dirname or os.path.join(SKILLS_DIR, "skills")
+    if not os.path.isdir(source):
+        return 0
+    os.makedirs(SKILLS_LINK_DIR, exist_ok=True)
+    linked = 0
+    for name in sorted(os.listdir(source)):
+        src = os.path.join(source, name)
+        if not os.path.isdir(src):
+            continue
+        link = os.path.join(SKILLS_LINK_DIR, name)
+        if os.path.islink(link):
+            os.unlink(link)
+        elif os.path.exists(link):
+            # A real directory of the same name belongs to the user.
+            continue
+        os.symlink(os.path.relpath(src, SKILLS_LINK_DIR), link)
+        linked += 1
+    return linked
+
+
+def skills_install(progress=None, force=False):
+    """Fetch the skill set into $HOME. Returns the installed version.
+
+    `git` is preferred because it makes later updates incremental; without it
+    the tree is downloaded as a tarball. The image may not carry git, and a
+    missing git must not make the feature unavailable.
+    """
+    progress = progress or (lambda text: log(text))
+    remote = skills_remote_version()
+    if not remote:
+        raise SetupError(_("无法读取远端版本（网络不通或仓库不存在）"))
+    if not force and skills_local_version() == remote:
+        _link_skills()
+        return remote
+
+    parent = os.path.dirname(SKILLS_DIR) or AGENT_DIR
+    os.makedirs(parent, exist_ok=True)
+    staging = SKILLS_DIR + ".new"
+    if os.path.isdir(staging):
+        shutil.rmtree(staging)
+
+    git = shutil.which("git")
+    if git:
+        progress(_("拉取技能包（git）…"))
+        rc, tail = run([git, "clone", "--quiet", "--depth", "1", SKILLS_REPO, staging])
+        if rc != 0:
+            shutil.rmtree(staging, ignore_errors=True)
+            raise SetupError(_("git clone 失败（rc=%d）：%s") % (rc, tail[-600:]))
+    else:
+        progress(_("拉取技能包（压缩包）…"))
+        archive = os.path.join(CACHE_DIR, "pi-skills.tar.gz")
+        download("https://codeload.github.com/%s/tar.gz/refs/heads/main" % SKILLS_SLUG,
+                 archive)
+        os.makedirs(staging, exist_ok=True)
+        with tarfile.open(archive, "r:gz") as tar:
+            _safe_extract(tar, staging)
+        # codeload wraps everything in a single <repo>-<ref>/ directory.
+        entries = [e for e in os.listdir(staging) if not e.startswith(".")]
+        if len(entries) == 1 and os.path.isdir(os.path.join(staging, entries[0])):
+            inner = os.path.join(staging, entries[0])
+            for name in os.listdir(inner):
+                os.replace(os.path.join(inner, name), os.path.join(staging, name))
+            os.rmdir(inner)
+
+    version = skills_local_version() if os.path.isdir(SKILLS_DIR) else ""
+    # Swap only after the new tree is complete, so a failed download never
+    # leaves the board with no skills at all.
+    if os.path.isdir(SKILLS_DIR):
+        retired = SKILLS_DIR + ".old"
+        shutil.rmtree(retired, ignore_errors=True)
+        os.replace(SKILLS_DIR, retired)
+    os.replace(staging, SKILLS_DIR)
+    shutil.rmtree(SKILLS_DIR + ".old", ignore_errors=True)
+
+    linked = _link_skills()
+    version = skills_local_version()
+    write_state(skills_version=version,
+                skills_installed_at=int(time.time()),
+                skills_status="installed")
+    progress(_("技能包已安装：%s（%d 个技能）") % (version or "?", linked))
+    return version
+
+
+def skills_sync():
+    """Re-point the links at the installed checkout. Cheap, runs every launch."""
+    return _link_skills()
+
+
+def skills_decline():
+    """Remember a no, so neither the installer nor the login hook asks again."""
+    return write_state(skills_status="declined")
+
+
+def skills_should_ask():
+    """True when the user has never answered the skill question.
+
+    Both "installed" and "declined" are answers; only a missing status means
+    the question has not been put yet.
+    """
+    return not (read_state().get("skills_status") in ("installed", "declined"))
+
+
+def skills_status():
+    state = read_state()
+    return {
+        "installed": bool(skills_local_version()),
+        "version": skills_local_version(),
+        "path": SKILLS_DIR,
+        "links": SKILLS_LINK_DIR,
+        "state": state.get("skills_status"),
+        "checked_at": state.get("skills_checked_at"),
+    }
+
+
+def skills_autostart(ask_func):
+    """Login hook: relink, then offer an update if one exists.
+
+    `ask_func(local, remote)` returns "now" / "later" / "never", or None when
+    there is no GUI or terminal to ask in. Nothing happens unless it returns
+    "now" -- an update is never pulled silently.
+
+    Silent by design in the common cases: no checkout and declined, already up
+    to date, or offline. A login must not produce a dialog just because the
+    network is down.
+    """
+    skills_sync()
+    if read_state().get("skills_status") == "declined":
+        return None
+    available = skills_update_available()
+    write_state(skills_checked_at=int(time.time()))
+    if not available:
+        return None
+    first_install = not skills_local_version()
+    answer = ask_func(skills_local_version(), skills_remote_version(), first_install)
+    if answer == "never":
+        skills_decline()
+        return None
+    if answer != "now":
+        return None
+    try:
+        return skills_install()
+    except SetupError as exc:
+        log(_("技能包更新失败：%s") % exc)
+        return None
+
+
 def status():
     marker = _read_json(MARKER_PATH, {}) or {}
     return {
@@ -761,6 +1041,7 @@ def status():
         "provider_id": PROVIDER_ID,
         "prefix": NPM_PREFIX,
         "launcher": os.path.join(BIN_DIR, "pi"),
+        "skills": skills_status(),
     }
 
 
@@ -785,35 +1066,55 @@ def main(argv):
 
     parser = argparse.ArgumentParser(
         prog="pi-agent-setup-engine",
-        description="pi agent 安装引擎（GUI 与命令行共用）")
+        description=_("Pi Agent 安装引擎（GUI 与命令行共用）"))
     sub = parser.add_subparsers(dest="command", required=True)
 
-    net = sub.add_parser("check-network", help="检查网络连通性")
+    net = sub.add_parser("check-network", help=_("检查网络连通性"))
     net.add_argument("--json", action="store_true")
 
-    inst = sub.add_parser("install", help="下载 node 运行时并安装 pi")
-    inst.add_argument("--mirror", action="store_true", help="下载失败时改用国内镜像")
+    inst = sub.add_parser("install", help=_("下载 node 运行时并安装 pi"))
+    inst.add_argument("--mirror", action="store_true",
+                      help=_("下载失败时改用国内镜像"))
 
-    conf = sub.add_parser("configure", help="写入 API URL / API Key / 模型")
+    conf = sub.add_parser("configure", help=_("写入 API URL / API Key / 模型"))
     conf.add_argument("--url", required=True)
     conf.add_argument("--key", required=True)
     conf.add_argument("--model", required=True)
     conf.add_argument("--api", default="openai-completions", choices=[x[0] for x in API_TYPES])
-    conf.add_argument("--name", default="自定义端点")
-    conf.add_argument("--test", action="store_true", help="写入前先探测端点")
+    # Resolved in the body, not here: the default must follow the session
+    # language, and `_()` is only meaningful once that is known.
+    conf.add_argument("--name", default=None)
+    conf.add_argument("--test", action="store_true", help=_("写入前先探测端点"))
 
-    lst = sub.add_parser("list-models", help="探测端点提供的模型列表")
+    lst = sub.add_parser("list-models", help=_("探测端点提供的模型列表"))
     lst.add_argument("--url", required=True)
     lst.add_argument("--key", required=True)
     lst.add_argument("--api", default="openai-completions", choices=[x[0] for x in API_TYPES])
     lst.add_argument("--json", action="store_true")
 
-    sub.add_parser("status", help="打印当前安装/配置状态")
-    sub.add_parser("should-prompt", help="登录时是否该弹窗（0=该弹，1=不该）")
-    sn = sub.add_parser("snooze", help="下次再询问")
+    sub.add_parser("status", help=_("打印当前安装/配置状态"))
+
+    sk = sub.add_parser("skills-status", help=_("技能包状态（JSON）"))
+    sk.add_argument("--json", action="store_true")
+    ski = sub.add_parser("skills-install", help=_("拉取并安装技能包（需要网络）"))
+    ski.add_argument("--force", action="store_true",
+                     help=_("即使版本相同也重新拉取"))
+    sub.add_parser("skills-sync", help=_("重新建立技能软链（不需要网络）"))
+    sub.add_parser("skills-decline", help=_("记住“不安装技能包”，以后不再询问"))
+    sub.add_parser("skills-should-ask", help=_("是否该问用户要不要装技能包（0=该问）"))
+    sck = sub.add_parser("skills-check", help=_("是否有更新（0=有，1=无，2=无法判断）"))
+    sck.add_argument("--json", action="store_true")
+    # The login hook. engine.py has no GUI, so it only reports what needs asking
+    # and lets the caller (pi-agent) put the question; this keeps GTK out of the
+    # module the headless CLI paths import.
+    sas = sub.add_parser("skills-autostart",
+                         help=_("登录时调用：静默重建链接，报告是否需要询问"))
+    sas.add_argument("--json", action="store_true")
+    sub.add_parser("should-prompt", help=_("登录时是否该弹窗（0=该弹，1=不该）"))
+    sn = sub.add_parser("snooze", help=_("下次再询问"))
     sn.add_argument("--days", type=int, default=DEFAULT_SNOOZE_DAYS)
-    sub.add_parser("decline", help="不再询问")
-    sub.add_parser("uninstall", help="移除 pi 运行时（保留 ~/.pi 会话与配置）")
+    sub.add_parser("decline", help=_("不再询问"))
+    sub.add_parser("uninstall", help=_("移除 pi 运行时（保留 ~/.pi 会话与配置）"))
 
     args = parser.parse_args(argv)
 
@@ -826,7 +1127,7 @@ def main(argv):
         return 0 if ok else 1
     if args.command == "install":
         version = install_pi(use_mirror=args.mirror)
-        print("已安装 pi %s" % version)
+        print(_("已安装 pi %s") % version)
         return 0
     if args.command == "list-models":
         models, detail = list_models(args.url, args.key, args.api)
@@ -844,13 +1145,72 @@ def main(argv):
             print(detail)
             if not ok:
                 return 1
-        paths = configure(args.url, args.key, args.model, args.api, args.name)
+        paths = configure(args.url, args.key, args.model, args.api,
+                          args.name or _("自定义端点"))
         for key, path in paths.items():
             print("%-9s %s" % (key, path))
         return 0
     if args.command == "status":
         print(json.dumps(status(), indent=2, ensure_ascii=False))
         return 0
+    if args.command == "skills-status":
+        info = skills_status()
+        if args.json:
+            print(json.dumps(info, indent=2, ensure_ascii=False))
+        else:
+            print(_("已安装：%s") % (info["version"] or _("否")))
+            print(_("位置：%s") % info["path"])
+            print(_("状态：%s") % (info["state"] or _("未询问")))
+        return 0
+    if args.command == "skills-install":
+        print(skills_install(force=args.force))
+        return 0
+    if args.command == "skills-sync":
+        print(_("已建立 %d 个技能链接") % skills_sync())
+        return 0
+    if args.command == "skills-decline":
+        skills_decline()
+        print(_("已记住：不安装技能包"))
+        return 0
+    if args.command == "skills-should-ask":
+        return 0 if skills_should_ask() else 1
+    if args.command == "skills-autostart":
+        # Rebuild the links (local, cheap, always safe) and report whether the
+        # caller should ask. Pulling is *not* done here: the caller owns the
+        # dialog and only calls skills-install after an explicit yes.
+        skills_sync()
+        state = read_state()
+        declined = state.get("skills_status") == "declined"
+        available = None if declined else skills_update_available()
+        if not declined:
+            write_state(skills_checked_at=int(time.time()))
+        info = {
+            "ask": bool(available),
+            "first_install": not skills_local_version(),
+            "installed": skills_local_version(),
+            "remote": skills_remote_version() if available else "",
+            "declined": declined,
+        }
+        if args.json:
+            print(json.dumps(info, ensure_ascii=False))
+        elif info["ask"]:
+            print("%s %s" % (info["installed"] or "-", info["remote"]))
+        return 0 if info["ask"] else 1
+    if args.command == "skills-check":
+        available = skills_update_available()
+        if args.json:
+            print(json.dumps({"update": available,
+                              "installed": skills_local_version(),
+                              "remote": skills_remote_version()},
+                             ensure_ascii=False))
+        elif available is None:
+            print(_("无法判断（离线）"))
+        elif available:
+            print(_("有更新：%s -> %s") % (skills_local_version() or _("未安装"),
+                                          skills_remote_version()))
+        else:
+            print(_("已是最新：%s") % skills_local_version())
+        return 0 if available else (2 if available is None else 1)
     if args.command == "should-prompt":
         return 0 if should_prompt() else 1
     if args.command == "snooze":
@@ -861,7 +1221,7 @@ def main(argv):
         return 0
     if args.command == "uninstall":
         for path in uninstall():
-            print("已删除 %s" % path)
+            print(_("已删除 %s") % path)
         return 0
     return 2
 
@@ -870,7 +1230,7 @@ if __name__ == "__main__":
     try:
         sys.exit(main(sys.argv[1:]))
     except SetupError as exc:
-        print("错误：%s" % exc, file=sys.stderr)
+        print(_("错误：%s") % exc, file=sys.stderr)
         sys.exit(1)
     except KeyboardInterrupt:
         sys.exit(130)

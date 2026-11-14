@@ -16,6 +16,21 @@ TimeCapsule - QuecPi OTA 图形化管理工具
 GUI: GTK3 (与 qcom-npu-test 同技术栈,不引入额外依赖)。
 """
 
+import sys
+
+# i18n 引导必须放在 import gi 之前:
+#   1) sys.path.insert 要在 `import ln_i18n` 之前 (它不是 site-packages 安装);
+#   2) ln_i18n.setup() 必须在模块顶部执行, 下面 APP_TITLE 等常量才能在定义时用 _()。
+# ln_i18n 只 import gettext/os, 不依赖 gi, 所以放这里安全。
+sys.path.insert(0, "/usr/share/ln-i18n")
+try:
+    import ln_i18n
+    _ = ln_i18n.setup("quectel-ota-gui")
+except ImportError:                      # ln-i18n 没装: 整机退回中文原文
+    def _(message):
+        return message
+
+
 import gi
 gi.require_version('Gtk', '3.0')
 gi.require_version('Pango', '1.0')
@@ -45,8 +60,10 @@ KERNEL_UPGRADE_MD5 = "/opt/kernel_upgrade/linux-qcm6490-idp.efi.md5"
 KERNEL_BAK_MD5 = "/opt/linux-qcm6490-idp.efi.md5"
 
 LOG_DIR = "/tmp/quectel_ota_gui_logs"
+# 常量在模块导入时求值: 此刻 ln_i18n.setup() 已经跑过, 语言已确定
+# (切换语言需要重启应用, 本文件不做运行期切换), 所以这里可以直接用 _()。
 APP_NAME = "TimeCapsule"
-APP_TITLE = "时间胶囊 · QuecPi OTA 管理工具"
+APP_TITLE = _("时间胶囊 · QuecPi OTA 管理工具")
 
 
 # ========== 工具函数 ==========
@@ -80,17 +97,18 @@ def fix_pkexec_suid():
     """
     p = shutil.which("pkexec")
     if not p:
-        return False, "未找到 pkexec"
+        return False, _("未找到 pkexec")
     if _pkexec_suid_ok():
-        return True, "pkexec setuid 正常"
+        return True, _("pkexec setuid 正常")
     # 需要 root 修权限位。用 sudo (交互式, 会要密码)。
     # 这里只构造命令, 由调用方在合适时机执行并提示用户。
     cmd = ["sudo", "chmod", "u+s", p]
-    return False, (
+    return False, _(
         "pkexec 未设置 setuid root 位, 无法提权执行 OTA 操作。\n"
-        f"请在终端执行一次修复命令 (会要求输入用户密码):\n"
-        f"    {' '.join(cmd)}\n"
-        "修复后 pkexec 将弹出图形密码框正常工作。")
+        "请在终端执行一次修复命令 (会要求输入用户密码):\n"
+        "    {cmd}\n"
+        "修复后 pkexec 将弹出图形密码框正常工作。").format(
+            cmd=" ".join(cmd))
 
 
 def elevation_cmd(args):
@@ -110,7 +128,7 @@ def elevation_cmd(args):
 
 
 def run_cmd(cmd, timeout=None, cwd=None, env=None):
-    """运行命令, 返回 (stdout+stderr, returncode)。"""
+    # 运行命令, 返回 (stdout+stderr, returncode)。
     log = logging.getLogger("ota_gui")
     log.debug(f"CMD: {' '.join(cmd)}")
     try:
@@ -119,15 +137,15 @@ def run_cmd(cmd, timeout=None, cwd=None, env=None):
         out = (r.stdout or "") + (r.stderr or "")
         return out, r.returncode
     except subprocess.TimeoutExpired:
-        return f"ERROR: 命令超时({timeout}s)", -1
+        return _("ERROR: 命令超时({timeout}s)").format(timeout=timeout), -1
     except FileNotFoundError as e:
-        return f"ERROR: 程序不存在: {e}", -1
+        return _("ERROR: 程序不存在: {e}").format(e=e), -1
     except Exception as e:
-        return f"ERROR: {e}", -1
+        return _("ERROR: {e}").format(e=e), -1
 
 
 def run_ota(*ota_args, timeout=None):
-    """运行 ota_run 子命令 (自动提权)。"""
+    # 运行 ota_run 子命令 (自动提权)。
     return run_cmd(elevation_cmd([OTA_RUN, *ota_args]), timeout=timeout)
 
 
@@ -152,17 +170,17 @@ def run_cmd_stream(cmd, timeout=None, cwd=None, env=None):
             env=env,
         )
     except FileNotFoundError as e:
-        log.error(f"程序不存在: {e}")
-        return f"ERROR: 程序不存在: {e}", -1
+        log.error(_("程序不存在: {e}").format(e=e))
+        return _("ERROR: 程序不存在: {e}").format(e=e), -1
     except Exception as e:
-        log.error(f"启动失败: {e}")
-        return f"ERROR: {e}", -1
+        log.error(_("启动失败: {e}").format(e=e))
+        return _("ERROR: {e}").format(e=e), -1
 
     out = []
     stream = proc.stdout
     if stream is None:
-        log.error("子进程 stdout 不可读 (PIPE 未生效?)")
-        return "ERROR: stdout 不可读", -1
+        log.error(_("子进程 stdout 不可读 (PIPE 未生效?)"))
+        return _("ERROR: stdout 不可读"), -1
     try:
         while True:
             line = stream.readline()
@@ -171,8 +189,8 @@ def run_cmd_stream(cmd, timeout=None, cwd=None, env=None):
             out.append(line)
             log.info(line.rstrip('\n'))
     except Exception as e:
-        log.error(f"读取输出异常: {e}")
-        out.append(f"ERROR: {e}")
+        log.error(_("读取输出异常: {e}").format(e=e))
+        out.append(_("ERROR: {e}").format(e=e))
     finally:
         try:
             stream.close()
@@ -182,7 +200,7 @@ def run_cmd_stream(cmd, timeout=None, cwd=None, env=None):
     try:
         rc = proc.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        log.error(f"命令超时({timeout}s), 终止子进程")
+        log.error(_("命令超时({timeout}s), 终止子进程").format(timeout=timeout))
         proc.kill()
         proc.wait()
         rc = -1
@@ -191,7 +209,7 @@ def run_cmd_stream(cmd, timeout=None, cwd=None, env=None):
 
 
 def run_ota_stream(*ota_args, timeout=None):
-    """流式运行 ota_run 子命令 (自动提权), 逐行实时输出到日志。"""
+    # 流式运行 ota_run 子命令 (自动提权), 逐行实时输出到日志。
     return run_cmd_stream(elevation_cmd([OTA_RUN, *ota_args]), timeout=timeout)
 
 
@@ -217,7 +235,7 @@ def read_file(path):
 
 
 def read_md5_value(path):
-    """读取 md5 文件, 只取摘要部分 (支持 'md5  filename' 和纯 md5 两种格式)。"""
+    # 读取 md5 文件, 只取摘要部分 (支持 'md5  filename' 和纯 md5 两种格式)。
     raw = read_file(path)
     if not raw:
         return ""
@@ -225,12 +243,12 @@ def read_md5_value(path):
 
 
 def kernel_upgrade_ready():
-    """/opt/kernel_upgrade 是否已有 efi+md5 待刷写。"""
+    # /opt/kernel_upgrade 是否已有 efi+md5 待刷写。
     return os.path.isfile(KERNEL_UPGRADE_EFI) and os.path.isfile(KERNEL_UPGRADE_MD5)
 
 
 def current_subvol_from_mount():
-    """从 mount 信息解析当前根的 subvol。"""
+    # 从 mount 信息解析当前根的 subvol。
     try:
         r = subprocess.run(["mount"], capture_output=True, text=True, timeout=5)
     except Exception:
@@ -244,7 +262,7 @@ def current_subvol_from_mount():
 
 
 def parse_subvol_list(text):
-    """解析 `btrfs subvolume list` 输出, 返回 [(id, gen, toplevel, path), ...]。"""
+    # 解析 `btrfs subvolume list` 输出, 返回 [(id, gen, toplevel, path), ...]。
     items = []
     for line in text.splitlines():
         m = re.match(
@@ -260,7 +278,7 @@ def parse_subvol_list(text):
 
 
 def next_subvol_name(existing):
-    """根据已有 @Vn 子卷, 推荐下一个名称。"""
+    # 根据已有 @Vn 子卷, 推荐下一个名称。
     used = set()
     for s in existing:
         m = re.match(r'^@V(\d+)$', s)
@@ -348,14 +366,18 @@ class TimeCapsuleWindow(Gtk.Window):
 
         # 标题
         title = Gtk.Label(xalign=0)
+        # 标题分两行 markup: 第一行是品牌 (不翻), 第二行是可翻的副标题。
+        # 副标题不带 markup 单独进 msgid, 外层 span 在代码里拼, 这样
+        # en.po 里看到的是纯文字而不是 <span ...> 噪声。
         title.set_markup(
-            f'<span size="xx-large" weight="bold">⏳ {APP_NAME}</span>\n'
-            f'<span size="small" foreground="gray">QuecPi (QCS6490) · '
-            f'Btrfs 子卷快照 A/B 升级管理</span>')
+            '<span size="xx-large" weight="bold">⏳ {app}</span>\n'
+            '<span size="small" foreground="gray">{sub}</span>'.format(
+                app=APP_NAME,
+                sub=_("QuecPi (QCS6490) · Btrfs 子卷快照 A/B 升级管理")))
         vbox.pack_start(title, False, False, 0)
 
         # 设备信息栏
-        info_frame = Gtk.Frame(label="系统状态")
+        info_frame = Gtk.Frame(label=_("系统状态"))
         info_grid = Gtk.Grid(column_spacing=14, row_spacing=3)
         info_grid.set_margin_start(8); info_grid.set_margin_end(8)
         info_grid.set_margin_top(5); info_grid.set_margin_bottom(5)
@@ -367,15 +389,15 @@ class TimeCapsuleWindow(Gtk.Window):
         self.lbl_status = Gtk.Label(xalign=0)
 
         rows = [
-            ("当前运行子卷:", self.lbl_subvol),
-            ("内核文件:", self.lbl_kernel),
-            ("OTA 状态:", self.lbl_status),
+            (_("当前运行子卷:"), self.lbl_subvol),
+            (_("内核文件:"), self.lbl_kernel),
+            (_("OTA 状态:"), self.lbl_status),
         ]
         for i, (k, v) in enumerate(rows):
             info_grid.attach(Gtk.Label(label=k, xalign=0), 0, i, 1, 1)
             info_grid.attach(v, 1, i, 1, 1)
 
-        self.btn_refresh_top = Gtk.Button(label="🔄 刷新")
+        self.btn_refresh_top = Gtk.Button(label=_("🔄 刷新"))
         self.btn_refresh_top.connect("clicked", lambda b: self.refresh_state())
         info_grid.attach(self.btn_refresh_top, 2, 0, 1, 3)
 
@@ -392,7 +414,7 @@ class TimeCapsuleWindow(Gtk.Window):
         body.pack_start(list_box, True, True, 0)
 
         # 日志面板
-        log_frame = Gtk.Frame(label="运行日志")
+        log_frame = Gtk.Frame(label=_("运行日志"))
         log_hbox = Gtk.Box(spacing=4)
         log_hbox.set_margin_start(4); log_hbox.set_margin_end(4)
         log_hbox.set_margin_top(2); log_hbox.set_margin_bottom(2)
@@ -410,10 +432,10 @@ class TimeCapsuleWindow(Gtk.Window):
         log_hbox.pack_start(log_sw, True, True, 0)
 
         log_btns = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        b = Gtk.Button(label="清空"); b.set_size_request(56, -1)
+        b = Gtk.Button(label=_("清空")); b.set_size_request(56, -1)
         b.connect("clicked", lambda x: self.log_tv.get_buffer().set_text(""))
         log_btns.pack_start(b, False, False, 0)
-        b = Gtk.Button(label="保存"); b.set_size_request(56, -1)
+        b = Gtk.Button(label=_("保存")); b.set_size_request(56, -1)
         b.connect("clicked", self.on_save_log)
         log_btns.pack_start(b, False, False, 0)
         log_hbox.pack_start(log_btns, False, False, 0)
@@ -421,13 +443,15 @@ class TimeCapsuleWindow(Gtk.Window):
 
         # 状态栏
         self.statusbar = Gtk.Label(xalign=0)
-        self.statusbar.set_markup('<span foreground="gray">就绪</span>')
+        self.statusbar.set_markup(
+            '<span foreground="gray">{msg}</span>'.format(msg=_("就绪")))
         vbox.pack_start(self.statusbar, False, False, 0)
 
         self.logger = setup_logger(self.log_tv)
-        self.logger.info(f"{APP_NAME} 启动")
-        self.logger.info(f"日志文件: {self.logger.log_file}")
-        self.logger.info(f"root 权限: {'是' if is_root() else '否 (将用 pkexec 提权)'}")
+        self.logger.info(_("{app} 启动").format(app=APP_NAME))
+        self.logger.info(_("日志文件: {path}").format(path=self.logger.log_file))
+        self.logger.info(_("root 权限: {state}").format(
+            state=_("是") if is_root() else _("否 (将用 pkexec 提权)")))
 
         # pkexec setuid 位检测: 缺失则提权会 127, 提示用户一键修复
         if not is_root() and not _pkexec_suid_ok():
@@ -435,7 +459,7 @@ class TimeCapsuleWindow(Gtk.Window):
             self.logger.warning(msg.replace("\n", " "))
             GLib.idle_add(lambda: self._warn_pkexec_suid(msg))
         else:
-            self.logger.info("pkexec setuid 位正常")
+            self.logger.info(_("pkexec setuid 位正常"))
 
         # 初始加载
         self.refresh_state()
@@ -444,7 +468,7 @@ class TimeCapsuleWindow(Gtk.Window):
         d = Gtk.MessageDialog(transient_for=self, modal=True,
                               message_type=Gtk.MessageType.WARNING,
                               buttons=Gtk.ButtonsType.OK,
-                              text="pkexec 提权不可用")
+                              text=_("pkexec 提权不可用"))
         d.format_secondary_text(msg)
         d.run()
         d.destroy()
@@ -452,7 +476,7 @@ class TimeCapsuleWindow(Gtk.Window):
 
     # ---------- 操作面板 ----------
     def _build_action_panel(self):
-        frame = Gtk.Frame(label="操作")
+        frame = Gtk.Frame(label=_("操作"))
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         outer.set_margin_start(8); outer.set_margin_end(8)
         outer.set_margin_top(8); outer.set_margin_bottom(8)
@@ -461,13 +485,14 @@ class TimeCapsuleWindow(Gtk.Window):
         # ---- 初始化 ----
         box_init = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         lbl = Gtk.Label(xalign=0)
-        lbl.set_markup("<b>首次初始化</b>")
+        lbl.set_markup(_("<b>首次初始化</b>"))
         box_init.pack_start(lbl, False, False, 0)
         desc = Gtk.Label(xalign=0, wrap=True)
         desc.set_markup("<span size='small' foreground='gray'>"
-                        "创建初始 @V0 快照并备份内核, 之后才能使用升级/回退</span>")
+                        + _("创建初始 @V0 快照并备份内核, 之后才能使用升级/回退")
+                        + "</span>")
         box_init.pack_start(desc, False, False, 0)
-        self.btn_init = Gtk.Button(label="⚡ 初始化 OTA (init)")
+        self.btn_init = Gtk.Button(label=_("⚡ 初始化 OTA (init)"))
         self.btn_init.get_style_context().add_class("suggested-action")
         self.btn_init.connect("clicked", self.on_init_clicked)
         box_init.pack_start(self.btn_init, False, False, 0)
@@ -478,13 +503,14 @@ class TimeCapsuleWindow(Gtk.Window):
 
         # ---- 备份 ----
         box_bk = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        lbl = Gtk.Label(xalign=0); lbl.set_markup("<b>备份</b>")
+        lbl = Gtk.Label(xalign=0); lbl.set_markup(_("<b>备份</b>"))
         box_bk.pack_start(lbl, False, False, 0)
         desc = Gtk.Label(xalign=0, wrap=True)
         desc.set_markup("<span size='small' foreground='gray'>"
-                        "将当前系统快照为 @backup, 升级前建议先备份</span>")
+                        + _("将当前系统快照为 @backup, 升级前建议先备份")
+                        + "</span>")
         box_bk.pack_start(desc, False, False, 0)
-        self.btn_backup = Gtk.Button(label="🛡️ 创建备份 (backup)")
+        self.btn_backup = Gtk.Button(label=_("🛡️ 创建备份 (backup)"))
         self.btn_backup.connect("clicked", self.on_backup_clicked)
         box_bk.pack_start(self.btn_backup, False, False, 0)
         outer.pack_start(box_bk, False, False, 0)
@@ -494,16 +520,17 @@ class TimeCapsuleWindow(Gtk.Window):
 
         # ---- 升级 ----
         box_up = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        lbl = Gtk.Label(xalign=0); lbl.set_markup("<b>系统升级</b>")
+        lbl = Gtk.Label(xalign=0); lbl.set_markup(_("<b>系统升级</b>"))
         box_up.pack_start(lbl, False, False, 0)
 
         row = Gtk.Box(spacing=6)
-        row.pack_start(Gtk.Label(label="升级脚本:"), False, False, 0)
+        row.pack_start(Gtk.Label(label=_("升级脚本:")), False, False, 0)
         self.ent_script = Gtk.Entry()
         self.ent_script.set_text(UPGRADE_SCRIPT)
-        self.ent_script.set_tooltip_text("选择本地升级脚本, 将替换 /opt/system_upgrade.sh 后执行升级")
+        self.ent_script.set_tooltip_text(
+            _("选择本地升级脚本, 将替换 /opt/system_upgrade.sh 后执行升级"))
         row.pack_start(self.ent_script, True, True, 0)
-        self.btn_pick = Gtk.Button(label="浏览...")
+        self.btn_pick = Gtk.Button(label=_("浏览..."))
         self.btn_pick.connect("clicked", self.on_pick_script)
         row.pack_start(self.btn_pick, False, False, 0)
         box_up.pack_start(row, False, False, 0)
@@ -511,44 +538,44 @@ class TimeCapsuleWindow(Gtk.Window):
         # 内核 EFI 文件 (可选): ota_run upgrade 会自动检测 /opt/kernel_upgrade/
         # 的 efi + md5 并刷写 EFI 分区。本工具负责生成配套 md5 并放入该目录。
         row_k = Gtk.Box(spacing=6)
-        row_k.pack_start(Gtk.Label(label="内核 EFI:"), False, False, 0)
+        row_k.pack_start(Gtk.Label(label=_("内核 EFI:")), False, False, 0)
         self.ent_kernel = Gtk.Entry()
         self.ent_kernel.set_tooltip_text(
-            "可选: 选择新内核 .efi 文件, 升级时自动计算 MD5 并放入 "
-            "/opt/kernel_upgrade/, ota_run 会在校验后刷写 EFI 分区")
+            _("可选: 选择新内核 .efi 文件, 升级时自动计算 MD5")
+            + _("并放入 /opt/kernel_upgrade/, ota_run 会在校验后刷写 EFI 分区"))
         row_k.pack_start(self.ent_kernel, True, True, 0)
-        self.btn_pick_kernel = Gtk.Button(label="浏览...")
+        self.btn_pick_kernel = Gtk.Button(label=_("浏览..."))
         self.btn_pick_kernel.connect("clicked", self.on_pick_kernel)
         row_k.pack_start(self.btn_pick_kernel, False, False, 0)
-        self.btn_kernel_md5 = Gtk.Button(label="生成 MD5")
+        self.btn_kernel_md5 = Gtk.Button(label=_("生成 MD5"))
         self.btn_kernel_md5.set_tooltip_text(
-            "计算所选 EFI 文件的 MD5 并显示, 校验通过后写入 "
-            "/opt/kernel_upgrade/linux-qcm6490-idp.efi(.md5)")
+            _("计算所选 EFI 文件的 MD5 并显示,")
+            + _("校验通过后写入 /opt/kernel_upgrade/linux-qcm6490-idp.efi(.md5)"))
         self.btn_kernel_md5.connect("clicked", self.on_compute_kernel_md5)
         row_k.pack_start(self.btn_kernel_md5, False, False, 0)
         box_up.pack_start(row_k, False, False, 0)
         self.lbl_kernel_md5 = Gtk.Label(xalign=0)
         self.lbl_kernel_md5.set_markup(
-            "<span size='small' foreground='gray'>未选内核 (将沿用当前内核)</span>")
+            _("<span size='small' foreground='gray'>未选内核 (将沿用当前内核)</span>"))
         box_up.pack_start(self.lbl_kernel_md5, False, False, 0)
 
         row2 = Gtk.Box(spacing=6)
-        row2.pack_start(Gtk.Label(label="新版本名:"), False, False, 0)
+        row2.pack_start(Gtk.Label(label=_("新版本名:")), False, False, 0)
         self.ent_newvol = Gtk.Entry()
         self.ent_newvol.set_placeholder_text("@V1")
-        self.ent_newvol.set_tooltip_text("新子卷名, 以 @ 开头, 如 @V1")
+        self.ent_newvol.set_tooltip_text(_("新子卷名, 以 @ 开头, 如 @V1"))
         row2.pack_start(self.ent_newvol, True, True, 0)
         box_up.pack_start(row2, False, False, 0)
 
-        self.chk_autobackup = Gtk.CheckButton(label="升级前自动创建备份 (推荐)")
+        self.chk_autobackup = Gtk.CheckButton(label=_("升级前自动创建备份 (推荐)"))
         self.chk_autobackup.set_active(True)
         box_up.pack_start(self.chk_autobackup, False, False, 0)
 
-        self.btn_preview = Gtk.Button(label="👁 预览脚本")
+        self.btn_preview = Gtk.Button(label=_("👁 预览脚本"))
         self.btn_preview.connect("clicked", self.on_preview_script)
         box_up.pack_start(self.btn_preview, False, False, 0)
 
-        self.btn_upgrade = Gtk.Button(label="⬆ 执行升级 (升级后重启)")
+        self.btn_upgrade = Gtk.Button(label=_("⬆ 执行升级 (升级后重启)"))
         self.btn_upgrade.get_style_context().add_class("suggested-action")
         self.btn_upgrade.connect("clicked", self.on_upgrade_clicked)
         box_up.pack_start(self.btn_upgrade, False, False, 0)
@@ -559,13 +586,14 @@ class TimeCapsuleWindow(Gtk.Window):
 
         # ---- 恢复 ----
         box_rs = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        lbl = Gtk.Label(xalign=0); lbl.set_markup("<b>从备份还原</b>")
+        lbl = Gtk.Label(xalign=0); lbl.set_markup(_("<b>从备份还原</b>"))
         box_rs.pack_start(lbl, False, False, 0)
         desc = Gtk.Label(xalign=0, wrap=True)
         desc.set_markup("<span size='small' foreground='gray'>"
-                        "从 @backup 子卷还原系统并重启 (ota_run restore)</span>")
+                        + _("从 @backup 子卷还原系统并重启 (ota_run restore)")
+                        + "</span>")
         box_rs.pack_start(desc, False, False, 0)
-        self.btn_restore = Gtk.Button(label="♻️ 还原备份 (restore)")
+        self.btn_restore = Gtk.Button(label=_("♻️ 还原备份 (restore)"))
         self.btn_restore.connect("clicked", self.on_restore_clicked)
         self.btn_restore.get_style_context().add_class("destructive-action")
         box_rs.pack_start(self.btn_restore, False, False, 0)
@@ -575,7 +603,7 @@ class TimeCapsuleWindow(Gtk.Window):
 
     # ---------- 版本列表 ----------
     def _build_version_list(self):
-        frame = Gtk.Frame(label="版本快照列表")
+        frame = Gtk.Frame(label=_("版本快照列表"))
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         box.set_margin_start(6); box.set_margin_end(6)
         box.set_margin_top(4); box.set_margin_bottom(4)
@@ -594,22 +622,22 @@ class TimeCapsuleWindow(Gtk.Window):
             c.set_min_width(w)
             self.treeview.append_column(c)
 
-        col("子卷", 0, 120)
-        col("类型", 1, 90)
+        col(_("子卷"), 0, 120)
+        col(_("类型"), 1, 90)
         col("ID", 2, 50)
         col("Gen", 3, 50)
-        col("状态", 4, 110)
+        col(_("状态"), 4, 110)
         sw.add(self.treeview)
         box.pack_start(sw, True, True, 0)
 
         btnbox = Gtk.Box(spacing=6)
-        self.btn_rollback = Gtk.Button(label="⏪ 回退到选中版本")
+        self.btn_rollback = Gtk.Button(label=_("⏪ 回退到选中版本"))
         self.btn_rollback.connect("clicked", self.on_rollback_clicked)
         btnbox.pack_start(self.btn_rollback, False, False, 0)
-        self.btn_delete = Gtk.Button(label="🗑 删除选中版本")
+        self.btn_delete = Gtk.Button(label=_("🗑 删除选中版本"))
         self.btn_delete.connect("clicked", self.on_delete_clicked)
         btnbox.pack_start(self.btn_delete, False, False, 0)
-        self.btn_refresh_list = Gtk.Button(label="🔄 刷新列表")
+        self.btn_refresh_list = Gtk.Button(label=_("🔄 刷新列表"))
         self.btn_refresh_list.connect("clicked", lambda b: self.refresh_state())
         btnbox.pack_end(self.btn_refresh_list, False, False, 0)
         box.pack_start(btnbox, False, False, 0)
@@ -633,7 +661,7 @@ class TimeCapsuleWindow(Gtk.Window):
                 except Exception:
                     kern = "?"
             else:
-                kern = "未找到"
+                kern = _("未找到")
 
             # btrfs 是否已初始化
             out, rc = run_ota("current", timeout=15)
@@ -645,24 +673,24 @@ class TimeCapsuleWindow(Gtk.Window):
 
             # 状态
             if not os.path.exists(FCT_FLAG):
-                status = "⚠️ 工厂初始化未完成 (缺 fct_done_flag)"
+                status = _("⚠️ 工厂初始化未完成 (缺 fct_done_flag)")
             elif os.path.exists(RESTORE_FLAG):
-                status = "⚠️ restore_flag 存在 (升级可能中断, 下次启动将回滚)"
+                status = _("⚠️ restore_flag 存在 (升级可能中断, 下次启动将回滚)")
             elif not self.btrfs_inited:
-                status = "⚠️ OTA 未初始化, 请先执行 [初始化]"
+                status = _("⚠️ OTA 未初始化, 请先执行 [初始化]")
             else:
-                status = "✅ OTA 就绪"
+                status = _("✅ OTA 就绪")
 
             GLib.idle_add(self._apply_state, kern, status)
             GLib.idle_add(self._populate_list)
             GLib.idle_add(self._suggest_new_vol)
-            self.logger.info(f"状态: {status}")
+            self.logger.info(_("状态: {status}").format(status=status))
         threading.Thread(target=_load, daemon=True).start()
 
     def _apply_state(self, kern, status):
         inited = self.btrfs_inited
-        sub = self.current_running or ("(顶层 rootfs)" if not inited else "未知")
-        hist = self.history_vol or "无"
+        sub = self.current_running or (_("(顶层 rootfs)") if not inited else _("未知"))
+        hist = self.history_vol or _("无")
         self.lbl_subvol.set_text(f"{sub}    [history: {hist}]")
         self.lbl_kernel.set_text(f"{EFI_KERNEL}  md5:{kern}")
 
@@ -687,7 +715,7 @@ class TimeCapsuleWindow(Gtk.Window):
     def _populate_list(self):
         self.liststore.clear()
         if not self.subvol_rows:
-            self.liststore.append(["(无子卷)", "-", "-", "-", "—"])
+            self.liststore.append([_("(无子卷)"), "-", "-", "-", "—"])
             return False
 
         cur = (self.current_running or "").lstrip("/")
@@ -700,13 +728,13 @@ class TimeCapsuleWindow(Gtk.Window):
             # 升级中途 (STEP6 已写 current_vol 但要等 reboot 才生效) 会和实际
             # mount 不一致, 用来标"启动项"会误导用户。启动配置不在列表展示。
             if path == "@backup":
-                typ, icon = "备份", "🛡️ 备份"
+                typ, icon = _("备份"), _("🛡️ 备份")
             elif path == cur and cur:
-                typ, icon = "当前运行", "✅ 当前"
+                typ, icon = _("当前运行"), _("✅ 当前")
             elif path == hist:
-                typ, icon = "上一历史", "📦 历史"
+                typ, icon = _("上一历史"), _("📦 历史")
             else:
-                typ, icon = "历史版本", "🗂️ 快照"
+                typ, icon = _("历史版本"), _("🗂️ 快照")
             self.liststore.append([path, typ, r["id"], r["gen"], icon])
         return False
 
@@ -727,15 +755,15 @@ class TimeCapsuleWindow(Gtk.Window):
     # ---------- 按钮回调 ----------
     def on_pick_script(self, button):
         dlg = Gtk.FileChooserDialog(
-            title="选择升级脚本", parent=self, action=Gtk.FileChooserAction.OPEN)
+            title=_("选择升级脚本"), parent=self, action=Gtk.FileChooserAction.OPEN)
         dlg.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
                         Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
         filt = Gtk.FileFilter()
-        filt.set_name("脚本文件 (*.sh)")
+        filt.set_name(_("脚本文件 (*.sh)"))
         filt.add_pattern("*.sh")
         dlg.add_filter(filt)
         filt2 = Gtk.FileFilter()
-        filt2.set_name("所有文件")
+        filt2.set_name(_("所有文件"))
         filt2.add_pattern("*")
         dlg.add_filter(filt2)
         if os.path.exists(self.ent_script.get_text()):
@@ -747,9 +775,9 @@ class TimeCapsuleWindow(Gtk.Window):
     def on_preview_script(self, button):
         path = self.ent_script.get_text().strip()
         if not path or not os.path.isfile(path):
-            self.show_error(f"脚本文件不存在: {path}")
+            self.show_error(_("脚本文件不存在: {path}").format(path=path))
             return
-        dlg = Gtk.Dialog(title="升级脚本预览", transient_for=self,
+        dlg = Gtk.Dialog(title=_("升级脚本预览"), transient_for=self,
                          modal=True)
         dlg.add_buttons(Gtk.STOCK_CLOSE, Gtk.ResponseType.OK)
         dlg.set_default_size(680, 460)
@@ -762,7 +790,7 @@ class TimeCapsuleWindow(Gtk.Window):
             with open(path, encoding='utf-8', errors='replace') as f:
                 txt = f.read()
         except OSError as e:
-            txt = f"读取失败: {e}"
+            txt = _("读取失败: {e}").format(e=e)
         tv.get_buffer().set_text(txt)
         sw.add(tv)
         dlg.get_content_area().pack_start(sw, True, True, 0)
@@ -773,15 +801,16 @@ class TimeCapsuleWindow(Gtk.Window):
     # ---- 内核 EFI 升级 ----
     def on_pick_kernel(self, button):
         dlg = Gtk.FileChooserDialog(
-            title="选择内核 EFI 文件", parent=self, action=Gtk.FileChooserAction.OPEN)
+            title=_("选择内核 EFI 文件"), parent=self,
+            action=Gtk.FileChooserAction.OPEN)
         dlg.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
                         Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
         filt = Gtk.FileFilter()
-        filt.set_name("EFI 内核 (*.efi)")
+        filt.set_name(_("EFI 内核 (*.efi)"))
         filt.add_pattern("*.efi")
         dlg.add_filter(filt)
         filt2 = Gtk.FileFilter()
-        filt2.set_name("所有文件")
+        filt2.set_name(_("所有文件"))
         filt2.add_pattern("*")
         dlg.add_filter(filt2)
         cur = self.ent_kernel.get_text().strip()
@@ -790,11 +819,13 @@ class TimeCapsuleWindow(Gtk.Window):
         if dlg.run() == Gtk.ResponseType.OK:
             self.ent_kernel.set_text(dlg.get_filename())
             self.lbl_kernel_md5.set_markup(
-                "<span size='small' foreground='gray'>文件已选定, 点击 [生成 MD5] 校验并写入</span>")
+                "<span size='small' foreground='gray'>"
+                + _("文件已选定, 点击 [生成 MD5] 校验并写入")
+                + "</span>")
         dlg.destroy()
 
     def _md5_of_file(self, path):
-        """计算文件 MD5, 返回十六进制摘要。"""
+        # 计算文件 MD5, 返回十六进制摘要。
         import hashlib
         h = hashlib.md5()
         with open(path, "rb") as f:
@@ -814,35 +845,40 @@ class TimeCapsuleWindow(Gtk.Window):
         """
         path = self.ent_kernel.get_text().strip()
         if not path:
-            self.show_error("请先选择内核 EFI 文件")
+            self.show_error(_("请先选择内核 EFI 文件"))
             return
         if not os.path.isfile(path):
-            self.show_error(f"内核文件不存在: {path}")
+            self.show_error(_("内核文件不存在: {path}").format(path=path))
             return
 
         # 基本健全性检查: EFI 内核镜像不该太小
         try:
             size = os.path.getsize(path)
         except OSError as e:
-            self.show_error(f"读取文件大小失败: {e}")
+            self.show_error(_("读取文件大小失败: {e}").format(e=e))
             return
         if size < 1024 * 1024:
             if not self._confirm_action(
-                    "内核文件偏小",
-                    f"文件大小仅 {size} 字节, 通常内核 EFI 远大于此。\n仍要继续吗?"):
+                    _("内核文件偏小"),
+                    _("文件大小仅 {size} 字节, 通常内核 EFI 远大于此。\n"
+                      "仍要继续吗?").format(size=size)):
                 return
 
         self.btn_kernel_md5.set_sensitive(False)
-        self.lbl_kernel_md5.set_markup("<span size='small'>⏳ 计算 MD5 中...</span>")
+        self.lbl_kernel_md5.set_markup(
+            _("<span size='small'>⏳ 计算 MD5 中...</span>"))
 
         def work():
             try:
                 md5 = self._md5_of_file(path)
             except OSError as e:
-                GLib.idle_add(self._kernel_md5_fail, f"计算 MD5 失败: {e}",
+                GLib.idle_add(self._kernel_md5_fail,
+                              _("计算 MD5 失败: {e}").format(e=e),
                               [self.btn_kernel_md5])
                 return
-            self.logger.info(f"内核 EFI: {path}  size={size}  md5={md5}")
+            # 技术日志 (路径/大小/摘要), 不翻译内容但需过门禁
+            self.logger.info(_("内核 EFI: {path}  size={size}  md5={md5}").format(
+                path=path, size=size, md5=md5))
 
             # 写入 /opt/kernel_upgrade/ (自动提权)
             self._install_kernel_files(path, md5)
@@ -860,22 +896,25 @@ class TimeCapsuleWindow(Gtk.Window):
         """
         SCRIPT = "/usr/sbin/ota_kernel_install"
         if not os.path.exists(SCRIPT):
-            self._task_err = f"缺少内核安装助手: {SCRIPT}\n请确认 quectel-ota 已安装"
+            self._task_err = _("缺少内核安装助手: {script}\n"
+                               "请确认 quectel-ota 已安装").format(script=SCRIPT)
             self.logger.error(self._task_err)
             return
         if not os.path.isfile(efi_path):
-            self._task_err = f"内核文件不存在: {efi_path}"
+            self._task_err = _("内核文件不存在: {path}").format(path=efi_path)
             self.logger.error(self._task_err)
             return
-        self.logger.info(f"调用 {SCRIPT} 安装内核 {efi_path}")
+        self.logger.info(_("调用 {script} 安装内核 {path}").format(
+            script=SCRIPT, path=efi_path))
         out, rc = run_cmd(elevation_cmd([SCRIPT, efi_path]), timeout=180)
+        # 技术日志 (命令返回码 + 原始输出), 不翻译
         self.logger.info(f"ota_kernel_install rc={rc}\n{out}")
         if rc != 0:
-            self._task_err = f"内核安装失败 (rc={rc}):\n{out}"
+            self._task_err = _("内核安装失败 (rc={rc}):\n{out}").format(rc=rc, out=out)
             self.logger.error(self._task_err)
             return
         # 脚本已完成 md5sum -c 自检, 这里只读取结果用于显示
-        self.logger.info("内核升级文件已就绪 (脚本自检通过)")
+        self.logger.info(_("内核升级文件已就绪 (脚本自检通过)"))
 
 
     def _kernel_md5_fail(self, msg, widgets):
@@ -888,20 +927,20 @@ class TimeCapsuleWindow(Gtk.Window):
         if err:
             self.show_error(err)
             self.lbl_kernel_md5.set_markup(
-                "<span size='small' foreground='#c62828'>❌ 内核准备失败</span>")
+                _("<span size='small' foreground='#c62828'>❌ 内核准备失败</span>"))
             return
         md5 = read_md5_value(KERNEL_UPGRADE_MD5)
         self.lbl_kernel_md5.set_markup(
-            f"<span size='small' foreground='green'>✅ 内核已就绪 md5:{md5[:12]} "
-            f"(升级时自动刷写 EFI)</span>")
+            _("<span size='small' foreground='green'>✅ 内核已就绪 md5:{md5} "
+              "(升级时自动刷写 EFI)</span>").format(md5=md5[:12]))
         self.statusbar.set_markup(
-            '<span foreground="green">✅ 内核升级文件已就绪, 升级时将一并刷写</span>')
-        self.logger.info("内核升级文件已就绪, 等待升级触发")
+            _("<span foreground='green'>✅ 内核升级文件已就绪, 升级时将一并刷写</span>"))
+        self.logger.info(_("内核升级文件已就绪, 等待升级触发"))
 
     # ----- 通用任务执行器 -----
     def _run_task(self, do, done_cb=None, busy_widgets=None):
         if self._busy:
-            self.logger.warning("已有任务在运行, 请等待完成")
+            self.logger.warning(_("已有任务在运行, 请等待完成"))
             return
         self._busy = True
         # 每次任务开始前清空错误标记: work() 失败时会重新设置它
@@ -914,13 +953,13 @@ class TimeCapsuleWindow(Gtk.Window):
             try:
                 do()
             except Exception as e:
-                self.logger.error(f"任务异常: {e}")
+                self.logger.error(_("任务异常: {e}").format(e=e))
                 err = str(e)
             else:
                 # work() 通过设置 self._task_err 报告命令失败 (rc != 0 等)
                 if getattr(self, "_task_err", None):
                     err = self._task_err
-                    self.logger.error(f"任务失败: {err}")
+                    self.logger.error(_("任务失败: {err}").format(err=err))
             GLib.idle_add(self._task_finish, widgets, done_cb, err is None, err)
         threading.Thread(target=run, daemon=True).start()
 
@@ -934,16 +973,18 @@ class TimeCapsuleWindow(Gtk.Window):
 
     # ----- 初始化 -----
     def on_init_clicked(self, button):
-        if not self._confirm("初始化 OTA",
-                            "将备份当前内核并创建初始 @V0 快照, 完成后自动重启。\n\n继续?"):
+        if not self._confirm(_("初始化 OTA"),
+                            _("将备份当前内核并创建初始 @V0 快照, 完成后自动重启。")
+                            + "\n\n" + _("继续?")):
             return
-        self.logger.info("开始 OTA 初始化...")
+        self.logger.info(_("开始 OTA 初始化..."))
 
         def work():
             out, rc = run_ota_stream("init", timeout=120)
-            self.logger.info(f"init 返回码={rc}")
+            # 技术日志 (返回码)
+            self.logger.info(_("init 返回码={rc}").format(rc=rc))
             if rc != 0:
-                self._task_err = f"初始化失败:\n{out}"
+                self._task_err = _("初始化失败:\n{out}").format(out=out)
         self._run_task(work, lambda ok, e: self._init_done(ok, e), [self.btn_init])
 
     def _init_done(self, ok, err):
@@ -951,23 +992,29 @@ class TimeCapsuleWindow(Gtk.Window):
             self.show_error(err)
             self.refresh_state()
             return
-        self.logger.info("OTA 初始化成功, 设备将重启")
-        self.statusbar.set_markup('<span foreground="green">✅ 初始化完成, 设备将重启</span>')
-        self.show_info("OTA 初始化成功!\n设备将自动重启进入子卷模式, 重启后重新打开本工具即可使用升级/回退。")
+        self.logger.info(_("OTA 初始化成功, 设备将重启"))
+        self.statusbar.set_markup(
+            _("<span foreground='green'>✅ 初始化完成, 设备将重启</span>"))
+        self.show_info(_("OTA 初始化成功!")
+                       + "\n"
+                       + _("设备将自动重启进入子卷模式, "
+                           "重启后重新打开本工具即可使用升级/回退。"))
         GLib.timeout_add_seconds(3, self.refresh_state)
 
     # ----- 备份 -----
     def on_backup_clicked(self, button):
-        if not self._confirm("创建备份",
-                            "将备份内核并把当前 @Vn 快照为 @backup (覆盖旧备份)。\n\n继续?"):
+        if not self._confirm(_("创建备份"),
+                            _("将备份内核并把当前 @Vn 快照为 @backup (覆盖旧备份)。")
+                            + "\n\n" + _("继续?")):
             return
-        self.logger.info("开始创建备份...")
+        self.logger.info(_("开始创建备份..."))
 
         def work():
             out, rc = run_ota_stream("backup", timeout=180)
-            self.logger.info(f"backup 返回码={rc}")
+            # 技术日志 (返回码)
+            self.logger.info(_("backup 返回码={rc}").format(rc=rc))
             if rc != 0:
-                self._task_err = f"备份失败:\n{out}"
+                self._task_err = _("备份失败:\n{out}").format(out=out)
         self._run_task(work, lambda ok, e: self._backup_done(ok, e), [self.btn_backup])
 
     def _backup_done(self, ok, err):
@@ -975,8 +1022,9 @@ class TimeCapsuleWindow(Gtk.Window):
         if err:
             self.show_error(err)
         else:
-            self.statusbar.set_markup('<span foreground="green">✅ 备份创建成功</span>')
-            self.logger.info("备份创建成功")
+            self.statusbar.set_markup(
+                _("<span foreground='green'>✅ 备份创建成功</span>"))
+            self.logger.info(_("备份创建成功"))
 
     # ----- 升级 -----
     def on_upgrade_clicked(self, button):
@@ -984,22 +1032,22 @@ class TimeCapsuleWindow(Gtk.Window):
         newvol = self.ent_newvol.get_text().strip()
         kernel = self.ent_kernel.get_text().strip()
         if not newvol:
-            self.show_error("请填写新版本名 (如 @V2)")
+            self.show_error(_("请填写新版本名 (如 @V2)"))
             return
         if not newvol.startswith("@"):
             newvol = "@" + newvol
             self.ent_newvol.set_text(newvol)
         if not re.match(r'^@[a-zA-Z0-9._-]+$', newvol):
-            self.show_error("新版本名非法, 需以 @ 开头, 仅含字母/数字/._-")
+            self.show_error(_("新版本名非法, 需以 @ 开头, 仅含字母/数字/._-"))
             return
         if script and not os.path.isfile(script):
-            self.show_error(f"升级脚本不存在: {script}")
+            self.show_error(_("升级脚本不存在: {script}").format(script=script))
             return
         if newvol == "@backup" or newvol.startswith("@backup"):
-            self.show_error("不能用 @backup 作为新版本名")
+            self.show_error(_("不能用 @backup 作为新版本名"))
             return
         if kernel and not os.path.isfile(kernel):
-            self.show_error(f"内核 EFI 文件不存在: {kernel}")
+            self.show_error(_("内核 EFI 文件不存在: {kernel}").format(kernel=kernel))
             return
 
         # 内核摘要: 选了文件取计算值, 没选且板上已就绪取板上值
@@ -1008,35 +1056,51 @@ class TimeCapsuleWindow(Gtk.Window):
                 _ksize = os.path.getsize(kernel)
                 _kmd5 = self._md5_of_file(kernel)
             except OSError as e:
-                self.show_error(f"读取内核文件失败: {e}")
+                self.show_error(_("读取内核文件失败: {e}").format(e=e))
                 return
-            k_summary = f"<b>升级内核:</b> 是 ({os.path.basename(kernel)}, {_ksize}B, md5:{_kmd5[:12]})\n"
+            k_summary = _("<b>升级内核:</b> 是 ({name}, {size}B, md5:{md5})").format(
+                name=os.path.basename(kernel), size=_ksize, md5=_kmd5[:12]) + "\n"
         elif kernel_upgrade_ready():
-            k_summary = f"<b>升级内核:</b> 是 (/opt/kernel_upgrade 已就绪, md5:{read_md5_value(KERNEL_UPGRADE_MD5)[:12]})\n"
+            k_summary = _(
+                "<b>升级内核:</b> 是 (/opt/kernel_upgrade 已就绪, md5:{md5})").format(
+                    md5=read_md5_value(KERNEL_UPGRADE_MD5)[:12]) + "\n"
         else:
-            k_summary = "<b>升级内核:</b> 否 (沿用当前内核)\n"
+            k_summary = _("<b>升级内核:</b> 否 (沿用当前内核)") + "\n"
 
+        # 多行 markup: 分句翻译再拼, 换行符放代码里。
+        # (含 \n 的整串会让 xgettext 把 msgid 折成多行, 门禁看不到)
         warn = (
-            "<b>系统升级确认</b>\n\n"
-            f"新版本子卷: <b>{newvol}</b>\n"
-            f"升级脚本: <tt>{script or UPGRADE_SCRIPT+' (板上现有)'}</tt>\n"
-            f"{k_summary}"
-            f"自动备份: <b>{'是' if self.chk_autobackup.get_active() else '否'}</b>\n\n"
-            "<span foreground='#c62828'>升级完成后设备将自动重启!</span>\n"
-            "如果升级脚本失败, 系统会自动回滚到 @backup。\n\n继续?"
+            _("<b>系统升级确认</b>")
+            + "\n\n"
+            + _("新版本子卷: <b>{newvol}</b>").format(newvol=newvol)
+            + "\n"
+            + _("升级脚本: <tt>{script}</tt>").format(
+                script=script or _("{path} (板上现有)").format(path=UPGRADE_SCRIPT))
+            + "\n"
+            + k_summary
+            + _("自动备份: <b>{state}</b>").format(
+                state=_("是") if self.chk_autobackup.get_active() else _("否"))
+            + "\n\n"
+            + _("<span foreground='#c62828'>升级完成后设备将自动重启!</span>")
+            + "\n"
+            + _("如果升级脚本失败, 系统会自动回滚到 @backup。")
+            + "\n\n" + _("继续?")
         )
-        if not self._confirm_rich("系统升级", warn):
+        if not self._confirm_rich(_("系统升级"), warn):
             return
 
         autob = self.chk_autobackup.get_active()
-        self.logger.info(f"开始系统升级 -> {newvol}, 脚本={script}, "
-                         f"内核={'是' if kernel else '否'}, 自动备份={autob}")
+        # 技术日志: 子卷名/路径/选项
+        self.logger.info(_("开始系统升级 -> {newvol}, 脚本={script}, "
+                           "内核={kernel}, 自动备份={autob}").format(
+            newvol=newvol, script=script,
+            kernel=_("是") if kernel else _("否"), autob=autob))
 
         def work():
             # 0) 若选了内核 EFI, 先计算 MD5 写入 /opt/kernel_upgrade/
             #    (用户可能直接点[执行升级]而没先点[生成 MD5], 这里兜底)
             if kernel:
-                self.logger.info("准备内核升级文件...")
+                self.logger.info(_("准备内核升级文件..."))
                 self._install_kernel_files(kernel, self._md5_of_file(kernel))
                 if getattr(self, "_task_err", None):
                     return  # _install_kernel_files 已设 _task_err
@@ -1044,21 +1108,25 @@ class TimeCapsuleWindow(Gtk.Window):
             # 1) 若用户选了新脚本, 替换 /opt/system_upgrade.sh
             #    写 /opt 需要 root, 统一走 ota_kernel_install install-script (sudo 白名单)
             if script and script != UPGRADE_SCRIPT:
-                self.logger.info(f"替换升级脚本 {script} -> {UPGRADE_SCRIPT}")
+                # 技术日志 (脚本路径替换)
+                self.logger.info(_("替换升级脚本 {script} -> {path}").format(
+                    script=script, path=UPGRADE_SCRIPT))
                 out, rc = run_cmd(
                     elevation_cmd(["/usr/sbin/ota_kernel_install", "install-script", script]),
                     timeout=30)
                 self.logger.info(f"install-script rc={rc}\n{out}")
                 if rc != 0:
-                    self._task_err = f"升级脚本替换失败 (rc={rc}):\n{out}"
+                    self._task_err = _("升级脚本替换失败 (rc={rc}):\n{out}").format(
+                        rc=rc, out=out)
                     return
 
             # 2) 自动备份 (流式输出: 备份耗时几十秒, 逐行打印避免日志空白)
             if autob:
-                self.logger.info("升级前自动创建备份...")
+                self.logger.info(_("升级前自动创建备份..."))
                 out, rc = run_ota_stream("backup", timeout=180)
                 if rc != 0:
-                    self._task_err = f"升级前备份失败, 已中止升级:\n{out}"
+                    self._task_err = _("升级前备份失败, 已中止升级:\n{out}").format(
+                        out=out)
                     return
 
             # 3) 执行升级 (流式输出!) — ota_run upgrade 会运行 system_upgrade.sh
@@ -1069,10 +1137,11 @@ class TimeCapsuleWindow(Gtk.Window):
             # 成功路径 ota_run 会 reboot, 子进程被信号终止 -> rc 可能为负;
             # 用进度标记判断: 跑到 STEP 4+ 说明升级脚本已成功, 不算失败。
             if upgrade_reached_success(out):
-                self.logger.info(f"upgrade 升级流程已完成 (rc={rc}), 设备将重启")
+                self.logger.info(_("upgrade 升级流程已完成 (rc={rc}), 设备将重启").format(
+                    rc=rc))
                 return
             if rc != 0:
-                self._task_err = f"升级失败 (rc={rc}):\n{out}"
+                self._task_err = _("升级失败 (rc={rc}):\n{out}").format(rc=rc, out=out)
         self._run_task(work, lambda ok, e: self._upgrade_done(ok, e),
                        [self.btn_upgrade, self.btn_backup, self.btn_init])
 
@@ -1080,76 +1149,90 @@ class TimeCapsuleWindow(Gtk.Window):
         if err:
             # 升级失败时 ota_run 通常会自己 reboot 回滚, 但若没 reboot 则刷新状态
             self.show_error(err)
-            self.statusbar.set_markup('<span foreground="#c62828">❌ 升级失败</span>')
+            self.statusbar.set_markup(
+                _("<span foreground='#c62828'>❌ 升级失败</span>"))
             GLib.timeout_add_seconds(5, self.refresh_state)
         else:
-            self.statusbar.set_markup('<span foreground="green">✅ 升级成功, 设备将重启</span>')
-            self.show_info("系统升级成功!\n设备将自动重启进入新版本。重启后重新打开本工具验证。")
+            self.statusbar.set_markup(
+                _("<span foreground='green'>✅ 升级成功, 设备将重启</span>"))
+            self.show_info(_("系统升级成功!")
+                           + "\n"
+                           + _("设备将自动重启进入新版本。重启后重新打开本工具验证。"))
 
     # ----- 回退 -----
     def on_rollback_clicked(self, button):
         target = self.get_selected_subvol()
         if not target:
-            self.show_error("请先在列表中选择要回退的版本")
+            self.show_error(_("请先在列表中选择要回退的版本"))
             return
         if target == "@backup":
-            self.show_error("不能回退到 @backup, 请使用 [还原备份] 按钮")
+            self.show_error(_("不能回退到 @backup, 请使用 [还原备份] 按钮"))
             return
         # 只认实际运行子卷 (mount 的 subvol=), 不读子卷内冻结的 current_vol
         cur_running = (self.current_running or "").lstrip("/")
         if target == cur_running:
-            self.show_error(f"{target} 正是当前运行版本, 无需回退")
+            self.show_error(_("{target} 正是当前运行版本, 无需回退").format(target=target))
             return
         warn = (
-            "<b>版本回退确认</b>\n\n"
-            f"目标版本: <b>{target}</b>\n"
-            "将恢复该版本的内核并把启动配置切换到它。\n\n"
-            "<span foreground='#c62828'>回退完成后设备将自动重启!</span>\n\n继续?"
+            _("<b>版本回退确认</b>")
+            + "\n\n"
+            + _("目标版本: <b>{target}</b>").format(target=target)
+            + "\n"
+            + _("将恢复该版本的内核并把启动配置切换到它。")
+            + "\n\n"
+            + _("<span foreground='#c62828'>回退完成后设备将自动重启!</span>")
+            + "\n\n" + _("继续?")
         )
-        if not self._confirm_rich("版本回退", warn):
+        if not self._confirm_rich(_("版本回退"), warn):
             return
-        self.logger.info(f"开始回退到 {target}")
+        # 技术日志 (目标子卷名)
+        self.logger.info(_("开始回退到 {target}").format(target=target))
 
         def work():
             out, rc = run_ota_stream("rollback", target, timeout=300)
-            self.logger.info(f"rollback 返回码={rc}")
+            self.logger.info(_("rollback 返回码={rc}").format(rc=rc))
             if rc != 0:
-                self._task_err = f"回退失败:\n{out}"
+                self._task_err = _("回退失败:\n{out}").format(out=out)
         self._run_task(work, lambda ok, e: self._rollback_done(ok, e),
                        [self.btn_rollback])
 
     def _rollback_done(self, ok, err):
         if err:
             self.show_error(err)
-            self.statusbar.set_markup('<span foreground="#c62828">❌ 回退失败</span>')
+            self.statusbar.set_markup(
+                _("<span foreground='#c62828'>❌ 回退失败</span>"))
             self.refresh_state()
         else:
-            self.statusbar.set_markup('<span foreground="green">✅ 回退成功, 设备将重启</span>')
-            self.show_info("版本回退成功!\n设备将自动重启进入所选版本。")
+            self.statusbar.set_markup(
+                _("<span foreground='green'>✅ 回退成功, 设备将重启</span>"))
+            self.show_info(_("版本回退成功!")
+                           + "\n" + _("设备将自动重启进入所选版本。"))
 
     # ----- 删除 -----
     def on_delete_clicked(self, button):
         target = self.get_selected_subvol()
         if not target:
-            self.show_error("请先在列表中选择要删除的版本")
+            self.show_error(_("请先在列表中选择要删除的版本"))
             return
         if target == "@backup":
-            self.show_error("不能删除 @backup 子卷")
+            self.show_error(_("不能删除 @backup 子卷"))
             return
         # 只认实际运行子卷 (mount 的 subvol=), 不读子卷内冻结的 current_vol
         if target == (self.current_running or "").lstrip("/"):
-            self.show_error("不能删除当前运行版本")
+            self.show_error(_("不能删除当前运行版本"))
             return
-        if not self._confirm_action(f"删除子卷 {target}",
-                                   f"确定删除子卷 {target} ?\n\n此操作不可恢复!"):
+        if not self._confirm_action(
+                _("删除子卷 {target}").format(target=target),
+                _("确定删除子卷 {target} ?\n\n此操作不可恢复!").format(target=target)):
             return
-        self.logger.info(f"开始删除子卷 {target}")
+        # 技术日志 (目标子卷名)
+        self.logger.info(_("开始删除子卷 {target}").format(target=target))
 
         def work():
             out, rc = run_ota_stream("delete", target, timeout=120)
-            self.logger.info(f"delete 返回码={rc}")
+            self.logger.info(_("delete 返回码={rc}").format(rc=rc))
             if rc != 0:
-                self._task_err = f"删除失败:\n{out}"
+                self._task_err = _("删除失败:\n{out}").format(out=out)
         self._run_task(work, lambda ok, e: self._delete_done(ok, e),
                        [self.btn_delete])
 
@@ -1158,42 +1241,51 @@ class TimeCapsuleWindow(Gtk.Window):
         if err:
             self.show_error(err)
         else:
-            self.statusbar.set_markup('<span foreground="green">✅ 子卷已删除</span>')
-            self.logger.info("子卷删除成功")
+            self.statusbar.set_markup(
+                _("<span foreground='green'>✅ 子卷已删除</span>"))
+            self.logger.info(_("子卷删除成功"))
 
     # ----- 还原 -----
     def on_restore_clicked(self, button):
         warn = (
-            "<b>从备份还原</b>\n\n"
-            "将从 @backup 子卷把系统还原为当前 @Vn (会先删除当前 @Vn 再从备份重建),\n"
-            "并恢复备份的内核。\n\n"
-            "<span foreground='#c62828'>还原完成后设备将自动重启!</span>\n\n继续?"
+            _("<b>从备份还原</b>")
+            + "\n\n"
+            + _("将从 @backup 子卷把系统还原为当前 @Vn "
+                "(会先删除当前 @Vn 再从备份重建),")
+            + "\n"
+            + _("并恢复备份的内核。")
+            + "\n\n"
+            + _("<span foreground='#c62828'>还原完成后设备将自动重启!</span>")
+            + "\n\n" + _("继续?")
         )
-        if not self._confirm_rich("从备份还原", warn):
+        if not self._confirm_rich(_("从备份还原"), warn):
             return
-        self.logger.info("开始从 @backup 还原")
+        self.logger.info(_("开始从 @backup 还原"))
 
         def work():
             out, rc = run_ota_stream("restore", timeout=300)
-            self.logger.info(f"restore 返回码={rc}")
+            self.logger.info(_("restore 返回码={rc}").format(rc=rc))
             if rc != 0:
-                self._task_err = f"还原失败:\n{out}"
+                self._task_err = _("还原失败:\n{out}").format(out=out)
         self._run_task(work, lambda ok, e: self._restore_done(ok, e),
                        [self.btn_restore])
 
     def _restore_done(self, ok, err):
         if err:
             self.show_error(err)
-            self.statusbar.set_markup('<span foreground="#c62828">❌ 还原失败</span>')
+            self.statusbar.set_markup(
+                _("<span foreground='#c62828'>❌ 还原失败</span>"))
             self.refresh_state()
         else:
-            self.statusbar.set_markup('<span foreground="green">✅ 还原成功, 设备将重启</span>')
-            self.show_info("备份还原成功!\n设备将自动重启进入还原后的系统。")
+            self.statusbar.set_markup(
+                _("<span foreground='green'>✅ 还原成功, 设备将重启</span>"))
+            self.show_info(_("备份还原成功!")
+                           + "\n" + _("设备将自动重启进入还原后的系统。"))
 
     # ---------- 日志保存 ----------
     def on_save_log(self, button):
         dlg = Gtk.FileChooserDialog(
-            title="保存日志", parent=self, action=Gtk.FileChooserAction.SAVE)
+            title=_("保存日志"), parent=self, action=Gtk.FileChooserAction.SAVE)
         dlg.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
                         Gtk.STOCK_SAVE, Gtk.ResponseType.OK)
         dlg.set_current_name(f"quectel_ota_{datetime.datetime.now():%Y%m%d_%H%M%S}.log")
@@ -1204,7 +1296,7 @@ class TimeCapsuleWindow(Gtk.Window):
             text = buf.get_text(start, end, True)
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(text)
-            self.logger.info(f"日志已保存: {path}")
+            self.logger.info(_("日志已保存: {path}").format(path=path))
         dlg.destroy()
 
     # ---------- 对话框 ----------
@@ -1245,7 +1337,7 @@ class TimeCapsuleWindow(Gtk.Window):
     def show_error(self, msg):
         d = Gtk.MessageDialog(transient_for=self, modal=True,
                               message_type=Gtk.MessageType.ERROR,
-                              buttons=Gtk.ButtonsType.OK, text="错误")
+                              buttons=Gtk.ButtonsType.OK, text=_("错误"))
         d.format_secondary_text(msg)
         self.logger.error(msg)
         d.run()
@@ -1254,7 +1346,7 @@ class TimeCapsuleWindow(Gtk.Window):
     def show_info(self, msg):
         d = Gtk.MessageDialog(transient_for=self, modal=True,
                               message_type=Gtk.MessageType.INFO,
-                              buttons=Gtk.ButtonsType.OK, text="提示")
+                              buttons=Gtk.ButtonsType.OK, text=_("提示"))
         d.format_secondary_text(msg)
         d.run()
         d.destroy()
@@ -1262,7 +1354,8 @@ class TimeCapsuleWindow(Gtk.Window):
 
 def main():
     if not os.path.exists(OTA_RUN):
-        print(f"ERROR: {OTA_RUN} 不存在, 请确认 quectel-ota 已安装")
+        print(_("ERROR: {ota_run} 不存在, 请确认 quectel-ota 已安装").format(
+            ota_run=OTA_RUN))
         return
     win = TimeCapsuleWindow()
     win.connect("destroy", Gtk.main_quit)

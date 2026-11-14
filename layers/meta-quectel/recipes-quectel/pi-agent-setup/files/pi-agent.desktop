@@ -1,9 +1,11 @@
 [Desktop Entry]
 Type=Application
-Name=Pi 编程助手
-Name[en]=Pi Coding Agent
-GenericName=AI Coding Agent
-GenericName[zh_CN]=编程智能体
+# English is the default value, Chinese goes into the [zh_CN] key -- the other
+# way round would show Chinese on every non-Chinese session.
+Name=Pi Agent
+Name[zh_CN]=Pi Agent
+GenericName=AI coding agent
+GenericName[zh_CN]=AI 编程智能体
 Comment=Install Pi, or open it in a terminal once it is installed
 Comment[zh_CN]=未安装时打开安装向导；装好后点击即在终端里打开 pi
 Exec=/usr/bin/pi-agent
@@ -22,6 +24,6 @@ StartupWMClass=pi-agent-setup
 Actions=Setup;
 
 [Desktop Action Setup]
-Name=安装 / 重新配置向导
-Name[en]=Install or reconfigure
+Name=Install or reconfigure
+Name[zh_CN]=安装 / 重新配置向导
 Exec=/usr/bin/pi-agent --setup

@@ -1,0 +1,846 @@
+# English translations for the Pi Agent wizard and install engine.
+#
+# The msgid is the Chinese source string (see i18n/README.md): a Chinese
+# session shows the source text and never loads this file, every other session
+# loads pi-agent-setup.mo compiled from here. Keep %s / %d / %.0f / %.1f and
+# \n byte-identical to the msgid -- a mismatch silently drops the translation.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: pi-agent-setup\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-13 23:04+0800\n"
+"PO-Revision-Date: 2026-11-13 16:20+0800\n"
+"Last-Translator: Quectel PI H1 team\n"
+"Language-Team: none\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "Pi Agent 安装向导"
+msgstr "Pi Agent Setup"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid ""
+"安装完成后这样开始用 pi：\n"
+"\n"
+"  1. 打开终端（Ctrl+Alt+T，或在应用列表里找“终端”）\n"
+"  2. 进入你要工作的目录，例如：\n"
+"       cd ~/my-project\n"
+"  3. 输入 pi 回车\n"
+"\n"
+"进入 pi 之后：\n"
+"  /model    切换模型\n"
+"  /login    更换 API Key 或用账号登录\n"
+"  /help     查看全部命令\n"
+"  Ctrl+C    退出（会话会自动保存，pi -c 继续上次对话）\n"
+"\n"
+"配置文件都在 ~/.pi/agent/ 下：\n"
+"  models.json    端点与模型\n"
+"  auth.json      API Key（权限 600）\n"
+"  settings.json  默认模型与扩展\n"
+msgstr ""
+"Once installed, start pi like this:\n"
+"\n"
+"  1. Open a terminal (Ctrl+Alt+T, or look for “Terminal” in the app grid)\n"
+"  2. Change into the directory you want to work in, for example:\n"
+"       cd ~/my-project\n"
+"  3. Type pi and press Enter\n"
+"\n"
+"Inside pi:\n"
+"  /model    switch model\n"
+"  /login    change the API key or sign in with an account\n"
+"  /help     list all commands\n"
+"  Ctrl+C    quit (the session is saved; pi -c resumes the last one)\n"
+"\n"
+"The configuration files live in ~/.pi/agent/:\n"
+"  models.json    endpoints and models\n"
+"  auth.json      API key (mode 600)\n"
+"  settings.json  default model and extensions\n"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "显示/隐藏"
+msgstr "Show/hide"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "安装 Pi Agent？"
+msgstr "Install Pi Agent?"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid ""
+"Pi Agent 是一个在终端里工作的编程智能体：能读写文件、执行命令、帮你排查和修改"
+"代码。它不是系统组件，会装在你自己的主目录里，随时可以删除。"
+msgstr ""
+"Pi Agent is a coding agent that lives in the terminal: it reads and writes "
+"files, runs commands and helps you track down and fix code. It is not a "
+"system component -- it installs into your own home directory and can be "
+"deleted at any time."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid ""
+"需要联网：向导会先检查网络，再下载 Node.js 运行时和 pi 本体（合计约 250 MB，"
+"视网速需要几分钟）。"
+msgstr ""
+"Needs the network: the wizard checks connectivity first, then downloads the "
+"Node.js runtime and pi itself (about 250 MB in total, a few minutes "
+"depending on your connection)."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "不需要管理员密码：全部装在你的主目录（~/.local），不修改系统文件"
+msgstr ""
+"No administrator password: everything goes into your home directory (~/."
+"local) and no system file is touched"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "随时可卸载：安装完成后会给出一条清理命令"
+msgstr "Easy to remove: the last page gives you the one cleanup command"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid ""
+"Pi Agent 本体由第三方（earendil-works）以 MIT 许可发布；本向导也同样以 MIT 许"
+"可发布。"
+msgstr ""
+"Pi Agent itself is published by a third party (earendil-works) under the MIT "
+"license; this wizard is released under the MIT license too."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "开始安装"
+msgstr "Install"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "下次询问"
+msgstr "Ask me later"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "7 天后再提醒"
+msgstr "Remind me in 7 days"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "不再安装"
+msgstr "Don't install"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "以后不再自动弹出这个向导"
+msgstr "This wizard will no longer open by itself"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "准备中…"
+msgstr "Preparing…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "转到后台"
+msgstr "Run in background"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "关闭窗口，安装继续进行"
+msgstr "Close the window; the installation keeps running"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "安装没有完成"
+msgstr "The installation did not finish"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "下载失败时改用国内镜像（nodejs.org 不通时）"
+msgstr "Use a mirror when the download fails (nodejs.org unreachable)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "重试"
+msgstr "Retry"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "稍后再说"
+msgstr "Later"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "配置 API 端点"
+msgstr "Configure the API endpoint"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid ""
+"pi 本身不带模型。填一个 OpenAI 兼容的服务地址和 Key，向导会写进 ~/.pi/agent/ "
+"并设为默认模型。"
+msgstr ""
+"pi does not bundle a model. Enter an OpenAI-compatible service URL and key; "
+"the wizard writes them into ~/.pi/agent/ and makes the model the default."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "接口类型"
+msgstr "API type"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "模型 ID"
+msgstr "Model ID"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "探测模型"
+msgstr "Discover models"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "用上面的 URL 和 Key 查询端点提供哪些模型"
+msgstr "Query which models the endpoint offers, using the URL and key above"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "（未探测）"
+msgstr "(not discovered yet)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "点“探测模型”后这里会列出端点提供的模型"
+msgstr "The models the endpoint offers appear here after “Discover models”"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "gpt-4o-mini，或直接填端点要求的模型名"
+msgstr "gpt-4o-mini, or type the model name your endpoint expects"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "可以直接手填；探测到的模型也会写进这里"
+msgstr ""
+"You can always type it yourself; discovered models are filled in here too"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "测试连接"
+msgstr "Test connection"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "保存并完成"
+msgstr "Save and finish"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "安装完成"
+msgstr "Installation complete"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "复制启动步骤"
+msgstr "Copy start-up steps"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "查看许可"
+msgstr "View license"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "显示 pi 本体与本向导的 MIT 许可全文"
+msgstr "Show the full MIT license text of pi and of this wizard"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "知道了"
+msgstr "Done"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "端点已改动，之前的模型列表已失效，请重新探测。"
+msgstr ""
+"The endpoint changed, so the previous model list is stale. Discover again."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid "%d 天后再提醒。也可以随时从应用列表重新打开向导"
+msgstr ""
+"%d days until the next reminder. You can reopen the wizard from the app grid "
+"at any time"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "不再自动提醒。以后要装可以重新打开向导"
+msgstr ""
+"No more automatic reminders. Reopen the wizard whenever you want to install"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "检查网络…"
+msgstr "Checking the network…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "=== 检查网络 ==="
+msgstr "=== checking the network ==="
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid ""
+"网络不通，无法下载安装文件。\n"
+"\n"
+"%s\n"
+"\n"
+"请确认网线或 Wi-Fi 已连接后点“重试”。"
+msgstr ""
+"The network is unreachable, so the installation files cannot be downloaded.\n"
+"\n"
+"%s\n"
+"\n"
+"Make sure the Ethernet cable or Wi-Fi is connected, then press “Retry”."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "网络正常"
+msgstr "The network is fine"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "=== 安装 Node.js 运行时与 pi ==="
+msgstr "=== installing the Node.js runtime and pi ==="
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "下载并安装…"
+msgstr "Downloading and installing…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "正在获取 Node.js 运行时"
+msgstr "Fetching the Node.js runtime"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid "=== 安装完成：pi %s ==="
+msgstr "=== installation complete: pi %s ==="
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid ""
+"安装过程中出现未预期的错误：\n"
+"\n"
+"%s"
+msgstr ""
+"An unexpected error occurred during the installation:\n"
+"\n"
+"%s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "安装板端技能包？"
+msgstr "Install the board skill set?"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid ""
+"技能包让 pi 了解这块板子的实际情况（外设、调试入口、实测结论）。\n"
+"\n"
+"它不在固件里，需要联网从 GitHub 拉取到你的主目录：\n"
+"%s\n"
+"\n"
+"随时可以删除，不安装也不影响 pi 本身使用。"
+msgstr ""
+"The skill set teaches pi what this board actually does (peripherals, debug "
+"entry points, measured results).\n"
+"\n"
+"It is not part of the firmware; it is downloaded from GitHub into your home "
+"directory:\n"
+"%s\n"
+"\n"
+"You can delete it at any time. Not installing it does not affect pi itself."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "不再询问"
+msgstr "Never ask again"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "现在不装"
+msgstr "Not now"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, fuzzy
+msgid "安装"
+msgstr "Install"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "=== 安装板端技能包 ==="
+msgstr "=== Installing the board skill set ==="
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid "技能包已安装：%s"
+msgstr "Skill set installed: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, fuzzy, python-format
+msgid "技能包安装失败：%s"
+msgstr "Installing the node runtime failed: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "技能包步骤出错，跳过"
+msgstr "The skill set step failed; skipping it"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "安装 pi…"
+msgstr "Installing pi…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid "pi %s 已就绪（Node %s）。填一下 API 端点就能用了。"
+msgstr "pi %s is ready (Node %s). Fill in the API endpoint and you can use it."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "先把 API URL、API Key、模型 ID 都填上"
+msgstr "Fill in the API URL, the API key and the model ID first"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "正在测试连接…"
+msgstr "Testing the connection…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "测试超时"
+msgstr "The test timed out"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "探测模型需要先填 API URL 和 API Key"
+msgstr "Discovering models needs the API URL and key first"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "探测中…"
+msgstr "Discovering…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "正在查询模型列表…"
+msgstr "Querying the model list…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "探测超时，请检查网络后重试，或直接手填模型 ID"
+msgstr ""
+"Discovery timed out. Check the network and retry, or just type the model ID"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid "正在查询模型列表…（%.0f 秒）"
+msgstr "Querying the model list… (%.0f s)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "（未探测到）"
+msgstr "(none found)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid ""
+"没能从端点拿到模型列表，请直接手填模型 ID。\n"
+"\n"
+msgstr ""
+"Could not get a model list from the endpoint. Type the model ID yourself.\n"
+"\n"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid ""
+"探测到 %d 个模型，可在下拉框里选，也可以直接改下面的输入框。\n"
+"%s"
+msgstr ""
+"Found %d models. Pick one in the dropdown, or edit the entry below.\n"
+"%s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "✔ 连接正常\n"
+msgstr "✔ Connected\n"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "✘ 连接失败\n"
+msgstr "✘ Connection failed\n"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "API URL、API Key、模型 ID 都不能为空"
+msgstr "The API URL, the API key and the model ID cannot be empty"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid "Pi 端点（%s）"
+msgstr "Pi endpoint (%s)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid "保存失败：%s"
+msgstr "Saving failed: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid "写配置文件失败：%s"
+msgstr "Writing the configuration file failed: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid ""
+"pi 已安装并配置好：\n"
+"默认模型 %s\n"
+"端点 %s"
+msgstr ""
+"pi is installed and configured:\n"
+"default model %s\n"
+"endpoint %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "启动步骤已复制到剪贴板"
+msgstr "The start-up steps are on the clipboard"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid "完整许可文本未安装（%s 不存在）。"
+msgstr "The full license text is not installed (%s does not exist)."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "Pi Agent 许可（MIT）"
+msgstr "Pi Agent license (MIT)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "关闭"
+msgstr "Close"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "安装仍在进行，完成前请不要关机"
+msgstr "The installation is still running; do not power off before it finishes"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "Pi Agent 技能包"
+msgstr "Pi Agent skills"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "板端技能包有更新"
+msgstr "A newer board skill set is available"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid ""
+"技能包让 pi 了解这块板子的实际情况（外设、调试入口、实测结论）。它不在固件"
+"里，需要联网从 GitHub 拉取到你的主目录（%s），随时可以删除。"
+msgstr ""
+"The skill set teaches pi what this board actually does (peripherals, debug "
+"entry points, measured results). It is not part of the firmware: it is "
+"downloaded from GitHub into your home directory (%s) and you can delete it "
+"at any time."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid "已安装 %s，远端 %s。更新同样会下载到你的主目录（%s）。"
+msgstr "Installed %s, upstream has %s. The update is downloaded into your home directory (%s) as well."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "不安装也不影响 pi 本身使用。"
+msgstr "Not installing it does not affect pi itself."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "以后再说"
+msgstr "Later"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "现在安装"
+msgstr "Install now"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "现在更新"
+msgstr "Update now"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid ""
+"下载校验失败（sha256 不匹配）\n"
+"  期望 %s\n"
+"  实际 %s"
+msgstr ""
+"Download verification failed (sha256 mismatch)\n"
+"  expected %s\n"
+"  actual %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "node 已就绪：%s"
+msgstr "node is ready: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "获取 node 版本信息：%s"
+msgstr "Fetching the node release index: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "  失败：%s"
+msgstr "  failed: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "%s 里没有 linux-%s 的 node 包"
+msgstr "%s lists no linux-%s node tarball"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "下载 node v%s（%.1f MB 级）"
+msgstr "Downloading node v%s (order of %.1f MB)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "  下载失败：%s"
+msgstr "  download failed: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "解包 node v%s"
+msgstr "Unpacking node v%s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "解包后找不到 bin/node"
+msgstr "bin/node is missing after unpacking"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "node 安装完成：%s"
+msgstr "node installed: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "node 运行时安装失败：%s"
+msgstr "Installing the node runtime failed: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "所有来源都不可用"
+msgstr "no source is usable"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "压缩包包含越界路径：%s"
+msgstr "The archive contains an out-of-tree path: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "压缩包包含越界链接：%s"
+msgstr "The archive contains an out-of-tree link: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "node 包里没有 npm：%s"
+msgstr "The node tarball does not contain npm: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "安装 %s（npm，安装到 %s）"
+msgstr "Installing %s (npm, into %s)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "镜像安装失败（rc=%d），改用官方源重试"
+msgstr ""
+"The mirror install failed (rc=%d), retrying against the official registry"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid ""
+"npm 安装失败（退出码 %d）：\n"
+"%s"
+msgstr ""
+"npm install failed (exit code %d):\n"
+"%s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "安装结束但找不到启动器：%s"
+msgstr "The install finished but the launcher is missing: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "pi 已安装但无法运行：%s --version 没有输出"
+msgstr "pi installed but does not run: %s --version printed nothing"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "pi 安装成功：%s"
+msgstr "pi installed: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "OpenAI 兼容（大部分中转/自建服务）"
+msgstr "OpenAI-compatible (most gateways and self-hosted servers)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "填写 API URL 和 API Key 才能探测模型列表"
+msgstr "Fill in the API URL and key to discover the model list"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "✓ %s（%d 个模型）"
+msgstr "✓ %s (%d models)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "%s 返回的内容里没有模型列表"
+msgstr "The response from %s contains no model list"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "无法连接"
+msgstr "Cannot connect"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "✓ %s（返回的模型列表里含 %s）"
+msgstr "✓ %s (the returned model list contains %s)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "✓ %s（可访问，未在模型列表里匹配到 %s，端点可能只列出部分模型）"
+msgstr ""
+"✓ %s (reachable, but %s is not in the model list; the endpoint may list only "
+"some of its models)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "自定义端点"
+msgstr "Custom endpoint"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "无法访问 %s：%s"
+msgstr "Cannot reach %s: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "无法读取远端版本（网络不通或仓库不存在）"
+msgstr "Cannot read the upstream version (no network, or the repository does not exist)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "拉取技能包（git）…"
+msgstr "Fetching the skill set (git)…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "git clone 失败（rc=%d）：%s"
+msgstr "git clone failed (rc=%d): %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "拉取技能包（压缩包）…"
+msgstr "Fetching the skill set (tarball)…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "技能包已安装：%s（%d 个技能）"
+msgstr "Skill set installed: %s (%d skills)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "技能包更新失败：%s"
+msgstr "Skill set update failed: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "Pi Agent 安装引擎（GUI 与命令行共用）"
+msgstr "Pi Agent install engine (shared by the GUI and the command line)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "检查网络连通性"
+msgstr "Check network connectivity"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "下载 node 运行时并安装 pi"
+msgstr "Download the node runtime and install pi"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "下载失败时改用国内镜像"
+msgstr "Use a mirror when the download fails"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "写入 API URL / API Key / 模型"
+msgstr "Write the API URL / API key / model"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "写入前先探测端点"
+msgstr "Probe the endpoint before writing"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "探测端点提供的模型列表"
+msgstr "Discover the model list the endpoint offers"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "打印当前安装/配置状态"
+msgstr "Print the current install/configuration state"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "技能包状态（JSON）"
+msgstr "Skill set status (JSON)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "拉取并安装技能包（需要网络）"
+msgstr "Fetch and install the skill set (needs network)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "即使版本相同也重新拉取"
+msgstr "Fetch again even if the version is unchanged"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "重新建立技能软链（不需要网络）"
+msgstr "Recreate the skill symlinks (no network needed)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "记住“不安装技能包”，以后不再询问"
+msgstr "Remember \"do not install the skill set\" and stop asking"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "是否该问用户要不要装技能包（0=该问）"
+msgstr "Whether the skill question should be asked (0 = yes)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "是否有更新（0=有，1=无，2=无法判断）"
+msgstr "Whether an update exists (0 = yes, 1 = no, 2 = cannot tell)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "登录时调用：静默重建链接，报告是否需要询问"
+msgstr "Called at login: rebuild links silently, report whether to ask"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "登录时是否该弹窗（0=该弹，1=不该）"
+msgstr "Whether the wizard should open at login (0=yes, 1=no)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "下次再询问"
+msgstr "Ask again later"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "移除 pi 运行时（保留 ~/.pi 会话与配置）"
+msgstr "Remove the pi runtime (keeps the ~/.pi sessions and configuration)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "已安装 pi %s"
+msgstr "Installed pi %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "已安装：%s"
+msgstr "Installed: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "否"
+msgstr "no"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "位置：%s"
+msgstr "Location: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "状态：%s"
+msgstr "State: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, fuzzy
+msgid "未询问"
+msgstr "Ask me later"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "已建立 %d 个技能链接"
+msgstr "Created %d skill links"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "已记住：不安装技能包"
+msgstr "Remembered: do not install the skill set"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "无法判断（离线）"
+msgstr "Cannot tell (offline)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "有更新：%s -> %s"
+msgstr "Update available: %s -> %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+msgid "未安装"
+msgstr "not installed"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "已是最新：%s"
+msgstr "Up to date: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "已删除 %s"
+msgstr "Removed %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
+#, python-format
+msgid "错误：%s"
+msgstr "Error: %s"
+

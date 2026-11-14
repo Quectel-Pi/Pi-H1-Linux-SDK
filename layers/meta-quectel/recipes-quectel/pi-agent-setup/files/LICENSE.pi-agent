@@ -1,0 +1,42 @@
+# License for Pi Agent
+#
+# Scope of this file, read before editing it:
+#
+#   * Pi Agent itself -- the npm package @earendil-works/pi-coding-agent, which
+#     is what the wizard downloads and installs -- is published under the MIT
+#     license below, copyright earendil-works.
+#   * pi-agent-setup (this wizard, the pi-agent launcher, engine.py and the
+#     .desktop entries in this recipe) is released under the same MIT license.
+#   * The two are separate works by the same license, not one work by two
+#     copyright holders: the text below covers both, and that is deliberate.
+#
+# The upstream npm tarball carries the MIT declaration only in package.json
+# ("license": "MIT", author Mario Zechner, https://github.com/earendil-works/pi)
+# and ships no LICENSE file, which is why this recipe has to provide one. It is
+# installed twice:
+#
+#   ${docdir}/pi-agent-setup/copyright            -- license bookkeeping
+#   ${datadir}/licenses/pi-agent/LICENSE          -- opened by the wizard's
+#                                                    "View license" button
+
+MIT License
+
+Copyright (c) 2026 earendil-works
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.

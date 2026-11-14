@@ -1,0 +1,1528 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the qcom-npu-test package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: qcom-npu-test\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-13 17:20+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "请用中文描述你看到的画面内容。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "未探测到模型"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "{name} · {ctx} 上下文"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "视觉输入 {w}x{h}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "视觉输入待探测"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "letterbox 到 {w}x{h}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "letterbox 到服务端输入尺寸"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "视觉塔三阶段"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ", {n} 图像 token"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "① 前端预处理"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "解码 JPEG + {size} + 分词"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "② 视觉编码"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "③ 预填充"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "文本 + 图像 embedding 喂入 HTP"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "④ 解码生成"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "逐 token 输出, 实测约 {tps:.1f} tok/s"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "命令返回码非0: {rc}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "命令超时({timeout}s): {cmd}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "ERROR: 命令超时({timeout}s)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "程序不存在: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "ERROR: 程序不存在: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "命令异常: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "npu-daemon 未就绪"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "npu-daemon 无响应"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "npu-daemon({rt}) 启动失败, 回退 snpe-net-run: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "npu-daemon 就绪: {model} [{rt}]"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "npu-daemon({rt}) 推理失败, 回退 CLI: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "npu-daemon[{rt}] 常驻会话压测"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "单帧 execute 均值 {avg:.2f} ms / 最小 {lo:.2f} / 最大 {hi:.2f}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "推理延迟: {ms:.2f} ms   [{rt}]"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "DSP 计算: {npu:.2f} ms  (HTP {clk:.0f} MHz)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "端到端点击: {ms:.0f} ms  (letterbox + 推理 + 后处理)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "加速比: "
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "比 {rt} 快 {x:.1f}×"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⚡ 同模型同图 · 三档 Runtime 实测对比"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "推理延迟"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "端到端"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "相对"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "失败"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "(看日志)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "{x:>8.1f}×  ({n} 目标)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⚠ 输出异常"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "HTP/NPU 相对 CPU 加速 {x:.1f}×, 相对 GPU 加速 {y:.1f}×"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"⚠ 0 目标那档: 量化 DLC 的 CPU runtime 输出分数塌陷, 耗时可信, 结果不可信"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "推理延迟 = 一次推理本身; 端到端 = 点一下要等多久"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "三档都用常驻会话, 新建会话的开销不在计时里 (GPU 光建会话就要 1.35s)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "无 SNPEDiag.log, 跳过延迟解析"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "letterbox 需要 numpy"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"ERROR: .onnx 源模型无法在板上直接推理, 需先用 qairt-converter 转成 .so\n"
+"请选 yolov7.dlc (SNPE 容器) 进行检测。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"ERROR: YOLO 后处理需要 numpy, 但设备上未安装。\n"
+"请安装: apt-get install python3-numpy (Debian) 或在 Yocto 里加 python3-numpy"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "YOLO 预处理失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "ERROR: 预处理失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "YOLO 推理: {model} x {image} backend={backend}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "npu-daemon 推理失败, 本帧回退 snpe-net-run: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"npu-daemon[{rt}]: execute {ms:.2f} ms (常驻会话, 无进程启动/图初始化开销)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "YOLO 返回码: {rc}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "YOLO 推理超时(120s)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "ERROR: 推理超时(120s)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "YOLO 异常: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"YOLO 耗时: letterbox={lb:.0f}ms infer={inf:.0f}ms decode={dec:.0f}ms ({mode})"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "(模型没有输出内容)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "端到端 {s:.1f}s"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "图像 {kb:.0f} KB"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "生成 {n} tokens"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "解码 {tps:.1f} tok/s"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "缓存命中 {n} tok"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "服务端视觉输入尺寸"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "前端预处理"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "解码图像 + letterbox 到 {size} + 分词"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "patch / body / merger 三阶段"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ", {n} 个图像 token"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "视觉编码 (HTP)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "前缀缓存命中 {n} tokens"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "预填充"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "首 token {s:.2f}s"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "解码生成"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "Qualcomm NPU 测试工具 (QCS6490)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"<span size=\"xx-large\" weight=\"bold\">🧪 Qualcomm NPU 测试工具</span>\n"
+"<span size=\"small\" foreground=\"gray\">QCS6490 · Hexagon DSP/HTP · SNPE/"
+"QNN SDK</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "设备信息"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "<span foreground=\"gray\">正在探测 NPU...</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "运行日志"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "清空"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "保存"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "Qualcomm NPU 测试工具启动"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "日志文件: {path}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "<span foreground=\"gray\">就绪</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "❓ 未知"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "✅ DSP/HTP 可用 (NPU 正常)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "❌ DSP/HTP 不可用"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⚠️ DSP 状态未知"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "❌ snpe-platform-validator 未安装"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⚠️ DSP 验证超时"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "❌ 验证失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "{soc}  |  内核: {kernel}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "设备: {soc}, 内核: {kernel}, NPU: {npu}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "🔍 平台验证"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"<span size=\"small\" foreground=\"gray\">调用 snpe/qnn-platform-validator 验"
+"证 DSP(HTP/NPU)、GPU runtime 可用性</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "验证工具:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "同时查询版本信息 (--coreVersion --libVersion)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "▶ 开始验证"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "验证结果"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"点击 [开始验证] 检测 NPU (DSP/HTP) 平台可用性...\n"
+"\n"
+"SNPE 验证项:\n"
+"  --runtime dsp   Hexagon DSP/HTP (即 NPU)\n"
+"  --runtime gpu   Adreno GPU (需要 OpenCL)\n"
+"\n"
+"QNN 验证项:\n"
+"  --backend dsp   QNN DSP 后端\n"
+"  --backend gpu   QNN GPU 后端\n"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⏳ 验证中..."
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "SNPE 验证 runtime={rt}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "QNN 验证 backend={bk}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "🔍 NPU 平台验证结果 ({tool})"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "  状态: {icon} {status}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "  前置条件: {v}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "  返回码: {rc}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "  --- 原始输出 ---"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "✅ 全部通过"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⚠️ 部分不可用"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "平台验证完成: {status}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "🧠 单次推理"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"<span size=\"small\" foreground=\"gray\">加载 .dlc(snpe-net-run)/.so(qnn-net-"
+"run) 模型做单次推理, 测试 CPU/GPU/DSP(NPU) 各 runtime 耗时. .onnx 源模型需先"
+"离线转换为 .so</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "模型:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "测试图片:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "上传本地图片"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "▶ 开始推理"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "输入图片"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "推理结果"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"选择模型和图片, 点击 [开始推理]...\n"
+"\n"
+"模型类型说明:\n"
+"  .dlc  -> snpe-net-run (SNPE), 板上可直接推理 ✓\n"
+"  .so   -> qnn-net-run (QNN context binary), 可直接推理 ✓\n"
+"  .onnx -> AI Hub 源模型, 需在 PC 上用 qairt-converter\n"
+"          转成 .so 后才能用 qnn-net-run 跑\n"
+"\n"
+"自带 yolov7.dlc 开箱即用; yolov7_onnx 为源模型参考。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"请选择模型\n"
+"(将 .dlc/.onnx 文件放到 /usr/share/model/ 后点刷新)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "请选择测试图片"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"此 .onnx 是 Qualcomm AI Hub 源模型, 无法在板上直接推理。\n"
+"需在 PC 上用 qairt-converter (qnn-onnx-converter) 转成\n"
+"QNN context binary (.so) 后, 用 qnn-net-run --model 运行。\n"
+"\n"
+"如需在板上直接测试, 请选 yolov7.dlc (SNPE 容器)。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"snpe-net-run 不存在: {path}\n"
+"请确认 qcom-snpe-sdk 已安装"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"qnn-net-run 不存在: {path}\n"
+"请确认 qcom-qnn-sdk 已安装"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⏳ 推理中..."
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "推理: model={model} image={image} backend={backend} runtime={rt}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "图片预处理失败, 回退原始文件: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "🧠 {backend} 单次推理结果"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "模型: {name}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "图片: {name}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "Runtime: {rt}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "返回码: {rc}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "SNPE 版本: {v}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "模型名: {v}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "执行状态: {v}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⚡ 耗时统计"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "平均层耗时: {v:.2f} ms"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "最慢单层: {v:.2f} ms"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "📋 原始输出"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "📂 输出文件 ({dir})"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "输出目录: {dir}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "完成"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "推理{status} - {ms:.2f}ms / {fps:.1f} FPS"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "推理{status}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "推理完成: rc={rc}, NPU={npu:.2f}ms, 调用={call:.0f}ms"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "🎯 YOLO检测"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"<span size=\"small\" foreground=\"gray\">加载 YOLO .dlc(snpe)/.so(qnn) 模型做"
+"目标检测, 解析检测框并渲染到图片上. 自带 yolov7.dlc 可直接检测; yolov7_onnx "
+"为源模型需先转换</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "YOLO 模型:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "刷新模型列表"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "▶ 开始检测"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⚡ 三档对比"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "同一模型同一张图依次跑 CPU / Adreno GPU / HTP(NPU), 用实测延迟对比"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "📷 摄像头实时识别"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "/dev/video10 (CamxBridge) 实时画面 + YOLO 叠框"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "图片 (输入/输出)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "检测结果"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"本工具自带 YOLOv7 模型:\n"
+"\n"
+"  yolov7.dlc        SNPE 容器, 板上可直接检测 ✓\n"
+"  yolov7_onnx/      AI Hub ONNX 源模型, 需在 PC 上用\n"
+"                    qairt-converter 转成 .so 后才能跑\n"
+"\n"
+"选择 yolov7.dlc + 图片 + runtime, 点 [开始检测]即可。\n"
+"也可放入自己的 .dlc / .so 模型到\n"
+"/usr/share/qcom-npu-test/models/ 后点 🔄 刷新。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "常驻会话 {rt}: "
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "就绪 {s:.2f}s"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "启动失败"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "摄像头实时识别: 先停掉多模态预览"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "请先选择 YOLO 模型"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"摄像头实时识别只支持 SNPE .dlc 模型\n"
+"请选 yolov7.dlc"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "npu-daemon 起不来, 看日志"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⏹ 停止"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "摄像头实时识别: 启动"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "▶ 开始"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "/dev/video10 · CamxBridge 1280x720 · YOLO on HTP"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "摄像头实时识别: 已停止"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "摄像头启动失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "摄像头流中断"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "摄像头检测失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "{fps:.1f} FPS · {n} 目标"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "/dev/video10 · 1280x720 · {fps:.1f} FPS · NPU {ms:.1f} ms · {n} 个目标"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "摄像头识别: {name} 等 {n} 个目标, NPU {ms:.2f} ms, {fps:.1f} FPS"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "👁 多模态测试"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"<span size=\"small\" foreground=\"gray\">把摄像头画面送给本地视觉模型, 问它看"
+"到了什么并输出回答. 摄像头源与\"摄像头实时\"页相同 (/dev/video10), 两页互斥使"
+"用. 本页打开即自动开始取流, 切走即释放摄像头</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "🔍 识别"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "把当前预览帧送给视觉模型, 问它看到了什么"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "▶ 打开预览"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "↻ 重置摄像头"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "预览不出画面时点一下: 重新释放并打开 "
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "🗑 清空结果"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "{dev} · CamxBridge {w}x{h} · 预览未开启"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "视觉模型: 检测中…"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "启动视觉服务 ({svc})"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "systemctl start {svc} (默认不开机自启: 独占 4 个大核 + 约 490MB)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "提示词:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "回车或点『识别』发送"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "最多生成:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"越多回答越长也越慢 (上限 {cap}, 来自服务端配置; 实测解码约 {tps:.1f} tok/s)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "<span size=\"x-large\" weight=\"bold\">💬 识别结果</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⏱ 处理过程"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "多模态回答区样式未生效, 已回退到内置字号"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"<span foreground=\"#2ec27e\">视觉模型: 就绪</span>  <span size=\"small\" "
+"foreground=\"gray\">"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"<span foreground=\"#e01b24\">视觉模型: 未运行</span>  <span size=\"small\" "
+"foreground=\"gray\">需先启动 "
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid " 服务</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "视觉模型: 启动中… (首次加载约 10~30s)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "找不到 sudo, 请手动执行: sudo systemctl start qwen35"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "启动 qwen35 失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "启动 qwen35 失败: {msg}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"启动 qwen35 失败 ({msg})\n"
+"请手动执行: sudo systemctl start qwen35"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "Qwen3.5 已就绪: {mid}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "Qwen3.5 启动超时, 端口 8000 没起来"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "多模态预览: 先停掉摄像头实时识别"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⏹ 停止预览"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "{dev} · {w}x{h} · 正在打开…"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "多模态预览: 启动 ({reason})"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "手动"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "多模态预览: 手动重置摄像头"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "重置摄像头失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "重置后"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "{dev} · 重置失败: {msg}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "多模态预览: 清掉 {n} 个残留取流进程"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "切到本页"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "多模态预览: 离开本页, 释放摄像头"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "多模态预览: 已停止"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "已重启 {unit}, 重新开始预览"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "{dev} · 已重启摄像头服务, 正在重新取流…"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "重启 {unit} 失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"{dev} · 取不到画面, 已自动重试 {n} 次\n"
+"先点“↻ 重置摄像头”; 仍不行就在终端执行: {cmd}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "摄像头服务重启后"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "多模态预览启动失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"{dev} · {w}x{h} · {fps:.1f} FPS · 亮度 {luma:.0f} · 预览中 (识别送入 {model})"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "多模态预览: 取流中断, 自动重连 ({n}/{m})"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "{dev} · {w}x{h} · 取流中断, 自动重连 ({n}/{m})…"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "多模态预览: 桥接正在重建, {n}/{m} 次未取到帧, 稍后重试"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "{dev} · {w}x{h} · 正在重试取流 ({n}/{m})…"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "预览还没有画面, 稍等一下再点识别"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"当前帧几乎全黑 (亮度 {luma:.0f}/255), 识别没意义\n"
+"预览刚打开时前几帧是黑的, 等画面出来再点识别"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⏳ 识别中…"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "多模态识别: 发送 1 帧 {w}x{h}, prompt={prompt!r}, max_tokens={n}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"已生成约 {done}/{total} tokens (按实测 {tps:.1f} tok/s, 上限 {est:.0f}s, 提前"
+"结束即为准)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "GdkPixbuf JPEG 编码失败"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "多模态识别失败: HTTP {code} {detail}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"Qwen3.5 返回 HTTP {code}\n"
+"{detail}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "多模态识别失败: 连不上 qwen35 ({reason})"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"连不上 Qwen3.5 服务 ({ep})\n"
+"原因: {reason}\n"
+"请点\"启动 Qwen3.5\"或执行: sudo systemctl start qwen35"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "多模态识别失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"多模态识别完成: {s:.1f}s, JPEG {kb:.0f}KB, 生成 {n} tokens, {tps:.1f} tok/s"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "<span size=\"small\" foreground=\"gray\">  "
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "服务端 self 计时"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "阶段合计(可重叠)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "客户端端到端"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "(含 JPEG {kb:.0f}KB 编码与传输)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"<span size=\"x-large\" weight=\"bold\" foreground=\"#e01b24\">⚠ 识别失败</"
+"span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "（无 YOLO 模型，请放 .dlc/.onnx）"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"请先选择 YOLO 模型\n"
+"把 yolov*.dlc / yolov*_onnx 放到 /usr/share/qcom-npu-test/models/ 后点 🔄 刷"
+"新"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"此 .onnx 是 Qualcomm AI Hub 源模型, 无法在板上直接推理。\n"
+"需在 PC 上用 qairt-converter 转成 .so 后再用。\n"
+"\n"
+"如需在板上直接检测, 请选 yolov7.dlc (SNPE 容器)。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "snpe-net-run 不存在: {path}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⏳ 检测中..."
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "YOLO: model={model} img={img} backend={backend} rt={rt}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "YOLO 分项: 总={total:.0f}ms diagview={diag:.0f}ms NPU={npu:.2f}ms"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "请先选好模型和图片"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "三档对比只支持 .dlc (SNPE); .onnx 需先转换"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⏳ 对比中…"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "三档都失败了, 看日志"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "🎯 YOLO 目标检测结果"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "模型输入: {w}x{h}x{c}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "🎯 检测到 {n} 个目标"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "  #{i} {name:>10s}  置信度: {conf:.4f}  [{bar}]"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "       位置: ({l}, {t}) - ({r}, {b})  {w}x{h}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "未检测到目标 (或 numpy/输出 raw 缺失)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "📸 输出图片: {path}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "✅ YOLO完成 - {n}个目标, NPU {ms:.2f}ms"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "✅ YOLO完成 - {n}个目标"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "YOLO完成: {n}个目标, NPU={ms:.2f}ms, 调用={call:.0f}ms"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "📷 摄像头实时"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⚡ 吞吐量基准"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"<span size=\"small\" foreground=\"gray\">用 snpe-throughput-net-run 在指定时"
+"长内并发压测, 输出平均 FPS / 延迟 / 总推理数</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "DLC 模型:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "输入图片:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "压测时长(秒):"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "性能档位:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "▶ 开始压测"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "压测结果"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"选择模型和压测时长, 点击 [开始压测]...\n"
+"压测期间 NPU 会满载, 输出平均 FPS、平均延迟、总推理数"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "请选择模型"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid ""
+"snpe-throughput-net-run 不存在: {path}\n"
+"(吞吐量压测仅支持 SNPE .dlc 模型)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid ""
+"吞吐量压测仅支持 SNPE .dlc 模型\n"
+"请选择 .dlc 模型 (如 yolov7.dlc)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "找不到测试图片"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⏳ 压测中..."
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "吞吐量压测: model={model} runtime={rt} duration={dur}s perf={perf}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "⚡ SNPE 吞吐量基准测试"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "压测时长: {n} 秒"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "网络: {v}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "🚀 性能结果"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "平均 FPS: {v:.1f}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "平均延迟: {v:.2f} ms"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "总推理数: {n}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "总执行时间: {s:.1f} s"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "推算 FPS: {v:.1f}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "📊 逐时段 FPS"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "压测完成"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "压测失败"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "{verdict} - {fps:.1f} FPS / {ms:.2f} ms"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "压测完成: {fps:.1f} FPS, {ms:.2f} ms"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "选择图片"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "图片文件"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "上传图片: {name} -> {dest}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "上传失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "保存日志"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "日志文件 (*.log)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "日志已保存: {path}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "未解析到推理时间: {tail}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "推理 {ms:.2f} ms"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "找不到测试图: {path}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "视觉服务: {name}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "未运行"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "Qwen3.5 未就绪, 先执行: sudo systemctl start qwen35"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "JPEG 编码失败"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+msgid "模型无输出"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "服务端没走图像通路: {meta}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "回答 ({s:.1f}s): {text}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/qcom-npu-test/files/npu_test_gui.py
+#, python-brace-format
+msgid "指标: {line}"
+msgstr ""

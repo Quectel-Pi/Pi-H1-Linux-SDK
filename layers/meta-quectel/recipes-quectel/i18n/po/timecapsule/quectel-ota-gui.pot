@@ -1,0 +1,896 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the quectel-ota-gui package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: quectel-ota-gui\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-13 16:44+0800\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "时间胶囊 · QuecPi OTA 管理工具"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "未找到 pkexec"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "pkexec setuid 正常"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"pkexec 未设置 setuid root 位, 无法提权执行 OTA 操作。\n"
+"请在终端执行一次修复命令 (会要求输入用户密码):\n"
+"    {cmd}\n"
+"修复后 pkexec 将弹出图形密码框正常工作。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "ERROR: 命令超时({timeout}s)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "ERROR: 程序不存在: {e}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "ERROR: {e}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "程序不存在: {e}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "启动失败: {e}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "子进程 stdout 不可读 (PIPE 未生效?)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "ERROR: stdout 不可读"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "读取输出异常: {e}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "命令超时({timeout}s), 终止子进程"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "QuecPi (QCS6490) · Btrfs 子卷快照 A/B 升级管理"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "系统状态"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "当前运行子卷:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "内核文件:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "OTA 状态:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "🔄 刷新"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "运行日志"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "清空"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "保存"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "就绪"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "{app} 启动"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "日志文件: {path}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "root 权限: {state}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "是"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "否 (将用 pkexec 提权)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "pkexec setuid 位正常"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "pkexec 提权不可用"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "操作"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<b>首次初始化</b>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "创建初始 @V0 快照并备份内核, 之后才能使用升级/回退"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "⚡ 初始化 OTA (init)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<b>备份</b>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "将当前系统快照为 @backup, 升级前建议先备份"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "🛡️ 创建备份 (backup)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<b>系统升级</b>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "升级脚本:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "选择本地升级脚本, 将替换 /opt/system_upgrade.sh 后执行升级"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "浏览..."
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "内核 EFI:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "可选: 选择新内核 .efi 文件, 升级时自动计算 MD5"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "并放入 /opt/kernel_upgrade/, ota_run 会在校验后刷写 EFI 分区"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "生成 MD5"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "计算所选 EFI 文件的 MD5 并显示,"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "校验通过后写入 /opt/kernel_upgrade/linux-qcm6490-idp.efi(.md5)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span size='small' foreground='gray'>未选内核 (将沿用当前内核)</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "新版本名:"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "新子卷名, 以 @ 开头, 如 @V1"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "升级前自动创建备份 (推荐)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "👁 预览脚本"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "⬆ 执行升级 (升级后重启)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<b>从备份还原</b>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "从 @backup 子卷还原系统并重启 (ota_run restore)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "♻️ 还原备份 (restore)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "版本快照列表"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "子卷"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "类型"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "状态"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "⏪ 回退到选中版本"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "🗑 删除选中版本"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "🔄 刷新列表"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "未找到"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "⚠️ 工厂初始化未完成 (缺 fct_done_flag)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "⚠️ restore_flag 存在 (升级可能中断, 下次启动将回滚)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "⚠️ OTA 未初始化, 请先执行 [初始化]"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "✅ OTA 就绪"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "状态: {status}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "(顶层 rootfs)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "未知"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "无"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "(无子卷)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "备份"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "🛡️ 备份"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "当前运行"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "✅ 当前"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "上一历史"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "📦 历史"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "历史版本"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "🗂️ 快照"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "选择升级脚本"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "脚本文件 (*.sh)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "所有文件"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "脚本文件不存在: {path}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "升级脚本预览"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "读取失败: {e}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "选择内核 EFI 文件"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "EFI 内核 (*.efi)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "文件已选定, 点击 [生成 MD5] 校验并写入"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "请先选择内核 EFI 文件"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "内核文件不存在: {path}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "读取文件大小失败: {e}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "内核文件偏小"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"文件大小仅 {size} 字节, 通常内核 EFI 远大于此。\n"
+"仍要继续吗?"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span size='small'>⏳ 计算 MD5 中...</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "计算 MD5 失败: {e}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "内核 EFI: {path}  size={size}  md5={md5}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"缺少内核安装助手: {script}\n"
+"请确认 quectel-ota 已安装"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "调用 {script} 安装内核 {path}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"内核安装失败 (rc={rc}):\n"
+"{out}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "内核升级文件已就绪 (脚本自检通过)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span size='small' foreground='#c62828'>❌ 内核准备失败</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"<span size='small' foreground='green'>✅ 内核已就绪 md5:{md5} (升级时自动刷"
+"写 EFI)</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='green'>✅ 内核升级文件已就绪, 升级时将一并刷写</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "内核升级文件已就绪, 等待升级触发"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "已有任务在运行, 请等待完成"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "任务异常: {e}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "任务失败: {err}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "初始化 OTA"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "将备份当前内核并创建初始 @V0 快照, 完成后自动重启。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "继续?"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "开始 OTA 初始化..."
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "init 返回码={rc}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"初始化失败:\n"
+"{out}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "OTA 初始化成功, 设备将重启"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='green'>✅ 初始化完成, 设备将重启</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "OTA 初始化成功!"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "设备将自动重启进入子卷模式, 重启后重新打开本工具即可使用升级/回退。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "创建备份"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "将备份内核并把当前 @Vn 快照为 @backup (覆盖旧备份)。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "开始创建备份..."
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "backup 返回码={rc}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"备份失败:\n"
+"{out}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='green'>✅ 备份创建成功</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "备份创建成功"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "请填写新版本名 (如 @V2)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "新版本名非法, 需以 @ 开头, 仅含字母/数字/._-"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "升级脚本不存在: {script}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "不能用 @backup 作为新版本名"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "内核 EFI 文件不存在: {kernel}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "读取内核文件失败: {e}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "<b>升级内核:</b> 是 ({name}, {size}B, md5:{md5})"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "<b>升级内核:</b> 是 (/opt/kernel_upgrade 已就绪, md5:{md5})"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<b>升级内核:</b> 否 (沿用当前内核)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<b>系统升级确认</b>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "新版本子卷: <b>{newvol}</b>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "升级脚本: <tt>{script}</tt>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "{path} (板上现有)"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "自动备份: <b>{state}</b>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "否"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='#c62828'>升级完成后设备将自动重启!</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "如果升级脚本失败, 系统会自动回滚到 @backup。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "系统升级"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"开始系统升级 -> {newvol}, 脚本={script}, 内核={kernel}, 自动备份={autob}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "准备内核升级文件..."
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "替换升级脚本 {script} -> {path}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"升级脚本替换失败 (rc={rc}):\n"
+"{out}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "升级前自动创建备份..."
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"升级前备份失败, 已中止升级:\n"
+"{out}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "upgrade 升级流程已完成 (rc={rc}), 设备将重启"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"升级失败 (rc={rc}):\n"
+"{out}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='#c62828'>❌ 升级失败</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='green'>✅ 升级成功, 设备将重启</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "系统升级成功!"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "设备将自动重启进入新版本。重启后重新打开本工具验证。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "请先在列表中选择要回退的版本"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "不能回退到 @backup, 请使用 [还原备份] 按钮"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "{target} 正是当前运行版本, 无需回退"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<b>版本回退确认</b>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "目标版本: <b>{target}</b>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "将恢复该版本的内核并把启动配置切换到它。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='#c62828'>回退完成后设备将自动重启!</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "版本回退"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "开始回退到 {target}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "rollback 返回码={rc}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"回退失败:\n"
+"{out}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='#c62828'>❌ 回退失败</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='green'>✅ 回退成功, 设备将重启</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "版本回退成功!"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "设备将自动重启进入所选版本。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "请先在列表中选择要删除的版本"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "不能删除 @backup 子卷"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "不能删除当前运行版本"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "删除子卷 {target}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"确定删除子卷 {target} ?\n"
+"\n"
+"此操作不可恢复!"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "开始删除子卷 {target}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "delete 返回码={rc}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"删除失败:\n"
+"{out}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='green'>✅ 子卷已删除</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "子卷删除成功"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "将从 @backup 子卷把系统还原为当前 @Vn (会先删除当前 @Vn 再从备份重建),"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "并恢复备份的内核。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='#c62828'>还原完成后设备将自动重启!</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "从备份还原"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "开始从 @backup 还原"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "restore 返回码={rc}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid ""
+"还原失败:\n"
+"{out}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='#c62828'>❌ 还原失败</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "<span foreground='green'>✅ 还原成功, 设备将重启</span>"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "备份还原成功!"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "设备将自动重启进入还原后的系统。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "保存日志"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "日志已保存: {path}"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "错误"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+msgid "提示"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/quectel-ota/files/ota_gui.py
+#, python-brace-format
+msgid "ERROR: {ota_run} 不存在, 请确认 quectel-ota 已安装"
+msgstr ""

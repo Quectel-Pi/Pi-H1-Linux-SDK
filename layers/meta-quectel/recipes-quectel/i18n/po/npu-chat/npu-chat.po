@@ -1,0 +1,344 @@
+# English translations for npu-chat package.
+# Copyright (C) 2026 THE npu-chat'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the npu-chat package.
+# Automatically generated, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: npu-chat\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-11-13 16:08+0800\n"
+"PO-Revision-Date: 2026-11-13 16:08+0800\n"
+"Last-Translator: Automatically generated\n"
+"Language-Team: none\n"
+"Language: en\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "描述这张图片里有什么。"
+msgstr "Describe what is in this picture."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "介绍一下你自己"
+msgstr "Introduce yourself"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "用三句话描述大海"
+msgstr "Describe the sea in three sentences"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "写一首关于秋天的短诗"
+msgstr "Write a short poem about autumn"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "什么是 Hexagon NPU？"
+msgstr "What is the Hexagon NPU?"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-format
+msgid ""
+"qwen3.5 的模型文件不全（在 %s 下需要 %s）。\n"
+"模型由 qwen35-npu-model 包安装，检查 /usr/share/qwen35 是否完整，重装该包后 "
+"systemctl restart qwen35。"
+msgstr ""
+"qwen3.5 is missing model files (need %s under %s).\n"
+"The model comes from the qwen35-npu-model package; check that /usr/share/"
+"qwen35 is complete, reinstall that package and then systemctl restart "
+"qwen35."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "qwen3.5 未启动，试 systemctl start qwen35 或看 journalctl -u qwen35"
+msgstr ""
+"qwen3.5 did not start; try systemctl start qwen35 or read journalctl -u "
+"qwen35"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "只支持 PNG / JPEG / WebP 图片"
+msgstr "Only PNG / JPEG / WebP images are supported"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "图片是空文件"
+msgstr "The image file is empty"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-format
+msgid "图片太大（%.1f MB，上限 %.0f MB）"
+msgstr "Image too large (%.1f MB, limit %.0f MB)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "缺少 GdkPixbuf，无法编码摄像头画面"
+msgstr "GdkPixbuf is missing, cannot encode the camera frame"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "JPEG 编码失败"
+msgstr "JPEG encoding failed"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "缺少 gst-launch-1.0，无法取摄像头画面"
+msgstr "gst-launch-1.0 is missing, cannot grab a camera frame"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-format
+msgid "启动取流失败：%s"
+msgstr "Failed to start the capture pipeline: %s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-format
+msgid ""
+"%s 没有出图（CamxBridge 可能还没建流）。稍等再拍，或 systemctl restart camx-"
+"v4l2-bridge@0"
+msgstr ""
+"%s produced no frame (CamxBridge may still be setting up the stream). Wait "
+"a moment and retry, or systemctl restart camx-v4l2-bridge@0"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "{model} 不支持识图，只有 {only} 能看图"
+msgstr "{model} cannot look at images; only {only} can"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "需要 pw-record 或 arecord"
+msgstr "pw-record or arecord is required"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "QCS6490  ·  HEXAGON V68  ·  本地推理"
+msgstr "QCS6490  ·  HEXAGON V68  ·  ON-DEVICE INFERENCE"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "停止"
+msgstr "Stop"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "🔊 朗读"
+msgstr "🔊 Read aloud"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "清空"
+msgstr "Clear"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "退出"
+msgstr "Quit"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "不带这张图"
+msgstr "Do not send this image"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "🖼 识图"
+msgstr "🖼 Image"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "上传图片…"
+msgstr "Upload an image…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "📷 摄像头拍照"
+msgstr "📷 Take a photo"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "输入消息，或按住 ↑ 说话…"
+msgstr "Type a message, or hold ↑ to talk…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "点一下发送，按住说话"
+msgstr "Tap to send, press and hold to talk"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "🔁 连续对话"
+msgstr "🔁 Hands-free"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "回答读完自动再次开麦，接着问下一句"
+msgstr "Reopens the microphone once the answer has been read out"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "就绪"
+msgstr "Ready"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "读图片失败：{e}"
+msgstr "Could not read the image: {e}"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "正在把 {model} 载入 NPU…"
+msgstr "Loading {model} onto the NPU…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "载入失败，发送消息可重试"
+msgstr "Loading failed; send a message to retry"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "{model} 已就绪"
+msgstr "{model} is ready"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "连续对话：回答读完自动开麦"
+msgstr "Hands-free: microphone reopens after the answer"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "录音失败：{e}"
+msgstr "Recording failed: {e}"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "在听…说完自动发送"
+msgstr "Listening… sends when you stop talking"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "识别中…"
+msgstr "Transcribing…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "正在听…松开发送"
+msgstr "Listening… release to send"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "识别失败：{err}"
+msgstr "Transcription failed: {err}"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "没听清，再说一次"
+msgstr "Did not catch that, please say it again"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "听到：{text}"
+msgstr "Heard: {text}"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "上传图片或拍一张照片，让 {model} 看图回答"
+msgstr "Upload an image or take a photo and let {model} look at it"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "只有 {model} 带视觉塔，能识图"
+msgstr "Only {model} has a vision tower and accepts images"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "只有 {model} 支持识图"
+msgstr "Only {model} supports images"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "选择要识别的图片"
+msgstr "Choose an image to send"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "图片（PNG / JPEG / WebP）"
+msgstr "Images (PNG / JPEG / WebP)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "只支持本地图片文件"
+msgstr "Only local image files are supported"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "正在从 {device} 拍照…"
+msgstr "Taking a photo from {device}…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "摄像头 {w}x{h}"
+msgstr "Camera {w}x{h}"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "拍照失败：{err}"
+msgstr "Taking the photo failed: {err}"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "图片"
+msgstr "Image"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-format
+msgid "%.0f KB · 发送时一起提交给 %s，首字会慢一些"
+msgstr "%.0f KB · sent along to %s, the first word takes a bit longer"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "图片已就绪，可以输入问题（留空则让它描述这张图）"
+msgstr ""
+"Image ready. Type a question (leave it empty and the model describes the "
+"picture)"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "已切换到 {name}"
+msgstr "Switched to {name}"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "正在停止…"
+msgstr "Stopping…"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "已停止朗读"
+msgstr "Reading stopped"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "已清空"
+msgstr "Cleared"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "问点什么吧"
+msgstr "Ask something"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "Qwen3.5-0.8B · Qwen2.5-0.5B · Llama-3.2-1B 跑在 NPU 上，不联网"
+msgstr "Qwen3.5-0.8B · Qwen2.5-0.5B · Llama-3.2-1B run on the NPU, offline"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "Qwen3.5-0.8B 还能识图：点 🖼 识图 上传图片或拍照"
+msgstr "Qwen3.5-0.8B also reads images: tap 🖼 Image to upload or take a photo"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "{model} 不支持识图，已移除图片"
+msgstr "{model} cannot look at images, the picture was removed"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-format
+msgid "识图 · 图像 %.0f KB"
+msgstr "Image · %.0f KB"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "{model}  首字 {first:0.1f}s  生成 {el:0.1f}s  约 {rate:0.1f} tok/s"
+msgstr ""
+"{model}  first word {first:0.1f}s  generated {el:0.1f}s  ~{rate:0.1f} tok/s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "{model} 正在 NPU 上生成…  {el:0.1f}s"
+msgstr "{model} generating on the NPU…  {el:0.1f}s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "推理失败：{err}"
+msgstr "Inference failed: {err}"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "失败"
+msgstr "Failed"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+msgid "已停止"
+msgstr "Stopped"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "{model}  ·  首字 {first:0.1f}s  ·  {tag}  ·  约 {rate:0.1f} tok/s"
+msgstr "{model}  ·  first word {first:0.1f}s  ·  {tag}  ·  ~{rate:0.1f} tok/s"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/npu-llm/files/npu-chat
+#, python-brace-format
+msgid "  ·  识图 {seen:0.1f}s"
+msgstr "  ·  image {seen:0.1f}s"

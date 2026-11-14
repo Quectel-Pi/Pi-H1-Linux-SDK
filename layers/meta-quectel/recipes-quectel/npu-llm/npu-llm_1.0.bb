@@ -71,6 +71,7 @@ SRC_URI = " \
     file://npu-chat.desktop;subdir=npu-llm-files \
     file://npu-chat.svg;subdir=npu-llm-files \
     file://README.Debian;subdir=npu-llm-files \
+    file://locale/en/LC_MESSAGES/npu-chat.mo;subdir=npu-llm-files \
     ${QWEN}/genie-t2t-run;name=rt_genie;subdir=npu-llm/runtime;downloadfilename=npu-llm-genie-t2t-run \
     ${QWEN}/libGenie.so;name=rt_genie_so;subdir=npu-llm/runtime;downloadfilename=npu-llm-libGenie.so \
     ${QWEN}/libQnnHtp.so;name=rt_htp;subdir=npu-llm/runtime;downloadfilename=npu-llm-libQnnHtp.so \
@@ -127,6 +128,21 @@ SRC_URI[whl_sherpa314.sha256sum] = "45f16c9fabc3d7ce31ba9722ff8196627ddcaa5ffd02
 SRC_URI[whl_core.sha256sum]     = "a51a03d55c376c32e15dd63ea852236042ba91a5cd73e253bbf7cf21f6582ba9"
 
 S = "${WORKDIR}"
+
+# Keep the English .mo inside the main package. OE's package_do_split_locales()
+# would otherwise move ${datadir}/locale/en into <PN>-locale-en, which the main
+# package only RRECOMMENDS (never RDEPENDs) -- so the .mo would be built, shipped
+# as a separate deb, and simply never installed on the image. This recipe has no
+# other translations, so nothing else loses its split.
+#
+# PACKAGE_NO_LOCALE only stops the per-language split; ${PN}-locale stays in
+# PACKAGES with the default FILES of ${datadir}/locale and is claimed *before*
+# ${PN} (populate_packages sorts -src/-dbg first, then declaration order, and
+# ${PN}-locale is declared ahead of ${PN}). Emptying its FILES is what actually
+# leaves the .mo to the main package -- dropping just one of these two lines
+# silently ships a translation file that nothing installs.
+PACKAGE_NO_LOCALE = "1"
+FILES:${PN}-locale = ""
 
 # Pure data/script package: nothing is compiled.
 do_configure[noexec] = "1"
@@ -236,6 +252,21 @@ do_install() {
     install -m 0644 ${S}/npu-llm-files/npu-chat.desktop ${D}${datadir}/applications/npu-chat.desktop
     install -m 0644 ${S}/npu-llm-files/npu-chat.svg \
         ${D}${datadir}/icons/hicolor/scalable/apps/npu-chat.svg
+
+    # English UI strings. npu-chat's msgids are the Chinese source text, so this
+    # .mo is only read when the session language is not Chinese -- a Chinese
+    # session needs no translation file at all. It is committed pre-compiled
+    # because the Debian/Ubuntu images rsync an overlay rootfs and never run this
+    # do_compile, so there is no msgfmt on the way in. ln-i18n loads it from
+    # /usr/share/locale/en/LC_MESSAGES/npu-chat.mo.
+    #
+    # SRC_URI's ;subdir=npu-llm-files puts the file under its own path, so the
+    # source is npu-llm-files/locale/en/LC_MESSAGES/npu-chat.mo -- not
+    # npu-llm-files/npu-chat.mo. The other files in this recipe sit at the root
+    # of files/, which is why they do not need the extra two directories.
+    install -d ${D}${datadir}/locale/en/LC_MESSAGES
+    install -m 0644 ${S}/npu-llm-files/locale/en/LC_MESSAGES/npu-chat.mo \
+        ${D}${datadir}/locale/en/LC_MESSAGES/npu-chat.mo
 }
 
 FILES:${PN} = " \
@@ -245,6 +276,7 @@ FILES:${PN} = " \
     ${datadir}/npu-llm/ \
     ${datadir}/applications/npu-chat.desktop \
     ${datadir}/icons/hicolor/scalable/apps/npu-chat.svg \
+    ${datadir}/locale/en/LC_MESSAGES/npu-chat.mo \
     ${docdir}/${PN}/ \
 "
 
@@ -278,6 +310,7 @@ FILES:${PN} = " \
 RDEPENDS:${PN} = " \
     python3 \
     coreutils \
+    ln-i18n \
     ${@ 'python3-numpy' if d.getVar('QUECTEL_OS_DIM') == 'LINUX' else ''} \
     ${@ 'python3-numpy-qwen35' if 'numpy' not in (d.getVar('QUECTEL_ROOTFS_PYHAS') or '').split() and d.getVar('QUECTEL_OS_DIM') != 'LINUX' else ''} \
 "

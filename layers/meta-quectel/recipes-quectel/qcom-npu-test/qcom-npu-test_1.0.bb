@@ -39,6 +39,7 @@ RRECOMMENDS:${PN} = " \
 RDEPENDS:${PN} = " \
     python3 \
     bash \
+    ln-i18n \
 "
 # NOTE: numpy is needed only by the YOLO post-processing path (NMS/box decode).
 # It is a soft (RRECOMMENDS) dep rather than a hard one so that:
@@ -55,6 +56,7 @@ SRC_URI = " \
     file://npu_daemon.cpp \
     file://npu-test.desktop \
     file://npu-test.svg \
+    file://locale/en/LC_MESSAGES/qcom-npu-test.mo \
     file://images/bus.jpg \
     file://labels/coco_80_labels_list.txt \
     file://models/yolov7.dlc \
@@ -64,6 +66,21 @@ SRC_URI = " \
 
 S = "${WORKDIR}"
 
+# Keep the English .mo inside the main package. OE's package_do_split_locales()
+# would otherwise move ${datadir}/locale/en into <PN>-locale-en, which the main
+# package only RRECOMMENDS (never RDEPENDs) -- so the .mo would be built, shipped
+# as a separate deb, and simply never installed on the image. This recipe has no
+# other translations, so nothing else loses its split.
+#
+# PACKAGE_NO_LOCALE only stops the per-language split; ${PN}-locale stays in
+# PACKAGES with the default FILES of ${datadir}/locale and is claimed *before*
+# ${PN} (populate_packages sorts -src/-dbg first, then declaration order, and
+# ${PN}-locale is declared ahead of ${PN}). Emptying its FILES is what actually
+# leaves the .mo to the main package -- dropping just one of these two lines
+# silently ships a translation file that nothing installs.
+PACKAGE_NO_LOCALE = "1"
+FILES:${PN}-locale = ""
+
 do_configure[noexec] = "1"
 do_compile[noexec] = "1"
 
@@ -71,6 +88,15 @@ do_install() {
     # Main GUI script
     install -d ${D}${bindir}
     install -m 0755 ${S}/npu_test_gui.py ${D}${bindir}/qcom-npu-test
+
+    # English translations. msgid is the Chinese source text, so a Chinese
+    # session needs no .mo at all; any other language reads this one.
+    # The .mo is committed pre-built (see i18n/README.md) because the
+    # DEBIAN/UBUNTU images overlay the rootfs by rsync and never run
+    # do_compile for these pure-script packages.
+    install -d ${D}${datadir}/locale/en/LC_MESSAGES
+    install -m 0644 ${S}/locale/en/LC_MESSAGES/qcom-npu-test.mo \
+        ${D}${datadir}/locale/en/LC_MESSAGES/qcom-npu-test.mo
 
     # 常驻 SNPE 会话 (npu_daemon.cpp 的产物, 已用板上 g++ 编好随包安装)
     # 为什么常驻: snpe-net-run 每点一次都要 进程启动 + 13.6MB DLC 解析 +
@@ -120,6 +146,7 @@ FILES:${PN} = " \
     ${bindir}/npu-daemon \
     ${datadir}/applications/npu-test.desktop \
     ${datadir}/icons/hicolor/scalable/apps/npu-test.svg \
+    ${datadir}/locale/en/LC_MESSAGES/qcom-npu-test.mo \
     /usr/share/qcom-npu-test/ \
 "
 

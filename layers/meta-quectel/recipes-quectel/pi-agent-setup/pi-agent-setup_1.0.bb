@@ -1,5 +1,5 @@
-SUMMARY = "Launcher and first-run installer for the Pi coding agent"
-DESCRIPTION = "Gives the board a 'Pi 编程助手' icon in the application grid. \
+SUMMARY = "Launcher, first-run installer and board skills for the Pi Agent"
+DESCRIPTION = "Gives the board a 'Pi Agent' icon in the application grid. \
 Nothing is preinstalled: clicking the icon while pi is missing opens a GTK4 \
 wizard that offers to install it, and once pi is installed and configured the \
 same icon opens a terminal running pi. The wizard downloads the Node.js \
@@ -8,10 +8,23 @@ of the board agrees, offers 'ask me later' and 'don't install', and after a \
 successful run asks for the API URL, key and model, writes \
 ~/.pi/agent/{models,auth,settings}.json and shows how to start pi. Removing it \
 is deleting ~/.local/share/pi and ~/.local/bin/pi: nothing outside $HOME is \
-touched, so no root, no polkit prompt, no apt."
+touched, so no root, no polkit prompt, no apt. \
+\
+The same package also teaches the board about its own peripherals: the skill \
+set (sysfs, systemctl, wpctl, v4l2, I2C/GPIO, QNN) that pi reads on the device \
+rather than the SDK-host skills in quectel_build/skills/. That set is NOT \
+shipped in the image -- the repository it lives in carries no licence, so it \
+cannot be redistributed inside a firmware image. The installer asks once \
+whether to fetch it, the login hook asks again before pulling a newer \
+revision, and nothing is downloaded unless the person says yes."
 HOMEPAGE = "https://pi.dev"
 LICENSE = "MIT"
-LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
+# Pi Agent itself (@earendil-works/pi-coding-agent) is MIT but its npm tarball
+# ships no LICENSE file, and this wizard is MIT too -- so the recipe carries its
+# own copy instead of pointing at ${COMMON_LICENSE_DIR}/MIT. The file has a short
+# comment header saying exactly that, which is why its md5 differs from the
+# generic MIT text.
+LIC_FILES_CHKSUM = "file://LICENSE.pi-agent;md5=3983bed0ec79107eb220e13ada79e95a"
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 
@@ -23,9 +36,46 @@ SRC_URI = " \
     file://pi-agent-setup-autostart.desktop \
     file://pi-agent.svg \
     file://README.md \
+    file://LICENSE.pi-agent \
+    file://locale/en/LC_MESSAGES/pi-agent-setup.mo \
 "
 
+# The board skill set is deliberately NOT fetched at build time and NOT
+# installed into the image.
+#
+# It lives in a third-party repository (github.com/super617/pi-skills) that
+# carries no licence file of any kind -- no LICENSE, no COPYING, nothing in the
+# README. Copyright therefore defaults to "all rights reserved", and copying
+# that content into a firmware image would mean redistributing it without
+# permission. Shipping the image would become a licensing problem for every
+# unit built from it.
+#
+# So the image now carries only the *ability* to fetch the skills:
+#
+#   * the installer asks once whether to fetch them (opt-in, in the wizard),
+#   * the login hook asks again before pulling a newer revision,
+#   * engine.py does the fetch into $HOME/.pi/agent/pi-skills at runtime,
+#   * nothing is downloaded unless the person answers yes.
+#
+# Bumping a pinned revision here is no longer how you update the skills: they
+# are not in here. To publish a new skill set, push to that repository.
+
 S = "${WORKDIR}"
+
+# Keep the English .mo inside the main package. OE's package_do_split_locales()
+# would otherwise move ${datadir}/locale/en into <PN>-locale-en, which the main
+# package only RRECOMMENDS (never RDEPENDs) -- so the .mo would be built, shipped
+# as a separate deb, and simply never installed on the image. This recipe has no
+# other translations, so nothing else loses its split.
+#
+# PACKAGE_NO_LOCALE only stops the per-language split; ${PN}-locale stays in
+# PACKAGES with the default FILES of ${datadir}/locale and is claimed *before*
+# ${PN} (populate_packages sorts -src/-dbg first, then declaration order, and
+# ${PN}-locale is declared ahead of ${PN}). Emptying its FILES is what actually
+# leaves the .mo to the main package -- dropping just one of these two lines
+# silently ships a translation file that nothing installs.
+PACKAGE_NO_LOCALE = "1"
+FILES:${PN}-locale = ""
 
 # Deliberately not 'inherit allarch': the package is shell + python, so allarch
 # would be legitimate, but this image mixes Yocto-built debs with a prebuilt
@@ -61,12 +111,22 @@ RDEPENDS:${PN} = " \
     ${@ 'python3-core python3-io python3-compression python3-netclient \
            python3-json python3-pygobject gtk4 adwaita-icon-theme' \
          if d.getVar('QUECTEL_OS_DIM') == 'LINUX' else ''} \
+    ln-i18n \
+    bash \
 "
 
 # libadwaita is used when present (toast overlay) and skipped otherwise, so a
 # hard dependency would be wrong; the wizard checks at runtime. Only the pure
 # OE rootfs has the recipe to recommend.
-RRECOMMENDS:${PN} = "${@ 'libadwaita' if d.getVar('QUECTEL_OS_DIM') == 'LINUX' else ''}"
+#
+# git is a Recommends and not a Depends: engine.py can fetch the skill set as a
+# tarball over urllib alone, and git only makes later updates incremental. The
+# Ubuntu 26 rootfs has no git at all, so hard-depending would drag it into the
+# rsync overlay for a capability the tarball path already provides.
+RRECOMMENDS:${PN} = " \
+    ${@ 'libadwaita' if d.getVar('QUECTEL_OS_DIM') == 'LINUX' else ''} \
+    git \
+"
 
 # The icon goes into the theme the desktop actually searches. The class only
 # refreshes the cache and does not pull anything in beyond what GTK needs.
@@ -77,6 +137,23 @@ do_install() {
 
     install -d ${D}${datadir}/pi-agent-setup
     install -m 0644 ${S}/engine.py ${D}${datadir}/pi-agent-setup/engine.py
+
+    # English translations. The .mo is a checked-in deliverable, not a build
+    # artifact: the DEBIAN/UBUNTU images are rsync overlays that never run this
+    # recipe's do_compile, and the apps read it from /usr/share/locale directly.
+    # Chinese needs no .mo -- the msgid is the Chinese text.
+    install -d ${D}${datadir}/locale/en/LC_MESSAGES
+    install -m 0644 ${S}/locale/en/LC_MESSAGES/pi-agent-setup.mo \
+        ${D}${datadir}/locale/en/LC_MESSAGES/pi-agent-setup.mo
+
+    # License, in two places on purpose: ${docdir} is where license bookkeeping
+    # looks, and ${datadir}/licenses/pi-agent/LICENSE is the path the wizard's
+    # "View license" button opens (LICENSE_PATH in pi-agent-setup.py). Keep the
+    # two in sync with that constant if it ever moves.
+    install -d ${D}${docdir}/${PN} ${D}${datadir}/licenses/pi-agent
+    install -m 0644 ${S}/LICENSE.pi-agent ${D}${docdir}/${PN}/copyright
+    install -m 0644 ${S}/LICENSE.pi-agent \
+        ${D}${datadir}/licenses/pi-agent/LICENSE
 
     # The application-grid entry and the icon it shows.
     install -d ${D}${datadir}/applications ${D}${datadir}/icons/hicolor/scalable/apps
@@ -93,6 +170,11 @@ do_install() {
 
     install -d ${D}${docdir}/${PN}
     install -m 0644 ${S}/README.md ${D}${docdir}/${PN}/README.md
+
+    # No skill content is installed. See the note above SRC_URI: the skill
+    # repository has no licence, so nothing from it may be redistributed inside
+    # this image. engine.py fetches it into the user's home at runtime, and only
+    # after they agree to it.
 }
 
 FILES:${PN} = " \
@@ -101,6 +183,8 @@ FILES:${PN} = " \
     ${datadir}/pi-agent-setup \
     ${datadir}/applications/pi-agent.desktop \
     ${datadir}/icons/hicolor/scalable/apps/pi-agent.svg \
+    ${datadir}/locale/en/LC_MESSAGES/pi-agent-setup.mo \
+    ${datadir}/licenses/pi-agent \
     ${sysconfdir}/xdg/autostart/pi-agent-setup.desktop \
 "
 
@@ -111,7 +195,15 @@ FILES:${PN} = " \
 # people actually read.
 FILES:${PN}-doc = "${docdir}/${PN}"
 
-# No postinst is needed: the icon is a plain file in hicolor, the .desktop files
-# are read from disk by the shell, and the launcher creates its workspace on
-# first use. Nothing here needs to run as root at install time.
+# The package is shell plus Python; nothing in it is a compiled binary, so the
+# usual strip check has nothing to say.
 INSANE_SKIP:${PN} += "already-stripped"
+
+# No postinst, for either half:
+#   - the icon is a plain file in hicolor and the .desktop files are read from
+#     disk, so the launcher needs nothing done at install time;
+#   - linking the skills into ~/.pi/agent/skills/ is per-user state and only
+#     applies once the person has agreed to fetch them. Doing it as root in
+#     postinst would leave root-owned links inside somebody's home directory,
+#     and would fetch third-party content nobody asked for. The pi-agent
+#     launcher does the linking for the user who logs in.

@@ -1,7 +1,7 @@
 #!/bin/sh
 # pi-agent -- one launcher, two jobs.
 #
-# The desktop entry "Pi 编程助手" has to do the right thing whether or not pi
+# The desktop entry "Pi Agent" has to do the right thing whether or not pi
 # is installed, and a .desktop Exec line cannot branch on state. So this small
 # dispatcher decides:
 #
@@ -42,7 +42,12 @@ for arg in "$@"; do
             sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
         *)
-            echo "pi-agent: 未知参数 $arg" >&2
+            # This launcher is pure shell, so there is no gettext here. The
+            # messages are written in both languages on one line instead: the
+            # board may be in either language, and a stray English line in a
+            # Chinese session (or the reverse) looks more broken than a doubled
+            # line does.
+            echo "pi-agent: unknown argument $arg / 未知参数 $arg" >&2
             exit 2 ;;
     esac
 done
@@ -75,6 +80,43 @@ fi
 
 if [ "$mode" = autostart ]; then
     # Autostart must be silent unless there is something to ask.
+
+    # Board skills: only relink what is already there, and ask before pulling.
+    # The skill set is NOT shipped in the image -- the repository it comes from
+    # carries no licence, so redistributing it inside a firmware image is not
+    # something this product can do. It is fetched into $HOME instead, and only
+    # after the person agrees.
+    #
+    # Two steps on purpose: engine.py (no GTK) decides whether there is anything
+    # to ask, and the wizard binary owns the dialog. Everything here is silent
+    # when there is nothing to say, and never fails the launch.
+    if [ -r "$ENGINE" ]; then
+        # One python pass turns the JSON into a single space-separated line:
+        #   "<ask> <first> <local> <remote>"
+        # Doing it in sed would break on an empty installed version, which is
+        # exactly the first-install case.
+        ask_line=$(python3 "$ENGINE" skills-autostart --json 2>/dev/null | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    raise SystemExit
+print("1" if d.get("ask") else "0",
+      "1" if d.get("first_install") else "0",
+      d.get("installed") or "-",
+      d.get("remote") or "-")
+' 2>/dev/null)
+        set -- $ask_line
+        if [ "${1:-0}" = 1 ]; then
+            python3 "$WIZARD" --ask-skills "${3:--}" "${4:--}" "${2:-0}" >/dev/null 2>&1
+            case $? in
+                0) python3 "$ENGINE" skills-install >/dev/null 2>&1 || true ;;
+                2) python3 "$ENGINE" skills-decline >/dev/null 2>&1 || true ;;
+                *) : ;;   # later: ask again next login
+            esac
+        fi
+    fi
+
     if [ "$configured" = yes ]; then
         exit 0
     fi
@@ -93,9 +135,21 @@ fi
 # pi is a terminal UI, so "open pi" means a terminal on a desktop. The private
 # Node.js runtime is put on PATH by ~/.local/bin/pi, a wrapper written by the
 # installer, so the terminal only needs that one directory.
+
+# Relink the board skills before every launch too: this is the case where the
+# person clicks the icon rather than logging in, and it is cheap (a handful of
+# symlinks). No prompt here -- the login hook is what asks.
+#
+# `skills-sync` is local-only and cannot fail the launch; the update check is
+# deliberately *not* run here, because a network round trip in front of the
+# terminal would make opening pi feel slow. The login hook does the checking.
+if [ -r "$ENGINE" ]; then
+    python3 "$ENGINE" skills-sync >/dev/null 2>&1 || true
+fi
+
 PI_BIN=$PI_AGENT_HOME/.local/bin/pi
 if [ ! -x "$PI_BIN" ]; then
-    echo "pi-agent: 找不到 $PI_BIN，重新运行安装向导" >&2
+    echo "pi-agent: cannot find $PI_BIN, re-run the setup wizard / 找不到 $PI_BIN，重新运行安装向导" >&2
     exec "$WIZARD"
 fi
 
@@ -103,7 +157,7 @@ mkdir -p "$WORKSPACE" 2>/dev/null || true
 
 # Keep the window open if pi dies straight away, so the error is readable
 # instead of the terminal vanishing.
-inner="cd '$WORKSPACE' && '$PI_BIN'; rc=\$?; if [ \$rc -ne 0 ]; then echo; echo \"pi 退出（\$rc）\"; exec sh -i; fi"
+inner="cd '$WORKSPACE' && '$PI_BIN'; rc=\$?; if [ \$rc -ne 0 ]; then echo; echo \"pi exited (\$rc) / pi 退出（\$rc）\"; exec sh -i; fi"
 
 term=
 for candidate in x-terminal-emulator gnome-terminal kgx ptyxis \
@@ -115,7 +169,7 @@ for candidate in x-terminal-emulator gnome-terminal kgx ptyxis \
 done
 
 if [ -z "$term" ]; then
-    echo "pi-agent: 没有找到终端程序，请在终端里手动运行 $PI_BIN" >&2
+    echo "pi-agent: no terminal program found, run $PI_BIN in a terminal yourself / 没有找到终端程序，请在终端里手动运行 $PI_BIN" >&2
     exit 1
 fi
 

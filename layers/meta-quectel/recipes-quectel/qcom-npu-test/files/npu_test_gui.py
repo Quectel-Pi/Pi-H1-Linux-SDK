@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""
-Quectel PI (QCS6490) Qualcomm NPU 图形化测试工具
-
-高通 QCS6490 的 NPU 即 Hexagon DSP/HTP (Hexagon Tensor Processor),
-通过 Qualcomm SNPE / QNN SDK 调用。本工具封装板上已有的命令行工具:
-
-  - snpe-platform-validator   验证 DSP/GPU runtime 可用性
-  - qnn-platform-validator    验证 QNN backend (dsp/gpu) 可用性
-  - snpe-net-run              加载 .dlc 容器做单次推理 (CPU/GPU/DSP)
-  - snpe-throughput-net-run   并发吞吐量压测, 输出 FPS/延迟
-
-GUI: GTK3 + cairo (不依赖 OpenCV), 与参考的 RK3576 rknpu-test 风格一致。
-"""
+# Quectel PI (QCS6490) Qualcomm NPU 图形化测试工具
+#
+# 高通 QCS6490 的 NPU 即 Hexagon DSP/HTP (Hexagon Tensor Processor),
+# 通过 Qualcomm SNPE / QNN SDK 调用。本工具封装板上已有的命令行工具:
+#
+#   - snpe-platform-validator   验证 DSP/GPU runtime 可用性
+#   - qnn-platform-validator    验证 QNN backend (dsp/gpu) 可用性
+#   - snpe-net-run              加载 .dlc 容器做单次推理 (CPU/GPU/DSP)
+#   - snpe-throughput-net-run   并发吞吐量压测, 输出 FPS/延迟
+#
+# GUI: GTK3 + cairo (不依赖 OpenCV), 与参考的 RK3576 rknpu-test 风格一致。
 
 import gi
 gi.require_version('Gtk', '3.0')
@@ -37,6 +35,17 @@ import json
 import base64
 import urllib.request
 import urllib.error
+
+# ========== 国际化 ==========
+# msgid 就是源码里的中文原文: 中文会话直接用原文, 非中文会话读 en.mo。
+# ln-i18n 没装时退回原文, 不影响启动。
+sys.path.insert(0, "/usr/share/ln-i18n")
+try:
+    import ln_i18n
+    _ = ln_i18n.setup("qcom-npu-test")
+except ImportError:                 # ln-i18n 包没装: 整机退回中文原文
+    def _(message):
+        return message
 
 # ========== 配置 ==========
 # 板上 SNPE/QNN 工具路径 (由 qcom-snpe-sdk / qcom-qnn-sdk 安装)
@@ -82,7 +91,7 @@ VLM_BASE          = "http://127.0.0.1:8000"
 VLM_RUNTIME_JSON  = "/usr/lib/qwen35/runtime.json"
 VLM_SERVICE       = "qwen35"          # systemd 单元名, 不是模型名
 VLM_TIMEOUT       = 300
-VLM_PROMPT        = "请用中文描述你看到的画面内容。"
+VLM_PROMPT        = _("请用中文描述你看到的画面内容。")
 VLM_MAX_TOKENS    = 128               # 首次使用的默认值, 实际上限从 runtime.json 读
 VLM_JPEG_QUALITY  = "90"
 VLM_PATCH_SIZE    = 16                # 仅当 runtime.json 不可读时用于推算网格
@@ -93,11 +102,11 @@ _CTX_RE = re.compile(r"^(\d+)([kKmM])$")
 
 def vlm_display_name(model_id):
     if not model_id:
-        return "未探测到模型"
+        return _("未探测到模型")
     raw = str(model_id).strip()
     toks = [t for t in re.split(r"[-_/\s]+", raw) if t]
     if not toks:
-        return "未探测到模型"
+        return _("未探测到模型")
 
     family = toks[0]
     size = ctx = None
@@ -114,7 +123,8 @@ def vlm_display_name(model_id):
     name = family[:1].upper() + family[1:]
     if size:
         name += "-" + size[:-1] + size[-1].upper()
-    return f"{name} · {ctx[0]}{ctx[1]} 上下文" if ctx else name
+    return _("{name} · {ctx} 上下文").format(name=name, ctx=ctx[0] + ctx[1]) \
+        if ctx else name
 VLM_PROFILE_CACHE = os.path.join(os.path.expanduser("~"), ".cache",
                                  "qcom-npu-test", "vlm_profile.json")
 # CamxBridge 是按需建流的: 客户端一连上来先吐几帧全黑的初始 buffer,
@@ -125,11 +135,10 @@ MM_MIN_LUMA = 8.0
 
 
 class VlmProfile(object):
-    """描述"这台机器上这个服务实际是什么样"——全部字段来自读取或实测.
-
-    runtime_cfg  : /usr/lib/qwen35/runtime.json 的内容 (可能为空)
-    observed     : 从真实响应学到的值, 缓存在磁盘上
-    """
+    # 描述"这台机器上这个服务实际是什么样"——全部字段来自读取或实测.
+    #
+    # runtime_cfg  : /usr/lib/qwen35/runtime.json 的内容 (可能为空)
+    # observed     : 从真实响应学到的值, 缓存在磁盘上
 
     # 只有一条真实数据都没有时才用的初始估计(秒). 一旦跑过一次就会被实测覆盖,
     # 所以这里的数字不会成为谎话, 只是第一眼的保守占位.
@@ -265,35 +274,40 @@ class VlmProfile(object):
     @property
     def vision_size_text(self):
         wh = self.decoder_wh
-        return f"视觉输入 {wh[0]}x{wh[1]}" if wh else "视觉输入待探测"
+        return (_("视觉输入 {w}x{h}").format(w=wh[0], h=wh[1]) if wh
+                else _("视觉输入待探测"))
 
     @property
     def tps(self):
         return self.decode_tps or 6.5          # 仅首帧估计值, 很快被实测覆盖
 
     def stage_plan(self):
-        """把学到的阶段耗时转成动画用的时间轴 [(开始秒, 名称, 说明)].
-
-        完全没有历史时返回 FIRST_RUN_STAGES 推出的保守顺序, 跑过一次后就
-        全部改成实测均值, 所以动画节奏和真实阶段是对得上的。
-        """
+        # 把学到的阶段耗时转成动画用的时间轴 [(开始秒, 名称, 说明)].
+        #
+        # 完全没有历史时返回 FIRST_RUN_STAGES 推出的保守顺序, 跑过一次后就
+        # 全部改成实测均值, 所以动画节奏和真实阶段是对得上的。
         b = dict(self.FIRST_RUN_STAGES)
         for k, v in self.stage_budget.items():
             if isinstance(v, (int, float)) and v > 0:
                 b[k] = float(v)
-        size = (f"letterbox 到 {self.decoder_wh[0]}x{self.decoder_wh[1]}"
-                if self.decoder_wh else "letterbox 到服务端输入尺寸")
-        vt = "视觉塔三阶段"
+        size = (_("letterbox 到 {w}x{h}").format(w=self.decoder_wh[0],
+                                                 h=self.decoder_wh[1])
+                if self.decoder_wh else _("letterbox 到服务端输入尺寸"))
+        vt = _("视觉塔三阶段")
         if self.image_tokens:
-            vt += f", {self.image_tokens} 图像 token"
+            vt += _(", {n} 图像 token").format(n=self.image_tokens)
         rows, t = [], 0.0
-        rows.append((t, "\u2460 前端预处理", f"解码 JPEG + {size} + 分词"))
+        rows.append((t, _("① 前端预处理"),
+                     _("解码 JPEG + {size} + 分词").format(size=size)))
         t += b["frontend"]
-        rows.append((t, "\u2461 视觉编码", vt))
+        rows.append((t, _("② 视觉编码"), vt))
         t += b["vision"]
-        rows.append((t, "\u2462 预填充", "文本 + 图像 embedding 喂入 HTP"))
+        rows.append((t, _("③ 预填充"),
+                     _("文本 + 图像 embedding 喂入 HTP")))
         t += b["npu_prefill"]
-        rows.append((t, "\u2463 解码生成", f"逐 token 输出, 实测约 {self.tps:.1f} tok/s"))
+        rows.append((t, _("④ 解码生成"),
+                     _("逐 token 输出, 实测约 {tps:.1f} tok/s").format(
+                         tps=self.tps)))
         return rows
 
 
@@ -342,7 +356,7 @@ VLM_CSS = b"""
 
 
 def install_vlm_css():
-    """把回答区样式挂到默认屏幕. 重复调用无害."""
+    # 把回答区样式挂到默认屏幕. 重复调用无害.
     try:
         prov = Gtk.CssProvider()
         try:
@@ -363,11 +377,10 @@ CAM_W, CAM_H = 1280, 720
 
 # ========== 工具函数 ==========
 def camera_pipeline_cmd(w=CAM_W, h=CAM_H, device=CAM_DEVICE):
-    """gst 取流命令: 裸 RGB 写到 stdout, 由调用方 os.read 凑成一帧.
-
-    sync=false 让管道按摄像头自己的节奏出帧, 不按墙上时间重采样; 拿到的就是
-    摄像头原始帧, 不会因为下游慢而插值重复帧.
-    """
+    # gst 取流命令: 裸 RGB 写到 stdout, 由调用方 os.read 凑成一帧.
+    #
+    # sync=false 让管道按摄像头自己的节奏出帧, 不按墙上时间重采样; 拿到的就是
+    # 摄像头原始帧, 不会因为下游慢而插值重复帧.
     return ["gst-launch-1.0", "-q", "v4l2src", f"device={device}", "!",
             "videoconvert", "!",
             f"video/x-raw,format=RGB,width={w},height={h}",
@@ -375,13 +388,12 @@ def camera_pipeline_cmd(w=CAM_W, h=CAM_H, device=CAM_DEVICE):
 
 
 def find_models():
-    """查找 .dlc / .so(QNN模型) / .onnx / .tflite 模型文件
-
-    .dlc  -> SNPE snpe-net-run 容器
-    .onnx -> QNN qnn-net-run 模型 (外部权重 model.data 需同目录)
-    .tflite-> SNPE tflite 容器
-    .so   -> QNN context-binary 模型
-    """
+    # 查找 .dlc / .so(QNN模型) / .onnx / .tflite 模型文件
+    #
+    # .dlc  -> SNPE snpe-net-run 容器
+    # .onnx -> QNN qnn-net-run 模型 (外部权重 model.data 需同目录)
+    # .tflite-> SNPE tflite 容器
+    # .so   -> QNN context-binary 模型
     models = []
     for d in MODEL_DIRS:
         if not os.path.isdir(d):
@@ -400,14 +412,13 @@ def find_models():
 
 
 def model_backend(model_path):
-    """根据模型扩展名判断后端工具
-
-    .dlc/.tflite -> snpe (snpe-net-run --container)
-                    也能用 qnn-net-run --dlc_path, 但 SNPE 是 DLC 首选
-    .so          -> qnn  (qnn-net-run --model, QNN context binary)
-    .onnx        -> onnx_reference (AI Hub 源模型, 需在 PC 上用
-                    qairt-converter/qnn-onnx-converter 转成 .so 后才能跑)
-    """
+    # 根据模型扩展名判断后端工具
+    #
+    # .dlc/.tflite -> snpe (snpe-net-run --container)
+    #                 也能用 qnn-net-run --dlc_path, 但 SNPE 是 DLC 首选
+    # .so          -> qnn  (qnn-net-run --model, QNN context binary)
+    # .onnx        -> onnx_reference (AI Hub 源模型, 需在 PC 上用
+    #                 qairt-converter/qnn-onnx-converter 转成 .so 后才能跑)
     ext = os.path.splitext(model_path)[1].lower()
     if ext == ".onnx":
         return "onnx_reference"
@@ -435,7 +446,7 @@ def find_images():
 
 
 def run_cmd(cmd, timeout=120, cwd=None, env=None):
-    """运行命令, 返回 (stdout+stderr, returncode)"""
+    # 运行命令, 返回 (stdout+stderr, returncode)
     log = logging.getLogger("npu_test")
     log.debug(f"CMD: {' '.join(cmd)}")
     try:
@@ -443,22 +454,23 @@ def run_cmd(cmd, timeout=120, cwd=None, env=None):
                             timeout=timeout, cwd=cwd, env=env)
         out = (r.stdout or "") + (r.stderr or "")
         if r.returncode != 0:
-            log.warning(f"命令返回码非0: {r.returncode}")
+            log.warning(_("命令返回码非0: {rc}").format(rc=r.returncode))
         return out, r.returncode
     except subprocess.TimeoutExpired:
-        log.error(f"命令超时({timeout}s): {' '.join(cmd)}")
-        return f"ERROR: 命令超时({timeout}s)", -1
+        log.error(_("命令超时({timeout}s): {cmd}").format(
+            timeout=timeout, cmd=" ".join(cmd)))
+        return _("ERROR: 命令超时({timeout}s)").format(timeout=timeout), -1
     except FileNotFoundError as e:
-        log.error(f"程序不存在: {e}")
-        return f"ERROR: 程序不存在: {e}", -1
+        log.error(_("程序不存在: {err}").format(err=e))
+        return _("ERROR: 程序不存在: {err}").format(err=e), -1
     except Exception as e:
-        log.error(f"命令异常: {e}")
-        return f"ERROR: {e}", -1
+        log.error(_("命令异常: {err}").format(err=e))
+        return "ERROR: {0}".format(e), -1
 
 
 # ========== 解析函数 ==========
 def parse_snpe_pf(text):
-    """解析 snpe-platform-validator 输出"""
+    # 解析 snpe-platform-validator 输出
     info = {}
     # Unit Test on the runtime DSP: Passed.
     m = re.search(r'Unit Test on the runtime (\w+):\s*(\w+)', text)
@@ -478,7 +490,7 @@ def parse_snpe_pf(text):
 
 
 def parse_qnn_pf(text):
-    """解析 qnn-platform-validator 输出"""
+    # 解析 qnn-platform-validator 输出
     info = {}
     m = re.search(r'Unit Test on the backend (\w+):\s*(\w+)', text)
     if m:
@@ -500,7 +512,7 @@ def parse_qnn_pf(text):
 
 
 def parse_inference(text):
-    """解析 snpe-net-run 单次推理输出, 提取耗时"""
+    # 解析 snpe-net-run 单次推理输出, 提取耗时
     info = {}
     # SNPE build version
     m = re.search(r'snpe-net-run build version:\s*([\w.]+)', text)
@@ -536,7 +548,7 @@ def parse_inference(text):
 
 
 def parse_throughput(text):
-    """解析 snpe-throughput-net-run 输出"""
+    # 解析 snpe-throughput-net-run 输出
     info = {}
     m = re.search(r'snpe-throughput-net-run build version:\s*([\w.]+)', text)
     if m:
@@ -584,13 +596,12 @@ def parse_throughput(text):
 
 
 class NpuDaemon:
-    """常驻 SNPE 会话: 容器只加载一次, 之后每次点击只付推理时间.
-
-    snpe-net-run 每点一次都要重走 进程启动 + 13.6MB DLC 解析 + DSP 会话
-    建立, 实测 ~280ms, 而推理本身只要 10~20ms. 用一个常驻进程收 raw 喂
-    结果, 点击延迟从 ~310ms 降到 ~30ms. 输出与 snpe-net-run 逐字节一致
-    (boxes/scores/class_idx 三路 raw 已 md5 校验).
-    """
+    # 常驻 SNPE 会话: 容器只加载一次, 之后每次点击只付推理时间.
+    #
+    # snpe-net-run 每点一次都要重走 进程启动 + 13.6MB DLC 解析 + DSP 会话
+    # 建立, 实测 ~280ms, 而推理本身只要 10~20ms. 用一个常驻进程收 raw 喂
+    # 结果, 点击延迟从 ~310ms 降到 ~30ms. 输出与 snpe-net-run 逐字节一致
+    # (boxes/scores/class_idx 三路 raw 已 md5 校验).
 
     def __init__(self, model, perf="burst", runtime="dsp"):
         self.dir = tempfile.mkdtemp(prefix="npu_daemon_", dir="/tmp")
@@ -616,7 +627,7 @@ class NpuDaemon:
         if not line.startswith(b"READY"):
             self.close()
             raise RuntimeError(line.decode(errors="replace").strip()
-                               or "npu-daemon 未就绪")
+                               or _("npu-daemon 未就绪"))
         parts = line.split()
         self.input_bytes = int(parts[2])
         self.use_shm = len(parts) > 3 and parts[3] == b"1"
@@ -628,7 +639,7 @@ class NpuDaemon:
         self.lock = threading.Lock()
 
     def infer(self, raw_bytes):
-        """喂一帧 float32 raw, 返回本轮 execute() 毫秒数."""
+        # 喂一帧 float32 raw, 返回本轮 execute() 毫秒数.
         with self.lock:
             if self.mm is not None:
                 self.mm[:] = raw_bytes
@@ -637,7 +648,7 @@ class NpuDaemon:
                 self.p.stdin.write(raw_bytes)
             line = self.p.stdout.readline().decode(errors="replace").strip()
         if not line.startswith("OK "):
-            raise RuntimeError(line or "npu-daemon 无响应")
+            raise RuntimeError(line or _("npu-daemon 无响应"))
         self.last_ms = float(line.split()[1])
         return self.last_ms
 
@@ -665,7 +676,7 @@ _DAEMON_LOCK = threading.Lock()
 
 
 def get_daemon(model, runtime="dsp"):
-    """按 (模型, 后端) 缓存常驻会话; 起不来就返回 None, 调用方回退 snpe-net-run."""
+    # 按 (模型, 后端) 缓存常驻会话; 起不来就返回 None, 调用方回退 snpe-net-run.
     if not os.path.exists(NPU_DAEMON):
         return None
     key = (model, runtime)
@@ -677,16 +688,18 @@ def get_daemon(model, runtime="dsp"):
             d = NpuDaemon(model, runtime=runtime)
         except Exception as e:
             logging.getLogger("npu_test").warning(
-                f"npu-daemon({runtime}) 启动失败, 回退 snpe-net-run: {e}")
+                _("npu-daemon({rt}) 启动失败, 回退 snpe-net-run: {err}").format(
+                    rt=runtime, err=e))
             _DAEMONS[key] = None
             return None
-        logging.getLogger("npu_test").info(f"npu-daemon 就绪: {model} [{runtime}]")
+        logging.getLogger("npu_test").info(
+            _("npu-daemon 就绪: {model} [{rt}]").format(model=model, rt=runtime))
         _DAEMONS[key] = d
         return d
 
 
 def daemon_run(model, runtime, raw_bytes):
-    """用常驻会话跑一帧 raw, 返回 (daemon, ms); 没会话就返回 None 让调用方回退 CLI."""
+    # 用常驻会话跑一帧 raw, 返回 (daemon, ms); 没会话就返回 None 让调用方回退 CLI.
     d = get_daemon(model, runtime)
     if d is None or len(raw_bytes) != d.input_bytes:
         return None
@@ -694,16 +707,16 @@ def daemon_run(model, runtime, raw_bytes):
         return d, d.infer(raw_bytes)
     except Exception as e:
         logging.getLogger("npu_test").warning(
-            f"npu-daemon({runtime}) 推理失败, 回退 CLI: {e}")
+            _("npu-daemon({rt}) 推理失败, 回退 CLI: {err}").format(
+                rt=runtime, err=e))
         return None
 
 
 def throughput_via_daemon(model, runtime, raw_bytes, seconds):
-    """常驻会话压测: 固定时长内连续喂帧, 返回 snpe-throughput-net-run 同款文本.
-
-    比 snpe-throughput-net-run 更贴实际: 那个每次都要重建会话, 报的是它自己
-    的稳态; 这里报的是常驻会话真实吞吐.
-    """
+    # 常驻会话压测: 固定时长内连续喂帧, 返回 snpe-throughput-net-run 同款文本.
+    #
+    # 比 snpe-throughput-net-run 更贴实际: 那个每次都要重建会话, 报的是它自己
+    # 的稳态; 这里报的是常驻会话真实吞吐.
     r = daemon_run(model, runtime, raw_bytes)
     if r is None:
         return None
@@ -717,16 +730,17 @@ def throughput_via_daemon(model, runtime, raw_bytes, seconds):
     if not n:
         return None
     avg = sum(lat) / n
-    return (f"npu-daemon[{d.runtime}] 常驻会话压测\n"
-            f"Total throughput(inferences per second): {n / wall:.3f} infs/sec\n"
-            f"Total throughput(latency per inference): {wall / n:.6f} sec/inf\n"
-            f"Total Inferences: {n}\n"
-            f"Total execution time: {wall:.3f} s\n"
-            f"单帧 execute 均值 {avg:.2f} ms / 最小 {min(lat):.2f} / 最大 {max(lat):.2f}")
+    return (_("npu-daemon[{rt}] 常驻会话压测").format(rt=d.runtime) + "\n"
+            + f"Total throughput(inferences per second): {n / wall:.3f} infs/sec\n"
+            + f"Total throughput(latency per inference): {wall / n:.6f} sec/inf\n"
+            + f"Total Inferences: {n}\n"
+            + f"Total execution time: {wall:.3f} s\n"
+            + _("单帧 execute 均值 {avg:.2f} ms / 最小 {lo:.2f} / 最大 {hi:.2f}").format(
+                avg=avg, lo=min(lat), hi=max(lat)))
 
 
 def yolo_detect_pixbuf(model, pixbuf, runtime="dsp", input_size=640):
-    """摄像头一帧: letterbox -> 常驻会话 -> 解码. 返回 (dets, infer_ms)."""
+    # 摄像头一帧: letterbox -> 常驻会话 -> 解码. 返回 (dets, infer_ms).
     raw, (top, left, scale), (w, h) = yolo_letterbox(pixbuf, input_size)
     r = daemon_run(model, runtime, raw)
     if r is None:
@@ -743,11 +757,10 @@ _RUNTIME_MS = {}
 
 
 def fmt_timing(lat, call_ms, runtime=""):
-    """把一次运行的耗时拼成面板文字.
-
-    三档 runtime 用同一个口径: 一次推理花多久. DSP 是常驻会话的 execute(),
-    CPU/GPU 是 SNPEDiag 的 Total Inference Time (没有 accelerator 计数器).
-    """
+    # 把一次运行的耗时拼成面板文字.
+    #
+    # 三档 runtime 用同一个口径: 一次推理花多久. DSP 是常驻会话的 execute(),
+    # CPU/GPU 是 SNPEDiag 的 Total Inference Time (没有 accelerator 计数器).
     lat = lat or {}
     npu = lat.get('avg_ms', 0) or 0
     tot = lat.get('total_ms', 0) or 0
@@ -757,61 +770,69 @@ def fmt_timing(lat, call_ms, runtime=""):
         _RUNTIME_MS[runtime.split()[0]] = ms
     out = []
     if ms > 0:
-        out.append(f"推理延迟: {ms:.2f} ms   [{runtime}]\n")
+        out.append(_("推理延迟: {ms:.2f} ms   [{rt}]").format(ms=ms, rt=runtime)
+                   + "\n")
         if clk > 0:
-            out.append(f"DSP 计算: {npu:.2f} ms  (HTP {clk:.0f} MHz)\n")
+            out.append(_("DSP 计算: {npu:.2f} ms  (HTP {clk:.0f} MHz)").format(
+                npu=npu, clk=clk) + "\n")
     if call_ms > 0:
-        out.append(f"端到端点击: {call_ms:.0f} ms  (letterbox + 推理 + 后处理)\n")
+        out.append(_("端到端点击: {ms:.0f} ms  (letterbox + 推理 + 后处理)").format(
+            ms=call_ms) + "\n")
     # 只在真的量过别的档位时才报倍数
     if runtime.startswith("DSP") and ms > 0:
         ref = [(k, v) for k, v in _RUNTIME_MS.items()
                if k in ("GPU", "CPU") and v > 0]
         if ref:
-            out.append("加速比: " + ", ".join(
-                f"比 {k} 快 {v / ms:.1f}×" for k, v in ref) + "\n")
+            out.append(_("加速比: ") + ", ".join(
+                _("比 {rt} 快 {x:.1f}×").format(rt=k, x=v / ms)
+                for k, v in ref) + "\n")
     return "".join(out)
 
 
 def compare_text(rows):
-    """三档对比表的文字. rows = [(runtime, 推理ms, 端到端ms, 目标数), ...]"""
+    # 三档对比表的文字. rows = [(runtime, 推理ms, 端到端ms, 目标数), ...]
     ok = [r for r in rows if r[1] > 0]
     base = min(r[1] for r in ok) if ok else 0
-    out = [f"{'='*55}\n  ⚡ 同模型同图 · 三档 Runtime 实测对比\n{'='*55}\n\n"
-           f"  {'Runtime':<16}{'推理延迟':>12}{'端到端':>12}{'相对':>9}\n"
-           f"  {'-'*49}\n"]
+    out = [f"{'='*55}\n  " + _("⚡ 同模型同图 · 三档 Runtime 实测对比")
+           + f"\n{'='*55}\n\n"
+           + "  " + "Runtime".ljust(16) + _("推理延迟").rjust(12)
+           + _("端到端").rjust(12) + _("相对").rjust(9) + "\n"
+           + f"  {'-'*49}\n"]
     for name, ms, wall, nd in rows:
         if ms <= 0:
-            out.append(f"  {name:<16}{'失败':>10}  (看日志)\n")
+            out.append(f"  {name:<16}" + _("失败").rjust(10) + "  "
+                       + _("(看日志)") + "\n")
             continue
         out.append(f"  {name:<16}{ms:>9.2f}ms{wall:>9.0f}ms"
-                   f"{ms/base:>8.1f}×  ({nd} 目标)"
-                   + ("  ⚠ 输出异常" if nd == 0 else "") + "\n")
+                   + _("{x:>8.1f}×  ({n} 目标)").format(x=ms / base, n=nd)
+                   + ("  " + _("⚠ 输出异常") if nd == 0 else "") + "\n")
     if len(ok) == 3:
-        out.append(f"\n  HTP/NPU 相对 CPU 加速 {rows[0][1]/base:.1f}×, "
-                   f"相对 GPU 加速 {rows[1][1]/base:.1f}×\n")
+        out.append("\n  " + _("HTP/NPU 相对 CPU 加速 {x:.1f}×, "
+                               "相对 GPU 加速 {y:.1f}×").format(
+                                   x=rows[0][1] / base, y=rows[1][1] / base)
+                   + "\n")
     if any(r[3] == 0 for r in ok):
         # 量化 DLC 在 CPU runtime 上算得出结果但分数全塌, 耗时也只能当参考.
-        out.append("  ⚠ 0 目标那档: 量化 DLC 的 CPU runtime 输出分数塌陷, "
-                   "耗时可信, 结果不可信\n")
-    out.append("  推理延迟 = 一次推理本身; 端到端 = 点一下要等多久\n")
-    out.append("  三档都用常驻会话, 新建会话的开销不在计时里 "
-               "(GPU 光建会话就要 1.35s)\n")
+        out.append("  " + _("⚠ 0 目标那档: 量化 DLC 的 CPU runtime 输出分数塌陷, "
+                            "耗时可信, 结果不可信") + "\n")
+    out.append("  " + _("推理延迟 = 一次推理本身; 端到端 = 点一下要等多久") + "\n")
+    out.append("  " + _("三档都用常驻会话, 新建会话的开销不在计时里 "
+                        "(GPU 光建会话就要 1.35s)") + "\n")
     return "".join(out)
 
 
 def measure_npu_latency(model, out_dir):
-    """从本次推理的 SNPEDiag.log 里取 NPU 纯推理时间 (snpe-diagview).
-
-    snpe-net-run 每次调用都要重跑 HTP graph prepare (容器加载 / DSP 初始化 /
-    图定序), 这部分固定开销远大于推理本身, 所以不能用它包住的 wall time
-    当"推理延迟". SNPEDiag.log 里本来就有 Total Inference Time, 直接读,
-    不用像旧版那样另起一个 snpe-throughput-net-run 进程再跑 1 秒循环
-    (那一步固定多花 ~1.2s, 是点击后卡顿的第二大来源).
-
-    Returns:
-        dict: {'avg_ms': float, 'avg_fps': float, 'raw': str}
-              非 snpe 后端 / 无日志 / 工具缺失时返回空 dict.
-    """
+    # 从本次推理的 SNPEDiag.log 里取 NPU 纯推理时间 (snpe-diagview).
+    #
+    # snpe-net-run 每次调用都要重跑 HTP graph prepare (容器加载 / DSP 初始化 /
+    # 图定序), 这部分固定开销远大于推理本身, 所以不能用它包住的 wall time
+    # 当"推理延迟". SNPEDiag.log 里本来就有 Total Inference Time, 直接读,
+    # 不用像旧版那样另起一个 snpe-throughput-net-run 进程再跑 1 秒循环
+    # (那一步固定多花 ~1.2s, 是点击后卡顿的第二大来源).
+    #
+    # Returns:
+    #     dict: {'avg_ms': float, 'avg_fps': float, 'raw': str}
+    #           非 snpe 后端 / 无日志 / 工具缺失时返回空 dict.
     if model_backend(model) != "snpe":
         return {}
     # 常驻会话跑的这一帧: 没有 SNPEDiag.log, 时间就是 daemon 报的 execute().
@@ -828,7 +849,7 @@ def measure_npu_latency(model, out_dir):
         return {}
     logp = os.path.join(out_dir, "SNPEDiag.log")
     if not os.path.exists(logp):
-        logging.getLogger("npu_test").info("无 SNPEDiag.log, 跳过延迟解析")
+        logging.getLogger("npu_test").info(_("无 SNPEDiag.log, 跳过延迟解析"))
         return {}
     out, rc = run_cmd([SNPE_DIAGVIEW, f"--input_log={logp}"], timeout=30)
     def us(pat):
@@ -852,7 +873,7 @@ def measure_npu_latency(model, out_dir):
 
 
 def parse_yolo_output(text):
-    """解析 SNPE yolov5 demo 输出 (沿用 RK3576 rknn demo 的输出格式假设)"""
+    # 解析 SNPE yolov5 demo 输出 (沿用 RK3576 rknn demo 的输出格式假设)
     info = {}
     m = re.search(r'build version:\s*([\w.]+)', text)
     if m:
@@ -908,15 +929,14 @@ _LB_CACHE = {}
 
 
 def _lb_canvas(size, pad_value, top, left, nh, nw):
-    """复用的 float32 letterbox 画布, 省掉每帧 1.2M 像素的 astype.
-
-    摄像头 1280x720 缩到 640x360 只占中间一条, 每帧只写这块; 几何变了才整块铺
-    pad 值. 之前每帧都 canvas.astype(float32)/255 全画布 (23ms), 现在只算有效
-    区域 (~7ms), 输出逐字节相同.
-    """
+    # 复用的 float32 letterbox 画布, 省掉每帧 1.2M 像素的 astype.
+    #
+    # 摄像头 1280x720 缩到 640x360 只占中间一条, 每帧只写这块; 几何变了才整块铺
+    # pad 值. 之前每帧都 canvas.astype(float32)/255 全画布 (23ms), 现在只算有效
+    # 区域 (~7ms), 输出逐字节相同.
     np = _np()
     if np is None:
-        raise RuntimeError("letterbox 需要 numpy")
+        raise RuntimeError(_("letterbox 需要 numpy"))
     key = (size, pad_value)
     geo = (top, left, nh, nw)
     hit = _LB_CACHE.get(key)
@@ -946,7 +966,7 @@ def yolo_letterbox(image_path, size=640, pad_value=114):
     # 640x640 上实测 ~160ms, 这里是几毫秒, 输出逐字节相同.
     np = _np()
     if np is None:
-        raise RuntimeError("letterbox 需要 numpy")
+        raise RuntimeError(_("letterbox 需要 numpy"))
     channels = 3
     top = (size - nh) // 2
     left = (size - nw) // 2
@@ -986,16 +1006,16 @@ def run_yolo(model, image, runtime_flag="--use_dsp", graph_name="yolov7",
     out_dir = tempfile.mkdtemp(prefix="npu_yolo_", dir="/tmp")
 
     if backend == "onnx_reference":
-        return ("ERROR: .onnx 源模型无法在板上直接推理, "
-                "需先用 qairt-converter 转成 .so\n"
-                "请选 yolov7.dlc (SNPE 容器) 进行检测。", None, [], None)
+        return (_("ERROR: .onnx 源模型无法在板上直接推理, "
+                  "需先用 qairt-converter 转成 .so\n"
+                  "请选 yolov7.dlc (SNPE 容器) 进行检测。"), None, [], None)
 
     # ---- preprocess to raw (SNPE expects a float32 NCHW .raw input) ----
     np = _np()
     if np is None:
-        return ("ERROR: YOLO 后处理需要 numpy, 但设备上未安装。\n"
-                "请安装: apt-get install python3-numpy "
-                "(Debian) 或在 Yocto 里加 python3-numpy", None, [], None)
+        return (_("ERROR: YOLO 后处理需要 numpy, 但设备上未安装。\n"
+                  "请安装: apt-get install python3-numpy "
+                  "(Debian) 或在 Yocto 里加 python3-numpy"), None, [], None)
 
     try:
         t_lb = time.monotonic()
@@ -1003,11 +1023,12 @@ def run_yolo(model, image, runtime_flag="--use_dsp", graph_name="yolov7",
             yolo_letterbox(image, input_size)
         lb_ms = (time.monotonic() - t_lb) * 1000.0
     except Exception as e:
-        log.error(f"YOLO 预处理失败: {e}")
-        return f"ERROR: 预处理失败: {e}", None, [], None
+        log.error(_("YOLO 预处理失败: {err}").format(err=e))
+        return _("ERROR: 预处理失败: {err}").format(err=e), None, [], None
 
-    log.info(f"YOLO 推理: {os.path.basename(model)} x {os.path.basename(image)} "
-             f"backend={backend}")
+    log.info(_("YOLO 推理: {model} x {image} backend={backend}").format(
+        model=os.path.basename(model), image=os.path.basename(image),
+        backend=backend))
 
     # 三档各自一个常驻会话, 端到端才可比: GPU 新建会话要 1.35s 编 OpenCL
     # kernel, DSP 也要读 DLC + 建 HTP 会话, 摊销掉这些才是纯推理差距.
@@ -1023,14 +1044,16 @@ def run_yolo(model, image, runtime_flag="--use_dsp", graph_name="yolov7",
             infer_ms = daemon.infer(raw_bytes)
             run_ms = (time.monotonic() - t_run) * 1000.0
         except Exception as e:
-            log.warning(f"npu-daemon 推理失败, 本帧回退 snpe-net-run: {e}")
+            log.warning(_("npu-daemon 推理失败, 本帧回退 snpe-net-run: {err}").format(
+                err=e))
             daemon = None
             run_ms = 0.0
         else:
             shutil.rmtree(out_dir, ignore_errors=True)   # 本帧没用到本地 tmp
             out_dir = daemon.dir
-            out = (f"npu-daemon[{daemon.runtime}]: execute {infer_ms:.2f} ms "
-                   f"(常驻会话, 无进程启动/图初始化开销)")
+            out = (_("npu-daemon[{rt}]: execute {ms:.2f} ms "
+                     "(常驻会话, 无进程启动/图初始化开销)").format(
+                         rt=daemon.runtime, ms=infer_ms))
 
     if daemon is None:
         raw_path = os.path.join(out_dir, "image.raw")
@@ -1058,13 +1081,13 @@ def run_yolo(model, image, runtime_flag="--use_dsp", graph_name="yolov7",
             run_ms = (time.monotonic() - t_run) * 1000.0
             out = (r.stdout or "") + (r.stderr or "")
             if r.returncode != 0:
-                log.warning(f"YOLO 返回码: {r.returncode}")
+                log.warning(_("YOLO 返回码: {rc}").format(rc=r.returncode))
         except subprocess.TimeoutExpired:
-            log.error("YOLO 推理超时(120s)")
-            return "ERROR: 推理超时(120s)", None, [], None
+            log.error(_("YOLO 推理超时(120s)"))
+            return _("ERROR: 推理超时(120s)"), None, [], None
         except Exception as e:
-            log.error(f"YOLO 异常: {e}")
-            return f"ERROR: {e}", None, [], None
+            log.error(_("YOLO 异常: {err}").format(err=e))
+            return "ERROR: {0}".format(e), None, [], None
 
     # ---- find output .raw (SNPE writes to Result_<n>/) ----
     # conf=0.5 + iou=0.45: SNPE quantized yolov7 emits many low-quality anchors;
@@ -1077,8 +1100,10 @@ def run_yolo(model, image, runtime_flag="--use_dsp", graph_name="yolov7",
                              input_size=input_size)
     dec_ms = (time.monotonic() - t_dec) * 1000.0
     # 分项耗时进日志, 卡的时候看这一行就知道该优化哪一步
-    log.info(f"YOLO 耗时: letterbox={lb_ms:.0f}ms infer={run_ms:.0f}ms "
-             f"decode={dec_ms:.0f}ms ({'daemon' if daemon else 'cli'})")
+    log.info(_("YOLO 耗时: letterbox={lb:.0f}ms infer={inf:.0f}ms "
+               "decode={dec:.0f}ms ({mode})").format(
+                   lb=lb_ms, inf=run_ms, dec=dec_ms,
+                   mode="daemon" if daemon else "cli"))
     return out, None, dets, out_dir
 
 
@@ -1288,7 +1313,7 @@ def _load_coco_labels():
 
 # ========== 日志系统 ==========
 class GTKLogHandler(logging.Handler):
-    """把日志写入 GTK TextView"""
+    # 把日志写入 GTK TextView
     def __init__(self, textview):
         super().__init__()
         self.textview = textview
@@ -1331,7 +1356,7 @@ def setup_logger(textview):
 
 # ========== Qwen3.5 视觉请求 ==========
 def vlm_probe(timeout=3.0):
-    """探测 Qwen3.5 服务. 返回模型 id, 不可用返回 None."""
+    # 探测 Qwen3.5 服务. 返回模型 id, 不可用返回 None.
     try:
         with urllib.request.urlopen(VLM_MODELS, timeout=timeout) as r:
             data = json.loads(r.read().decode("utf-8", "replace"))
@@ -1343,15 +1368,14 @@ def vlm_probe(timeout=3.0):
 
 def vlm_ask_image(jpeg, prompt, max_tokens=VLM_MAX_TOKENS,
                   timeout=VLM_TIMEOUT):
-    """把一张 JPEG 发给 Qwen3.5 视觉模型, 返回 (回答文本, 指标字典).
-
-    服务端契约 (见 qwen35 的 request_frontend / qwen_server):
-      - content 数组里放 {"type":"image_url","image_url":{"url":"data:..."}}
-        和 {"type":"text","text":...}, 图片只允许 data URL, 单次只允许一张;
-      - 尺寸由服务端按自己的视觉输入尺寸 letterbox, 所以这里传摄像头原生帧即可;
-      - 回答在 choices[0].message.content, 耗时/速度在 qwen35_metrics 里。
-    失败时抛异常, 由调用方分类展示。
-    """
+    # 把一张 JPEG 发给 Qwen3.5 视觉模型, 返回 (回答文本, 指标字典).
+    #
+    # 服务端契约 (见 qwen35 的 request_frontend / qwen_server):
+    #   - content 数组里放 {"type":"image_url","image_url":{"url":"data:..."}}
+    #     和 {"type":"text","text":...}, 图片只允许 data URL, 单次只允许一张;
+    #   - 尺寸由服务端按自己的视觉输入尺寸 letterbox, 所以这里传摄像头原生帧即可;
+    #   - 回答在 choices[0].message.content, 耗时/速度在 qwen35_metrics 里。
+    # 失败时抛异常, 由调用方分类展示。
     payload = {
         "messages": [{"role": "user", "content": [
             {"type": "image_url",
@@ -1372,7 +1396,7 @@ def vlm_ask_image(jpeg, prompt, max_tokens=VLM_MAX_TOKENS,
     text = (msg.get("content") or "").strip()
     if not text:
         # 模型可能只输出了推理段, 兜底拿它, 总比空白好
-        text = (msg.get("reasoning_content") or "").strip() or "(模型没有输出内容)"
+        text = (msg.get("reasoning_content") or "").strip() or _("(模型没有输出内容)")
 
     usage = data.get("usage") or {}
     m = data.get("qwen35_metrics") or {}
@@ -1402,11 +1426,10 @@ def vlm_ask_image(jpeg, prompt, max_tokens=VLM_MAX_TOKENS,
 
 
 def mm_frame_luma(raw, step=997):
-    """粗估一帧 RGB 的平均亮度 (0-255). 隔字节抽样, 不用 PIL/OpenCV.
-
-    CamxBridge 刚建流时前几帧是全黑的, 而全黑帧送进去模型只会回一句
-    "这张图片是空的/很模糊", 属于拿不到信息的调用. 这里就提前拦下来。
-    """
+    # 粗估一帧 RGB 的平均亮度 (0-255). 隔字节抽样, 不用 PIL/OpenCV.
+    #
+    # CamxBridge 刚建流时前几帧是全黑的, 而全黑帧送进去模型只会回一句
+    # "这张图片是空的/很模糊", 属于拿不到信息的调用. 这里就提前拦下来。
     if not raw:
         return 0.0
     total = n = 0
@@ -1417,37 +1440,39 @@ def mm_frame_luma(raw, step=997):
 
 
 def vlm_meta_line(meta, elapsed=None, jpeg_bytes=None):
-    """把请求指标拼成一行给人看的摘要."""
+    # 把请求指标拼成一行给人看的摘要.
     parts = []
     if elapsed is not None:
-        parts.append(f"端到端 {elapsed:.1f}s")
+        parts.append(_("端到端 {s:.1f}s").format(s=elapsed))
     if jpeg_bytes:
-        parts.append(f"图像 {jpeg_bytes / 1024:.0f} KB")
+        parts.append(_("图像 {kb:.0f} KB").format(kb=jpeg_bytes / 1024))
     if meta.get("prompt_tokens"):
-        parts.append(f"prompt {meta['prompt_tokens']} tokens")
+        parts.append("prompt {0} tokens".format(meta['prompt_tokens']))
     if meta.get("completion_tokens"):
-        parts.append(f"生成 {meta['completion_tokens']} tokens")
+        parts.append(_("生成 {n} tokens").format(n=meta['completion_tokens']))
     if meta.get("decode_tps"):
-        parts.append(f"解码 {meta['decode_tps']:.1f} tok/s")
+        parts.append(_("解码 {tps:.1f} tok/s").format(tps=meta['decode_tps']))
     if meta.get("finish_reason"):
-        parts.append(f"finish={meta['finish_reason']}")
+        parts.append("finish={0}".format(meta['finish_reason']))
     if meta.get("prefill_cached_tokens"):
-        parts.append(f"缓存命中 {meta['prefill_cached_tokens']} tok")
+        parts.append(_("缓存命中 {n} tok").format(n=meta['prefill_cached_tokens']))
     return " · ".join(parts)
 
 
 def vlm_stage_rows(meta):
-    """把服务端报的阶段耗时整理成 [(名称, 秒数, 补充说明)] , 供时间轴展示."""
+    # 把服务端报的阶段耗时整理成 [(名称, 秒数, 补充说明)] , 供时间轴展示.
     st = meta.get("stages") or {}
     rows = []
     if st.get("frontend"):
         wh = VLM_PROFILE.decoder_wh
-        size = f"{wh[0]}x{wh[1]}" if wh else "服务端视觉输入尺寸"
-        rows.append(("前端预处理", st["frontend"], f"解码图像 + letterbox 到 {size} + 分词"))
+        size = f"{wh[0]}x{wh[1]}" if wh else _("服务端视觉输入尺寸")
+        rows.append((_("前端预处理"), st["frontend"],
+                     _("解码图像 + letterbox 到 {size} + 分词").format(size=size)))
     if meta.get("vision_s"):
         it = VLM_PROFILE.image_tokens
-        extra = "patch / body / merger 三阶段" + (f", {it} 个图像 token" if it else "")
-        rows.append(("视觉编码 (HTP)", meta["vision_s"], extra))
+        extra = _("patch / body / merger 三阶段") + (
+            _(", {n} 个图像 token").format(n=it) if it else "")
+        rows.append((_("视觉编码 (HTP)"), meta["vision_s"], extra))
     if st.get("npu_prefill") or meta.get("prefill_s"):
         sec = st.get("npu_prefill") or meta.get("prefill_s")
         extra = ""
@@ -1459,23 +1484,24 @@ def vlm_stage_rows(meta):
         if cached:
             # 同一张图的 prompt 前缀会缓存, 命中后预填充几乎不耗时
             extra = (extra + " · " if extra else "") + \
-                    f"前缀缓存命中 {cached} tokens"
-        rows.append(("预填充", sec, extra))
+                    _("前缀缓存命中 {n} tokens").format(n=cached)
+        rows.append((_("预填充"), sec, extra))
     if st.get("decoder"):
         extra = ""
         if meta.get("first_token_s"):
-            extra = f"首 token {meta['first_token_s']:.2f}s"
+            extra = _("首 token {s:.2f}s").format(s=meta['first_token_s'])
         if meta.get("completion_tokens") and meta.get("decode_tps"):
             extra += (" · " if extra else "") + \
-                     f"{meta['completion_tokens']} tokens @ {meta['decode_tps']:.1f} tok/s"
-        rows.append(("解码生成", st["decoder"], extra))
+                     "{0} tokens @ {1:.1f} tok/s".format(
+                         meta['completion_tokens'], meta['decode_tps'])
+        rows.append((_("解码生成"), st["decoder"], extra))
     return rows
 
 
 # ========== GUI ==========
 class NPUTestWindow(Gtk.Window):
     def __init__(self):
-        super().__init__(title="Qualcomm NPU 测试工具 (QCS6490)")
+        super().__init__(title=_("Qualcomm NPU 测试工具 (QCS6490)"))
         self.set_default_size(1000, 740)
         self.set_position(Gtk.WindowPosition.CENTER)
 
@@ -1488,12 +1514,12 @@ class NPUTestWindow(Gtk.Window):
 
         # 标题
         title = Gtk.Label()
-        title.set_markup('<span size="xx-large" weight="bold">🧪 Qualcomm NPU 测试工具</span>\n'
-                         '<span size="small" foreground="gray">QCS6490 · Hexagon DSP/HTP · SNPE/QNN SDK</span>')
+        title.set_markup(_("<span size=\"xx-large\" weight=\"bold\">🧪 Qualcomm NPU 测试工具</span>\n"
+                           "<span size=\"small\" foreground=\"gray\">QCS6490 · Hexagon DSP/HTP · SNPE/QNN SDK</span>"))
         vbox.pack_start(title, False, False, 0)
 
         # 设备信息栏
-        info_bar = Gtk.Frame(label="设备信息")
+        info_bar = Gtk.Frame(label=_("设备信息"))
         info_grid = Gtk.Grid(column_spacing=12, row_spacing=2)
         info_grid.set_margin_start(6)
         info_grid.set_margin_end(6)
@@ -1502,7 +1528,7 @@ class NPUTestWindow(Gtk.Window):
         info_bar.add(info_grid)
         self.lbl_soc = Gtk.Label(xalign=0)
         self.lbl_runtime = Gtk.Label(xalign=0)
-        self.lbl_runtime.set_markup('<span foreground="gray">正在探测 NPU...</span>')
+        self.lbl_runtime.set_markup(_("<span foreground=\"gray\">正在探测 NPU...</span>"))
         info_grid.attach(Gtk.Label(label="SoC:", xalign=0), 0, 0, 1, 1)
         info_grid.attach(self.lbl_soc, 1, 0, 1, 1)
         info_grid.attach(Gtk.Label(label="NPU/Runtime:", xalign=0), 0, 1, 1, 1)
@@ -1545,7 +1571,7 @@ class NPUTestWindow(Gtk.Window):
         self.warm_sessions()
 
         # ===== 日志面板 =====
-        log_frame = Gtk.Frame(label="运行日志")
+        log_frame = Gtk.Frame(label=_("运行日志"))
         log_hbox = Gtk.Box(spacing=4)
         log_hbox.set_margin_start(4)
         log_hbox.set_margin_end(4)
@@ -1565,11 +1591,11 @@ class NPUTestWindow(Gtk.Window):
         log_hbox.pack_start(log_sw, True, True, 0)
 
         log_btn_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        btn_clear = Gtk.Button(label="清空")
+        btn_clear = Gtk.Button(label=_("清空"))
         btn_clear.set_size_request(60, -1)
         btn_clear.connect("clicked", lambda b: self.log_textview.get_buffer().set_text(""))
         log_btn_box.pack_start(btn_clear, False, False, 0)
-        btn_save = Gtk.Button(label="保存")
+        btn_save = Gtk.Button(label=_("保存"))
         btn_save.set_size_request(60, -1)
         btn_save.connect("clicked", self.on_save_log)
         log_btn_box.pack_start(btn_save, False, False, 0)
@@ -1579,12 +1605,12 @@ class NPUTestWindow(Gtk.Window):
 
         # 初始化日志
         self.logger = setup_logger(self.log_textview)
-        self.logger.info("Qualcomm NPU 测试工具启动")
-        self.logger.info(f"日志文件: {self.logger.log_file}")
+        self.logger.info(_("Qualcomm NPU 测试工具启动"))
+        self.logger.info(_("日志文件: {path}").format(path=self.logger.log_file))
 
         # 状态栏
         self.statusbar = Gtk.Label(xalign=0)
-        self.statusbar.set_markup('<span foreground="gray">就绪</span>')
+        self.statusbar.set_markup(_("<span foreground=\"gray\">就绪</span>"))
         vbox.pack_start(self.statusbar, False, False, 0)
 
         # 异步加载设备信息
@@ -1614,29 +1640,31 @@ class NPUTestWindow(Gtk.Window):
                     pass
 
             # 快速验证 NPU: 跑 snpe dsp platform-validator (快, 不需要模型)
-            npu_status = "❓ 未知"
+            npu_status = _("❓ 未知")
             try:
                 if os.path.exists(SNPE_PF_VALIDATOR):
                     r = subprocess.run([SNPE_PF_VALIDATOR, "--runtime", "dsp", "--testRuntime"],
                                        capture_output=True, text=True, timeout=30)
                     out = (r.stdout or "") + (r.stderr or "")
                     if "Unit Test on the runtime DSP: Passed" in out:
-                        npu_status = "✅ DSP/HTP 可用 (NPU 正常)"
+                        npu_status = _("✅ DSP/HTP 可用 (NPU 正常)")
                     elif "not available" in out.lower() or "Absent" in out:
-                        npu_status = "❌ DSP/HTP 不可用"
+                        npu_status = _("❌ DSP/HTP 不可用")
                     else:
-                        npu_status = "⚠️ DSP 状态未知"
+                        npu_status = _("⚠️ DSP 状态未知")
                 else:
-                    npu_status = "❌ snpe-platform-validator 未安装"
+                    npu_status = _("❌ snpe-platform-validator 未安装")
             except subprocess.TimeoutExpired:
-                npu_status = "⚠️ DSP 验证超时"
+                npu_status = _("⚠️ DSP 验证超时")
             except Exception as e:
-                npu_status = f"❌ 验证失败: {e}"
+                npu_status = _("❌ 验证失败: {err}").format(err=e)
 
-            GLib.idle_add(lambda: self.lbl_soc.set_text(f"{soc}  |  内核: {kernel}"))
+            GLib.idle_add(lambda: self.lbl_soc.set_text(
+                _("{soc}  |  内核: {kernel}").format(soc=soc, kernel=kernel)))
             GLib.idle_add(lambda: self.lbl_runtime.set_markup(
-                f'<span foreground="green">{npu_status}</span>'))
-            self.logger.info(f"设备: {soc}, 内核: {kernel}, NPU: {npu_status}")
+                '<span foreground="green">{0}</span>'.format(npu_status)))
+            self.logger.info(_("设备: {soc}, 内核: {kernel}, NPU: {npu}").format(
+                soc=soc, kernel=kernel, npu=npu_status))
         threading.Thread(target=_load, daemon=True).start()
 
     # ========== Tab1: 平台验证 ==========
@@ -1645,46 +1673,46 @@ class NPUTestWindow(Gtk.Window):
         tab.set_margin_start(8)
         tab.set_margin_end(8)
         tab.set_margin_top(8)
-        self.notebook.append_page(tab, Gtk.Label(label="🔍 平台验证"))
+        self.notebook.append_page(tab, Gtk.Label(label=_("🔍 平台验证")))
 
         desc = Gtk.Label(xalign=0)
-        desc.set_markup('<span size="small" foreground="gray">'
-                        '调用 snpe/qnn-platform-validator 验证 DSP(HTP/NPU)、GPU runtime 可用性</span>')
+        desc.set_markup(_('<span size="small" foreground="gray">'
+                          '调用 snpe/qnn-platform-validator 验证 DSP(HTP/NPU)、GPU runtime 可用性</span>'))
         tab.pack_start(desc, False, False, 0)
 
         # 工具选择
         sel = Gtk.Box(spacing=10)
         tab.pack_start(sel, False, False, 0)
-        sel.pack_start(Gtk.Label(label="验证工具:"), False, False, 0)
+        sel.pack_start(Gtk.Label(label=_("验证工具:")), False, False, 0)
         self.cmb_pf_tool = Gtk.ComboBoxText()
         self.cmb_pf_tool.append_text("SNPE platform-validator (dsp/gpu)")
         self.cmb_pf_tool.append_text("QNN platform-validator (dsp/gpu)")
         self.cmb_pf_tool.set_active(0)
         sel.pack_start(self.cmb_pf_tool, False, False, 0)
 
-        self.chk_version = Gtk.CheckButton(label="同时查询版本信息 (--coreVersion --libVersion)")
+        self.chk_version = Gtk.CheckButton(label=_("同时查询版本信息 (--coreVersion --libVersion)"))
         sel.pack_start(self.chk_version, False, False, 0)
 
-        self.btn_validate = Gtk.Button(label="▶ 开始验证")
+        self.btn_validate = Gtk.Button(label=_("▶ 开始验证"))
         self.btn_validate.get_style_context().add_class("suggested-action")
         self.btn_validate.connect("clicked", self.on_validate_clicked)
         sel.pack_end(self.btn_validate, False, False, 0)
 
         # 结果区
-        result_frame = Gtk.Frame(label="验证结果")
+        result_frame = Gtk.Frame(label=_("验证结果"))
         sw = Gtk.ScrolledWindow()
         self.pf_result_text = Gtk.TextView()
         self.pf_result_text.set_editable(False)
         self.pf_result_text.set_monospace(True)
         self.pf_result_text.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         self.pf_result_text.get_buffer().set_text(
-            "点击 [开始验证] 检测 NPU (DSP/HTP) 平台可用性...\n\n"
-            "SNPE 验证项:\n"
-            "  --runtime dsp   Hexagon DSP/HTP (即 NPU)\n"
-            "  --runtime gpu   Adreno GPU (需要 OpenCL)\n\n"
-            "QNN 验证项:\n"
-            "  --backend dsp   QNN DSP 后端\n"
-            "  --backend gpu   QNN GPU 后端\n")
+            _("点击 [开始验证] 检测 NPU (DSP/HTP) 平台可用性...\n\n"
+              "SNPE 验证项:\n"
+              "  --runtime dsp   Hexagon DSP/HTP (即 NPU)\n"
+              "  --runtime gpu   Adreno GPU (需要 OpenCL)\n\n"
+              "QNN 验证项:\n"
+              "  --backend dsp   QNN DSP 后端\n"
+              "  --backend gpu   QNN GPU 后端\n"))
         sw.add(self.pf_result_text)
         result_frame.add(sw)
         tab.pack_start(result_frame, True, True, 0)
@@ -1693,7 +1721,7 @@ class NPUTestWindow(Gtk.Window):
         tool = self.cmb_pf_tool.get_active()
         want_ver = self.chk_version.get_active()
         self.btn_validate.set_sensitive(False)
-        self.btn_validate.set_label("⏳ 验证中...")
+        self.btn_validate.set_label(_("⏳ 验证中..."))
 
         def run():
             results = {}
@@ -1703,7 +1731,7 @@ class NPUTestWindow(Gtk.Window):
                     cmd = [SNPE_PF_VALIDATOR, "--runtime", rt, "--testRuntime"]
                     if want_ver:
                         cmd += ["--coreVersion", "--libVersion"]
-                    self.logger.info(f"SNPE 验证 runtime={rt}")
+                    self.logger.info(_("SNPE 验证 runtime={rt}").format(rt=rt))
                     out, rc = run_cmd(cmd, timeout=60)
                     results[rt] = (out, rc, parse_snpe_pf(out))
                 GLib.idle_add(self.on_validate_done, "snpe", results)
@@ -1713,7 +1741,7 @@ class NPUTestWindow(Gtk.Window):
                     cmd = [QNN_PF_VALIDATOR, "--backend", bk, "--testBackend"]
                     if want_ver:
                         cmd += ["--coreVersion", "--libVersion"]
-                    self.logger.info(f"QNN 验证 backend={bk}")
+                    self.logger.info(_("QNN 验证 backend={bk}").format(bk=bk))
                     out, rc = run_cmd(cmd, timeout=60)
                     results[bk] = (out, rc, parse_qnn_pf(out))
                 GLib.idle_add(self.on_validate_done, "qnn", results)
@@ -1721,14 +1749,15 @@ class NPUTestWindow(Gtk.Window):
 
     def on_validate_done(self, tool, results):
         self.btn_validate.set_sensitive(True)
-        self.btn_validate.set_label("▶ 开始验证")
+        self.btn_validate.set_label(_("▶ 开始验证"))
         buf = self.pf_result_text.get_buffer()
         buf.set_text("")
 
         def a(text):
             buf.insert(buf.get_end_iter(), text)
 
-        a(f"{'='*55}\n  🔍 NPU 平台验证结果 ({tool.upper()})\n{'='*55}\n\n")
+        a(f"{'='*55}\n  " + _("🔍 NPU 平台验证结果 ({tool})").format(
+            tool=tool.upper()) + f"\n{'='*55}\n\n")
         all_ok = True
         for key in results:
             out, rc, info = results[key]
@@ -1745,18 +1774,20 @@ class NPUTestWindow(Gtk.Window):
                 all_ok = False
             else:
                 icon = "⚠️"
-            a(f"  状态: {icon} {status}\n")
+            a(_("  状态: {icon} {status}").format(icon=icon, status=status) + "\n")
             if 'prereq' in info and key in info['prereq']:
-                a(f"  前置条件: {info['prereq'][key]}\n")
+                a(_("  前置条件: {v}").format(v=info['prereq'][key]) + "\n")
             if 'summary' in info:
                 for k, v in info['summary'].items():
                     a(f"  {k}: {v}\n")
-            a(f"  返回码: {rc}\n\n")
-            a(f"  --- 原始输出 ---\n{out}\n\n")
+            a(_("  返回码: {rc}").format(rc=rc) + "\n\n")
+            a(_("  --- 原始输出 ---") + "\n" + out + "\n\n")
 
-        status_text = "✅ 全部通过" if all_ok else "⚠️ 部分不可用"
-        self.statusbar.set_markup(f'<span foreground="{"green" if all_ok else "orange"}">{status_text}</span>')
-        self.logger.info(f"平台验证完成: {status_text}")
+        status_text = _("✅ 全部通过") if all_ok else _("⚠️ 部分不可用")
+        self.statusbar.set_markup(
+            '<span foreground="{0}">{1}</span>'.format(
+                "green" if all_ok else "orange", status_text))
+        self.logger.info(_("平台验证完成: {status}").format(status=status_text))
 
     # ========== Tab2: 单次推理 ==========
     def build_inference_tab(self):
@@ -1764,12 +1795,12 @@ class NPUTestWindow(Gtk.Window):
         tab.set_margin_start(8)
         tab.set_margin_end(8)
         tab.set_margin_top(8)
-        self.notebook.append_page(tab, Gtk.Label(label="🧠 单次推理"))
+        self.notebook.append_page(tab, Gtk.Label(label=_("🧠 单次推理")))
 
         desc = Gtk.Label(xalign=0)
-        desc.set_markup('<span size="small" foreground="gray">'
-                        '加载 .dlc(snpe-net-run)/.so(qnn-net-run) 模型做单次推理, 测试 CPU/GPU/DSP(NPU) 各 runtime 耗时. '
-                        '.onnx 源模型需先离线转换为 .so</span>')
+        desc.set_markup(_('<span size="small" foreground="gray">'
+                          '加载 .dlc(snpe-net-run)/.so(qnn-net-run) 模型做单次推理, 测试 CPU/GPU/DSP(NPU) 各 runtime 耗时. '
+                          '.onnx 源模型需先离线转换为 .so</span>'))
         tab.pack_start(desc, False, False, 0)
 
         # 选择区
@@ -1778,7 +1809,7 @@ class NPUTestWindow(Gtk.Window):
 
         # 模型
         mb = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        mb.pack_start(Gtk.Label(label="模型:", xalign=0), False, False, 0)
+        mb.pack_start(Gtk.Label(label=_("模型:"), xalign=0), False, False, 0)
         self.cmb_model = Gtk.ComboBoxText()
         self.models = find_models()
         self._refresh_model_combo()
@@ -1787,7 +1818,7 @@ class NPUTestWindow(Gtk.Window):
 
         # 图片
         ib = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        ib.pack_start(Gtk.Label(label="测试图片:", xalign=0), False, False, 0)
+        ib.pack_start(Gtk.Label(label=_("测试图片:"), xalign=0), False, False, 0)
         img_hbox = Gtk.Box(spacing=4)
         self.cmb_image = Gtk.ComboBoxText()
         self.images = find_images()
@@ -1799,7 +1830,7 @@ class NPUTestWindow(Gtk.Window):
             lambda c: self.load_image_preview(self.cmb_image, self.images, self.inf_img_widget))
         img_hbox.pack_start(self.cmb_image, True, True, 0)
         btn_upload = Gtk.Button(label="📁")
-        btn_upload.set_tooltip_text("上传本地图片")
+        btn_upload.set_tooltip_text(_("上传本地图片"))
         btn_upload.set_size_request(32, -1)
         btn_upload.connect("clicked",
             lambda b: self.on_upload_image(self.cmb_image, self.images, self.inf_img_widget))
@@ -1821,7 +1852,7 @@ class NPUTestWindow(Gtk.Window):
         # 按钮
         bbtn = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         bbtn.pack_start(Gtk.Label(label=""), False, False, 0)
-        self.btn_infer = Gtk.Button(label="▶ 开始推理")
+        self.btn_infer = Gtk.Button(label=_("▶ 开始推理"))
         self.btn_infer.get_style_context().add_class("suggested-action")
         self.btn_infer.connect("clicked", self.on_infer_clicked)
         bbtn.pack_start(self.btn_infer, False, False, 0)
@@ -1831,25 +1862,26 @@ class NPUTestWindow(Gtk.Window):
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         tab.pack_start(paned, True, True, 0)
 
-        img_frame = Gtk.Frame(label="输入图片")
+        img_frame = Gtk.Frame(label=_("输入图片"))
         self.inf_img_widget = Gtk.Image()
         self.inf_img_widget.set_size_request(280, 280)
         img_frame.add(self.inf_img_widget)
         paned.pack1(img_frame, resize=False, shrink=False)
 
-        result_frame = Gtk.Frame(label="推理结果")
+        result_frame = Gtk.Frame(label=_("推理结果"))
         sw = Gtk.ScrolledWindow()
         self.inf_result_text = Gtk.TextView()
         self.inf_result_text.set_editable(False)
         self.inf_result_text.set_monospace(True)
         self.inf_result_text.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self.inf_result_text.get_buffer().set_text("选择模型和图片, 点击 [开始推理]...\n\n"
-            "模型类型说明:\n"
-            "  .dlc  -> snpe-net-run (SNPE), 板上可直接推理 ✓\n"
-            "  .so   -> qnn-net-run (QNN context binary), 可直接推理 ✓\n"
-            "  .onnx -> AI Hub 源模型, 需在 PC 上用 qairt-converter\n"
-            "          转成 .so 后才能用 qnn-net-run 跑\n\n"
-            "自带 yolov7.dlc 开箱即用; yolov7_onnx 为源模型参考。")
+        self.inf_result_text.get_buffer().set_text(
+            _("选择模型和图片, 点击 [开始推理]...\n\n"
+              "模型类型说明:\n"
+              "  .dlc  -> snpe-net-run (SNPE), 板上可直接推理 ✓\n"
+              "  .so   -> qnn-net-run (QNN context binary), 可直接推理 ✓\n"
+              "  .onnx -> AI Hub 源模型, 需在 PC 上用 qairt-converter\n"
+              "          转成 .so 后才能用 qnn-net-run 跑\n\n"
+              "自带 yolov7.dlc 开箱即用; yolov7_onnx 为源模型参考。"))
         sw.add(self.inf_result_text)
         result_frame.add(sw)
         paned.pack2(result_frame, resize=True, shrink=False)
@@ -1873,10 +1905,10 @@ class NPUTestWindow(Gtk.Window):
         mi = self.cmb_model.get_active()
         ii = self.cmb_image.get_active()
         if mi < 0:
-            self.show_error("请选择模型\n(将 .dlc/.onnx 文件放到 /usr/share/model/ 后点刷新)")
+            self.show_error(_("请选择模型\n(将 .dlc/.onnx 文件放到 /usr/share/model/ 后点刷新)"))
             return
         if ii < 0:
-            self.show_error("请选择测试图片")
+            self.show_error(_("请选择测试图片"))
             return
         model = self.models[mi]
         image = self.images[ii]
@@ -1886,28 +1918,33 @@ class NPUTestWindow(Gtk.Window):
 
         if backend == "onnx_reference":
             self.show_error(
-                "此 .onnx 是 Qualcomm AI Hub 源模型, 无法在板上直接推理。\n"
-                "需在 PC 上用 qairt-converter (qnn-onnx-converter) 转成\n"
-                "QNN context binary (.so) 后, 用 qnn-net-run --model 运行。\n\n"
-                "如需在板上直接测试, 请选 yolov7.dlc (SNPE 容器)。")
+                _("此 .onnx 是 Qualcomm AI Hub 源模型, 无法在板上直接推理。\n"
+                  "需在 PC 上用 qairt-converter (qnn-onnx-converter) 转成\n"
+                  "QNN context binary (.so) 后, 用 qnn-net-run --model 运行。\n\n"
+                  "如需在板上直接测试, 请选 yolov7.dlc (SNPE 容器)。"))
             return
         if backend == "snpe":
             if not os.path.exists(SNPE_NET_RUN):
-                self.show_error(f"snpe-net-run 不存在: {SNPE_NET_RUN}\n请确认 qcom-snpe-sdk 已安装")
+                self.show_error(_("snpe-net-run 不存在: {path}\n请确认 qcom-snpe-sdk 已安装").format(
+                    path=SNPE_NET_RUN))
                 return
             runtime_flag = ["--use_dsp", "--use_gpu", ""][rt_idx]
         else:  # qnn (.so)
             if not os.path.exists(QNN_NET_RUN):
-                self.show_error(f"qnn-net-run 不存在: {QNN_NET_RUN}\n请确认 qcom-qnn-sdk 已安装")
+                self.show_error(_("qnn-net-run 不存在: {path}\n请确认 qcom-qnn-sdk 已安装").format(
+                    path=QNN_NET_RUN))
                 return
             runtime_flag = ["--backend libQnnHtp.so",
                             "--backend libQnnGpu.so",
                             "--backend libQnnCpu.so"][rt_idx]
 
         self.btn_infer.set_sensitive(False)
-        self.btn_infer.set_label("⏳ 推理中...")
-        self.logger.info(f"推理: model={os.path.basename(model)} image={os.path.basename(image)} "
-                         f"backend={backend} runtime={runtime_name}")
+        self.btn_infer.set_label(_("⏳ 推理中..."))
+        self.logger.info(_("推理: model={model} image={image} backend={backend} "
+                          "runtime={rt}").format(
+                              model=os.path.basename(model),
+                              image=os.path.basename(image),
+                              backend=backend, rt=runtime_name))
 
         def run():
             out_dir = tempfile.mkdtemp(prefix="npu_out_", dir="/tmp")
@@ -1927,7 +1964,8 @@ class NPUTestWindow(Gtk.Window):
                         f.write(raw_bytes)
                     input_file = raw_path
                 except Exception as e:
-                    self.logger.warning(f"图片预处理失败, 回退原始文件: {e}")
+                    self.logger.warning(_("图片预处理失败, 回退原始文件: {err}").format(
+                        err=e))
 
             # 常驻会话优先: 和 YOLO 页共用同一个 npu-daemon, 点一下只付推理时间.
             # 起不来(或模型尺寸不是 640)就回退 snpe-net-run.
@@ -1937,8 +1975,9 @@ class NPUTestWindow(Gtk.Window):
                     d, ms = r
                     shutil.rmtree(out_dir, ignore_errors=True)
                     lat = {"avg_ms": ms, "total_ms": ms, "clock_mhz": 0.0}
-                    out = (f"npu-daemon[{d.runtime}]: execute {ms:.2f} ms "
-                           f"(常驻会话, 无进程启动/图初始化开销)")
+                    out = (_("npu-daemon[{rt}]: execute {ms:.2f} ms "
+                             "(常驻会话, 无进程启动/图初始化开销)").format(
+                                 rt=d.runtime, ms=ms))
                     GLib.idle_add(self.on_infer_done, out, 0, model, image,
                                   runtime_name, d.dir, backend, ms, lat)
                     return
@@ -1968,7 +2007,7 @@ class NPUTestWindow(Gtk.Window):
 
     def on_infer_done(self, raw, rc, model, image, runtime, out_dir, backend="snpe", call_ms=0, lat=None):
         self.btn_infer.set_sensitive(True)
-        self.btn_infer.set_label("▶ 开始推理")
+        self.btn_infer.set_label(_("▶ 开始推理"))
         info = parse_inference(raw)
         buf = self.inf_result_text.get_buffer()
         buf.set_text("")
@@ -1976,20 +2015,21 @@ class NPUTestWindow(Gtk.Window):
         def a(text):
             buf.insert(buf.get_end_iter(), text)
 
-        a(f"{'='*55}\n  🧠 {backend.upper()} 单次推理结果\n{'='*55}\n\n")
-        a(f"模型: {os.path.basename(model)}\n")
-        a(f"图片: {os.path.basename(image)}\n")
-        a(f"Runtime: {runtime}\n")
-        a(f"返回码: {rc}\n\n")
+        a(f"{'='*55}\n  " + _("🧠 {backend} 单次推理结果").format(
+            backend=backend.upper()) + f"\n{'='*55}\n\n")
+        a(_("模型: {name}").format(name=os.path.basename(model)) + "\n")
+        a(_("图片: {name}").format(name=os.path.basename(image)) + "\n")
+        a(_("Runtime: {rt}").format(rt=runtime) + "\n")
+        a(_("返回码: {rc}").format(rc=rc) + "\n\n")
         if 'build_ver' in info:
-            a(f"SNPE 版本: {info['build_ver']}\n")
+            a(_("SNPE 版本: {v}").format(v=info['build_ver']) + "\n")
         if 'model_name' in info:
-            a(f"模型名: {info['model_name']}\n")
+            a(_("模型名: {v}").format(v=info['model_name']) + "\n")
         if 'status' in info:
-            a(f"执行状态: {info['status']}\n")
+            a(_("执行状态: {v}").format(v=info['status']) + "\n")
         # 耗时统计: NPU 延迟取自本次运行的 SNPEDiag.log (snpe-diagview),
         # 端到端耗时是真正点一次要等的时间 (预处理 + snpe-net-run + 后处理).
-        a(f"\n{'─'*55}\n  ⚡ 耗时统计\n{'─'*55}\n")
+        a(f"\n{'─'*55}\n  " + _("⚡ 耗时统计") + f"\n{'─'*55}\n")
         # 拆成两行, 否则单帧冷跑的 Total 会被误当成"NPU 变慢了":
         #   NPU计算 = DSP 上跑网络的时间 (转速随 DVFS 变, 单帧 ~0.9GHz / 满载 ~1.4GHz)
         #   单次推理 = 计算 + 4.9MB 输入和 3 路输出张量的 fastrpc 搬运
@@ -1997,35 +2037,43 @@ class NPUTestWindow(Gtk.Window):
         tot_ms = (lat or {}).get('total_ms', 0)
         a(fmt_timing(lat, call_ms, runtime))
         if 'avg_layer_ms' in info:
-            a(f"平均层耗时: {info['avg_layer_ms']:.2f} ms\n")
+            a(_("平均层耗时: {v:.2f} ms").format(v=info['avg_layer_ms']) + "\n")
         if 'max_ms' in info:
-            a(f"最慢单层: {info['max_ms']:.2f} ms\n")
+            a(_("最慢单层: {v:.2f} ms").format(v=info['max_ms']) + "\n")
         if 'fps' in info:
-            a(f"FPS: {info['fps']:.1f}\n")
-        a(f"\n{'─'*55}\n  📋 原始输出\n{'─'*55}\n{raw}")
+            a("FPS: {0:.1f}".format(info['fps']) + "\n")
+        a(f"\n{'─'*55}\n  " + _("📋 原始输出") + f"\n{'─'*55}\n" + raw)
         # 输出目录信息
         try:
             outs = os.listdir(out_dir)
             if outs:
-                a(f"\n{'─'*55}\n  📂 输出文件 ({out_dir})\n{'─'*55}\n")
+                a(f"\n{'─'*55}\n  " + _("📂 输出文件 ({dir})").format(dir=out_dir)
+                  + f"\n{'─'*55}\n")
                 for f in sorted(outs):
                     p = os.path.join(out_dir, f)
                     a(f"  {f}  ({os.path.getsize(p)} bytes)\n")
         except:
             pass
-        a(f"\n输出目录: {out_dir}\n")
+        a("\n" + _("输出目录: {dir}").format(dir=out_dir) + "\n")
 
         # 状态栏优先显示 NPU 纯推理延迟, 没有则回退调用总耗时
         sb_ms = npu_ms if npu_ms > 0 else (info.get('total_ms', 0) or call_ms)
-        status = info.get('status', '完成' if rc == 0 else '失败')
+        status = info.get('status', _("完成") if rc == 0 else _("失败"))
         if sb_ms > 0:
             self.statusbar.set_markup(
-                f'<span foreground="{"green" if rc==0 else "red"}">'
-                f'{"✅" if rc==0 else "❌"} 推理{status} - {sb_ms:.2f}ms / {1000.0/sb_ms:.1f} FPS</span>')
+                '<span foreground="{color}">{icon} {msg}</span>'.format(
+                    color="green" if rc == 0 else "red",
+                    icon="✅" if rc == 0 else "❌",
+                    msg=_("推理{status} - {ms:.2f}ms / {fps:.1f} FPS").format(
+                        status=status, ms=sb_ms, fps=1000.0 / sb_ms)))
         else:
             self.statusbar.set_markup(
-                f'<span foreground="{"green" if rc==0 else "red"}">{"✅" if rc==0 else "❌"} 推理{status}</span>')
-        self.logger.info(f"推理完成: rc={rc}, NPU={npu_ms:.2f}ms, 调用={call_ms:.0f}ms")
+                '<span foreground="{color}">{icon} {msg}</span>'.format(
+                    color="green" if rc == 0 else "red",
+                    icon="✅" if rc == 0 else "❌",
+                    msg=_("推理{status}").format(status=status)))
+        self.logger.info(_("推理完成: rc={rc}, NPU={npu:.2f}ms, 调用={call:.0f}ms").format(
+            rc=rc, npu=npu_ms, call=call_ms))
 
     # ========== Tab YOLO: 目标检测 ==========
     def build_yolo_tab(self):
@@ -2033,12 +2081,12 @@ class NPUTestWindow(Gtk.Window):
         tab.set_margin_start(8)
         tab.set_margin_end(8)
         tab.set_margin_top(8)
-        self.notebook.append_page(tab, Gtk.Label(label="🎯 YOLO检测"))
+        self.notebook.append_page(tab, Gtk.Label(label=_("🎯 YOLO检测")))
 
         desc = Gtk.Label(xalign=0)
-        desc.set_markup('<span size="small" foreground="gray">'
-                        '加载 YOLO .dlc(snpe)/.so(qnn) 模型做目标检测, 解析检测框并渲染到图片上. '
-                        '自带 yolov7.dlc 可直接检测; yolov7_onnx 为源模型需先转换</span>')
+        desc.set_markup(_('<span size="small" foreground="gray">'
+                          '加载 YOLO .dlc(snpe)/.so(qnn) 模型做目标检测, 解析检测框并渲染到图片上. '
+                          '自带 yolov7.dlc 可直接检测; yolov7_onnx 为源模型需先转换</span>'))
         tab.pack_start(desc, False, False, 0)
 
         # 选择区
@@ -2047,12 +2095,12 @@ class NPUTestWindow(Gtk.Window):
 
         # YOLO 模型
         mb = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        mb.pack_start(Gtk.Label(label="YOLO 模型:", xalign=0), False, False, 0)
+        mb.pack_start(Gtk.Label(label=_("YOLO 模型:"), xalign=0), False, False, 0)
         self.cmb_yolo_model = Gtk.ComboBoxText()
         self._yolo_models = []
         self._refresh_yolo_models()
         btn_refresh_yolo = Gtk.Button(label="🔄")
-        btn_refresh_yolo.set_tooltip_text("刷新模型列表")
+        btn_refresh_yolo.set_tooltip_text(_("刷新模型列表"))
         btn_refresh_yolo.set_size_request(32, -1)
         btn_refresh_yolo.connect("clicked", lambda b: self._refresh_yolo_models())
         ym_hbox = Gtk.Box(spacing=4)
@@ -2063,7 +2111,7 @@ class NPUTestWindow(Gtk.Window):
 
         # 图片
         ib = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        ib.pack_start(Gtk.Label(label="测试图片:", xalign=0), False, False, 0)
+        ib.pack_start(Gtk.Label(label=_("测试图片:"), xalign=0), False, False, 0)
         yimg_hbox = Gtk.Box(spacing=4)
         self.cmb_yolo_image = Gtk.ComboBoxText()
         self._yolo_images = find_images()
@@ -2081,7 +2129,7 @@ class NPUTestWindow(Gtk.Window):
             lambda c: self.load_image_preview(self.cmb_yolo_image, self._yolo_images, self.yolo_img_widget))
         yimg_hbox.pack_start(self.cmb_yolo_image, True, True, 0)
         btn_yupload = Gtk.Button(label="📁")
-        btn_yupload.set_tooltip_text("上传本地图片")
+        btn_yupload.set_tooltip_text(_("上传本地图片"))
         btn_yupload.set_size_request(32, -1)
         btn_yupload.connect("clicked",
             lambda b: self.on_upload_image(self.cmb_yolo_image, self._yolo_images, self.yolo_img_widget))
@@ -2102,21 +2150,21 @@ class NPUTestWindow(Gtk.Window):
         # 按钮
         bbtn = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         bbtn.pack_start(Gtk.Label(label=""), False, False, 0)
-        self.btn_yolo = Gtk.Button(label="▶ 开始检测")
+        self.btn_yolo = Gtk.Button(label=_("▶ 开始检测"))
         self.btn_yolo.get_style_context().add_class("suggested-action")
         self.btn_yolo.connect("clicked", self.on_yolo_clicked)
         bbtn.pack_start(self.btn_yolo, False, False, 0)
 
         # 一键量三档: 同一张图跑 CPU / GPU / NPU, 把 delay 差摆在面板上
-        self.btn_cmp = Gtk.Button(label="⚡ 三档对比")
+        self.btn_cmp = Gtk.Button(label=_("⚡ 三档对比"))
         self.btn_cmp.set_tooltip_text(
-            "同一模型同一张图依次跑 CPU / Adreno GPU / HTP(NPU), 用实测延迟对比")
+            _("同一模型同一张图依次跑 CPU / Adreno GPU / HTP(NPU), 用实测延迟对比"))
         self.btn_cmp.connect("clicked", self.on_compare_clicked)
         bbtn.pack_start(self.btn_cmp, False, False, 0)
 
         # 摄像头在独立 Tab 里看(占满窗口, 不跟静态图抢地方)
-        self.btn_cam = Gtk.Button(label="📷 摄像头实时识别")
-        self.btn_cam.set_tooltip_text("/dev/video10 (CamxBridge) 实时画面 + YOLO 叠框")
+        self.btn_cam = Gtk.Button(label=_("📷 摄像头实时识别"))
+        self.btn_cam.set_tooltip_text(_("/dev/video10 (CamxBridge) 实时画面 + YOLO 叠框"))
         self.btn_cam.connect("clicked", self.on_cam_clicked)
         bbtn.pack_start(self.btn_cam, False, False, 0)
         sel.pack_start(bbtn, False, False, 0)
@@ -2125,26 +2173,26 @@ class NPUTestWindow(Gtk.Window):
         paned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
         tab.pack_start(paned, True, True, 0)
 
-        img_frame = Gtk.Frame(label="图片 (输入/输出)")
+        img_frame = Gtk.Frame(label=_("图片 (输入/输出)"))
         self.yolo_img_widget = Gtk.Image()
         self.yolo_img_widget.set_size_request(320, 320)
         img_frame.add(self.yolo_img_widget)
         paned.pack1(img_frame, resize=False, shrink=False)
 
-        result_frame = Gtk.Frame(label="检测结果")
+        result_frame = Gtk.Frame(label=_("检测结果"))
         sw = Gtk.ScrolledWindow()
         self.yolo_result_text = Gtk.TextView()
         self.yolo_result_text.set_editable(False)
         self.yolo_result_text.set_monospace(True)
         self.yolo_result_text.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
         self.yolo_result_text.get_buffer().set_text(
-            "本工具自带 YOLOv7 模型:\n\n"
-            "  yolov7.dlc        SNPE 容器, 板上可直接检测 ✓\n"
-            "  yolov7_onnx/      AI Hub ONNX 源模型, 需在 PC 上用\n"
-            "                    qairt-converter 转成 .so 后才能跑\n\n"
-            "选择 yolov7.dlc + 图片 + runtime, 点 [开始检测]即可。\n"
-            "也可放入自己的 .dlc / .so 模型到\n"
-            "/usr/share/qcom-npu-test/models/ 后点 🔄 刷新。")
+            _("本工具自带 YOLOv7 模型:\n\n"
+              "  yolov7.dlc        SNPE 容器, 板上可直接检测 ✓\n"
+              "  yolov7_onnx/      AI Hub ONNX 源模型, 需在 PC 上用\n"
+              "                    qairt-converter 转成 .so 后才能跑\n\n"
+              "选择 yolov7.dlc + 图片 + runtime, 点 [开始检测]即可。\n"
+              "也可放入自己的 .dlc / .so 模型到\n"
+              "/usr/share/qcom-npu-test/models/ 后点 🔄 刷新。"))
         sw.add(self.yolo_result_text)
         result_frame.add(sw)
         paned.pack2(result_frame, resize=True, shrink=False)
@@ -2154,11 +2202,10 @@ class NPUTestWindow(Gtk.Window):
 
     # ---------- 常驻会话预热 ----------
     def warm_sessions(self):
-        """开界面就把常驻会话拉起来, 不管用户先点哪个 Tab.
-
-        CPU 档只建会话 ~0.1s 却要多占 ~200MB (每层都留 float buffer), 不常驻,
-        第一次用到时再起, 起来后一直留着.
-        """
+        # 开界面就把常驻会话拉起来, 不管用户先点哪个 Tab.
+        #
+        # CPU 档只建会话 ~0.1s 却要多占 ~200MB (每层都留 float buffer), 不常驻,
+        # 第一次用到时再起, 起来后一直留着.
         log = logging.getLogger("npu_test")
         warm = os.path.join(MODEL_DIRS[0], "yolov7.dlc")
         if not os.path.exists(warm):
@@ -2167,8 +2214,9 @@ class NPUTestWindow(Gtk.Window):
             for rt in ("dsp", "gpu"):
                 t0 = time.monotonic()
                 d = get_daemon(warm, rt)
-                log.info(f"常驻会话 {rt}: "
-                         + (f"就绪 {time.monotonic() - t0:.2f}s" if d else "启动失败"))
+                log.info(_("常驻会话 {rt}: ").format(rt=rt)
+                         + (_("就绪 {s:.2f}s").format(s=time.monotonic() - t0)
+                            if d else _("启动失败")))
         threading.Thread(target=_warm, daemon=True).start()
 
     # ---------- 摄像头实时预览 ----------
@@ -2178,27 +2226,27 @@ class NPUTestWindow(Gtk.Window):
             return
         if self._mm_on:
             # 同一个 /dev/video10, 只能有一个读者
-            self.logger.info("摄像头实时识别: 先停掉多模态预览")
+            self.logger.info(_("摄像头实时识别: 先停掉多模态预览"))
             self._mm_stop()
         mi = self.cmb_yolo_model.get_active()
         if mi < 0 or mi >= len(self._yolo_models):
-            self.show_error("请先选择 YOLO 模型")
+            self.show_error(_("请先选择 YOLO 模型"))
             return
         model = self._yolo_models[mi]
         if model_backend(model) != "snpe":
-            self.show_error("摄像头实时识别只支持 SNPE .dlc 模型\n请选 yolov7.dlc")
+            self.show_error(_("摄像头实时识别只支持 SNPE .dlc 模型\n请选 yolov7.dlc"))
             return
         if get_daemon(model, "dsp") is None:
-            self.show_error("npu-daemon 起不来, 看日志")
+            self.show_error(_("npu-daemon 起不来, 看日志"))
             return
         self._cam_model = model
         self._cam_on = True
         self.notebook.set_current_page(self._cam_tab_idx)
-        self.btn_cam_tab.set_label("⏹ 停止")
+        self.btn_cam_tab.set_label(_("⏹ 停止"))
         # 预览线程共用一个 daemon 会话, 期间禁止点检测, 否则输出 raw 会串
         self.btn_yolo.set_sensitive(False)
         self.btn_cmp.set_sensitive(False)
-        self.logger.info("摄像头实时识别: 启动")
+        self.logger.info(_("摄像头实时识别: 启动"))
         threading.Thread(target=self._cam_loop, daemon=True).start()
 
     def _cam_stop(self):
@@ -2218,21 +2266,20 @@ class NPUTestWindow(Gtk.Window):
 
     def _cam_stopped(self):
         try:
-            self.btn_cam_tab.set_label("▶ 开始")
-            self.lbl_cam.set_text("/dev/video10 · CamxBridge 1280x720 · YOLO on HTP")
+            self.btn_cam_tab.set_label(_("▶ 开始"))
+            self.lbl_cam.set_text(_("/dev/video10 · CamxBridge 1280x720 · YOLO on HTP"))
             self.btn_yolo.set_sensitive(True)
             self.btn_cmp.set_sensitive(True)
-            self.logger.info("摄像头实时识别: 已停止")
+            self.logger.info(_("摄像头实时识别: 已停止"))
         except Exception:
             pass    # 窗口正在销毁
 
     def _cam_loop(self):
-        """取流线程 + 推理线程, 分开跑.
-
-        取流线程只干一件事: 把管道抽干, 永远只保留最新一帧. 推理慢(40ms/帧)时
-        丢掉中间的帧, 管道也不会被我们压住; 之前取流和推理串在一起, 一慢就落后
-        于摄像头, v4l2loopback 的生产端就会覆盖正在读的缓冲, 画面就撕裂了.
-        """
+        # 取流线程 + 推理线程, 分开跑.
+        #
+        # 取流线程只干一件事: 把管道抽干, 永远只保留最新一帧. 推理慢(40ms/帧)时
+        # 丢掉中间的帧, 管道也不会被我们压住; 之前取流和推理串在一起, 一慢就落后
+        # 于摄像头, v4l2loopback 的生产端就会覆盖正在读的缓冲, 画面就撕裂了.
         w, h = CAM_W, CAM_H
         nbytes = w * h * 3
         cmd = camera_pipeline_cmd(w, h)
@@ -2240,7 +2287,7 @@ class NPUTestWindow(Gtk.Window):
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                  stderr=subprocess.DEVNULL, bufsize=nbytes * 2)
         except Exception as e:
-            self.logger.error(f"摄像头启动失败: {e}")
+            self.logger.error(_("摄像头启动失败: {err}").format(err=e))
             self._cam_on = False
             GLib.idle_add(self._cam_stopped)
             return
@@ -2260,7 +2307,7 @@ class NPUTestWindow(Gtk.Window):
                         break
                     got += n
                 if got < nbytes:
-                    self.logger.warning("摄像头流中断")
+                    self.logger.warning(_("摄像头流中断"))
                     break
                 with self._cam_cond:
                     # 换缓冲而不是就地写: 推理线程正持有的那份不能被改
@@ -2277,7 +2324,7 @@ class NPUTestWindow(Gtk.Window):
                 GLib.idle_add(self._cam_stopped)
 
     def _cam_infer_loop(self, w, h):
-        """只处理最新帧: 跳过积压, 画面永远是最新的, 检测框和这一帧同源不漂移."""
+        # 只处理最新帧: 跳过积压, 画面永远是最新的, 检测框和这一帧同源不漂移.
         seq = 0
         now = time.monotonic()
         frames, t_log, t_fps, infer_ms = 0, now, now, 0.0
@@ -2298,7 +2345,7 @@ class NPUTestWindow(Gtk.Window):
                 dets, infer_ms = yolo_detect_pixbuf(self._cam_model, pb)
             except Exception as e:
                 dets = []
-                self.logger.warning(f"摄像头检测失败: {e}")
+                self.logger.warning(_("摄像头检测失败: {err}").format(err=e))
             with self._cam_lock:
                 # 帧 + 框 + HUD 一起换, 不会错位
                 self._cam_frame = (pb, dets, hud)
@@ -2308,14 +2355,16 @@ class NPUTestWindow(Gtk.Window):
             if now - t_fps >= 1.0:
                 fps = frames / (now - t_fps)
                 frames, t_fps = 0, now
-                hud = f"{fps:.1f} FPS · {len(dets)} 目标"
+                hud = _("{fps:.1f} FPS · {n} 目标").format(fps=fps, n=len(dets))
                 GLib.idle_add(self.lbl_cam.set_text,
-                              f"/dev/video10 · 1280x720 · {fps:.1f} FPS · "
-                              f"NPU {infer_ms:.1f} ms · {len(dets)} 个目标")
+                              _("/dev/video10 · 1280x720 · {fps:.1f} FPS · "
+                                "NPU {ms:.1f} ms · {n} 个目标").format(
+                                    fps=fps, ms=infer_ms, n=len(dets)))
             if dets and now - t_log >= 3.0:   # 只在识别到目标时才记日志
-                self.logger.info(f"摄像头识别: {dets[0]['name']} 等 {len(dets)} 个目标, "
-                                 f"NPU {infer_ms:.2f} ms, "
-                                 f"{fps:.1f} FPS")
+                self.logger.info(_("摄像头识别: {name} 等 {n} 个目标, "
+                                   "NPU {ms:.2f} ms, {fps:.1f} FPS").format(
+                                       name=dets[0]['name'], n=len(dets),
+                                       ms=infer_ms, fps=fps))
                 t_log = now
 
     def _on_cam_draw(self, area, ctx):
@@ -2324,7 +2373,7 @@ class NPUTestWindow(Gtk.Window):
         return self._draw_frame(area, ctx, frame)
 
     def _draw_frame(self, area, ctx, frame):
-        """画面铺满 (保持比例居中) + 左上 HUD + 检测框. 摄像头/视频共用."""
+        # 画面铺满 (保持比例居中) + 左上 HUD + 检测框. 摄像头/视频共用.
         W, H = area.get_allocated_width(), area.get_allocated_height()
         ctx.set_source_rgb(0.08, 0.08, 0.08)   # 先铺底, 尺寸变化时不留残影
         ctx.rectangle(0, 0, W, H)
@@ -2384,38 +2433,38 @@ class NPUTestWindow(Gtk.Window):
         tab.set_margin_end(8)
         tab.set_margin_top(8)
         self._mm_tab_idx = self.notebook.append_page(
-            tab, Gtk.Label(label="\U0001F441 多模态测试"))
+            tab, Gtk.Label(label=_("👁 多模态测试")))
 
         desc = Gtk.Label(xalign=0)
         desc.set_line_wrap(True)
-        desc.set_markup('<span size="small" foreground="gray">'
-                        '把摄像头画面送给本地视觉模型, 问它看到了什么并输出回答. '
-                        '摄像头源与"摄像头实时"页相同 (/dev/video10), 两页互斥使用. '
-                        '本页打开即自动开始取流, 切走即释放摄像头</span>')
+        desc.set_markup(_('<span size="small" foreground="gray">'
+                          "把摄像头画面送给本地视觉模型, 问它看到了什么并输出回答. "
+                          "摄像头源与\"摄像头实时\"页相同 (/dev/video10), 两页互斥使用. "
+                          "本页打开即自动开始取流, 切走即释放摄像头</span>"))
         tab.pack_start(desc, False, False, 0)
 
         # ---- 操作栏 ----
         bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
 
         # 识别是这一页的主操作: 放大字号 + 加内边距 + 主色, 一眼能看见
-        self.btn_mm_rec = Gtk.Button(label="\U0001F50D 识别")
+        self.btn_mm_rec = Gtk.Button(label=_("🔍 识别"))
         self.btn_mm_rec.set_sensitive(False)   # 有帧之后才可点
-        self.btn_mm_rec.set_tooltip_text("把当前预览帧送给视觉模型, 问它看到了什么")
+        self.btn_mm_rec.set_tooltip_text(_("把当前预览帧送给视觉模型, 问它看到了什么"))
         self.btn_mm_rec.get_style_context().add_class("suggested-action")
         self.btn_mm_rec.set_name("vlm-recognize-btn")
         self.btn_mm_rec.set_size_request(170, 56)
         self.btn_mm_rec.connect("clicked", self.on_mm_recognize_clicked)
         bar.pack_start(self.btn_mm_rec, False, False, 0)
 
-        self.btn_mm_prev = Gtk.Button(label="\u25B6 打开预览")
+        self.btn_mm_prev = Gtk.Button(label=_("▶ 打开预览"))
         self.btn_mm_prev.connect("clicked", self.on_mm_preview_clicked)
         bar.pack_start(self.btn_mm_prev, False, False, 0)
 
         # 取流卡住时的兜底: 自动重试也不行才需要人工点一下。
         # 做小一点, 不跟识别键抢注意力。
-        self.btn_mm_reset = Gtk.Button(label="\u21BB 重置摄像头")
+        self.btn_mm_reset = Gtk.Button(label=_("↻ 重置摄像头"))
         self.btn_mm_reset.set_tooltip_text(
-            "预览不出画面时点一下: 重新释放并打开 " + CAM_DEVICE)
+            _("预览不出画面时点一下: 重新释放并打开 ") + CAM_DEVICE)
         self.btn_mm_reset.set_relief(Gtk.ReliefStyle.NONE)
         self.btn_mm_reset.set_valign(Gtk.Align.CENTER)   # 不跟同行按钮一起撑高
         self.btn_mm_reset.set_size_request(0, 0)
@@ -2423,42 +2472,45 @@ class NPUTestWindow(Gtk.Window):
         self.btn_mm_reset.connect("clicked", self.on_mm_reset_clicked)
         bar.pack_start(self.btn_mm_reset, False, False, 0)
 
-        self.btn_mm_clear = Gtk.Button(label="\U0001F5D1 清空结果")
+        self.btn_mm_clear = Gtk.Button(label=_("🗑 清空结果"))
         self.btn_mm_clear.connect("clicked", self.on_mm_clear_clicked)
         bar.pack_start(self.btn_mm_clear, False, False, 0)
 
         self.lbl_mm = Gtk.Label(
-            label=f"{CAM_DEVICE} · CamxBridge {CAM_W}x{CAM_H} · 预览未开启", xalign=0)
+            label=_("{dev} · CamxBridge {w}x{h} · 预览未开启").format(
+                dev=CAM_DEVICE, w=CAM_W, h=CAM_H), xalign=0)
         bar.pack_start(self.lbl_mm, True, True, 0)
         tab.pack_start(bar, False, False, 0)
 
         # ---- 模型状态 / 提示词 / 生成长度 ----
         qb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.lbl_mm_qwen = Gtk.Label(label="视觉模型: 检测中…", xalign=0)
+        self.lbl_mm_qwen = Gtk.Label(label=_("视觉模型: 检测中…"), xalign=0)
         qb.pack_start(self.lbl_mm_qwen, False, False, 0)
 
-        self.btn_mm_start = Gtk.Button(label=f"启动视觉服务 ({VLM_SERVICE})")
+        self.btn_mm_start = Gtk.Button(
+            label=_("启动视觉服务 ({svc})").format(svc=VLM_SERVICE))
         self.btn_mm_start.set_tooltip_text(
-            f"systemctl start {VLM_SERVICE} (默认不开机自启: 独占 4 个大核 + 约 490MB)")
+            _("systemctl start {svc} (默认不开机自启: 独占 4 个大核 + 约 490MB)").format(
+                svc=VLM_SERVICE))
         self.btn_mm_start.connect("clicked", self.on_mm_start_qwen)
         qb.pack_start(self.btn_mm_start, False, False, 0)
 
-        qb.pack_start(Gtk.Label(label="提示词:", xalign=0), False, False, 0)
+        qb.pack_start(Gtk.Label(label=_("提示词:"), xalign=0), False, False, 0)
         self.ent_mm_prompt = Gtk.Entry()
         self.ent_mm_prompt.set_text(VLM_PROMPT)
         self.ent_mm_prompt.set_hexpand(True)
-        self.ent_mm_prompt.set_tooltip_text("回车或点『识别』发送")
+        self.ent_mm_prompt.set_tooltip_text(_("回车或点『识别』发送"))
         self.ent_mm_prompt.connect("activate", self.on_mm_recognize_clicked)
         qb.pack_start(self.ent_mm_prompt, True, True, 0)
 
-        qb.pack_start(Gtk.Label(label="最多生成:", xalign=0), False, False, 0)
+        qb.pack_start(Gtk.Label(label=_("最多生成:"), xalign=0), False, False, 0)
         # 生成长度上限不写死: 按服务端 runtime.json 的 limits.max_tokens 定范围
         cap = max(16, int(VLM_PROFILE.max_tokens_cap))
         self.sp_mm_tokens = Gtk.SpinButton.new_with_range(16, cap, 16)
         self.sp_mm_tokens.set_value(min(VLM_MAX_TOKENS, cap))
         self.sp_mm_tokens.set_tooltip_text(
-            f"越多回答越长也越慢 (上限 {cap}, 来自服务端配置; "
-            f"实测解码约 {VLM_PROFILE.tps:.1f} tok/s)")
+            _("越多回答越长也越慢 (上限 {cap}, 来自服务端配置; "
+              "实测解码约 {tps:.1f} tok/s)").format(cap=cap, tps=VLM_PROFILE.tps))
         qb.pack_start(self.sp_mm_tokens, False, False, 0)
         qb.pack_start(Gtk.Label(label="tokens", xalign=0), False, False, 0)
         tab.pack_start(qb, False, False, 0)
@@ -2477,8 +2529,8 @@ class NPUTestWindow(Gtk.Window):
         # 标题行: 左边大标题, 右边一行小字指标
         hb = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         self.lbl_mm_res = Gtk.Label(xalign=0)
-        self.lbl_mm_res.set_markup('<span size="x-large" weight="bold">'
-                                   '\U0001F4AC 识别结果</span>')
+        self.lbl_mm_res.set_markup(_('<span size="x-large" weight="bold">'
+                                     '💬 识别结果</span>'))
         hb.pack_start(self.lbl_mm_res, False, False, 0)
         self.lbl_mm_meta = Gtk.Label(xalign=0)
         hb.pack_start(self.lbl_mm_meta, True, True, 0)
@@ -2534,7 +2586,7 @@ class NPUTestWindow(Gtk.Window):
 
         # ---- 处理过程时间轴 (回答后填真实耗时, 可折叠) ----
         self.mm_expander = Gtk.Expander()
-        self.mm_expander.set_label("\u23F1 处理过程")
+        self.mm_expander.set_label(_("⏱ 处理过程"))
         self.mm_stage = Gtk.TextView()
         self.mm_stage.set_name("vlm-stage-text")
         self.mm_stage.set_editable(False)
@@ -2562,7 +2614,7 @@ class NPUTestWindow(Gtk.Window):
         self._mm_max_tokens = VLM_MAX_TOKENS
         if not install_vlm_css():
             # CSS 挂不上时才用 override_font 保底(它会盖过 CSS, 所以只能二选一)
-            self.logger.warning("多模态回答区样式未生效, 已回退到内置字号")
+            self.logger.warning(_("多模态回答区样式未生效, 已回退到内置字号"))
             try:
                 self.mm_result.override_font(Pango.FontDescription("Sans 13"))
                 self.mm_stage.override_font(Pango.FontDescription("Monospace 9"))
@@ -2578,8 +2630,8 @@ class NPUTestWindow(Gtk.Window):
         self.mm_result_buf.set_text("")
         self.lbl_mm_meta.set_markup("")
         self.mm_expander.hide()
-        self.lbl_mm_res.set_markup('<span size="x-large" weight="bold">'
-                                   '\U0001F4AC 识别结果</span>')
+        self.lbl_mm_res.set_markup(_('<span size="x-large" weight="bold">'
+                                     '💬 识别结果</span>'))
 
     # ---------- 视觉模型服务状态 ----------
     def _mm_probe_worker(self):
@@ -2593,8 +2645,8 @@ class NPUTestWindow(Gtk.Window):
                 if VLM_PROFILE.model_id is None:
                     VLM_PROFILE.model_id = str(mid)
                 self.lbl_mm_qwen.set_markup(
-                    '<span foreground="#2ec27e">视觉模型: 就绪</span>  '
-                    '<span size="small" foreground="gray">'
+                    _("<span foreground=\"#2ec27e\">视觉模型: 就绪</span>  "
+                      "<span size=\"small\" foreground=\"gray\">")
                     + GLib.markup_escape_text(VLM_PROFILE.model_display)
                     + ' · ' + GLib.markup_escape_text(VLM_PROFILE.vision_size_text)
                     + '</span>')
@@ -2603,20 +2655,21 @@ class NPUTestWindow(Gtk.Window):
                 cap = max(16, int(VLM_PROFILE.max_tokens_cap))
                 self.sp_mm_tokens.set_range(16, cap)
                 self.sp_mm_tokens.set_tooltip_text(
-                    f"越多回答越长也越慢 (上限 {cap}, 来自服务端配置; "
-                    f"实测解码约 {VLM_PROFILE.tps:.1f} tok/s)")
+                    _("越多回答越长也越慢 (上限 {cap}, 来自服务端配置; "
+                      "实测解码约 {tps:.1f} tok/s)").format(
+                          cap=cap, tps=VLM_PROFILE.tps))
             else:
                 self.lbl_mm_qwen.set_markup(
-                    '<span foreground="#e01b24">视觉模型: 未运行</span>  '
-                    '<span size="small" foreground="gray">'
-                    '需先启动 ' + VLM_SERVICE + ' 服务</span>')
+                    _("<span foreground=\"#e01b24\">视觉模型: 未运行</span>  "
+                      "<span size=\"small\" foreground=\"gray\">需先启动 ")
+                    + VLM_SERVICE + _(" 服务</span>"))
                 self.btn_mm_start.set_sensitive(True)
         except Exception:
             pass
 
     def on_mm_start_qwen(self, btn):
         btn.set_sensitive(False)
-        self.lbl_mm_qwen.set_text(f"视觉模型: 启动中… (首次加载约 10~30s)")
+        self.lbl_mm_qwen.set_text(_("视觉模型: 启动中… (首次加载约 10~30s)"))
         threading.Thread(target=self._mm_start_qwen_worker, daemon=True).start()
 
     def _mm_start_qwen_worker(self):
@@ -2625,20 +2678,23 @@ class NPUTestWindow(Gtk.Window):
                                capture_output=True, timeout=300)
         except FileNotFoundError:
             GLib.idle_add(self.show_error,
-                          "找不到 sudo, 请手动执行: sudo systemctl start qwen35")
+                          _("找不到 sudo, 请手动执行: sudo systemctl start qwen35"))
             GLib.idle_add(self._mm_qwen_label, None)
             return
         except Exception as e:
-            self.logger.error(f"启动 qwen35 失败: {e}")
-            GLib.idle_add(self.show_error, f"启动 qwen35 失败: {e}")
+            self.logger.error(_("启动 qwen35 失败: {err}").format(err=e))
+            GLib.idle_add(self.show_error,
+                          _("启动 qwen35 失败: {err}").format(err=e))
             GLib.idle_add(self._mm_qwen_label, None)
             return
         if r.returncode != 0:
             msg = (r.stderr or r.stdout or b"").decode("utf-8", "replace").strip()
-            self.logger.error(f"启动 qwen35 失败: {msg or 'rc=' + str(r.returncode)}")
+            self.logger.error(_("启动 qwen35 失败: {msg}").format(
+                msg=msg or 'rc=' + str(r.returncode)))
             GLib.idle_add(self.show_error,
-                          f"启动 qwen35 失败 ({msg or 'rc=' + str(r.returncode)})\n"
-                          "请手动执行: sudo systemctl start qwen35")
+                          _("启动 qwen35 失败 ({msg})\n"
+                            "请手动执行: sudo systemctl start qwen35").format(
+                                msg=msg or 'rc=' + str(r.returncode)))
             GLib.idle_add(self._mm_qwen_label, None)
             return
         # systemctl start 返回不代表端口已监听, 等 /v1/models 真的能应答
@@ -2650,9 +2706,9 @@ class NPUTestWindow(Gtk.Window):
                 break
             time.sleep(1.0)
         if mid:
-            self.logger.info(f"Qwen3.5 已就绪: {mid}")
+            self.logger.info(_("Qwen3.5 已就绪: {mid}").format(mid=mid))
         else:
-            self.logger.error("Qwen3.5 启动超时, 端口 8000 没起来")
+            self.logger.error(_("Qwen3.5 启动超时, 端口 8000 没起来"))
         GLib.idle_add(self._mm_qwen_label, mid)
 
     # ---------- 预览 ----------
@@ -2662,32 +2718,33 @@ class NPUTestWindow(Gtk.Window):
             return
         self._mm_start()
 
-    def _mm_start(self, reason="手动"):
-        """开始取流。切页进来、手动点按钮、重置后重开都走同一条路。"""
+    def _mm_start(self, reason=None):
+        # 开始取流。切页进来、手动点按钮、重置后重开都走同一条路。
         if self._mm_on:
             return
         if self._cam_on:
             # 同一个 /dev/video10, 只能有一个读者
-            self.logger.info("多模态预览: 先停掉摄像头实时识别")
+            self.logger.info(_("多模态预览: 先停掉摄像头实时识别"))
             self._cam_stop()
         self._mm_on = True
         self._mm_ready = False
         self.btn_mm_rec.set_sensitive(False)
-        self.btn_mm_prev.set_label("\u23F9 停止预览")
-        self.lbl_mm.set_text(f"{CAM_DEVICE} · {CAM_W}x{CAM_H} · 正在打开…")
-        self.logger.info(f"多模态预览: 启动 ({reason})")
+        self.btn_mm_prev.set_label(_("⏹ 停止预览"))
+        self.lbl_mm.set_text(
+            _("{dev} · {w}x{h} · 正在打开…").format(dev=CAM_DEVICE, w=CAM_W, h=CAM_H))
+        self.logger.info(_("多模态预览: 启动 ({reason})").format(
+            reason=reason or _("手动")))
         threading.Thread(target=self._mm_preview_loop, daemon=True).start()
 
     def on_mm_reset_clicked(self, btn):
-        """预览不出画面时的手工兜底。在后台线程做, 不阻塞界面。
-
-        普通用户就能完成的部分: 杀掉自己残留的取流子进程、关掉并重新打开
-        v4l2 节点(CamxBridge 会在最后一个读者断开后重连 camera)。
-        需要 root 的部分(重启桥接服务)只在退避重试也救不回来时才尝试,
-        非 root 时把命令告诉用户, 不弹密码框。
-        """
+        # 预览不出画面时的手工兜底。在后台线程做, 不阻塞界面。
+        #
+        # 普通用户就能完成的部分: 杀掉自己残留的取流子进程、关掉并重新打开
+        # v4l2 节点(CamxBridge 会在最后一个读者断开后重连 camera)。
+        # 需要 root 的部分(重启桥接服务)只在退避重试也救不回来时才尝试,
+        # 非 root 时把命令告诉用户, 不弹密码框。
         btn.set_sensitive(False)
-        self.logger.info("多模态预览: 手动重置摄像头")
+        self.logger.info(_("多模态预览: 手动重置摄像头"))
         threading.Thread(target=self._mm_reset_worker, daemon=True).start()
 
     def _mm_reset_worker(self):
@@ -2699,7 +2756,7 @@ class NPUTestWindow(Gtk.Window):
             self._mm_fail_streak = 0
             GLib.idle_add(self._mm_restart_from_reset)
         except Exception as e:
-            self.logger.error(f"重置摄像头失败: {e}")
+            self.logger.error(_("重置摄像头失败: {err}").format(err=e))
             GLib.idle_add(self._mm_reset_failed, str(e))
 
     def _mm_restart_from_reset(self):
@@ -2707,17 +2764,18 @@ class NPUTestWindow(Gtk.Window):
             self.btn_mm_reset.set_sensitive(True)
         except Exception:
             pass
-        self._mm_start("重置后")
+        self._mm_start(_("重置后"))
 
     def _mm_reset_failed(self, msg):
         try:
             self.btn_mm_reset.set_sensitive(True)
         except Exception:
             pass
-        self.lbl_mm.set_text(f"{CAM_DEVICE} · 重置失败: {msg}")
+        self.lbl_mm.set_text(
+            _("{dev} · 重置失败: {msg}").format(dev=CAM_DEVICE, msg=msg))
 
     def _mm_kill_proc(self):
-        """杀掉当前取流子进程并等它真的退出(不等会和新进程抢设备)。"""
+        # 杀掉当前取流子进程并等它真的退出(不等会和新进程抢设备)。
         p, self._mm_proc = self._mm_proc, None
         if p is None:
             return
@@ -2728,7 +2786,7 @@ class NPUTestWindow(Gtk.Window):
             pass
 
     def _mm_kill_stale_helpers(self):
-        """清掉以前遗留的取流管道。只动本进程启动的、命令行带本程序特征的那些。"""
+        # 清掉以前遗留的取流管道。只动本进程启动的、命令行带本程序特征的那些。
         me = os.getuid()
         killed = 0
         for entry in os.listdir("/proc"):
@@ -2748,22 +2806,21 @@ class NPUTestWindow(Gtk.Window):
             except Exception:
                 continue
         if killed:
-            self.logger.info(f"多模态预览: 清掉 {killed} 个残留取流进程")
+            self.logger.info(_("多模态预览: 清掉 {n} 个残留取流进程").format(n=killed))
         return killed
 
     def on_notebook_switch_page(self, notebook, page, page_num):
-        """切页自动开关预览: 进本页就取流, 离本页就释放摄像头。
-
-        手动停止后切走再切回仍会重新开始 —— 页面的默认状态就是“在预览”。
-        检测中(_mm_busy)切走不拦截请求: 帧已经送出去, 结果回来仍会填到回答区,
-        只是不再占着摄像头。
-        """
+        # 切页自动开关预览: 进本页就取流, 离本页就释放摄像头。
+        #
+        # 手动停止后切走再切回仍会重新开始 —— 页面的默认状态就是“在预览”。
+        # 检测中(_mm_busy)切走不拦截请求: 帧已经送出去, 结果回来仍会填到回答区,
+        # 只是不再占着摄像头。
         try:
             if page_num == self._mm_tab_idx:
                 if not self._mm_on:
-                    self._mm_start("切到本页")
+                    self._mm_start(_("切到本页"))
             elif self._mm_on:
-                self.logger.info("多模态预览: 离开本页, 释放摄像头")
+                self.logger.info(_("多模态预览: 离开本页, 释放摄像头"))
                 self._mm_stop()
         except Exception:
             pass        # 启动阶段页面索引未就绪, 不因切页报错卡住界面
@@ -2783,7 +2840,7 @@ class NPUTestWindow(Gtk.Window):
 
     def _mm_stopped(self, failed=False):
         try:
-            self.btn_mm_prev.set_label("\u25B6 打开预览")
+            self.btn_mm_prev.set_label(_("▶ 打开预览"))
             self.btn_mm_rec.set_sensitive(False)
             self._mm_ready = False
             if failed:
@@ -2791,17 +2848,18 @@ class NPUTestWindow(Gtk.Window):
                 self._mm_recover_camera()
             else:
                 self.lbl_mm.set_text(
-                    f"{CAM_DEVICE} · CamxBridge {CAM_W}x{CAM_H} · 预览未开启")
+                    _("{dev} · CamxBridge {w}x{h} · 预览未开启").format(
+                        dev=CAM_DEVICE, w=CAM_W, h=CAM_H))
             with self._mm_lock:
                 self._mm_raw = None
                 self._mm_frame = None
             self.mm_area.queue_draw()
-            self.logger.info("多模态预览: 已停止")
+            self.logger.info(_("多模态预览: 已停止"))
         except Exception:
             pass    # 窗口正在销毁
 
     def _mm_recover_camera(self):
-        """取流反复失败后的收尾: 能自己重启就重启, 不能就把该输的命令给出。"""
+        # 取流反复失败后的收尾: 能自己重启就重启, 不能就把该输的命令给出。
         unit = "camx-v4l2-bridge@0"
         cmd = f"sudo systemctl restart {unit}"
         if os.geteuid() == 0:
@@ -2809,35 +2867,37 @@ class NPUTestWindow(Gtk.Window):
                 r = subprocess.run(["systemctl", "restart", unit],
                                    capture_output=True, timeout=60)
                 if r.returncode == 0:
-                    self.logger.info(f"已重启 {unit}, 重新开始预览")
+                    self.logger.info(_("已重启 {unit}, 重新开始预览").format(unit=unit))
                     self.lbl_mm.set_text(
-                        f"{CAM_DEVICE} · 已重启摄像头服务, 正在重新取流…")
+                        _("{dev} · 已重启摄像头服务, 正在重新取流…").format(
+                            dev=CAM_DEVICE))
                     self._mm_fail_streak = 0
                     GLib.timeout_add(1500, self._mm_auto_restart)
                     return
                 err = (r.stderr or b"").decode("utf-8", "replace").strip()
-                self.logger.error(f"重启 {unit} 失败: {err or r.returncode}")
+                self.logger.error(_("重启 {unit} 失败: {err}").format(
+                    unit=unit, err=err or r.returncode))
             except Exception as e:
-                self.logger.error(f"重启 {unit} 失败: {e}")
+                self.logger.error(_("重启 {unit} 失败: {err}").format(unit=unit, err=e))
         self.lbl_mm.set_text(
-            f"{CAM_DEVICE} · 取不到画面, 已自动重试 {self._mm_fail_streak} 次\n"
-            f"先点“\u21BB 重置摄像头”; 仍不行就在终端执行: {cmd}")
+            _("{dev} · 取不到画面, 已自动重试 {n} 次\n"
+              "先点“↻ 重置摄像头”; 仍不行就在终端执行: {cmd}").format(
+                  dev=CAM_DEVICE, n=self._mm_fail_streak, cmd=cmd))
 
     def _mm_auto_restart(self):
-        """重启完摄像头服务后自动接回预览(仍在本页才做)。"""
+        # 重启完摄像头服务后自动接回预览(仍在本页才做)。
         try:
             if self.notebook.get_current_page() == self._mm_tab_idx and not self._mm_on:
-                self._mm_start("摄像头服务重启后")
+                self._mm_start(_("摄像头服务重启后"))
         except Exception:
             pass
         return False
 
     def _mm_preview_loop(self):
-        """只取流不推理: 每帧转成 pixbuf 供绘制, 同时留住裸 RGB 供识别用.
-
-        不做 YOLO 检测, 因此不需要拆成取流/推理两个线程: 30fps 下单线程
-        就能跟上, 画面永远是摄像头当前帧.
-        """
+        # 只取流不推理: 每帧转成 pixbuf 供绘制, 同时留住裸 RGB 供识别用.
+        #
+        # 不做 YOLO 检测, 因此不需要拆成取流/推理两个线程: 30fps 下单线程
+        # 就能跟上, 画面永远是摄像头当前帧.
         w, h = CAM_W, CAM_H
         nbytes = w * h * 3
         buf = bytearray(nbytes)
@@ -2858,7 +2918,7 @@ class NPUTestWindow(Gtk.Window):
                                      stderr=subprocess.DEVNULL,
                                      bufsize=nbytes * 2)
             except Exception as e:
-                self.logger.error(f"多模态预览启动失败: {e}")
+                self.logger.error(_("多模态预览启动失败: {err}").format(err=e))
                 break
             self._mm_proc = p
             fd = p.stdout.fileno()
@@ -2894,9 +2954,12 @@ class NPUTestWindow(Gtk.Window):
                         fps = frames / (now - t_fps)
                         frames, t_fps = 0, now
                         GLib.idle_add(self.lbl_mm.set_text,
-                                      f"{CAM_DEVICE} · {w}x{h} · {fps:.1f} FPS · "
-                                      f"亮度 {mm_frame_luma(raw):.0f} · "
-                                      f"预览中 (识别送入 {VLM_PROFILE.model_display})")
+                                      _("{dev} · {w}x{h} · {fps:.1f} FPS · "
+                                        "亮度 {luma:.0f} · "
+                                        "预览中 (识别送入 {model})").format(
+                                            dev=CAM_DEVICE, w=w, h=h, fps=fps,
+                                            luma=mm_frame_luma(raw),
+                                            model=VLM_PROFILE.model_display))
             finally:
                 try:
                     p.kill()
@@ -2912,21 +2975,26 @@ class NPUTestWindow(Gtk.Window):
                 self._mm_fail_streak = max(self._mm_fail_streak, 1)
                 if attempts < max_attempts:
                     self.logger.warning(
-                        f"多模态预览: 取流中断, 自动重连 ({attempts}/{max_attempts})")
+                        _("多模态预览: 取流中断, 自动重连 ({n}/{m})").format(
+                            n=attempts, m=max_attempts))
                     GLib.idle_add(self.lbl_mm.set_text,
-                                  f"{CAM_DEVICE} · {w}x{h} · 取流中断, "
-                                  f"自动重连 ({attempts}/{max_attempts})…")
+                                  _("{dev} · {w}x{h} · 取流中断, "
+                                    "自动重连 ({n}/{m})…").format(
+                                        dev=CAM_DEVICE, w=w, h=h,
+                                        n=attempts, m=max_attempts))
                     time.sleep(0.8)
                     continue
             else:
                 self._mm_fail_streak += 1
                 if attempts < max_attempts:
                     self.logger.info(
-                        f"多模态预览: 桥接正在重建, {attempts}/{max_attempts} 次未取到帧, "
-                        "稍后重试")
+                        _("多模态预览: 桥接正在重建, {n}/{m} 次未取到帧, "
+                          "稍后重试").format(n=attempts, m=max_attempts))
                     GLib.idle_add(self.lbl_mm.set_text,
-                                  f"{CAM_DEVICE} · {w}x{h} · 正在重试取流 "
-                                  f"({attempts}/{max_attempts})…")
+                                  _("{dev} · {w}x{h} · 正在重试取流 "
+                                    "({n}/{m})…").format(
+                                        dev=CAM_DEVICE, w=w, h=h,
+                                        n=attempts, m=max_attempts))
                     time.sleep(0.8)
                     continue
             break
@@ -2960,37 +3028,39 @@ class NPUTestWindow(Gtk.Window):
         with self._mm_lock:
             raw = self._mm_raw
         if not raw:
-            self.show_error("预览还没有画面, 稍等一下再点识别")
+            self.show_error(_("预览还没有画面, 稍等一下再点识别"))
             return
         luma = mm_frame_luma(raw)
         if luma < MM_MIN_LUMA:
             # 全黑/极暗帧: 通常是 bridge 刚建流, 真实画面还没到
             self.show_error(
-                f"当前帧几乎全黑 (亮度 {luma:.0f}/255), 识别没意义\n"
-                "预览刚打开时前几帧是黑的, 等画面出来再点识别")
+                _("当前帧几乎全黑 (亮度 {luma:.0f}/255), 识别没意义\n"
+                  "预览刚打开时前几帧是黑的, 等画面出来再点识别").format(
+                      luma=luma))
             return
         prompt = self.ent_mm_prompt.get_text().strip() or VLM_PROMPT
         max_tokens = int(self.sp_mm_tokens.get_value())
         self._mm_busy = True
         self.btn_mm_rec.set_sensitive(False)
-        self.btn_mm_rec.set_label("\u23F3 识别中…")
+        self.btn_mm_rec.set_label(_("⏳ 识别中…"))
         self.mm_result_buf.set_text("")
         self.lbl_mm_meta.set_markup("")
         self.mm_expander.hide()
         self._mm_anim_start(max_tokens)
-        self.logger.info(f"多模态识别: 发送 1 帧 {CAM_W}x{CAM_H}, "
-                         f"prompt={prompt!r}, max_tokens={max_tokens}")
+        self.logger.info(_("多模态识别: 发送 1 帧 {w}x{h}, "
+                          "prompt={prompt!r}, max_tokens={n}").format(
+                              w=CAM_W, h=CAM_H, prompt=prompt,
+                              n=max_tokens))
         threading.Thread(target=self._mm_worker,
                          args=(raw, prompt, max_tokens), daemon=True).start()
 
     # ---------- 识别中的动画 ----------
     def _mm_anim_start(self, max_tokens):
-        """启动旋转图标 + pulse 进度条 + 阶段提示.
-
-        服务端是同步 HTTP, 没有逐阶段进度可拿, 所以时间轴按实测耗时估算推进,
-        进度条用 pulse(不确定态) 而不是伪造百分比. 已经用掉的秒数会实时显示,
-        用户能判断"它还在跑"还是"卡住了".
-        """
+        # 启动旋转图标 + pulse 进度条 + 阶段提示.
+        #
+        # 服务端是同步 HTTP, 没有逐阶段进度可拿, 所以时间轴按实测耗时估算推进,
+        # 进度条用 pulse(不确定态) 而不是伪造百分比. 已经用掉的秒数会实时显示,
+        # 用户能判断"它还在跑"还是"卡住了".
         self._mm_busy_t0 = time.monotonic()
         self._mm_max_tokens = max_tokens
         # 时间轴每次启动时从 VLM_PROFILE 重建: 跑过几次后就是实测节奏
@@ -3005,18 +3075,17 @@ class NPUTestWindow(Gtk.Window):
 
     @staticmethod
     def _mm_show_dyn(widget):
-        """显示一个 set_no_show_all 的容器.
-
-        被标了 no_show_all 的控件, 连自己调 show_all() 都无效(这是 GTK 的语义),
-        所以这里逐个 show() 显式打开.
-        """
+        # 显示一个 set_no_show_all 的容器.
+        #
+        # 被标了 no_show_all 的控件, 连自己调 show_all() 都无效(这是 GTK 的语义),
+        # 所以这里逐个 show() 显式打开.
         widget.show()
         if hasattr(widget, "get_children"):
             for ch in widget.get_children():
                 NPUTestWindow._mm_show_dyn(ch)
 
     def _mm_anim_tick(self):
-        """每 120ms 刷一次: 推进度条 + 按已用时间选当前阶段."""
+        # 每 120ms 刷一次: 推进度条 + 按已用时间选当前阶段.
         if not self._mm_busy:
             self._mm_busy_tick = None
             return False
@@ -3036,8 +3105,10 @@ class NPUTestWindow(Gtk.Window):
                 est = self._mm_max_tokens / tps
                 done = min(self._mm_max_tokens,
                            int((el - stages[-1][0]) * tps))
-                desc = f"已生成约 {max(0, done)}/{self._mm_max_tokens} tokens" \
-                       f" (按实测 {tps:.1f} tok/s, 上限 {est:.0f}s, 提前结束即为准)"
+                desc = _("已生成约 {done}/{total} tokens"
+                         " (按实测 {tps:.1f} tok/s, 上限 {est:.0f}s, 提前结束即为准)"
+                         ).format(done=max(0, done), total=self._mm_max_tokens,
+                                  tps=tps, est=est)
             self.lbl_mm_stage.set_text(name)
             self.lbl_mm_stage_desc.set_text(desc)
         except Exception:
@@ -3061,7 +3132,7 @@ class NPUTestWindow(Gtk.Window):
             ok, jpeg = pb.save_to_bufferv(
                 "jpeg", ["quality"], [VLM_JPEG_QUALITY])
             if not ok or not jpeg:
-                raise RuntimeError("GdkPixbuf JPEG 编码失败")
+                raise RuntimeError(_("GdkPixbuf JPEG 编码失败"))
             # 留一份实际发出去的图, 便于复现/比对回答
             try:
                 d = os.path.join(LOG_DIR, "vlm")
@@ -3080,25 +3151,31 @@ class NPUTestWindow(Gtk.Window):
                           or detail)
             except Exception:
                 pass
-            self.logger.error(f"多模态识别失败: HTTP {e.code} {detail[:400]}")
-            GLib.idle_add(self._mm_failed, f"Qwen3.5 返回 HTTP {e.code}\n{detail[:800]}")
+            self.logger.error(_("多模态识别失败: HTTP {code} {detail}").format(
+                code=e.code, detail=detail[:400]))
+            GLib.idle_add(self._mm_failed,
+                          _("Qwen3.5 返回 HTTP {code}\n{detail}").format(
+                              code=e.code, detail=detail[:800]))
             return
         except urllib.error.URLError as e:
-            self.logger.error(f"多模态识别失败: 连不上 qwen35 ({e.reason})")
+            self.logger.error(_("多模态识别失败: 连不上 qwen35 ({reason})").format(
+                reason=e.reason))
             GLib.idle_add(self._mm_failed,
-                          f"连不上 Qwen3.5 服务 ({VLM_ENDPOINT})\n"
-                          f"原因: {e.reason}\n"
-                          "请点\"启动 Qwen3.5\"或执行: sudo systemctl start qwen35")
+                          _("连不上 Qwen3.5 服务 ({ep})\n"
+                            "原因: {reason}\n"
+                            "请点\"启动 Qwen3.5\"或执行: sudo systemctl start qwen35"
+                            ).format(ep=VLM_ENDPOINT, reason=e.reason))
             return
         except Exception as e:
-            self.logger.error(f"多模态识别失败: {e}")
+            self.logger.error(_("多模态识别失败: {err}").format(err=e))
             GLib.idle_add(self._mm_failed, str(e))
             return
         elapsed = time.monotonic() - t0
-        self.logger.info(f"多模态识别完成: {elapsed:.1f}s, "
-                         f"JPEG {len(jpeg) / 1024:.0f}KB, "
-                         f"生成 {meta.get('completion_tokens')} tokens, "
-                         f"{meta.get('decode_tps') or 0:.1f} tok/s")
+        self.logger.info(_("多模态识别完成: {s:.1f}s, JPEG {kb:.0f}KB, "
+                          "生成 {n} tokens, {tps:.1f} tok/s").format(
+                              s=elapsed, kb=len(jpeg) / 1024,
+                              n=meta.get('completion_tokens'),
+                              tps=meta.get('decode_tps') or 0))
         GLib.idle_add(self._mm_done, text, meta, elapsed, len(jpeg))
 
     def _mm_done(self, text, meta, elapsed, jpeg_len):
@@ -3106,29 +3183,28 @@ class NPUTestWindow(Gtk.Window):
         try:
             self.mm_result_buf.set_text(text)
             self.lbl_mm_meta.set_markup(
-                '<span size="small" foreground="#2ec27e" weight="bold">'
-                f'{elapsed:.1f}s</span>'
-                '<span size="small" foreground="gray">  '
+                '<span size="small" foreground="#2ec27e" weight="bold">{0:.1f}s</span>'.format(elapsed)
+                + _('<span size="small" foreground="gray">  ')
                 + GLib.markup_escape_text(
-                    f"{VLM_PROFILE.model_display} · "
+                    VLM_PROFILE.model_display + ' · '
                     + vlm_meta_line(meta, None, jpeg_len))
                 + '</span>')
             self._mm_fill_stages(meta, elapsed, jpeg_len)
             # 模型状态行也跟着用实测值刷新(尺寸/速度可能刚学到)
             self.lbl_mm_qwen.set_markup(
-                '<span foreground="#2ec27e">视觉模型: 就绪</span>  '
-                '<span size="small" foreground="gray">'
+                _("<span foreground=\"#2ec27e\">视觉模型: 就绪</span>  "
+                  "<span size=\"small\" foreground=\"gray\">")
                 + GLib.markup_escape_text(VLM_PROFILE.model_display)
                 + ' · ' + GLib.markup_escape_text(VLM_PROFILE.vision_size_text)
                 + '</span>')
         except Exception:
             pass
         self._mm_busy = False
-        self.btn_mm_rec.set_label("\U0001F50D 识别")
+        self.btn_mm_rec.set_label(_("🔍 识别"))
         self.btn_mm_rec.set_sensitive(self._mm_on)
 
     def _mm_fill_stages(self, meta, elapsed, jpeg_len):
-        """把服务端报的真实阶段耗时画成一条时间轴(带占比进度条)."""
+        # 把服务端报的真实阶段耗时画成一条时间轴(带占比进度条).
         rows = vlm_stage_rows(meta)
         buf = self.mm_stage_buf
         buf.set_text("")
@@ -3149,10 +3225,14 @@ class NPUTestWindow(Gtk.Window):
                 buf.insert(it, f"{'':<14}\u2514 {extra}\n", -1)
         buf.insert(it, f"{'─' * 54}\n", -1)
         if meta.get("request_seconds"):
-            buf.insert(it, f"{'服务端 self 计时':<14}{meta['request_seconds']:6.2f}s\n", -1)
-        buf.insert(it, f"{'阶段合计(可重叠)':<14}{total:6.2f}s\n", -1)
-        buf.insert(it, f"{'客户端端到端':<14}{elapsed:6.2f}s  "
-                       f"(含 JPEG {jpeg_len / 1024:.0f}KB 编码与传输)\n", -1)
+            buf.insert(it, _("服务端 self 计时").ljust(14)
+                       + "{0:6.2f}s\n".format(meta['request_seconds']), -1)
+        buf.insert(it, _("阶段合计(可重叠)").ljust(14)
+                   + "{0:6.2f}s\n".format(total), -1)
+        buf.insert(it, _("客户端端到端").ljust(14)
+                   + "{0:6.2f}s  ".format(elapsed)
+                   + _("(含 JPEG {kb:.0f}KB 编码与传输)").format(
+                       kb=jpeg_len / 1024) + "\n", -1)
         self.mm_expander.set_expanded(False)
         self._mm_show_dyn(self.mm_expander)
 
@@ -3161,14 +3241,14 @@ class NPUTestWindow(Gtk.Window):
         try:
             self.mm_result_buf.set_text(msg)
             self.lbl_mm_res.set_markup(
-                '<span size="x-large" weight="bold" foreground="#e01b24">'
-                '\u26A0 识别失败</span>')
+                _('<span size="x-large" weight="bold" foreground="#e01b24">'
+                  '⚠ 识别失败</span>'))
             self.lbl_mm_meta.set_markup("")
             self.mm_expander.hide()
         except Exception:
             pass
         self._mm_busy = False
-        self.btn_mm_rec.set_label("\U0001F50D 识别")
+        self.btn_mm_rec.set_label(_("🔍 识别"))
         self.btn_mm_rec.set_sensitive(self._mm_on)
 
     def _refresh_yolo_models(self):
@@ -3186,18 +3266,18 @@ class NPUTestWindow(Gtk.Window):
         if self._yolo_models:
             self.cmb_yolo_model.set_active(0)
         else:
-            self.cmb_yolo_model.append_text("（无 YOLO 模型，请放 .dlc/.onnx）")
+            self.cmb_yolo_model.append_text(_("（无 YOLO 模型，请放 .dlc/.onnx）"))
             self.cmb_yolo_model.set_active(0)
 
     def on_yolo_clicked(self, button):
         mi = self.cmb_yolo_model.get_active()
         ii = self.cmb_yolo_image.get_active()
         if mi < 0 or mi >= len(self._yolo_models):
-            self.show_error("请先选择 YOLO 模型\n把 yolov*.dlc / yolov*_onnx 放到 "
-                            "/usr/share/qcom-npu-test/models/ 后点 🔄 刷新")
+            self.show_error(_("请先选择 YOLO 模型\n把 yolov*.dlc / yolov*_onnx 放到 "
+                              "/usr/share/qcom-npu-test/models/ 后点 🔄 刷新"))
             return
         if ii < 0:
-            self.show_error("请选择测试图片")
+            self.show_error(_("请选择测试图片"))
             return
         model = self._yolo_models[mi]
         image = self._yolo_images[ii]
@@ -3207,27 +3287,33 @@ class NPUTestWindow(Gtk.Window):
 
         if backend == "onnx_reference":
             self.show_error(
-                "此 .onnx 是 Qualcomm AI Hub 源模型, 无法在板上直接推理。\n"
-                "需在 PC 上用 qairt-converter 转成 .so 后再用。\n\n"
-                "如需在板上直接检测, 请选 yolov7.dlc (SNPE 容器)。")
+                _("此 .onnx 是 Qualcomm AI Hub 源模型, 无法在板上直接推理。\n"
+                  "需在 PC 上用 qairt-converter 转成 .so 后再用。\n\n"
+                  "如需在板上直接检测, 请选 yolov7.dlc (SNPE 容器)。"))
             return
         if backend == "snpe":
             if not os.path.exists(SNPE_NET_RUN):
-                self.show_error(f"snpe-net-run 不存在: {SNPE_NET_RUN}")
+                self.show_error(_("snpe-net-run 不存在: {path}").format(
+                    path=SNPE_NET_RUN))
                 return
             runtime_flag = ["--use_dsp", "--use_gpu", ""][rt_idx]
         else:  # qnn (.so)
             if not os.path.exists(QNN_NET_RUN):
-                self.show_error(f"qnn-net-run 不存在: {QNN_NET_RUN}\n请确认 qcom-qnn-sdk 已安装")
+                self.show_error(_("qnn-net-run 不存在: {path}\n"
+                                  "请确认 qcom-qnn-sdk 已安装").format(
+                                      path=QNN_NET_RUN))
                 return
             runtime_flag = ["--backend libQnnHtp.so",
                             "--backend libQnnGpu.so",
                             "--backend libQnnCpu.so"][rt_idx]
 
         self.btn_yolo.set_sensitive(False)
-        self.btn_yolo.set_label("⏳ 检测中...")
-        self.logger.info(f"YOLO: model={os.path.basename(model)} img={os.path.basename(image)} "
-                         f"backend={backend} rt={runtime_name}")
+        self.btn_yolo.set_label(_("⏳ 检测中..."))
+        self.logger.info(_("YOLO: model={model} img={img} backend={backend} "
+                          "rt={rt}").format(
+                              model=os.path.basename(model),
+                              img=os.path.basename(image),
+                              backend=backend, rt=runtime_name))
 
         def run():
             import time as _time
@@ -3238,25 +3324,27 @@ class NPUTestWindow(Gtk.Window):
             t_lat = _time.monotonic()
             lat = measure_npu_latency(model, out_dir) if out_dir else {}
             lat_ms = (_time.monotonic() - t_lat) * 1000.0
-            self.logger.info(f"YOLO 分项: 总={call_ms:.0f}ms "
-                             f"diagview={lat_ms:.0f}ms NPU={lat.get('avg_ms', 0):.2f}ms")
+            self.logger.info(_("YOLO 分项: 总={total:.0f}ms diagview={diag:.0f}ms "
+                              "NPU={npu:.2f}ms").format(
+                                  total=call_ms, diag=lat_ms,
+                                  npu=lat.get('avg_ms', 0)))
             GLib.idle_add(self.on_yolo_done, raw, model, image, runtime_name,
                           out_path, dets, call_ms, lat)
         threading.Thread(target=run, daemon=True).start()
 
     def on_compare_clicked(self, btn):
-        """同一张图依次跑 CPU / GPU / NPU, 只用实测数字画对比表."""
+        # 同一张图依次跑 CPU / GPU / NPU, 只用实测数字画对比表.
         mi = self.cmb_yolo_model.get_active()
         ii = self.cmb_yolo_image.get_active()
         if mi < 0 or mi >= len(self._yolo_models) or ii < 0:
-            self.show_error("请先选好模型和图片")
+            self.show_error(_("请先选好模型和图片"))
             return
         model, image = self._yolo_models[mi], self._yolo_images[ii]
         if model_backend(model) != "snpe":
-            self.show_error("三档对比只支持 .dlc (SNPE); .onnx 需先转换")
+            self.show_error(_("三档对比只支持 .dlc (SNPE); .onnx 需先转换"))
             return
         btn.set_sensitive(False)
-        btn.set_label("⏳ 对比中…")
+        btn.set_label(_("⏳ 对比中…"))
 
         def run():
             rows = []
@@ -3276,10 +3364,10 @@ class NPUTestWindow(Gtk.Window):
 
     def show_compare(self, rows, btn):
         btn.set_sensitive(True)
-        btn.set_label("⚡ 三档对比")
+        btn.set_label(_("⚡ 三档对比"))
         ok = [r for r in rows if r[1] > 0]
         if not ok:
-            self.show_error("三档都失败了, 看日志")
+            self.show_error(_("三档都失败了, 看日志"))
             return
         buf = self.yolo_result_text.get_buffer()
         buf.set_text("")
@@ -3290,7 +3378,7 @@ class NPUTestWindow(Gtk.Window):
 
     def on_yolo_done(self, raw, model, image, runtime, out_path, dets=None, call_ms=0, lat=None):
         self.btn_yolo.set_sensitive(True)
-        self.btn_yolo.set_label("▶ 开始检测")
+        self.btn_yolo.set_label(_("▶ 开始检测"))
         if dets is None:
             dets = []
         # parse_yolo_output is kept as a fallback for tools that still emit
@@ -3305,14 +3393,15 @@ class NPUTestWindow(Gtk.Window):
         def a(text):
             buf.insert(buf.get_end_iter(), text)
 
-        a(f"{'='*55}\n  🎯 YOLO 目标检测结果\n{'='*55}\n\n")
-        a(f"模型: {os.path.basename(model)}\n")
-        a(f"图片: {os.path.basename(image)}\n")
-        a(f"Runtime: {runtime}\n\n")
+        a(f"{'='*55}\n  " + _("🎯 YOLO 目标检测结果") + f"\n{'='*55}\n\n")
+        a(_("模型: {name}").format(name=os.path.basename(model)) + "\n")
+        a(_("图片: {name}").format(name=os.path.basename(image)) + "\n")
+        a(_("Runtime: {rt}").format(rt=runtime) + "\n\n")
         if 'build_ver' in info:
-            a(f"SNPE 版本: {info['build_ver']}\n")
+            a(_("SNPE 版本: {v}").format(v=info['build_ver']) + "\n")
         if 'model_h' in info:
-            a(f"模型输入: {info['model_w']}x{info['model_h']}x{info['model_c']}\n")
+            a(_("模型输入: {w}x{h}x{c}").format(
+                w=info['model_w'], h=info['model_h'], c=info['model_c']) + "\n")
         # 耗时统计: NPU 延迟取自本次运行的 SNPEDiag.log (snpe-diagview).
         # 拆成两行, 否则单帧冷跑的 Total 会被误当成"NPU 变慢了":
         #   NPU计算 = DSP 上跑网络的时间 (随 DVFS 变, 单帧 ~0.9GHz / 满载 ~1.4GHz)
@@ -3323,35 +3412,43 @@ class NPUTestWindow(Gtk.Window):
         a("\n")
 
         if dets:
-            a(f"{'─'*55}\n  🎯 检测到 {len(dets)} 个目标\n{'─'*55}\n")
+            a(f"{'─'*55}\n  " + _("🎯 检测到 {n} 个目标").format(n=len(dets))
+              + f"\n{'─'*55}\n")
             for i, d in enumerate(dets, 1):
                 w = d['right'] - d['left']
                 h = d['bottom'] - d['top']
                 bar = "█" * int(d['conf'] * 30) + "░" * (30 - int(d['conf'] * 30))
-                a(f"  #{i} {d['name']:>10s}  置信度: {d['conf']:.4f}  [{bar}]\n")
-                a(f"       位置: ({d['left']}, {d['top']}) - ({d['right']}, {d['bottom']})  {w}x{h}\n\n")
+                a(_("  #{i} {name:>10s}  置信度: {conf:.4f}  [{bar}]").format(
+                    i=i, name=d['name'], conf=d['conf'], bar=bar) + "\n")
+                a(_("       位置: ({l}, {t}) - ({r}, {b})  {w}x{h}").format(
+                    l=d['left'], t=d['top'], r=d['right'], b=d['bottom'],
+                    w=w, h=h) + "\n\n")
         else:
-            a("未检测到目标 (或 numpy/输出 raw 缺失)\n\n")
-        a(f"{'─'*55}\n  📋 原始输出\n{'─'*55}\n{raw}")
+            a(_("未检测到目标 (或 numpy/输出 raw 缺失)") + "\n\n")
+        a(f"{'─'*55}\n  " + _("📋 原始输出") + f"\n{'─'*55}\n" + raw)
 
         # 在原图上画检测框并显示 (cairo 渲染)
         display_path = out_path if out_path and os.path.exists(out_path) else image
         self._render_yolo_image(display_path, dets)
         if out_path:
-            a(f"\n📸 输出图片: {out_path}\n")
+            a("\n" + _("📸 输出图片: {path}").format(path=out_path) + "\n")
 
         n = len(dets)
         # 状态栏优先显示 NPU 纯推理延迟, 没有则不显示耗时
         if npu_ms:
             self.statusbar.set_markup(
-                f'<span foreground="green">✅ YOLO完成 - {n}个目标, NPU {npu_ms:.2f}ms</span>')
+                '<span foreground="green">{0}</span>'.format(
+                    _("✅ YOLO完成 - {n}个目标, NPU {ms:.2f}ms").format(
+                        n=n, ms=npu_ms)))
         else:
             self.statusbar.set_markup(
-                f'<span foreground="green">✅ YOLO完成 - {n}个目标</span>')
-        self.logger.info(f"YOLO完成: {n}个目标, NPU={npu_ms:.2f}ms, 调用={call_ms:.0f}ms")
+                '<span foreground="green">{0}</span>'.format(
+                    _("✅ YOLO完成 - {n}个目标").format(n=n)))
+        self.logger.info(_("YOLO完成: {n}个目标, NPU={ms:.2f}ms, 调用={call:.0f}ms").format(
+            n=n, ms=npu_ms, call=call_ms))
 
     def _render_yolo_image(self, path, dets):
-        """在图片上画检测框并显示 (复用 RK3576 rknpu-test 的 cairo 渲染逻辑)"""
+        # 在图片上画检测框并显示 (复用 RK3576 rknpu-test 的 cairo 渲染逻辑)
         try:
             pixbuf = GdkPixbuf.Pixbuf.new_from_file(path)
         except Exception:
@@ -3425,14 +3522,15 @@ class NPUTestWindow(Gtk.Window):
     def build_camera_tab(self):
         tab = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         tab.set_border_width(8)
-        self._cam_tab_idx = self.notebook.append_page(tab, Gtk.Label(label="📷 摄像头实时"))
+        self._cam_tab_idx = self.notebook.append_page(
+            tab, Gtk.Label(label=_("📷 摄像头实时")))
 
         bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
-        self.btn_cam_tab = Gtk.Button(label="▶ 开始")
+        self.btn_cam_tab = Gtk.Button(label=_("▶ 开始"))
         self.btn_cam_tab.get_style_context().add_class("suggested-action")
         self.btn_cam_tab.connect("clicked", self.on_cam_clicked)
         bar.pack_start(self.btn_cam_tab, False, False, 0)
-        self.lbl_cam = Gtk.Label(label="/dev/video10 · CamxBridge 1280x720 · YOLO on HTP")
+        self.lbl_cam = Gtk.Label(label=_("/dev/video10 · CamxBridge 1280x720 · YOLO on HTP"))
         bar.pack_start(self.lbl_cam, False, False, 0)
         tab.pack_start(bar, False, False, 0)
 
@@ -3447,11 +3545,11 @@ class NPUTestWindow(Gtk.Window):
         tab.set_margin_start(8)
         tab.set_margin_end(8)
         tab.set_margin_top(8)
-        self.notebook.append_page(tab, Gtk.Label(label="⚡ 吞吐量基准"))
+        self.notebook.append_page(tab, Gtk.Label(label=_("⚡ 吞吐量基准")))
 
         desc = Gtk.Label(xalign=0)
-        desc.set_markup('<span size="small" foreground="gray">'
-                        '用 snpe-throughput-net-run 在指定时长内并发压测, 输出平均 FPS / 延迟 / 总推理数</span>')
+        desc.set_markup(_('<span size="small" foreground="gray">'
+                          '用 snpe-throughput-net-run 在指定时长内并发压测, 输出平均 FPS / 延迟 / 总推理数</span>'))
         tab.pack_start(desc, False, False, 0)
 
         sel = Gtk.Box(spacing=10)
@@ -3459,7 +3557,7 @@ class NPUTestWindow(Gtk.Window):
 
         # 模型
         mb = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        mb.pack_start(Gtk.Label(label="DLC 模型:", xalign=0), False, False, 0)
+        mb.pack_start(Gtk.Label(label=_("DLC 模型:"), xalign=0), False, False, 0)
         self.cmb_tp_model = Gtk.ComboBoxText()
         for m in find_models():
             self.cmb_tp_model.append_text(os.path.basename(m))
@@ -3470,7 +3568,7 @@ class NPUTestWindow(Gtk.Window):
 
         # 图片
         ib = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        ib.pack_start(Gtk.Label(label="输入图片:", xalign=0), False, False, 0)
+        ib.pack_start(Gtk.Label(label=_("输入图片:"), xalign=0), False, False, 0)
         self.cmb_tp_image = Gtk.ComboBoxText()
         for img in find_images():
             self.cmb_tp_image.append_text(os.path.basename(img))
@@ -3481,7 +3579,7 @@ class NPUTestWindow(Gtk.Window):
 
         # 时长
         db = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        db.pack_start(Gtk.Label(label="压测时长(秒):", xalign=0), False, False, 0)
+        db.pack_start(Gtk.Label(label=_("压测时长(秒):"), xalign=0), False, False, 0)
         self.spin_duration = Gtk.SpinButton.new_with_range(1, 120, 1)
         self.spin_duration.set_value(10)
         db.pack_start(self.spin_duration, False, False, 0)
@@ -3500,7 +3598,7 @@ class NPUTestWindow(Gtk.Window):
 
         # perf profile
         pb = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
-        pb.pack_start(Gtk.Label(label="性能档位:", xalign=0), False, False, 0)
+        pb.pack_start(Gtk.Label(label=_("性能档位:"), xalign=0), False, False, 0)
         self.cmb_perf = Gtk.ComboBoxText()
         for p in ("balanced", "high_performance", "sustained_high_performance",
                   "burst", "power_saver", "default"):
@@ -3512,21 +3610,22 @@ class NPUTestWindow(Gtk.Window):
         # 按钮
         bbtn = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         bbtn.pack_start(Gtk.Label(label=""), False, False, 0)
-        self.btn_tp = Gtk.Button(label="▶ 开始压测")
+        self.btn_tp = Gtk.Button(label=_("▶ 开始压测"))
         self.btn_tp.get_style_context().add_class("suggested-action")
         self.btn_tp.connect("clicked", self.on_throughput_clicked)
         bbtn.pack_start(self.btn_tp, False, False, 0)
         sel.pack_start(bbtn, False, False, 0)
 
         # 结果区
-        result_frame = Gtk.Frame(label="压测结果")
+        result_frame = Gtk.Frame(label=_("压测结果"))
         sw = Gtk.ScrolledWindow()
         self.tp_result_text = Gtk.TextView()
         self.tp_result_text.set_editable(False)
         self.tp_result_text.set_monospace(True)
         self.tp_result_text.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
-        self.tp_result_text.get_buffer().set_text("选择模型和压测时长, 点击 [开始压测]...\n"
-            "压测期间 NPU 会满载, 输出平均 FPS、平均延迟、总推理数")
+        self.tp_result_text.get_buffer().set_text(
+            _("选择模型和压测时长, 点击 [开始压测]...\n"
+              "压测期间 NPU 会满载, 输出平均 FPS、平均延迟、总推理数"))
         sw.add(self.tp_result_text)
         result_frame.add(sw)
         tab.pack_start(result_frame, True, True, 0)
@@ -3535,23 +3634,25 @@ class NPUTestWindow(Gtk.Window):
         mi = self.cmb_tp_model.get_active()
         ii = self.cmb_tp_image.get_active()
         if mi < 0:
-            self.show_error("请选择模型")
+            self.show_error(_("请选择模型"))
             return
         if not os.path.exists(SNPE_THROUGHPUT_RUN):
-            self.show_error(f"snpe-throughput-net-run 不存在: {SNPE_THROUGHPUT_RUN}\n"
-                           "(吞吐量压测仅支持 SNPE .dlc 模型)")
+            self.show_error(
+                _("snpe-throughput-net-run 不存在: {path}\n"
+                  "(吞吐量压测仅支持 SNPE .dlc 模型)").format(
+                      path=SNPE_THROUGHPUT_RUN))
             return
         models = find_models()
         model = models[mi]
         # snpe-throughput-net-run 只吃 .dlc, ONNX 模型不支持
         if model_backend(model) != "snpe":
-            self.show_error("吞吐量压测仅支持 SNPE .dlc 模型\n"
-                           "请选择 .dlc 模型 (如 yolov7.dlc)")
+            self.show_error(_("吞吐量压测仅支持 SNPE .dlc 模型\n"
+                              "请选择 .dlc 模型 (如 yolov7.dlc)"))
             return
         images = find_images()
         image = images[ii] if ii >= 0 and ii < len(images) else (images[0] if images else None)
         if not image:
-            self.show_error("找不到测试图片")
+            self.show_error(_("找不到测试图片"))
             return
         rt_idx = self.cmb_tp_runtime.get_active()
         runtime_flag = ["--use_dsp", "--use_gpu", ""][rt_idx]
@@ -3560,9 +3661,11 @@ class NPUTestWindow(Gtk.Window):
         perf = self.cmb_perf.get_active_text()
 
         self.btn_tp.set_sensitive(False)
-        self.btn_tp.set_label("⏳ 压测中...")
-        self.logger.info(f"吞吐量压测: model={os.path.basename(model)} runtime={runtime_name} "
-                         f"duration={duration}s perf={perf}")
+        self.btn_tp.set_label(_("⏳ 压测中..."))
+        self.logger.info(_("吞吐量压测: model={model} runtime={rt} "
+                          "duration={dur}s perf={perf}").format(
+                              model=os.path.basename(model), rt=runtime_name,
+                              dur=duration, perf=perf))
 
         def run():
             out_dir = tempfile.mkdtemp(prefix="snpe_tp_", dir="/tmp")
@@ -3579,7 +3682,8 @@ class NPUTestWindow(Gtk.Window):
                         f.write(raw_bytes)
                     input_file = raw_path
                 except Exception as e:
-                    self.logger.warning(f"图片预处理失败, 回退原始文件: {e}")
+                    self.logger.warning(_("图片预处理失败, 回退原始文件: {err}").format(
+                        err=e))
 
             # 常驻会话优先: 会话只建一次, 报的是真实吞吐, 不含每次重建的开销
             if raw_bytes and model_backend(model) == "snpe":
@@ -3602,7 +3706,7 @@ class NPUTestWindow(Gtk.Window):
 
     def on_throughput_done(self, raw, rc, model, runtime, duration, out_dir):
         self.btn_tp.set_sensitive(True)
-        self.btn_tp.set_label("▶ 开始压测")
+        self.btn_tp.set_label(_("▶ 开始压测"))
         info = parse_throughput(raw)
         buf = self.tp_result_text.get_buffer()
         buf.set_text("")
@@ -3610,51 +3714,57 @@ class NPUTestWindow(Gtk.Window):
         def a(text):
             buf.insert(buf.get_end_iter(), text)
 
-        a(f"{'='*55}\n  ⚡ SNPE 吞吐量基准测试\n{'='*55}\n\n")
-        a(f"模型: {os.path.basename(model)}\n")
-        a(f"Runtime: {runtime}\n")
-        a(f"压测时长: {duration} 秒\n")
-        a(f"返回码: {rc}\n\n")
+        a(f"{'='*55}\n  " + _("⚡ SNPE 吞吐量基准测试") + f"\n{'='*55}\n\n")
+        a(_("模型: {name}").format(name=os.path.basename(model)) + "\n")
+        a(_("Runtime: {rt}").format(rt=runtime) + "\n")
+        a(_("压测时长: {n} 秒").format(n=duration) + "\n")
+        a(_("返回码: {rc}").format(rc=rc) + "\n\n")
         if 'build_ver' in info:
-            a(f"SNPE 版本: {info['build_ver']}\n")
+            a(_("SNPE 版本: {v}").format(v=info['build_ver']) + "\n")
         if 'network' in info:
-            a(f"网络: {info['network']}\n")
+            a(_("网络: {v}").format(v=info['network']) + "\n")
         if 'avg_fps' in info or 'avg_ms' in info:
-            a(f"\n{'─'*55}\n  🚀 性能结果\n{'─'*55}\n")
+            a(f"\n{'─'*55}\n  " + _("🚀 性能结果") + f"\n{'─'*55}\n")
             if 'avg_fps' in info:
-                a(f"平均 FPS: {info['avg_fps']:.1f}\n")
+                a(_("平均 FPS: {v:.1f}").format(v=info['avg_fps']) + "\n")
             if 'avg_ms' in info:
-                a(f"平均延迟: {info['avg_ms']:.2f} ms\n")
+                a(_("平均延迟: {v:.2f} ms").format(v=info['avg_ms']) + "\n")
             if 'total_inferences' in info:
-                a(f"总推理数: {info['total_inferences']}\n")
+                a(_("总推理数: {n}").format(n=info['total_inferences']) + "\n")
             if 'total_time_s' in info:
-                a(f"总执行时间: {info['total_time_s']:.1f} s\n")
+                a(_("总执行时间: {s:.1f} s").format(s=info['total_time_s']) + "\n")
             if info.get('avg_ms', 0) > 0 and 'avg_fps' not in info:
-                a(f"推算 FPS: {1000.0/info['avg_ms']:.1f}\n")
+                a(_("推算 FPS: {v:.1f}").format(v=1000.0 / info['avg_ms']) + "\n")
         if 'fps_samples' in info and info['fps_samples']:
-            a(f"\n{'─'*55}\n  📊 逐时段 FPS\n{'─'*55}\n")
+            a(f"\n{'─'*55}\n  " + _("📊 逐时段 FPS") + f"\n{'─'*55}\n")
             for i, fps in enumerate(info['fps_samples']):
                 bar = "█" * int(fps / 10)
                 a(f"  [{i:2d}] {fps:7.1f} FPS  {bar}\n")
-        a(f"\n{'─'*55}\n  📋 原始输出\n{'─'*55}\n{raw}")
+        a(f"\n{'─'*55}\n  " + _("📋 原始输出") + f"\n{'─'*55}\n" + raw)
 
         fps = info.get('avg_fps', 0)
         ms = info.get('avg_ms', 0)
+        verdict = _("压测完成") if rc == 0 else _("压测失败")
+        if fps or ms:
+            msg = _("{verdict} - {fps:.1f} FPS / {ms:.2f} ms").format(
+                verdict=verdict, fps=fps, ms=ms)
+        else:
+            msg = verdict
         self.statusbar.set_markup(
-            f'<span foreground="{"green" if rc==0 else "red"}">'
-            f'{"✅" if rc==0 else "❌"} 压测{"完成" if rc==0 else "失败"} - '
-            f'{fps:.1f} FPS / {ms:.2f} ms</span>' if (fps or ms)
-            else f'<span foreground="{"green" if rc==0 else "red"}">{"✅" if rc==0 else "❌"} 压测{"完成" if rc==0 else "失败"}</span>')
-        self.logger.info(f"压测完成: {fps:.1f} FPS, {ms:.2f} ms")
+            '<span foreground="{0}">{1} {2}</span>'.format(
+                "green" if rc == 0 else "red",
+                "✅" if rc == 0 else "❌", msg))
+        self.logger.info(_("压测完成: {fps:.1f} FPS, {ms:.2f} ms").format(
+            fps=fps, ms=ms))
 
     # ========== 公共方法 ==========
     def on_upload_image(self, combo, images, widget):
         dialog = Gtk.FileChooserDialog(
-            title="选择图片", parent=self, action=Gtk.FileChooserAction.OPEN)
+            title=_("选择图片"), parent=self, action=Gtk.FileChooserAction.OPEN)
         dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
                            Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
         filt = Gtk.FileFilter()
-        filt.set_name("图片文件")
+        filt.set_name(_("图片文件"))
         filt.add_mime_type("image/*")
         dialog.add_filter(filt)
         if dialog.run() != Gtk.ResponseType.OK:
@@ -3673,9 +3783,10 @@ class NPUTestWindow(Gtk.Window):
         dest = os.path.join(upload_dir, os.path.basename(local))
         try:
             shutil.copy2(local, dest)
-            self.logger.info(f"上传图片: {os.path.basename(local)} -> {dest}")
+            self.logger.info(_("上传图片: {name} -> {dest}").format(
+                name=os.path.basename(local), dest=dest))
         except Exception as e:
-            self.show_error(f"上传失败: {e}")
+            self.show_error(_("上传失败: {err}").format(err=e))
             return
         if dest not in images:
             images.append(dest)
@@ -3700,12 +3811,12 @@ class NPUTestWindow(Gtk.Window):
 
     def on_save_log(self, button):
         dialog = Gtk.FileChooserDialog(
-            title="保存日志", parent=self, action=Gtk.FileChooserAction.SAVE)
+            title=_("保存日志"), parent=self, action=Gtk.FileChooserAction.SAVE)
         dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL,
                            Gtk.STOCK_SAVE, Gtk.ResponseType.OK)
         dialog.set_current_name(f"qcom_npu_test_{datetime.datetime.now():%Y%m%d_%H%M%S}.log")
         filt = Gtk.FileFilter()
-        filt.set_name("日志文件 (*.log)")
+        filt.set_name(_("日志文件 (*.log)"))
         filt.add_pattern("*.log")
         dialog.add_filter(filt)
         if dialog.run() == Gtk.ResponseType.OK:
@@ -3715,7 +3826,7 @@ class NPUTestWindow(Gtk.Window):
             text = buf.get_text(start, end, True)
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(text)
-            self.logger.info(f"日志已保存: {path}")
+            self.logger.info(_("日志已保存: {path}").format(path=path))
         dialog.destroy()
 
     def show_error(self, msg):
@@ -3726,11 +3837,10 @@ class NPUTestWindow(Gtk.Window):
 
 
 def _selftest():
-    """板上自检 (不弹 GUI): python3 /usr/bin/qcom-npu-test --selftest
-
-    校验 letterbox 输出尺寸/填充值, 以及 snpe-net-run + diagview 延迟解析
-    这条主链路能不能跑通. 改了预处理或延迟解析后跑一次即可.
-    """
+    # 板上自检 (不弹 GUI): python3 /usr/bin/qcom-npu-test --selftest
+    #
+    # 校验 letterbox 输出尺寸/填充值, 以及 snpe-net-run + diagview 延迟解析
+    # 这条主链路能不能跑通. 改了预处理或延迟解析后跑一次即可.
     img = os.path.join(IMAGE_DIRS[0], "bus.jpg")
     model = os.path.join(MODEL_DIRS[0], "yolov7.dlc")
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -3743,47 +3853,52 @@ def _selftest():
     assert out_dir, txt
     lat = measure_npu_latency(model, out_dir)
     assert (lat.get('avg_ms', 0) or lat.get('total_ms', 0)) > 0, \
-        f"未解析到推理时间: {txt[-400:]}"
+        _("未解析到推理时间: {tail}").format(tail=txt[-400:])
     # 摄像头走 pixbuf 直喂(不落盘), 校验它和 run_yolo 的检测结果一致
     cdets, _cms = yolo_detect_pixbuf(model, GdkPixbuf.Pixbuf.new_from_file(img))
     assert len(cdets) == len(dets), (len(cdets), len(dets))
     # 吞吐页走的是常驻会话压测, 校验它输出的文本能被 parse_throughput 解析回来
     tp = throughput_via_daemon(model, "dsp", raw, 2)
     assert tp and parse_throughput(tp).get('avg_fps', 0) > 0, tp
-    print(f"SELFTEST OK: {len(dets)} dets, 推理 "
-          f"{(lat.get('total_ms') or lat.get('avg_ms', 0)):.2f} ms"
-          + (f" @ {lat['clock_mhz']:.0f}MHz" if lat.get('clock_mhz') else ""))
+    print("SELFTEST OK: {0} dets, ".format(len(dets))
+          + _("推理 {ms:.2f} ms").format(
+              ms=lat.get('total_ms') or lat.get('avg_ms', 0))
+          + (" @ {0:.0f}MHz".format(lat['clock_mhz'])
+             if lat.get('clock_mhz') else ""))
 
 
 def _vlm_selftest():
-    """多模态链路自检 (不弹 GUI): python3 qcom-npu-test --vlm-selftest
-
-    不需要摄像头也不弹窗: 拿自带的 bus.jpg 按摄像头同分辨率重采样成 1280x720
-    再编码成 JPEG, 走一遍真实的 /v1/chat/completions 图像请求. 需要 qwen35 已
-    启动 (sudo systemctl start qwen35).
-    """
+    # 多模态链路自检 (不弹 GUI): python3 qcom-npu-test --vlm-selftest
+    #
+    # 不需要摄像头也不弹窗: 拿自带的 bus.jpg 按摄像头同分辨率重采样成 1280x720
+    # 再编码成 JPEG, 走一遍真实的 /v1/chat/completions 图像请求. 需要 qwen35 已
+    # 启动 (sudo systemctl start qwen35).
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     img = os.path.join(IMAGE_DIRS[0], "bus.jpg")
-    assert os.path.isfile(img), f"找不到测试图: {img}"
+    assert os.path.isfile(img), _("找不到测试图: {path}").format(path=img)
 
     mid = vlm_probe(timeout=5.0)
-    print(f"视觉服务: {vlm_display_name(mid) if mid else '未运行'}")
-    assert mid, "Qwen3.5 未就绪, 先执行: sudo systemctl start qwen35"
+    print(_("视觉服务: {name}").format(
+        name=vlm_display_name(mid) if mid else _("未运行")))
+    assert mid, _("Qwen3.5 未就绪, 先执行: sudo systemctl start qwen35")
 
     # 与摄像头帧走同一条路径: raw RGB -> pixbuf -> JPEG
     pb = GdkPixbuf.Pixbuf.new_from_file_at_scale(img, CAM_W, CAM_H, False)
     ok, jpeg = pb.save_to_bufferv("jpeg", ["quality"], [VLM_JPEG_QUALITY])
-    assert ok and jpeg, "JPEG 编码失败"
+    assert ok and jpeg, _("JPEG 编码失败")
     assert jpeg[:3] == b"\xff\xd8\xff", jpeg[:3]
-    print(f"JPEG: {pb.get_width()}x{pb.get_height()}, {len(jpeg) / 1024:.0f} KB")
+    print("JPEG: {0}x{1}, {2:.0f} KB".format(
+        pb.get_width(), pb.get_height(), len(jpeg) / 1024))
 
     t0 = time.monotonic()
     text, meta = vlm_ask_image(jpeg, VLM_PROMPT, 64)
     elapsed = time.monotonic() - t0
-    assert text and text != "(模型没有输出内容)", "模型无输出"
-    assert meta.get("mode") == "image", f"服务端没走图像通路: {meta}"
-    print(f"回答 ({elapsed:.1f}s): {text}")
-    print(f"指标: {vlm_meta_line(meta, elapsed, len(jpeg))}")
+    assert text and text != _("(模型没有输出内容)"), _("模型无输出")
+    assert meta.get("mode") == "image", _("服务端没走图像通路: {meta}").format(
+        meta=meta)
+    print(_("回答 ({s:.1f}s): {text}").format(s=elapsed, text=text))
+    print(_("指标: {line}").format(
+        line=vlm_meta_line(meta, elapsed, len(jpeg))))
     print("VLM SELFTEST OK")
 
 

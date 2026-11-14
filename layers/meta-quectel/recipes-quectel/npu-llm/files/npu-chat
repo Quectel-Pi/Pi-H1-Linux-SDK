@@ -23,6 +23,22 @@ import time
 import urllib.request
 import wave
 
+# Board language. The msgid is the Chinese source string below, so a Chinese (or
+# C/POSIX) session shows it unchanged and every other session loads
+# /usr/share/locale/en/LC_MESSAGES/npu-chat.mo. ln-i18n is a plain file installed
+# by its own recipe, not a site-packages module, hence the explicit sys.path. A
+# missing ln-i18n must not stop the chat: fall back to the source text (all
+# Chinese) rather than failing to start.
+# This has to sit above `import gi` because SEND_HINTS and the other module-level
+# constants below call _() while the module is being imported.
+sys.path.insert(0, "/usr/share/ln-i18n")
+try:
+    import ln_i18n  # noqa: E402
+    _ = ln_i18n.setup("npu-chat")
+except ImportError:                      # ln-i18n not installed: keep source text
+    def _(message):
+        return message
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -118,7 +134,7 @@ IMAGE_SUFFIX_MIME = {
 # qwen_server.py rejects a decoded image bigger than limits.max_image_bytes, and
 # takes exactly one inline image per request (data URL only, no remote URLs).
 IMAGE_MAX_BYTES = int(os.environ.get("NPU_CHAT_IMAGE_MAX", "8000000"))
-DEFAULT_IMAGE_PROMPT = "描述这张图片里有什么。"
+DEFAULT_IMAGE_PROMPT = _("描述这张图片里有什么。")
 # The camera the board exposes: CamxBridge's v4l2loopback node. It is the node
 # qcom-npu-test drives as well, and only one reader can hold it at a time.
 CAM_DEVICE = os.environ.get("NPU_CHAT_CAMERA", "/dev/video10")
@@ -203,7 +219,8 @@ scrolled > viewport { background: transparent; }
 .attach-hint { font-family: "Noto Sans CJK SC", sans-serif; font-size: 10px; color: #7d8aa5; }
 """
 
-SEND_HINTS = ["介绍一下你自己", "用三句话描述大海", "写一首关于秋天的短诗", "什么是 Hexagon NPU？"]
+SEND_HINTS = [_("介绍一下你自己"), _("用三句话描述大海"),
+              _("写一首关于秋天的短诗"), _("什么是 Hexagon NPU？")]
 
 # prompt budget in chars, sized to the model's context window
 BUDGET = {"qwen": 1700, "llama": 6000}
@@ -302,9 +319,9 @@ def start_qwen35():
     if qwen35_up():
         return None
     if not _qwen35_artifacts():
-        return ("qwen3.5 的模型文件不全（在 %s 下需要 %s）。\n"
-                "模型由 qwen35-npu-model 包安装，检查 /usr/share/qwen35 是否"
-                "完整，重装该包后 systemctl restart qwen35。"
+        return (_("qwen3.5 的模型文件不全（在 %s 下需要 %s）。\n"
+                 "模型由 qwen35-npu-model 包安装，检查 /usr/share/qwen35 是否"
+                 "完整，重装该包后 systemctl restart qwen35。")
                 % (QWEN35_DIR, " / ".join(QWEN35_REQUIRED)))
     # The engine needs root: /dev/fastrpc-cdsp is root:system and it pins cores
     # 4-7. The unit owns it and the GUI just asks systemd; direct launch stays as
@@ -321,11 +338,13 @@ def start_qwen35():
                 break
     # Resident by design: a reload per turn would cost several seconds of NPU
     # upload on top of the ~6 s cold start.
-    for _ in range(90):
+    # (wait, not _: `_` is the gettext function now, and reusing it as a loop
+    # variable would make this name local and break the _() call below.)
+    for wait in range(90):
         if qwen35_up(1.0):
             return None
         time.sleep(1)
-    return "qwen3.5 未启动，试 systemctl start qwen35 或看 journalctl -u qwen35"
+    return _("qwen3.5 未启动，试 systemctl start qwen35 或看 journalctl -u qwen35")
 
 
 def trim_history(history, budget=None):
@@ -345,6 +364,7 @@ def trim_history(history, budget=None):
 
 
 def image_capable(model):
+    # i18n-ignore: 中英混写的注释性 docstring，不是界面文案
     """识图 is a qwen3.5-only feature: the genie models have no vision tower."""
     return model == QWEN35_MODEL and QWEN35_VISION
 
@@ -358,13 +378,13 @@ def load_image(path):
     """Read a still image off disk and check it against the server's limits."""
     mime = IMAGE_SUFFIX_MIME.get(os.path.splitext(path)[1].lower())
     if mime is None:
-        raise ValueError("只支持 PNG / JPEG / WebP 图片")
+        raise ValueError(_("只支持 PNG / JPEG / WebP 图片"))
     with open(path, "rb") as f:
         data = f.read()
     if not data:
-        raise ValueError("图片是空文件")
+        raise ValueError(_("图片是空文件"))
     if len(data) > IMAGE_MAX_BYTES:
-        raise ValueError("图片太大（%.1f MB，上限 %.0f MB）"
+        raise ValueError(_("图片太大（%.1f MB，上限 %.0f MB）")
                          % (len(data) / 1e6, IMAGE_MAX_BYTES / 1e6))
     return {"data": data, "mime": mime, "name": os.path.basename(path)}
 
@@ -383,13 +403,13 @@ def mean_luma(raw, step=997):
 def jpeg_from_rgb(raw, width, height, quality=90):
     """Encode one raw RGB frame as JPEG: the server takes data URLs only."""
     if GdkPixbuf is None:
-        raise RuntimeError("缺少 GdkPixbuf，无法编码摄像头画面")
+        raise RuntimeError(_("缺少 GdkPixbuf，无法编码摄像头画面"))
     pixbuf = GdkPixbuf.Pixbuf.new_from_bytes(
         GLib.Bytes.new(bytes(raw)), GdkPixbuf.Colorspace.RGB, False, 8,
         width, height, width * 3)
     ok, buf = pixbuf.save_to_bufferv("jpeg", ["quality"], [str(int(quality))])
     if not ok or not buf:
-        raise RuntimeError("JPEG 编码失败")
+        raise RuntimeError(_("JPEG 编码失败"))
     return bytes(buf)
 
 
@@ -409,16 +429,17 @@ def camera_jpeg(device=CAM_DEVICE, width=CAM_W, height=CAM_H,
            "video/x-raw,format=RGB,width=%d,height=%d" % (width, height),
            "!", "fdsink", "fd=1", "sync=false"]
     if not shutil.which("gst-launch-1.0"):
-        raise RuntimeError("缺少 gst-launch-1.0，无法取摄像头画面")
+        raise RuntimeError(_("缺少 gst-launch-1.0，无法取摄像头画面"))
     try:
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
                                 stderr=subprocess.DEVNULL, bufsize=nbytes * 2)
     except OSError as e:
-        raise RuntimeError("启动取流失败：%s" % e) from e
+        raise RuntimeError(_("启动取流失败：%s") % e) from e
     best, good = None, 0
     try:
         fd = proc.stdout.fileno()
-        for _ in range(max(1, frames)):
+        # attempt, not _: see the note in start_qwen35()
+        for attempt in range(max(1, frames)):
             frame = read_frame(fd, nbytes)
             if frame is None:
                 break
@@ -432,8 +453,8 @@ def camera_jpeg(device=CAM_DEVICE, width=CAM_W, height=CAM_H,
         proc.wait()
     if best is None:
         raise RuntimeError(
-            "%s 没有出图（CamxBridge 可能还没建流）。稍等再拍，"
-            "或 systemctl restart camx-v4l2-bridge@0" % device)
+            _("%s 没有出图（CamxBridge 可能还没建流）。稍等再拍，"
+              "或 systemctl restart camx-v4l2-bridge@0") % device)
     return jpeg_from_rgb(best, width, height)
 
 
@@ -559,7 +580,8 @@ def ask(model, prompt, on_chunk=None, job=None, history=None, image=None):
     if model == QWEN35_MODEL:
         return ask_server(history or [("user", prompt)], on_chunk, job, image)
     if image is not None:
-        return "", f"{model} 不支持识图，只有 {QWEN35_MODEL} 能看图", 0.0, False, None
+        return "", _("{model} 不支持识图，只有 {only} 能看图").format(
+            model=model, only=QWEN35_MODEL), 0.0, False, None
     d = os.path.join(DATA, model)
     env = dict(os.environ)
     env["LD_LIBRARY_PATH"] = ROOT + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else "")
@@ -584,7 +606,8 @@ def ask(model, prompt, on_chunk=None, job=None, history=None, image=None):
             # Re-extract from everything so far: extract() already knows how to
             # skip the rpcmem banner and stop at [END], and on a truncated
             # buffer it just returns the text without the closing marker.
-            sofar, _ = extract(raw.decode("utf-8", "replace"))
+            # err, not _: see the note in start_qwen35()
+            sofar, _err = extract(raw.decode("utf-8", "replace"))
             if sofar and sofar != text:
                 text = sofar
                 if on_chunk:
@@ -597,7 +620,7 @@ def ask(model, prompt, on_chunk=None, job=None, history=None, image=None):
     stopped = bool(job and job.get("stop"))
     if text:
         return text, None, dt, stopped, None
-    _, err = extract(raw.decode("utf-8", "replace"))
+    _ignored, err = extract(raw.decode("utf-8", "replace"))
     if stopped:
         return "", None, dt, True, None
     return "", err or f"genie-t2t-run exited {p.returncode}", dt, False, None
@@ -679,6 +702,10 @@ _chars = None
 _lock = threading.Lock()
 _gen = threading.Lock()
 
+# i18n-ignore-start: 下面整段是 TTS 的文本处理，不是界面文案
+# DIGITS/UNITS/SAY_MAP 是中文读法字表：翻成英文就把 "12" 念成 "twelve" 了
+# （Matcha 是 zh-en 混合模型，拉丁数字它自己会读）。docstring 里的中文只是举例。
+# 这段一律不包 _()，也不随界面语言变——语音链路要念的永远是汉语字。
 DIGITS = "零一二三四五六七八九"
 UNITS = ("", "十", "百", "千")
 SAY_MAP = {"+": "加", "=": "等于", "×": "乘", "÷": "除以", "&": "和"}
@@ -834,6 +861,7 @@ def speakable(text):
     return "".join(out)
 
 
+# i18n-ignore-end：TTS 文本处理到此为止，下面是界面文案。
 def tts_engine():
     """'matcha', 'vits' or None, from whatever is actually on disk."""
     tts = os.path.join(VOICE, "tts")
@@ -1090,7 +1118,7 @@ class Recorder:
     def start(self):
         cmd = recorder()
         if cmd is None:
-            raise RuntimeError("需要 pw-record 或 arecord")
+            raise RuntimeError(_("需要 pw-record 或 arecord"))
         self.p = subprocess.Popen(
             cmd + [self.path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             preexec_fn=_die_with_parent,
@@ -1152,7 +1180,7 @@ class Chat(Gtk.Application):
         tl = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         t = Gtk.Label(label="NPU Chat", xalign=0)
         t.add_css_class("title")
-        s = Gtk.Label(label="QCS6490  ·  HEXAGON V68  ·  本地推理", xalign=0)
+        s = Gtk.Label(label=_("QCS6490  ·  HEXAGON V68  ·  本地推理"), xalign=0)
         s.add_css_class("subtitle")
         tl.append(t)
         tl.append(s)
@@ -1161,25 +1189,25 @@ class Chat(Gtk.Application):
         spacer.set_hexpand(True)
         head.append(spacer)
 
-        self.stop_btn = Gtk.Button(label="停止")
+        self.stop_btn = Gtk.Button(label=_("停止"))
         self.stop_btn.add_css_class("chip")
         self.stop_btn.set_sensitive(False)
         self.stop_btn.connect("clicked", self.stop)
         head.append(self.stop_btn)
 
-        self.speak_btn = Gtk.ToggleButton(label="🔊 朗读")
+        self.speak_btn = Gtk.ToggleButton(label=_("🔊 朗读"))
         self.speak_btn.add_css_class("chip")
         self.speak_btn.set_sensitive(voice_ready())
         self.speak_btn.set_active(voice_ready())
         self.speak_btn.connect("toggled", lambda b: None if b.get_active() else self.hush())
         head.append(self.speak_btn)
 
-        self.clear_btn = Gtk.Button(label="清空")
+        self.clear_btn = Gtk.Button(label=_("清空"))
         self.clear_btn.add_css_class("chip")
         self.clear_btn.connect("clicked", self.clear)
         head.append(self.clear_btn)
 
-        quit_btn = Gtk.Button(label="退出")
+        quit_btn = Gtk.Button(label=_("退出"))
         quit_btn.add_css_class("chip")
         quit_btn.add_css_class("quit")
         quit_btn.connect("clicked", lambda *_: self.quit())
@@ -1247,7 +1275,7 @@ class Chat(Gtk.Application):
         drop = Gtk.Button(label="✕")
         drop.add_css_class("chip")
         drop.set_valign(Gtk.Align.CENTER)
-        drop.set_tooltip_text("不带这张图")
+        drop.set_tooltip_text(_("不带这张图"))
         drop.connect("clicked", lambda *_: self.drop_attach())
         self.attach_bar.append(self.attach_pic)
         self.attach_bar.append(info)
@@ -1258,17 +1286,17 @@ class Chat(Gtk.Application):
         bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
         bar.set_margin_top(6)
         bar.set_margin_bottom(4)
-        self.img_btn = Gtk.ToggleButton(label="🖼 识图")
+        self.img_btn = Gtk.ToggleButton(label=_("🖼 识图"))
         self.img_btn.add_css_class("chip")
         pop = Gtk.Popover()
         pop.set_parent(self.img_btn)
         pbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         pbox.set_margin_top(6)
         pbox.set_margin_bottom(6)
-        pick_btn = Gtk.Button(label="上传图片…")
+        pick_btn = Gtk.Button(label=_("上传图片…"))
         pick_btn.add_css_class("flat")
         pick_btn.connect("clicked", lambda _b: self.choose_image(pop))
-        cam_btn = Gtk.Button(label="📷 摄像头拍照")
+        cam_btn = Gtk.Button(label=_("📷 摄像头拍照"))
         cam_btn.add_css_class("flat")
         cam_btn.connect("clicked", lambda _b: self.shoot(pop))
         pbox.append(pick_btn)
@@ -1280,12 +1308,12 @@ class Chat(Gtk.Application):
         self.sync_image_button()
         self.entry = Gtk.Entry()
         self.entry.add_css_class("entry")
-        self.entry.set_placeholder_text("输入消息，或按住 ↑ 说话…")
+        self.entry.set_placeholder_text(_("输入消息，或按住 ↑ 说话…"))
         self.entry.set_hexpand(True)
         self.entry.connect("activate", self.send)
         self.send_btn = Gtk.Button(label="↑")
         self.send_btn.add_css_class("send")
-        self.send_btn.set_tooltip_text("点一下发送，按住说话")
+        self.send_btn.set_tooltip_text(_("点一下发送，按住说话"))
         hold = Gtk.GestureClick()
         hold.set_propagation_phase(Gtk.PropagationPhase.CAPTURE)
         hold.connect("pressed", self.talk_press)
@@ -1294,15 +1322,15 @@ class Chat(Gtk.Application):
         bar.append(self.img_btn)
         bar.append(self.entry)
         bar.append(self.send_btn)
-        self.cont_btn = Gtk.ToggleButton(label="🔁 连续对话")
+        self.cont_btn = Gtk.ToggleButton(label=_("🔁 连续对话"))
         self.cont_btn.add_css_class("chip")
         self.cont_btn.set_sensitive(voice_ready())
-        self.cont_btn.set_tooltip_text("回答读完自动再次开麦，接着问下一句")
+        self.cont_btn.set_tooltip_text(_("回答读完自动再次开麦，接着问下一句"))
         self.cont_btn.connect("toggled", self.cont_toggled)
         bar.append(self.cont_btn)
         col.append(bar)
 
-        self.status = Gtk.Label(label="就绪", xalign=0)
+        self.status = Gtk.Label(label=_("就绪"), xalign=0)
         self.status.add_css_class("status")
         col.append(self.status)
 
@@ -1317,7 +1345,7 @@ class Chat(Gtk.Application):
             try:
                 self.set_attach(load_image(self.ask_image))
             except (OSError, ValueError) as e:
-                self.status.set_text(f"读图片失败：{e}")
+                self.status.set_text(_("读图片失败：{e}").format(e=e))
         if self.ask_text:
             GLib.timeout_add(200, lambda: (self.fire(self.ask_text), False)[1])
         elif self.shot:
@@ -1335,12 +1363,14 @@ class Chat(Gtk.Application):
             return
 
         def run():
-            GLib.idle_add(self.status.set_text, f"正在把 {self.model} 载入 NPU…")
+            GLib.idle_add(self.status.set_text,
+                          _("正在把 {model} 载入 NPU…").format(model=self.model))
             err = start_qwen35()
             if err:
-                GLib.idle_add(self.status.set_text, "载入失败，发送消息可重试")
+                GLib.idle_add(self.status.set_text, _("载入失败，发送消息可重试"))
             else:
-                GLib.idle_add(self.status.set_text, f"{self.model} 已就绪")
+                GLib.idle_add(self.status.set_text,
+                              _("{model} 已就绪").format(model=self.model))
 
         threading.Thread(target=run, daemon=True).start()
 
@@ -1369,7 +1399,7 @@ class Chat(Gtk.Application):
         if btn.get_active():
             if voice_ready():
                 self.speak_btn.set_active(True)  # a hands-free loop has to talk back
-            self.status.set_text("连续对话：回答读完自动开麦")
+            self.status.set_text(_("连续对话：回答读完自动开麦"))
             if not self.busy:
                 self.next_turn()
         elif self.vstop is not None:
@@ -1396,13 +1426,13 @@ class Chat(Gtk.Application):
             rec = Recorder()
             rec.start()
         except Exception as e:
-            self.status.set_text(f"录音失败：{e}")
+            self.status.set_text(_("录音失败：{e}").format(e=e))
             return False
         self.rec = rec
         self.vstop = threading.Event()
         self.send_btn.set_label("●")
         self.send_btn.add_css_class("listening")
-        self.status.set_text("在听…说完自动发送")
+        self.status.set_text(_("在听…说完自动发送"))
         threading.Thread(target=self._vad, args=(rec, self.vstop), daemon=True).start()
         return False
 
@@ -1431,7 +1461,7 @@ class Chat(Gtk.Application):
         self.vstop = None
         self.send_btn.set_label("↑")
         self.send_btn.remove_css_class("listening")
-        self.status.set_text("识别中…")
+        self.status.set_text(_("识别中…"))
         threading.Thread(target=self._hear, args=(path,), daemon=True).start()
         return False
 
@@ -1455,11 +1485,11 @@ class Chat(Gtk.Application):
             self.rec.start()
         except Exception as e:
             self.rec = None
-            self.status.set_text(f"录音失败：{e}")
+            self.status.set_text(_("录音失败：{e}").format(e=e))
             return False
         self.send_btn.set_label("●")
         self.send_btn.add_css_class("listening")
-        self.status.set_text("正在听…松开发送")
+        self.status.set_text(_("正在听…松开发送"))
         # a lost release (finger off the screen) must not record until the app dies
         self.cap = GLib.timeout_add_seconds(60, self._talk_cap)
         return False
@@ -1484,7 +1514,7 @@ class Chat(Gtk.Application):
         self.send_btn.set_label("↑")
         self.send_btn.remove_css_class("listening")
         path = rec.stop()
-        self.status.set_text("识别中…")
+        self.status.set_text(_("识别中…"))
         threading.Thread(target=self._hear, args=(path,), daemon=True).start()
 
     def _hear(self, path):
@@ -1497,13 +1527,13 @@ class Chat(Gtk.Application):
 
     def _heard(self, text, err):
         if err:
-            self.status.set_text(f"识别失败：{err}")
+            self.status.set_text(_("识别失败：{err}").format(err=err))
         elif not text:
-            self.status.set_text("没听清，再说一次")
+            self.status.set_text(_("没听清，再说一次"))
             if self.cont_btn.get_active():
                 GLib.timeout_add(600, self._auto_listen)
         else:
-            self.status.set_text(f"听到：{text}")
+            self.status.set_text(_("听到：{text}").format(text=text))
             # a spoken question always gets a spoken answer
             if voice_ready():
                 self.speak_btn.set_active(True)
@@ -1534,22 +1564,23 @@ class Chat(Gtk.Application):
             self.img_pop.popdown()
 
     def sync_image_button(self):
+        # i18n-ignore: 同上，中英混写的 docstring
         """识图 is only meaningful for the vision model: gate the button on it."""
         ok = image_capable(self.model)
         self.img_btn.set_sensitive(ok)
         self.img_btn.set_tooltip_text(
-            "上传图片或拍一张照片，让 %s 看图回答" % self.model if ok else
-            "只有 %s 带视觉塔，能识图" % QWEN35_MODEL)
+            _("上传图片或拍一张照片，让 {model} 看图回答").format(model=self.model) if ok else
+            _("只有 {model} 带视觉塔，能识图").format(model=QWEN35_MODEL))
 
     def choose_image(self, pop):
         pop.popdown()
         if not image_capable(self.model):
-            self.status.set_text(f"只有 {QWEN35_MODEL} 支持识图")
+            self.status.set_text(_("只有 {model} 支持识图").format(model=QWEN35_MODEL))
             return
         dlg = Gtk.FileDialog()
-        dlg.set_title("选择要识别的图片")
+        dlg.set_title(_("选择要识别的图片"))
         f = Gtk.FileFilter()
-        f.set_name("图片（PNG / JPEG / WebP）")
+        f.set_name(_("图片（PNG / JPEG / WebP）"))
         for mime in ("image/png", "image/jpeg", "image/webp"):
             f.add_mime_type(mime)
         filters = Gio.ListStore.new(Gtk.FileFilter)
@@ -1567,27 +1598,27 @@ class Chat(Gtk.Application):
             return
         path = gfile.get_path()
         if not path:
-            self.status.set_text("只支持本地图片文件")
+            self.status.set_text(_("只支持本地图片文件"))
             return
         try:
             self.set_attach(load_image(path))
         except (OSError, ValueError) as e:
-            self.status.set_text(f"读图片失败：{e}")
+            self.status.set_text(_("读图片失败：{e}").format(e=e))
 
     def shoot(self, pop=None):
         """One frame from the CamxBridge node, off the main loop."""
         if pop is not None:
             pop.popdown()
         if not image_capable(self.model):
-            self.status.set_text(f"只有 {QWEN35_MODEL} 支持识图")
+            self.status.set_text(_("只有 {model} 支持识图").format(model=QWEN35_MODEL))
             return
-        self.status.set_text(f"正在从 {CAM_DEVICE} 拍照…")
+        self.status.set_text(_("正在从 {device} 拍照…").format(device=CAM_DEVICE))
 
         def run():
             try:
                 data = camera_jpeg()
                 image = {"data": data, "mime": "image/jpeg",
-                         "name": "摄像头 %dx%d" % (CAM_W, CAM_H)}
+                         "name": _("摄像头 {w}x{h}").format(w=CAM_W, h=CAM_H)}
                 err = None
             except Exception as e:  # pipeline missing, node busy, encoder
                 image, err = None, f"{type(e).__name__}: {e}"
@@ -1597,7 +1628,7 @@ class Chat(Gtk.Application):
 
     def _shoot_done(self, image, err):
         if err:
-            self.status.set_text(f"拍照失败：{err}")
+            self.status.set_text(_("拍照失败：{err}").format(err=err))
             return False
         self.set_attach(image)
         return False
@@ -1608,11 +1639,11 @@ class Chat(Gtk.Application):
             self.attach_pic.set_paintable(texture)
         self.image = image
         kb = len(image["data"]) / 1024.0
-        self.attach_name.set_text(image.get("name") or "图片")
+        self.attach_name.set_text(image.get("name") or _("图片"))
         self.attach_hint.set_text(
-            "%.0f KB · 发送时一起提交给 %s，首字会慢一些" % (kb, QWEN35_MODEL))
+            _("%.0f KB · 发送时一起提交给 %s，首字会慢一些") % (kb, QWEN35_MODEL))
         self.attach_bar.set_visible(True)
-        self.status.set_text("图片已就绪，可以输入问题（留空则让它描述这张图）")
+        self.status.set_text(_("图片已就绪，可以输入问题（留空则让它描述这张图）"))
 
     def drop_attach(self):
         self.image = None
@@ -1632,7 +1663,7 @@ class Chat(Gtk.Application):
             # the picture would be rejected by a text model anyway
             self.drop_attach()
         pop.popdown()
-        self.status.set_text(f"已切换到 {name}")
+        self.status.set_text(_("已切换到 {name}").format(name=name))
 
     def stop(self, *_):
         """Cut the turn short. SIGINT first; genie usually exits in ~0.1 s and the
@@ -1642,9 +1673,9 @@ class Chat(Gtk.Application):
         if p is None or p.poll() is not None:
             if self.busy:  # server model: no child, flag the reader loop
                 self.job["stop"] = True
-                self.status.set_text("正在停止…")
+                self.status.set_text(_("正在停止…"))
                 return
-            self.status.set_text("已停止朗读")
+            self.status.set_text(_("已停止朗读"))
             return
         self.job["stop"] = True
         p.send_signal(signal.SIGINT)
@@ -1655,7 +1686,7 @@ class Chat(Gtk.Application):
             return False
 
         GLib.timeout_add(2000, backstop)
-        self.status.set_text("正在停止…")
+        self.status.set_text(_("正在停止…"))
 
     def clear(self, *_):
         if getattr(self, "busy", False):
@@ -1667,7 +1698,7 @@ class Chat(Gtk.Application):
         self.welcome = None
         self.drop_attach()
         self.show_welcome()
-        self.status.set_text("已清空")
+        self.status.set_text(_("已清空"))
 
     def on_key(self, _c, keyval, _code, _mods):
         if keyval == 0xFF1B:  # Escape
@@ -1680,11 +1711,11 @@ class Chat(Gtk.Application):
         w.set_valign(Gtk.Align.CENTER)
         w.set_margin_top(40)
         w.set_margin_bottom(40)
-        t = Gtk.Label(label="问点什么吧", xalign=0.5)
+        t = Gtk.Label(label=_("问点什么吧"), xalign=0.5)
         t.add_css_class("welcome")
-        s = Gtk.Label(label="Qwen3.5-0.8B · Qwen2.5-0.5B · Llama-3.2-1B 跑在 NPU 上，不联网", xalign=0.5)
+        s = Gtk.Label(label=_("Qwen3.5-0.8B · Qwen2.5-0.5B · Llama-3.2-1B 跑在 NPU 上，不联网"), xalign=0.5)
         s.add_css_class("subtitle")
-        v = Gtk.Label(label=f"Qwen3.5-0.8B 还能识图：点 🖼 识图 上传图片或拍照", xalign=0.5)
+        v = Gtk.Label(label=_("Qwen3.5-0.8B 还能识图：点 🖼 识图 上传图片或拍照"), xalign=0.5)
         v.add_css_class("subtitle")
         w.append(t)
         w.append(s)
@@ -1767,7 +1798,7 @@ class Chat(Gtk.Application):
         image = self.image
         if image is not None and not image_capable(self.model):
             self.drop_attach()
-            self.status.set_text(f"{self.model} 不支持识图，已移除图片")
+            self.status.set_text(_("{model} 不支持识图，已移除图片").format(model=self.model))
             image = None
         if not text and image is None:
             return
@@ -1775,7 +1806,8 @@ class Chat(Gtk.Application):
             self.list.remove(self.welcome)
             self.welcome = None
 
-        if not text:  # a bare picture: let the model describe it
+        if not text:  # a bare picture: let the model describe it, in the UI
+            # language, so the answer comes back in the same one
             text = DEFAULT_IMAGE_PROMPT
         self.entry.set_text("")
         self.drop_attach()
@@ -1790,7 +1822,7 @@ class Chat(Gtk.Application):
             self.bubble(text, True)
         else:
             self.bubble(text, True,
-                        meta="识图 · 图像 %.0f KB" % (len(image["data"]) / 1024.0),
+                        meta=_("识图 · 图像 %.0f KB") % (len(image["data"]) / 1024.0),
                         image=image)
         self.history.append(("user", text))
 
@@ -1847,12 +1879,16 @@ class Chat(Gtk.Application):
             el = max(time.monotonic() - phase["t0"], 0.001)
             if phase["got"]:
                 self.status.set_text(
-                    f"{self.model}  首字 {phase['first']:0.1f}s  生成 {el:0.1f}s"
-                    f"  约 {tokens(anim['target']) / el:0.1f} tok/s"
+                    _("{model}  首字 {first:0.1f}s  生成 {el:0.1f}s"
+                      "  约 {rate:0.1f} tok/s").format(
+                        model=self.model, first=phase["first"], el=el,
+                        rate=tokens(anim["target"]) / el)
                 )
             else:
                 body.set_text(["●", "●●", "●●●"][phase["i"] % 3])
-                self.status.set_text(f"{self.model} 正在 NPU 上生成…  {el:0.1f}s")
+                self.status.set_text(
+                    _("{model} 正在 NPU 上生成…  {el:0.1f}s").format(
+                        model=self.model, el=el))
             phase["i"] += 1
             return True
 
@@ -1877,12 +1913,12 @@ class Chat(Gtk.Application):
             self.chip.remove_css_class("busy")
             if err:
                 self.list.remove(holder)
-                self.error(f"推理失败：{err}")
-                self.status.set_text("失败")
+                self.error(_("推理失败：{err}").format(err=err))
+                self.status.set_text(_("失败"))
                 return False
             if not txt:
                 self.list.remove(holder)
-                self.status.set_text("已停止")
+                self.status.set_text(_("已停止"))
                 return False
             show(txt)
             if getattr(self, "shot", False) and self.ask_text:
@@ -1897,12 +1933,13 @@ class Chat(Gtk.Application):
                 self.speaker.say(tail)
                 self.speech_pos = len(txt)
             approx = tokens(txt) / dt if dt > 0 else 0
-            tag = "已停止" if stopped else f"{dt:0.1f}s"
+            tag = _("已停止") if stopped else "%.1fs" % dt
             seen = (meta or {}).get("vision_run_seconds") or 0
             self.status.set_text(
-                f"{self.model}  ·  首字 {phase['first']:0.1f}s  ·  {tag}"
-                f"  ·  约 {approx:0.1f} tok/s"
-                + (f"  ·  识图 {seen:0.1f}s" if seen else "")
+                _("{model}  ·  首字 {first:0.1f}s  ·  {tag}"
+                  "  ·  约 {rate:0.1f} tok/s").format(
+                    model=self.model, first=phase["first"], tag=tag, rate=approx)
+                + (_("  ·  识图 {seen:0.1f}s").format(seen=seen) if seen else "")
             )
             if self.ask_text:
                 print(f"ANSWER ({dt:0.1f}s): {txt}\nSTATUS: {self.status.get_text()}")
@@ -1918,6 +1955,8 @@ class Chat(Gtk.Application):
 
 
 def selftest():
+    # i18n-ignore-start: 自检输入的样例文本与断言期望值。它们是梵语/中文测试数据，
+    # 不是界面文案；翻了 assert 在英文会话下会直接失败。
     q = build_prompt("qwen2.5-0.5b", [("user", "hi"), ("assistant", "yo"), ("user", "ok")])
     assert q.endswith("<|im_start|>assistant\n"), q
     assert "<|im_start|>user\nhi<|im_end|>" in q
@@ -2016,6 +2055,7 @@ def selftest():
     assert set(TTS_GAIN) == {"matcha", "vits"}, TTS_GAIN
     assert all(0.0 < g <= 1.0 for g in TTS_GAIN.values()), TTS_GAIN
     assert 0.0 < TTS_PEAK < 1.0, TTS_PEAK
+    # i18n-ignore-end
     print("selftest ok")
 
 
@@ -2035,6 +2075,7 @@ def voice_selftest(seconds=4):
     print(f"ASR {time.monotonic() - t0:0.2f}s: {text!r}")
     out = "/tmp/npu-chat-selftest-tts.wav"
     t0 = time.monotonic()
+    # i18n-ignore: 自检念的样例句，故意固定中文（验的是语音链路，不是界面语言）
     secs = synth("语音链路正常。", out)
     dt = time.monotonic() - t0
     print(f"TTS {dt:0.2f}s for {secs:0.2f}s audio ({secs / dt:0.2f}x real time)")

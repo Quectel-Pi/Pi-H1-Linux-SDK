@@ -1,8 +1,9 @@
 [Desktop Entry]
 Type=Application
-Name=Pi 编程助手（首次运行）
-Name[en]=Pi Coding Agent (first run)
-Comment=Install and configure the Pi coding agent
+Name=Pi Agent (first run)
+Name[zh_CN]=Pi Agent（首次运行）
+Comment=Install and configure the Pi Agent
+Comment[zh_CN]=安装并配置 Pi Agent
 Exec=/usr/bin/pi-agent --only-if-needed
 Icon=pi-agent
 Terminal=false

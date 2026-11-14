@@ -1,8 +1,8 @@
-# Pi 编程助手（pi-agent-setup）
+# Pi Agent（pi-agent-setup）
 
 这个包**不预装 pi**。它提供：
 
-- 应用列表里一个图标 **“Pi 编程助手”**
+- 应用列表里一个图标 **“Pi Agent”**
 - 首次登录自动弹出的安装向导
 
 两者都指向同一个小启动器 `/usr/bin/pi-agent`，由它按当前状态分派：
@@ -25,12 +25,33 @@
 
 右键图标也能看到“安装 / 重新配置向导”这一项。
 
+## 中英文切换
+
+界面跟着系统语言走，不需要单独的设置项：GNOME「设置 → 区域与语言」改完，
+**下次登录**（应用重启）后生效。
+
+| 系统语言 | 看到的内容 |
+|---|---|
+| 中文（`zh_CN.*`） | 源码里的中文原文，**不加载**任何 `.mo` |
+| 其它（`en_US.*` / `C` / 未设置） | `/usr/share/locale/en/LC_MESSAGES/pi-agent-setup.mo` 里的英文 |
+
+机制见 `layers/meta-quectel/recipes-quectel/i18n/README.md`（四个板载 GUI 共用）：
+msgid 就是中文原文，所以缺翻译文件时兑底是中文而不是空白。
+
+三处要分开看：
+
+- **`.desktop`** 不走 gettext，用 `Name=` / `Name[zh_CN]=` 这套键；
+- **`pi-agent` 启动器的 shell 提示**（“未知参数”、“找不到终端”等）没有 gettext，
+  写成 `English / 中文` 一行双语：板子可能是任一语言，单语输出在另一种语言下更难看；
+- **`engine.py` 的 status JSON**：key（`pi_installed` 等）不翻，给人看的 value
+  与命令行 `--help` 文本都翻。
+
 ## 首次登录弹窗
 
 开机登录 GNOME 后，如果 pi 还没装（或装了没配），会自动弹窗：
 
 ```
-安装 Pi 编程助手？
+安装 Pi Agent？
   需要联网：下载 Node.js 运行时和 pi 本体（约 250 MB）
   不需要管理员密码：全部装在你的主目录（~/.local）
   随时可卸载
@@ -60,7 +81,7 @@
 
 两种方式等价：
 
-1. 点应用列表里的 **Pi 编程助手** 图标 → 自动开终端进 `~/pi-workspace` 并运行 pi
+1. 点应用列表里的 **Pi Agent** 图标 → 自动开终端进 `~/pi-workspace` 并运行 pi
 2. 自己开终端：
 
    ```bash
@@ -70,6 +91,55 @@
 
 窗口里也写了：`/model` 切模型、`/login` 换 Key、`Ctrl+C` 退出、
 `pi -c` 继续上次会话。
+
+## 板端技能包（不在固件里，需同意才下载）
+
+pi 要在板子上干活，需要知道这块板子的实际情况（外设、调试入口、实测结论）。
+这套内容在 `github.com/super617/pi-skills`，**不在固件里**。
+
+### 为什么不在固件里
+
+那个仓库没有声明任何许可（没有 LICENSE、没有 COPYING、README 里也没写）。
+默认是“保留所有权利”，把它烤进固件就等于随镜像分发，这是授权问题。
+所以镜像只带"能去拉"的能力，不带内容本身。
+
+### 什么时候会问
+
+| 时机 | 行为 |
+|---|---|
+| 装 pi 的过程中 | 弹一次框问要不要装技能包（可"安装 / 现在不装 / 不再询问"） |
+| 每次登录 | 检查远端版本；有新版才弹框，无新版或离线**完全静默** |
+| 点图标启动 pi | 只重建软链，不联网 |
+
+**任何时候都不会静默下载**。选"不再询问"之后，装向导和登录钩子都不再问，
+要反悔只能手动跑 `engine.py skills-install`。
+
+### 装到哪、怎么生效
+
+```
+~/.pi/agent/pi-skills        ← 拉下来的内容（git clone，没有 git 时走 tar.gz）
+~/.pi/agent/skills/<name>    ← 软链，pi 从这个目录读用户技能
+```
+
+软链指向而不是复制，所以更新后不需要改 pi 的任何配置。
+第一次优先用 `git clone`（之后能增量更新）；镜像里没有 git 时
+engine.py 会退到 `codeload.github.com` 的 tar.gz，功能一样。
+
+### 命令行
+
+```bash
+python3 /usr/bin/pi-agent-setup --ask-skills          # 手动弹一次询问框
+engine.py skills-status                               # 装没装、什么版本
+engine.py skills-check                                # 0=有更新 1=最新 2=离线
+engine.py skills-install                              # 直接装（跳过询问）
+engine.py skills-decline                              # 记住不要再问
+engine.py skills-sync                                 # 只重建软链
+```
+
+删掉即可卸载：`rm -rf ~/.pi/agent/pi-skills ~/.pi/agent/skills`。
+
+> 旧固件里的 `board-skills` / `board-check` / `board-shot` 三个命令**已经没了**——
+> 它们也是那个无授权仓库里的脚本，不能随镜像分发。
 
 ## 卸载
 
@@ -180,6 +250,34 @@ pi 的配置目录是 `~/.pi/agent/`（可用 `PI_CODING_AGENT_DIR` 覆盖），
 - 启动器六个分支实测：未安装→向导、半配置→`--page config`（预填 URL/模型，
   Key 留空）、已配置→终端内运行 pi、`--setup`→强制向导、`--here`→当前目录、
   autostart 已配置→静默退出 rc=0
+
+## 许可 / License
+
+这里有**两个**作品，都是 MIT，但是不是同一家的东西：
+
+| | 许可 | 版权 |
+|---|---|---|
+| **Pi Agent**（`@earendil-works/pi-coding-agent`，向导下载的那个 npm 包） | MIT | earendil-works |
+| **pi-agent-setup**（本向导、`pi-agent` 启动器、`engine.py`、`.desktop`） | MIT | 本仓库 |
+
+两者都以 MIT 发布，可以自由使用、修改、再分发（保留版权声明与许可全文）。
+
+### 为什么包里自带一份 LICENSE
+
+上游 npm 包 `package.json` 只写了 `"license": "MIT"`（作者 Mario Zechner，
+仓库 `github.com/earendil-works/pi`），**tarball 里没有 LICENSE 文件**。
+所以 MIT 要求的“随副本分发许可全文”只能由本包提供：
+
+- 源文件：`files/LICENSE.pi-agent`（MIT 全文 + 注释头说明适用范围）
+- 装机后两份：
+  - `${docdir}/pi-agent-setup/copyright` — license bookkeeping
+  - `/usr/share/licenses/pi-agent/LICENSE` — 向导末页「查看许可」按钮打开的那份
+    路径写死在 `pi-agent-setup.py` 的 `LICENSE_PATH`，两处要一起改
+- `LIC_FILES_CHKSUM` 指向自己的 `LICENSE.pi-agent`（因为文件带注释头，
+  md5 与 `${COMMON_LICENSE_DIR}/MIT` 不同）
+
+向导首屏有一行小字、末页有 `Pi Agent © earendil-works · MIT License · https://pi.dev`
+和「查看许可」按钮（文件不存在时降级为弹窗里只显示这一行）。
 
 ## 已知取舍
 
