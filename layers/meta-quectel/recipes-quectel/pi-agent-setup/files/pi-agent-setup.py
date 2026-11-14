@@ -615,7 +615,7 @@ class SetupWindow(_WINDOW_BASE):
     # ------------------------------------------------------------------
     # welcome / failure actions
     # ------------------------------------------------------------------
-    def _on_later_clicked(self, *_):
+    def _on_later_clicked(self, *_args):
         state = engine.read_state()
         days = state.get("snooze_days") or engine.DEFAULT_SNOOZE_DAYS
         engine.snooze(days)
@@ -623,13 +623,13 @@ class SetupWindow(_WINDOW_BASE):
         self._toast(_("%d 天后再提醒。也可以随时从应用列表重新打开向导") % days)
         GLib.timeout_add(900, self.close)
 
-    def _on_never_clicked(self, *_):
+    def _on_never_clicked(self, *_args):
         engine.decline()
         self.result = "declined"
         self._toast(_("不再自动提醒。以后要装可以重新打开向导"))
         GLib.timeout_add(900, self.close)
 
-    def _on_install_clicked(self, *_):
+    def _on_install_clicked(self, *_args):
         if self.busy:
             return
         self.busy = True
@@ -771,7 +771,7 @@ class SetupWindow(_WINDOW_BASE):
                 self.model_row.entry.get_text().strip(),
                 self._current_api())
 
-    def _on_test_clicked(self, *_):
+    def _on_test_clicked(self, *_args):
         url, key, model, api = self._form()
         if not url or not key or not model:
             self.test_result.set_text(_("先把 API URL、API Key、模型 ID 都填上"))
@@ -809,7 +809,7 @@ class SetupWindow(_WINDOW_BASE):
         self.model_dropdown.set_sensitive(False)
         self.models_found = []
 
-    def _on_probe_clicked(self, *_):
+    def _on_probe_clicked(self, *_args):
         # Read the widgets HERE, on the main thread: GTK is not thread safe.
         url, key, _model, api = self._form()
         if not url or not key:
@@ -909,7 +909,7 @@ class SetupWindow(_WINDOW_BASE):
             (_("✔ 连接正常\n") if ok else _("✘ 连接失败\n")) + detail)
         return False
 
-    def _on_finish_clicked(self, *_):
+    def _on_finish_clicked(self, *_args):
         url, key, model, api = self._form()
         if not url or not key or not model:
             self.test_result.set_text(_("API URL、API Key、模型 ID 都不能为空"))
@@ -935,12 +935,12 @@ class SetupWindow(_WINDOW_BASE):
             _("pi 已安装并配置好：\n默认模型 %s\n端点 %s") % (model, base))
         self.stack.set_visible_child_name("done")
 
-    def _on_copy_clicked(self, *_):
+    def _on_copy_clicked(self, *_args):
         clipboard = Gdk.Display.get_default().get_clipboard()
         clipboard.set(HOW_TO_START)
         self._toast(_("启动步骤已复制到剪贴板"))
 
-    def _on_license_clicked(self, *_):
+    def _on_license_clicked(self, *_args):
         """Show the MIT text.
 
         Gtk.show_uri_on_window() is a GTK3 API; GTK4 only has the fire-and-
@@ -991,7 +991,7 @@ class SetupWindow(_WINDOW_BASE):
         dialog.present()
 
     # ------------------------------------------------------------------
-    def _on_close_request(self, *_):
+    def _on_close_request(self, *_args):
         if self.busy:
             self._toast(_("安装仍在进行，完成前请不要关机"))
         return False
