@@ -1,7 +1,7 @@
 ---
 name: user-profile
-description: "顶层约束 skill（跨 agent 通用）：每次启动先跑 quectel_build/skills/profile-check.sh 读 setting.inf 用户能力画像；PROFILE_MISSING 或 NOT_READY 则逐题引导提问，用 profile-set.sh 落盘；READY 则按输出的各域协作模式（mentor/guided/handoff）决定术语深度、自主度、提问边界与汇报格式。任何任务开始前先过这一层。"
-version: 1.2.0
+description: "顶层约束 skill（跨 agent 通用）：按需求类型分流——明确需求/解明确问题直接干活不建画像；闲聊与笼统产品需求才主动引导建画像。引导/执行时跑 quectel_build/skills/profile-check.sh 读 setting.inf，PROFILE_MISSING/NOT_READY 则逐题引导并用 profile-set.sh 落盘；READY 则按各域 mentor/guided/handoff 决定术语深度、自主度、提问边界与汇报格式。"
+version: 1.3.0
 author: Hermes Agent
 license: MIT
 platforms: [linux, darwin, windows]
@@ -34,7 +34,22 @@ metadata:
 | `quectel_build/skills/setting.inf` | 画像本体（每人一份，个人环境相关） | ❌ gitignore |
 | `quectel_build/skills/setting.inf.example` | 画像模板 | ✅ |
 
-## 2. 会话启动动作（必做）
+## 2. 会话启动动作（先分流，不是无条件引导）
+
+### 2.0 需求类型分流 ★先做这一步
+
+| 需求类型 | 判据 | 画像动作 |
+|---|---|---|
+| **明确需求 / 解明确问题** | 能一句话说出“要修什么/要什么效果”（HDMI 不亮、编一版烧、这行日志什么意思） | **暂不建画像，直接干活**：不打印检查过程、不发问卷、不提问。静默观察偏好即可。 |
+| **闲聊** | 无交付物诉求 | **主动建画像，但轻量**：顺聊天问 1~2 题，不连问 12 题、不打断节奏 |
+| **笼统产品需求** | 只有目标没边界（做个产品/设计一套方案/这板子能做什么） | **主动建画像，正经引导**：一次一题、每答落盘 |
+
+判断不清按“明确需求”处理（先干活），需要判深浅/定边界时再补画像。
+
+**不许拿分流当偷懒借口**：明确需求里反复要你做技术路线选择、或连续两轮猜错方向，
+说明缺画像，补一句“要不要顺手定一下能力画像”，但**不阻塞当前任务**。
+
+### 2.1 只有进入引导 / 按画像执行时，才跑检查
 
 ```bash
 sh quectel_build/skills/profile-check.sh
@@ -44,9 +59,9 @@ sh quectel_build/skills/profile-check.sh
 
 | 退出码 | 输出首行 | 动作 |
 |---|---|---|
-| `2` | `PROFILE_MISSING` | **不要开始干活**。走第 3 节引导流程 |
-| `3` | `PROFILE_NOT_READY` | 画像问了一半。读 `progress:` 从断点续问 |
-| `0` | `PROFILE_READY` | 直接按输出里的 `modes:` / `*_domains:` / 偏好执行第 4 节 |
+| `2` | `PROFILE_MISSING` | 引导场景：走第 3 节逐题引导。明确需求场景：静默跳过、直接干活 |
+| `3` | `PROFILE_NOT_READY` | 引导场景：读 `progress:` 从断点续问 |
+| `0` | `PROFILE_READY` | 按输出里的 `modes:` / `*_domains:` / 偏好执行第 4 节 |
 
 - 输出里的 `mentor_domains` / `guided_domains` / `handoff_domains` 就是**已算好的协作模式**，
   直接用，不要自己重新解释画像。
@@ -56,7 +71,8 @@ sh quectel_build/skills/profile-check.sh
   之后整场不再提画像。
 - 不要把整份画像打印给用户，除非用户明确要求。
 
-**禁止**：跳过 `profile-check.sh`；`PROFILE_MISSING` 时闷头干活；拿画像当免死金牌做越界操作。
+**禁止**：引导场景里跳过 `profile-check.sh`；`PROFILE_MISSING` 且属于闲聊/笼统需求时闷头干活；拿画像当免死金牌做越界操作。
+**也禁止**：明确需求场景下拿画像当拦路行——用户说“别问了先干活”就只问 Q1 或直接 quick-start。
 
 ## 3. 画像缺失/未完成时的引导流程
 
