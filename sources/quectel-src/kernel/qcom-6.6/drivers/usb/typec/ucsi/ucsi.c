@@ -967,6 +967,32 @@ static void ucsi_partner_change(struct ucsi_connector *con)
 
 	u_role = ucsi_partner_usb_role(con);
 
+	/*
+	 * Factory test mode forces the client role unconditionally (see
+	 * ucsi_partner_usb_role()), which also covered the detached port and so
+	 * hid the disconnect from the controller: the downstream role switch
+	 * (EUD) drops a request that matches the role it already holds, dwc3
+	 * therefore never saw USB_ROLE_NONE, never ran its cable-disconnect
+	 * handling (OTG_VBUS_VALID override, glue role) and never rebuilt the
+	 * core on the next attach - hot-plug stayed broken until reboot as soon
+	 * as factory mode was on.
+	 *
+	 * Pass NONE through on a real detach so the controller falls back to its
+	 * idle default (host) and the next attach takes the HOST -> DEVICE
+	 * rebuild path, which is what the non-factory path has always done.
+	 *
+	 * Only a detach of a partner that was really there is turned into NONE:
+	 * con->partner is still set while this runs (both callers unregister it
+	 * afterwards), whereas the 3-wire factory fixture never registers a
+	 * partner at all - the PPM cannot see it - and must keep the forced
+	 * DEVICE role, otherwise it would never enumerate on the tester.  The
+	 * attach path and the boot-time force in ucsi_register_port() are
+	 * untouched as well.
+	 */
+	if (fct_client && con->partner &&
+	    !(con->status.flags & UCSI_CONSTAT_CONNECTED))
+		u_role = USB_ROLE_NONE;
+
 	switch (ptype) {
 	case UCSI_CONSTAT_PARTNER_TYPE_UFP:
 	case UCSI_CONSTAT_PARTNER_TYPE_CABLE_AND_UFP:
