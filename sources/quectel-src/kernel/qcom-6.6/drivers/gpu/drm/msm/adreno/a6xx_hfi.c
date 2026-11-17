@@ -11,6 +11,15 @@
 
 #define HFI_MSG_ID(val) [val] = #val
 
+/*
+ * Upper bound on the number of response frames a6xx_hfi_wait_for_ack() will
+ * consume while looking for the ack of a single command. The response queue
+ * holds at most HFI_QUEUE_SIZE / sizeof(struct a6xx_hfi_msg_response) frames,
+ * so a full queue plus one round is a generous bound; anything beyond that
+ * means the GMU is not going to answer this seqnum.
+ */
+#define A6XX_HFI_ACK_MAX_FRAMES		256
+
 static const char * const a6xx_hfi_msg_id[] = {
 	HFI_MSG_ID(HFI_H2F_MSG_INIT),
 	HFI_MSG_ID(HFI_H2F_MSG_FW_VERSION),
@@ -109,6 +118,7 @@ static int a6xx_hfi_wait_for_ack(struct a6xx_gmu *gmu, u32 id, u32 seqnum,
 	struct a6xx_hfi_queue *queue = &gmu->queues[HFI_RESPONSE_QUEUE];
 	u32 val;
 	int ret;
+	int i;
 
 	/* Wait for a response */
 	ret = gmu_poll_timeout(gmu, REG_A6XX_GMU_GMU2HOST_INTR_INFO, val,
@@ -125,7 +135,15 @@ static int a6xx_hfi_wait_for_ack(struct a6xx_gmu *gmu, u32 id, u32 seqnum,
 	gmu_write(gmu, REG_A6XX_GMU_GMU2HOST_INTR_CLR,
 		A6XX_GMU_GMU2HOST_INTR_INFO_MSGQ);
 
-	for (;;) {
+	/*
+	 * Bounded: the loop below only advances by consuming messages from the
+	 * response queue, and the GMU can keep it populated with frames that
+	 * never match our seqnum (stale or ERROR frames) for as long as it is
+	 * wedged. On shutdown that would spin here forever with pid 1 in
+	 * device_shutdown(), which is what turns a bad GPU power-down into a
+	 * watchdog reset. Bail out after a bounded number of frames.
+	 */
+	for (i = 0; i < A6XX_HFI_ACK_MAX_FRAMES; i++) {
 		struct a6xx_hfi_msg_response resp;
 
 		/* Get the next packet */
@@ -170,6 +188,12 @@ static int a6xx_hfi_wait_for_ack(struct a6xx_gmu *gmu, u32 id, u32 seqnum,
 
 		return 0;
 	}
+
+	DRM_DEV_ERROR(gmu->dev,
+		"Message %s id %d gave up after %u frames without a matching ack\n",
+		a6xx_hfi_msg_id[id], seqnum, A6XX_HFI_ACK_MAX_FRAMES);
+
+	return -ETIMEDOUT;
 }
 
 static int a6xx_hfi_send_msg(struct a6xx_gmu *gmu, int id,

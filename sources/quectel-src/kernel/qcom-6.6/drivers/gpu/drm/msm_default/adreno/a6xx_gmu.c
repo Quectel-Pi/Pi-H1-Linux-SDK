@@ -16,6 +16,13 @@
 #include "msm_gpu_trace.h"
 #include "msm_mmu.h"
 
+/*
+ * Upper bound on how long a6xx_gmu_set_oob() waits for an in-progress MMU
+ * devcoredump before giving up on the OOB handshake. Kept well below the
+ * watchdog bark timeout so a wedged GPU cannot stretch a reboot past it.
+ */
+#define A6XX_GMU_OOB_COREDUMP_TIMEOUT_MS	3000
+
 static void a6xx_gmu_fault(struct a6xx_gmu *gmu)
 {
 	struct a6xx_gpu *a6xx_gpu = container_of(gmu, struct a6xx_gpu, gmu);
@@ -336,6 +343,11 @@ int a6xx_gmu_set_oob(struct a6xx_gmu *gmu, enum a6xx_gmu_oob_state state)
 	 * NB: if we are running on the gpu worker thread itself, the
 	 * fault_work that completes the coredump is queued behind us and
 	 * can never run -> bail out instead of waiting forever.
+	 *
+	 * The wait below is bounded as well: an unbounded
+	 * wait_for_completion() here hangs pid 1 inside device_shutdown()
+	 * when the GPU never finishes its coredump, which is exactly the
+	 * situation that ends in a watchdog reset instead of a clean reboot.
 	 */
 	do {
 		/* Wait for the acknowledge interrupt */
@@ -353,9 +365,16 @@ int a6xx_gmu_set_oob(struct a6xx_gmu *gmu, enum a6xx_gmu_oob_state state)
 
 		/* We may timeout because the GMU is temporarily wedged from
 		 * pending faults from the GPU and we are taking a devcoredump.
-		 * Wait until the MMU is resumed and try again.
+		 * Wait until the MMU is resumed and try again -- but only for a
+		 * bounded time.
 		 */
-		wait_for_completion(&gpu->fault_coredump_done);
+		if (!wait_for_completion_timeout(&gpu->fault_coredump_done,
+				msecs_to_jiffies(A6XX_GMU_OOB_COREDUMP_TIMEOUT_MS))) {
+			DRM_DEV_ERROR(gmu->dev,
+				"Timeout waiting for MMU coredump to finish (OOB set %s)\n",
+				a6xx_gmu_oob_bits[state].name);
+			break;
+		}
 	} while (true);
 
 	if (ret)

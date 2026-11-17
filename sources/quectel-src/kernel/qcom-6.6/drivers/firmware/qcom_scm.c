@@ -26,6 +26,7 @@
 #include <linux/of_reserved_mem.h>
 #include <linux/clk.h>
 #include <linux/reset-controller.h>
+#include <linux/reboot.h>
 #include <linux/remoteproc.h>
 #include <linux/sizes.h>
 #include <linux/arm-smccc.h>
@@ -2160,6 +2161,47 @@ static const struct kernel_param_ops download_mode_param_ops = {
 module_param_cb(download_mode, &download_mode_param_ops, NULL, 0644);
 MODULE_PARM_DESC(download_mode, "download mode: off/0/N for no dump mode, full/on/1/Y for full dump mode, mini for minidump mode and full,mini for both full and minidump mode together are acceptable values");
 
+/*
+ * Clear the TCSR download-mode bits from a reboot notifier instead of only from
+ * the platform .shutdown callback.
+ *
+ * Kernel .shutdown callbacks run in reverse probe order, and this driver probes
+ * at subsys_initcall() -- the earliest of any device -- so qcom_scm_shutdown()
+ * is the very last one to run in device_shutdown(). Every device that hangs on
+ * the way (a PAS SMC, the GPU/GMU power down, a remoteproc stop-ack) therefore
+ * aborts the shutdown with the download bits still set, and SBL1 then sees
+ * TCSR BOOT_MISC_DETECT.DLOAD and enters 0x900e instead of booting normally:
+ * the board sits in Sahara waiting for a host to collect a dump it never
+ * intended to produce.
+ *
+ * reboot_notifier_list runs in kernel_restart_prepare()/kernel_shutdown_prepare()
+ * *before* device_shutdown(), so the bits are already cleared when the hang
+ * happens. The .shutdown callback is kept as a second line of defence.
+ *
+ * Panic is unaffected: panic() does not call the reboot notifiers, so
+ * AT+QCFG="dumpenable",1 still triggers the watchdog bite and still produces a
+ * dump. Reading back /sys/module/qcom_scm/parameters/download_mode keeps
+ * reporting the configured value, because the getter reads the parameter and
+ * not the register.
+ */
+static int qcom_scm_reboot_notifier(struct notifier_block *nb,
+				    unsigned long action, void *data)
+{
+	if (!__scm)
+		return NOTIFY_DONE;
+
+	qcom_scm_set_download_mode(QCOM_DLOAD_NODUMP);
+	pr_info("qcom_scm: cleared download mode bits at reboot/prepare (%s)\n",
+		action == SYS_RESTART ? "restart" :
+		action == SYS_POWER_OFF ? "power-off" : "halt");
+
+	return NOTIFY_DONE;
+}
+
+static struct notifier_block qcom_scm_reboot_nb = {
+	.notifier_call = qcom_scm_reboot_notifier,
+};
+
 static int qcom_scm_probe(struct platform_device *pdev)
 {
 	struct qcom_tzmem_pool_config pool_config;
@@ -2261,6 +2303,11 @@ static int qcom_scm_probe(struct platform_device *pdev)
 	if (IS_ERR(__scm->mempool))
 		return dev_err_probe(__scm->dev, PTR_ERR(__scm->mempool),
 					"Failed to create the SCM memory pool\n");
+
+	ret = devm_register_reboot_notifier(&pdev->dev, &qcom_scm_reboot_nb);
+	if (ret)
+		dev_warn(__scm->dev, "failed to register reboot notifier: %d\n",
+			 ret);
 
 	return 0;
 }
