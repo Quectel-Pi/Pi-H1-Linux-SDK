@@ -1,0 +1,1 @@
+../../../quectel_build/skills/bp-build-SKILL.md
