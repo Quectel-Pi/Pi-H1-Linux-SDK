@@ -36,7 +36,7 @@ if [ ! -f "$INF" ]; then
     [ "$QUIET" = 0 ] && echo "== user-profile =="
     echo "PROFILE_MISSING"
     echo "path: $INF"
-    echo "NEXT: 引导提问（题库见 quectel_build/skills/user-profile-SKILL.md 第 2.2 节，当前 0/12）"
+    echo "NEXT: 引导提问（题库见 quectel_build/skills/user-profile-SKILL.md 第 3.2 节；闲聊轻量引导见 2.0.1，当前 0/12）"
     exit 2
 fi
 
@@ -195,7 +195,7 @@ END {
     print "deb_track_ask: " dtask
 
     if (!ready) {
-        print "NEXT: 引导提问（题库见 quectel_build/skills/user-profile-SKILL.md 第 2.2 节，当前 " progress "）"
+        print "NEXT: 引导提问（题库见 quectel_build/skills/user-profile-SKILL.md 第 3.2 节；闲聊轻量引导见 2.0.1，当前 " progress "）"
         exit 3
     }
 
