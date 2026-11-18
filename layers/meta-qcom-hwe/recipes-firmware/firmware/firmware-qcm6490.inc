@@ -17,10 +17,30 @@ def qcm6490_fw_src_uri(d):
         d.getVar('FW_ARTIFACTORY'), d.getVar('QCM6490_FW_BUILD_ID'), d.getVar('QCM6490_FW_BIN_PATH'))
 
 def qcm6490_hlosfw_sha256(d):
+    import hashlib
     import os
-    if os.path.exists(d.getVar('QCM6490_FW_LOCAL_ZIP')):
-        return "a24b0d978dacd66f9c1cdf3e4993320c562b722d82a7034d47ab0c1b3ed3095b"
-    return "76c04d671335d3acc5a10c797a987ff7f6dfb43ab1cf86df12b45b49b0382c30"
+
+    local = d.getVar('QCM6490_FW_LOCAL_ZIP')
+    if not os.path.exists(local):
+        # Matches r1.0_00114.0/qcm6490-le-1-0 on the Qualcomm artifactory.
+        return "76c04d671335d3acc5a10c797a987ff7f6dfb43ab1cf86df12b45b49b0382c30"
+
+    # Hash whatever zip is actually present.  Pinning one literal value here
+    # means every tree that carries a differently built (but valid)
+    # QCM6490_fw.zip fails at do_fetch, which is what happened before.
+    # The cache hangs off the function so it survives re-parses; putting it in
+    # the datastore would make the metadata look non-deterministic.
+    cache = qcm6490_hlosfw_sha256.__dict__.setdefault('cache', {})
+    st = os.stat(local)
+    key = (local, st.st_size, st.st_mtime_ns)
+    if key not in cache:
+        digest = hashlib.sha256()
+        with open(local, 'rb') as fp:
+            for chunk in iter(lambda: fp.read(1 << 20), b''):
+                digest.update(chunk)
+        cache[key] = digest.hexdigest()
+
+    return cache[key]
 
 QCM6490_FW_BUILD_ID ?= "r1.0_00114.0/qcm6490-le-1-0"
 QCM6490_FW_BIN_PATH ?= "common/build/ufs/bin"
