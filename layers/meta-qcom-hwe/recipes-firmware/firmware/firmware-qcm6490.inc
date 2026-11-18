@@ -19,13 +19,13 @@ def qcm6490_fw_src_uri(d):
 def qcm6490_hlosfw_sha256(d):
     import os
     if os.path.exists(d.getVar('QCM6490_FW_LOCAL_ZIP')):
-        return "3b5727de98328506f959eefe5516d3a5b2dfacd7c9f9eebc8e3f2fa0b721d179"
+        return "a24b0d978dacd66f9c1cdf3e4993320c562b722d82a7034d47ab0c1b3ed3095b"
     return "76c04d671335d3acc5a10c797a987ff7f6dfb43ab1cf86df12b45b49b0382c30"
 
 QCM6490_FW_BUILD_ID ?= "r1.0_00114.0/qcm6490-le-1-0"
 QCM6490_FW_BIN_PATH ?= "common/build/ufs/bin"
 QCM6490_HLOSFW_SHA256SUM ?= "${@qcm6490_hlosfw_sha256(d)}"
-QCM6490_DSPSO_SHA256SUM ?= "26f67d906046d7527d421bedab18be783ca6580247519c7b7fa0bf5dbcdf4088"
+QCM6490_DSPSO_SHA256SUM ?= "2781ae6771a1353d72d11269ffb82d2bdcda1bd4155388d3daf1f350b5ea7426"
 
 # Fetch a shallow mirror tarball.
 BB_GIT_SHALLOW       = "1"
