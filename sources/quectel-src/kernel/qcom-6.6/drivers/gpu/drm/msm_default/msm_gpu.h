@@ -236,6 +236,12 @@ struct msm_gpu {
 	 */
 	int global_faults;
 
+	/**
+	 * recover_failed: GPU recovery could not bring the hardware back, so
+	 * submits are rejected from then on instead of feeding a wedged GPU.
+	 */
+	bool recover_failed;
+
 	void __iomem *mmio;
 	int irq;
 

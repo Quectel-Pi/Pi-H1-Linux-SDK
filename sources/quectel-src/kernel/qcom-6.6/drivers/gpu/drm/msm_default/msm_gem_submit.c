@@ -772,6 +772,13 @@ int msm_ioctl_gem_submit(struct drm_device *dev, void *data,
 	if (!gpu)
 		return -ENXIO;
 
+	/* GPU died and recovery could not revive it. Reject submissions so the
+	 * caller degrades (EIO) instead of the box wedging into a ramdump. */
+	if (unlikely(gpu->recover_failed)) {
+		DRM_ERROR_RATELIMITED("GPU is dead, submit rejected\n");
+		return -EIO;
+	}
+
 	if (args->pad)
 		return -EINVAL;
 

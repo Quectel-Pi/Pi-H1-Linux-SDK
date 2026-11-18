@@ -11,9 +11,35 @@
 #include <linux/bitfield.h>
 #include <linux/devfreq.h>
 #include <linux/pm_domain.h>
+#include <linux/reboot.h>
 #include <linux/soc/qcom/llcc-qcom.h>
 
 #define GPU_PAS_ID 13
+
+/* Test hook used to validate the recover-failure path on purpose (see
+ * hw_init). 0 keeps normal behaviour. */
+static bool a6xx_fail_hw_init;
+module_param_named(fail_hw_init, a6xx_fail_hw_init, bool, 0644);
+MODULE_PARM_DESC(fail_hw_init, "Force hw_init to fail, to exercise GPU recover failure handling");
+
+/* Test hook for the emit-side iova=0 guard: pretend the IB address is 0
+ * so the guard can be exercised without a real bad submit. */
+static bool a6xx_force_bad_ib;
+module_param_named(force_bad_ib, a6xx_force_bad_ib, bool, 0644);
+MODULE_PARM_DESC(force_bad_ib, "Pretend every IB has iova=0, to exercise the emit guard");
+
+/* An unrecoverable GPU is rebooted (never ramdump'd) so the unit comes back
+ * with working 3D. Set auto_reboot=0 to keep it latched and just fail submits. */
+static bool a6xx_auto_reboot = true;
+module_param_named(auto_reboot, a6xx_auto_reboot, bool, 0644);
+MODULE_PARM_DESC(auto_reboot, "Restart the system when the GPU cannot be recovered (default on)");
+
+static void a6xx_reboot_work(struct work_struct *work)
+{
+	pr_emerg("a6xx: GPU unrecoverable, restarting system\n");
+	orderly_reboot();
+}
+static DECLARE_WORK(a6xx_reboot_wq, a6xx_reboot_work);
 
 static inline bool _a6xx_check_idle(struct msm_gpu *gpu)
 {
@@ -207,6 +233,14 @@ static void a6xx_submit(struct msm_gpu *gpu, struct msm_gem_submit *submit)
 				break;
 			fallthrough;
 		case MSM_SUBMIT_CMD_BUF:
+			/* iova=0 lets CP read from physical 0 -> TRANSLATION fault storm,
+			 * which wedges GMU. Skip instead of letting it reach the ring. */
+			if (unlikely(!submit->cmd[i].iova || a6xx_force_bad_ib)) {
+				DRM_DEV_ERROR_RATELIMITED(&gpu->pdev->dev,
+					"skip IB with iova=0 (type %d size %u)\n",
+					submit->cmd[i].type, submit->cmd[i].size);
+				break;
+			}
 			OUT_PKT7(ring, CP_INDIRECT_BUFFER_PFE, 3);
 			OUT_RING(ring, lower_32_bits(submit->cmd[i].iova));
 			OUT_RING(ring, upper_32_bits(submit->cmd[i].iova));
@@ -1289,6 +1323,14 @@ static int hw_init(struct msm_gpu *gpu)
 	struct a6xx_gmu *gmu = &a6xx_gpu->gmu;
 	int ret;
 
+	/* Test hook: simulate a GMU that never answers the OOB handshake, so
+	 * the recover-failure path can be validated on purpose. */
+	if (unlikely(a6xx_fail_hw_init)) {
+		DRM_DEV_ERROR(&gpu->pdev->dev,
+			"hw_init forced failure (a6xx_fail_hw_init=1)\n");
+		return -ETIMEDOUT;
+	}
+
 	if (!adreno_has_gmu_wrapper(adreno_gpu)) {
 		/* Make sure the GMU keeps the GPU on while we set it up */
 		ret = a6xx_gmu_set_oob(&a6xx_gpu->gmu, GMU_OOB_GPU_SET);
@@ -1588,7 +1630,7 @@ static void a6xx_recover(struct msm_gpu *gpu)
 	struct adreno_gpu *adreno_gpu = to_adreno_gpu(gpu);
 	struct a6xx_gpu *a6xx_gpu = to_a6xx_gpu(adreno_gpu);
 	struct a6xx_gmu *gmu = &a6xx_gpu->gmu;
-	int i, active_submits;
+	int i, active_submits, ret;
 
 	adreno_dump_info(gpu);
 
@@ -1655,8 +1697,30 @@ static void a6xx_recover(struct msm_gpu *gpu)
 	gpu->active_submits = active_submits;
 	mutex_unlock(&gpu->active_lock);
 
-	msm_gpu_hw_init(gpu);
+	/* A wedged GMU often only recovers after a full power cycle of the GMU
+	 * subsystem, which the graceful path above may not have done. Try one
+	 * hard reset before giving up. */
+	ret = msm_gpu_hw_init(gpu);
+	if (ret && a6xx_gmu_stop(a6xx_gpu) == 0) {
+		DRM_DEV_ERROR(&gpu->pdev->dev,
+			"recover: retrying after GMU force-off\n");
+		pm_runtime_get_sync(&gpu->pdev->dev);
+		ret = msm_gpu_hw_init(gpu);
+	}
+
+	/* If the GMU still never answers the handshake the GPU is wedged for
+	 * good; keep hung=true and latch recover_failed so later submits fail
+	 * fast instead of feeding more bad IBs into a half-dead GPU. */
+	if (ret) {
+		DRM_DEV_ERROR(&gpu->pdev->dev,
+			"recover: hw_init failed, GPU stays hung\n");
+		gpu->recover_failed = true;
+		if (a6xx_auto_reboot)
+			schedule_work(&a6xx_reboot_wq);
+		return;
+	}
 	a6xx_gpu->hung = false;
+	gpu->recover_failed = false;
 }
 
 static const char *a6xx_uche_fault_block(struct msm_gpu *gpu, u32 mid)

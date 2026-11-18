@@ -424,6 +424,19 @@ static void recover_worker(struct kthread_work *work)
 
 		gpu->funcs->recover(gpu);
 
+		/* Recovery gave up: replaying the queue would push the same bad
+		 * IBs into a wedged GPU and freeze the box. Let submits fail with
+		 * -EIO instead. */
+		if (unlikely(gpu->recover_failed)) {
+			DRM_DEV_ERROR(dev->dev,
+				"%s: recovery failed, dropping queued submits\n",
+				gpu->name);
+			pm_runtime_put(&gpu->pdev->dev);
+			mutex_unlock(&gpu->lock);
+			msm_gpu_retire(gpu);
+			return;
+		}
+
 		/*
 		 * Replay all remaining submits starting with highest priority
 		 * ring
@@ -517,6 +530,11 @@ static void hangcheck_handler(struct timer_list *t)
 	struct drm_device *dev = gpu->dev;
 	struct msm_ringbuffer *ring = gpu->funcs->active_ring(gpu);
 	uint32_t fence = ring->memptrs->fence;
+
+	/* Recovery already gave up on this GPU: stop the timer so we do not
+	 * re-enter recover forever (each round blocks on a dead GMU). */
+	if (unlikely(gpu->recover_failed))
+		return;
 
 	if (fence != ring->hangcheck_fence) {
 		/* some progress has been made.. ya! */
