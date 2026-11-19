@@ -251,8 +251,6 @@ deploy_debian_gnome_rootfs () {
             rm -f ${IMAGE_ROOTFS}/usr/lib/libelf*
             rm -f "${IMAGE_ROOTFS}/etc/systemd/system/multi-user.target.wants/init_display.service"
             rm -f "${IMAGE_ROOTFS}/etc/systemd/system/init_display.service"
-            rm -f "${IMAGE_ROOTFS}/etc/systemd/system/multi-user.target.wants/qteesupplicant.service"
-            rm -f "${IMAGE_ROOTFS}/usr/lib/systemd/system/qteesupplicant.service"
             rm -f "${IMAGE_ROOTFS}/usr/lib/systemd/system/pipewire-pulse.service"
             rm -f "${IMAGE_ROOTFS}/etc/systemd/system/multi-user.target.wants/pipewire-pulse.service"
             rm -f "${IMAGE_ROOTFS}/etc/modprobe.d/blacklist-msm.conf"
