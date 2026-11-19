@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: pi-agent-setup\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-13 23:04+0800\n"
+"POT-Creation-Date: 2026-11-19 16:32+0800\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -19,6 +19,12 @@ msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid "Pi Agent 安装向导"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid ""
+"Pi Agent © earendil-works · 第三方软件，非 Quectel 产品 · MIT License · "
+"https://pi.dev"
 msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
@@ -43,17 +49,25 @@ msgid ""
 msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "Pi Agent 重新配置"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid "显示/隐藏"
 msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
-msgid "安装 Pi Agent？"
+msgid "安装 Pi Agent？（推荐）"
 msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid ""
-"Pi Agent 是一个在终端里工作的编程智能体：能读写文件、执行命令、帮你排查和修改"
-"代码。它不是系统组件，会装在你自己的主目录里，随时可以删除。"
+"Pi Agent 是第三方（earendil-works）的终端编程智能体，不是 Quectel 的产品，本"
+"页只是推荐安装；它只装在你的主目录里，随时可删。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "第三方软件，与 Quectel 无隶属关系，Quectel 不提供支持。"
 msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
@@ -72,8 +86,8 @@ msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid ""
-"Pi Agent 本体由第三方（earendil-works）以 MIT 许可发布；本向导也同样以 MIT 许"
-"可发布。"
+"Pi Agent 由第三方（earendil-works）以 MIT 发布，非 Quectel 产品；本向导也以 "
+"MIT 发布。"
 msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
@@ -125,6 +139,16 @@ msgid "稍后再说"
 msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "重新配置 API 端点"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid ""
+"下面已填入当前保存的配置，改完点“保存修改”即可。旧值会被覆盖，~/.pi/agent/ 下"
+"其余内容不受影响。"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid "配置 API 端点"
 msgstr ""
 
@@ -171,7 +195,15 @@ msgid "测试连接"
 msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "保存修改"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid "保存并完成"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "配置已更新"
 msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
@@ -385,6 +417,16 @@ msgstr ""
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 #, python-format
 msgid "写配置文件失败：%s"
+msgstr ""
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid ""
+"新的配置已生效：\n"
+"默认模型 %s\n"
+"端点 %s\n"
+"\n"
+"已经开着的 pi 会话读的仍是旧配置，退出重开即可。"
 msgstr ""
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py

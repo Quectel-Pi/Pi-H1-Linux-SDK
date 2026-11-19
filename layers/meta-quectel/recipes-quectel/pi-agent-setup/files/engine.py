@@ -792,6 +792,31 @@ def is_configured():
     return bool(marker.get("config")) and bool(installed_pi())
 
 
+def saved_config():
+    """What configure() last wrote, API key included.
+
+    Used to prefill the reconfigure page: fixing one wrong field should not
+    mean retyping the other three. The key comes from auth.json (mode 600) and
+    is only ever put into a masked entry.
+    """
+    marker = _read_json(MARKER_PATH, {}) or {}
+    config = marker.get("config") or {}
+    auth = _read_json(os.path.join(AGENT_DIR, "auth.json"), {}) or {}
+    entry = auth.get(PROVIDER_ID) or {}
+    if isinstance(entry, dict):
+        key = entry.get("key") or ""
+    elif isinstance(entry, str):          # older pi wrote the bare key
+        key = entry
+    else:
+        key = ""
+    return {
+        "baseUrl": config.get("baseUrl") or "",
+        "model": config.get("model") or "",
+        "api": config.get("api") or API_TYPES[0][0],
+        "key": key,
+    }
+
+
 def should_prompt():
     """True when the first-run window should appear on login."""
     if is_configured():

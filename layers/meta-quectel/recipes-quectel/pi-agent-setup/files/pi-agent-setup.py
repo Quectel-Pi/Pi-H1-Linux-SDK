@@ -61,7 +61,8 @@ TITLE = _("Pi Agent 安装向导")
 # an image that dropped the -doc payload) the wizard still shows the short
 # notice instead of an empty window.
 LICENSE_PATH = "/usr/share/licenses/pi-agent/LICENSE"
-LICENSE_NOTICE = "Pi Agent © earendil-works · MIT License · https://pi.dev"
+LICENSE_NOTICE = _("Pi Agent © earendil-works · 第三方软件，非 Quectel 产品 · "
+                  "MIT License · https://pi.dev")
 
 # libadwaita is used for the window itself (header bar look, and the toast
 # overlay used for the "7 天后再提醒" confirmation). The bar is deliberately
@@ -118,6 +119,13 @@ class SetupWindow(_WINDOW_BASE):
         self.busy = False
         self.mirror_check = None
 
+        # --page config means two different things: first time (pi installed,
+        # endpoint never filled in) and reconfigure (everything already saved).
+        # Read the saved endpoint before building the pages so the headings and
+        # button labels can say which one this is.
+        self.saved = engine.saved_config()
+        self.reconfiguring = bool(start_page == "config" and self.saved.get("baseUrl"))
+
         if Adw is not None:
             self.toast_overlay = Adw.ToastOverlay()
             self.holder = self.toast_overlay
@@ -154,9 +162,12 @@ class SetupWindow(_WINDOW_BASE):
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
         self.connect("close-request", self._on_close_request)
+        if self.reconfiguring:
+            self.set_title(_("Pi Agent 重新配置"))
         # --page config is the half-finished case (pi installed, endpoint never
-        # filled in). Opening on "install pi?" there would ask the wrong
-        # question, so land on the form and prefill what is known.
+        # filled in) and the reconfigure case. Opening on "install pi?" there
+        # would ask the wrong question, so land on the form and prefill what is
+        # known.
         if start_page in ("welcome", "config", "done"):
             if start_page == "config":
                 self._prefill_from_install()
@@ -165,12 +176,17 @@ class SetupWindow(_WINDOW_BASE):
             self.stack.set_visible_child_name("welcome")
 
     def _prefill_from_install(self):
-        info = engine._read_json(engine.MARKER_PATH, {}) or {}
-        config = info.get("config") or {}
+        config = self.saved or {}
         if config.get("baseUrl"):
             self.url_row.entry.set_text(config["baseUrl"])
+        if self.reconfiguring and config.get("key"):
+            self.key_row.entry.set_text(config["key"])
         if config.get("model"):
             self.model_row.entry.set_text(config["model"])
+        if self.reconfiguring:
+            values = [value for value, _label in engine.API_TYPES]
+            if config.get("api") in values:
+                self.api_row.set_selected(values.index(config["api"]))
         self.header.set_show_title_buttons(True)
 
     # ------------------------------------------------------------------
@@ -274,15 +290,17 @@ class SetupWindow(_WINDOW_BASE):
         icon.set_margin_bottom(4)
         box.append(icon)
 
-        box.append(self._heading(_("安装 Pi Agent？")))
+        box.append(self._heading(_("安装 Pi Agent？（推荐）")))
         box.append(self._paragraph(
-            _("Pi Agent 是一个在终端里工作的编程智能体：能读写文件、执行命令、"
-              "帮你排查和修改代码。它不是系统组件，会装在你自己的主目录里，"
-              "随时可以删除。")))
+            _("Pi Agent 是第三方（earendil-works）的终端编程智能体，"
+              "不是 Quectel 的产品，本页只是推荐安装；它只装在你的主目录里，"
+              "随时可删。")))
 
         details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         details.set_margin_top(6)
         for icon_name, text in (
+            ("dialog-information-symbolic",
+             _("第三方软件，与 Quectel 无隶属关系，Quectel 不提供支持。")),
             ("network-transmit-receive-symbolic",
              _("需要联网：向导会先检查网络，再下载 Node.js 运行时和 pi 本体"
                "（合计约 250 MB，视网速需要几分钟）。")),
@@ -297,9 +315,11 @@ class SetupWindow(_WINDOW_BASE):
         # Licensing, small print. The pi package itself ships no LICENSE file
         # (the upstream npm tarball has only package.json's "license": "MIT"),
         # so the wizard states it here and offers the full text on the last page.
+        # Who made what is spelled out: pi is a third party's product that this
+        # firmware merely recommends, the wizard is ours.
         licence = self._paragraph(
-            _("Pi Agent 本体由第三方（earendil-works）以 MIT 许可发布；"
-              "本向导也同样以 MIT 许可发布。"), dim=True)
+            _("Pi Agent 由第三方（earendil-works）以 MIT 发布，非 Quectel 产品；"
+              "本向导也以 MIT 发布。"), dim=True)
         licence.add_css_class("pi-setup-licence")
         licence.set_margin_top(2)
         box.append(licence)
@@ -423,10 +443,16 @@ class SetupWindow(_WINDOW_BASE):
         sw = self._page()
         box = sw.body
 
-        box.append(self._heading(_("配置 API 端点")))
-        box.append(self._paragraph(
-            _("pi 本身不带模型。填一个 OpenAI 兼容的服务地址和 Key，"
-              "向导会写进 ~/.pi/agent/ 并设为默认模型。")))
+        if self.reconfiguring:
+            box.append(self._heading(_("重新配置 API 端点")))
+            box.append(self._paragraph(
+                _("下面已填入当前保存的配置，改完点“保存修改”即可。"
+                  "旧值会被覆盖，~/.pi/agent/ 下其余内容不受影响。")))
+        else:
+            box.append(self._heading(_("配置 API 端点")))
+            box.append(self._paragraph(
+                _("pi 本身不带模型。填一个 OpenAI 兼容的服务地址和 Key，"
+                  "向导会写进 ~/.pi/agent/ 并设为默认模型。")))
 
         self.url_row = self._field(
             "API URL", "https://api.openai.com/v1")
@@ -501,7 +527,8 @@ class SetupWindow(_WINDOW_BASE):
         self.test_button = Gtk.Button(label=_("测试连接"))
         self.test_button.set_size_request(130, 44)
         self.test_button.connect("clicked", self._on_test_clicked)
-        self.finish_button = Gtk.Button(label=_("保存并完成"))
+        self.finish_button = Gtk.Button(
+            label=_("保存修改") if self.reconfiguring else _("保存并完成"))
         self.finish_button.add_css_class("suggested-action")
         self.finish_button.set_size_request(170, 44)
         self.finish_button.connect("clicked", self._on_finish_clicked)
@@ -520,7 +547,9 @@ class SetupWindow(_WINDOW_BASE):
         icon = Gtk.Image.new_from_icon_name("emblem-ok-symbolic")
         icon.set_pixel_size(64)
         box.append(icon)
-        box.append(self._heading(_("安装完成")))
+        self.done_heading = self._heading(
+            _("配置已更新") if self.reconfiguring else _("安装完成"))
+        box.append(self.done_heading)
 
         self.done_description = self._paragraph("")
         self.done_description.set_xalign(0)
@@ -931,8 +960,14 @@ class SetupWindow(_WINDOW_BASE):
         base = url.rstrip("/")
         if base.endswith("/chat/completions"):
             base = base[: -len("/chat/completions")]
-        self.done_description.set_text(
-            _("pi 已安装并配置好：\n默认模型 %s\n端点 %s") % (model, base))
+        if self.reconfiguring:
+            self.done_heading.set_text(_("配置已更新"))
+            self.done_description.set_text(
+                _("新的配置已生效：\n默认模型 %s\n端点 %s\n\n"
+                  "已经开着的 pi 会话读的仍是旧配置，退出重开即可。") % (model, base))
+        else:
+            self.done_description.set_text(
+                _("pi 已安装并配置好：\n默认模型 %s\n端点 %s") % (model, base))
         self.stack.set_visible_child_name("done")
 
     def _on_copy_clicked(self, *_args):
@@ -958,7 +993,7 @@ class SetupWindow(_WINDOW_BASE):
                 _("完整许可文本未安装（%s 不存在）。") % LICENSE_PATH)
 
         dialog = Gtk.Window()
-        dialog.set_title(_("Pi Agent 许可（MIT）"))
+        dialog.set_title(_("Pi Agent 许可（MIT，第三方软件）"))
         dialog.set_transient_for(self)
         dialog.set_modal(True)
         dialog.set_default_size(720, 560)

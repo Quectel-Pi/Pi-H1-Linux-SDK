@@ -9,7 +9,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: pi-agent-setup\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-11-13 23:04+0800\n"
+"POT-Creation-Date: 2026-11-19 16:32+0800\n"
 "PO-Revision-Date: 2026-11-13 16:20+0800\n"
 "Last-Translator: Quectel PI H1 team\n"
 "Language-Team: none\n"
@@ -22,6 +22,14 @@ msgstr ""
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid "Pi Agent 安装向导"
 msgstr "Pi Agent Setup"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid ""
+"Pi Agent © earendil-works · 第三方软件，非 Quectel 产品 · MIT License · "
+"https://pi.dev"
+msgstr ""
+"Pi Agent © earendil-works · third-party software, not a Quectel product · "
+"MIT License · https://pi.dev"
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid ""
@@ -62,22 +70,31 @@ msgstr ""
 "  settings.json  default model and extensions\n"
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "Pi Agent 重新配置"
+msgstr "Pi Agent Reconfiguration"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid "显示/隐藏"
 msgstr "Show/hide"
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
-msgid "安装 Pi Agent？"
-msgstr "Install Pi Agent?"
+msgid "安装 Pi Agent？（推荐）"
+msgstr "Install Pi Agent? (recommended)"
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid ""
-"Pi Agent 是一个在终端里工作的编程智能体：能读写文件、执行命令、帮你排查和修改"
-"代码。它不是系统组件，会装在你自己的主目录里，随时可以删除。"
+"Pi Agent 是第三方（earendil-works）的终端编程智能体，不是 Quectel 的产品，本"
+"页只是推荐安装；它只装在你的主目录里，随时可删。"
 msgstr ""
-"Pi Agent is a coding agent that lives in the terminal: it reads and writes "
-"files, runs commands and helps you track down and fix code. It is not a "
-"system component -- it installs into your own home directory and can be "
-"deleted at any time."
+"Pi Agent is a terminal coding agent from a third party (earendil-works), "
+"not a Quectel product; this page merely recommends it. It installs only "
+"into your home directory and can be removed at any time."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "第三方软件，与 Quectel 无隶属关系，Quectel 不提供支持。"
+msgstr ""
+"Third-party software, unaffiliated with Quectel, which offers no support "
+"for it."
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid ""
@@ -100,8 +117,8 @@ msgstr "Easy to remove: the last page gives you the one cleanup command"
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid ""
-"Pi Agent 本体由第三方（earendil-works）以 MIT 许可发布；本向导也同样以 MIT 许"
-"可发布。"
+"Pi Agent 由第三方（earendil-works）以 MIT 发布，非 Quectel 产品；本向导也以 "
+"MIT 发布。"
 msgstr ""
 "Pi Agent itself is published by a third party (earendil-works) under the MIT "
 "license; this wizard is released under the MIT license too."
@@ -155,6 +172,19 @@ msgid "稍后再说"
 msgstr "Later"
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "重新配置 API 端点"
+msgstr "Reconfigure the API endpoint"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid ""
+"下面已填入当前保存的配置，改完点“保存修改”即可。旧值会被覆盖，~/.pi/agent/ 下"
+"其余内容不受影响。"
+msgstr ""
+"The values below are what is saved right now. Change what you need and pick "
+"\"Save changes\". The old values are overwritten; the rest of ~/.pi/agent/ "
+"is left alone."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid "配置 API 端点"
 msgstr "Configure the API endpoint"
 
@@ -204,8 +234,16 @@ msgid "测试连接"
 msgstr "Test connection"
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "保存修改"
+msgstr "Save changes"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid "保存并完成"
 msgstr "Save and finish"
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+msgid "配置已更新"
+msgstr "Configuration updated"
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid "安装完成"
@@ -449,6 +487,22 @@ msgstr "Writing the configuration file failed: %s"
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 #, python-format
 msgid ""
+"新的配置已生效：\n"
+"默认模型 %s\n"
+"端点 %s\n"
+"\n"
+"已经开着的 pi 会话读的仍是旧配置，退出重开即可。"
+msgstr ""
+"The new configuration is in effect:\n"
+"default model %s\n"
+"endpoint %s\n"
+"\n"
+"A pi session that is already running still holds the old values; quit and "
+"start it again to pick them up."
+
+#: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
+#, python-format
+msgid ""
 "pi 已安装并配置好：\n"
 "默认模型 %s\n"
 "端点 %s"
@@ -467,8 +521,8 @@ msgid "完整许可文本未安装（%s 不存在）。"
 msgstr "The full license text is not installed (%s does not exist)."
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
-msgid "Pi Agent 许可（MIT）"
-msgstr "Pi Agent license (MIT)"
+msgid "Pi Agent 许可（MIT，第三方软件）"
+msgstr "Pi Agent license (MIT, third-party software)"
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid "关闭"
@@ -500,7 +554,9 @@ msgstr ""
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 #, python-format
 msgid "已安装 %s，远端 %s。更新同样会下载到你的主目录（%s）。"
-msgstr "Installed %s, upstream has %s. The update is downloaded into your home directory (%s) as well."
+msgstr ""
+"Installed %s, upstream has %s. The update is downloaded into your home "
+"directory (%s) as well."
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/pi-agent-setup.py
 msgid "不安装也不影响 pi 本身使用。"
@@ -677,7 +733,9 @@ msgstr "Cannot reach %s: %s"
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
 msgid "无法读取远端版本（网络不通或仓库不存在）"
-msgstr "Cannot read the upstream version (no network, or the repository does not exist)"
+msgstr ""
+"Cannot read the upstream version (no network, or the repository does not "
+"exist)"
 
 #: /home/igni/Downloads/debian/1.7-QuecPi-QCLinux-BL01/layers/meta-quectel/recipes-quectel/pi-agent-setup/files/engine.py
 msgid "拉取技能包（git）…"
@@ -844,3 +902,11 @@ msgstr "Removed %s"
 msgid "错误：%s"
 msgstr "Error: %s"
 
+#~ msgid ""
+#~ "Pi Agent 是一个在终端里工作的编程智能体：能读写文件、执行命令、帮你排查和"
+#~ "修改代码。它不是系统组件，会装在你自己的主目录里，随时可以删除。"
+#~ msgstr ""
+#~ "Pi Agent is a coding agent that lives in the terminal: it reads and "
+#~ "writes files, runs commands and helps you track down and fix code. It is "
+#~ "not a system component -- it installs into your own home directory and "
+#~ "can be deleted at any time."

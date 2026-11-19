@@ -17,13 +17,28 @@
 > 装后运行"就必须有个分派器。用 shell 而不是 python，是为了点开 pi 时不必先起一个
 > Python + GTK 进程。
 
-想强制打开向导（改端点、重装）：
+## 配错了怎么改（重新配置）
+
+右键图标 → **安装 / 重新配置向导**，或命令行：
 
 ```bash
-/usr/bin/pi-agent --setup
+/usr/bin/pi-agent --reconfigure      # 已配置：直接进表单，全部字段预填
+/usr/bin/pi-agent --setup           # 从欢迎页开始（重装 / 看介绍）
 ```
 
-右键图标也能看到“安装 / 重新配置向导”这一项。
+`--reconfigure` 的行为按状态分：
+
+| 当前状态 | `--reconfigure` 落到哪 |
+|---|---|
+| 已装且已配置 | 配置表单，标题“重新配置 API 端点”，**URL / API Key / 模型 / 接口类型全部回填** |
+| 已装但没配置 | 空配置表单（和首次一样） |
+| 没装 pi | 欢迎页（没有可改的东西） |
+
+保存后完成页标题是“配置已更新”，并提示“已经开着的 pi 会话读的仍是旧配置，
+退出重开即可”。写入只覆盖 `~/.pi/agent/{models,auth,settings}.json` 里本向导
+那个 provider（`pi-setup`），其它 provider 和会话都不动。
+
+API Key 从 `~/.pi/agent/auth.json`（权限 600）读回，只填进掩码输入框。
 
 ## 中英文切换
 
@@ -195,7 +210,8 @@ GUI、图标、命令行共用同一个引擎：
 
 ```bash
 pi-agent --status                 # 看状态（同安装向导的一页）
-pi-agent --setup                  # 强制打开向导
+pi-agent --setup                  # 从欢迎页打开向导
+pi-agent --reconfigure            # 直接进配置表单（已配置时预填全部字段）
 pi-agent --here                   # 在当前目录跑 pi
 pi-agent --only-if-needed         # autostart 用：没事就静默退出
 
@@ -250,6 +266,10 @@ pi 的配置目录是 `~/.pi/agent/`（可用 `PI_CODING_AGENT_DIR` 覆盖），
 - 启动器六个分支实测：未安装→向导、半配置→`--page config`（预填 URL/模型，
   Key 留空）、已配置→终端内运行 pi、`--setup`→强制向导、`--here`→当前目录、
   autostart 已配置→静默退出 rc=0
+- 重新配置页（2026-11 新增）在 Xvfb + GTK 4.6 上实测：已配置时 URL/Key/模型/
+  接口类型四项全部回填（`anthropic-messages` 也正确选中第 2 项），标题变
+  “Pi Agent 重新配置”、按钮“保存修改”、完成页“配置已更新”；未配置时同一入口
+  仍是空表单；`--reconfigure` 在未装 pi 时退回欢迎页
 
 ## 许可 / License
 
@@ -261,6 +281,10 @@ pi 的配置目录是 `~/.pi/agent/`（可用 `PI_CODING_AGENT_DIR` 覆盖），
 | **pi-agent-setup**（本向导、`pi-agent` 启动器、`engine.py`、`.desktop`） | MIT | 本仓库 |
 
 两者都以 MIT 发布，可以自由使用、修改、再分发（保留版权声明与许可全文）。
+
+**Pi Agent 是第三方软件，不是 Quectel 的产品**：Quectel 不开发、不维护、
+不提供支持，它也不在固件里。本镜像只提供这个安装向导（推荐安装途径之一），
+这一点在首屏、末页小字和许可弹窗标题里都写明了。
 
 ### 为什么包里自带一份 LICENSE
 
@@ -276,8 +300,8 @@ pi 的配置目录是 `~/.pi/agent/`（可用 `PI_CODING_AGENT_DIR` 覆盖），
 - `LIC_FILES_CHKSUM` 指向自己的 `LICENSE.pi-agent`（因为文件带注释头，
   md5 与 `${COMMON_LICENSE_DIR}/MIT` 不同）
 
-向导首屏有一行小字、末页有 `Pi Agent © earendil-works · MIT License · https://pi.dev`
-和「查看许可」按钮（文件不存在时降级为弹窗里只显示这一行）。
+向导首屏有一行小字、末页有 `Pi Agent © earendil-works · 第三方软件，非 Quectel 产品 ·
+MIT License · https://pi.dev` 和「查看许可」按钮（文件不存在时降级为弹窗里只显示这一行）。
 
 ## 已知取舍
 

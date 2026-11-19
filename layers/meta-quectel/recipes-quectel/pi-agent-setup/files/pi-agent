@@ -16,6 +16,9 @@
 #
 # Flags:
 #   --setup            always open the wizard (desktop action / manual)
+#   --reconfigure      open the API form with the saved values filled in; on a
+#                      board that is not configured yet this is the normal
+#                      wizard, so the desktop action can always use it
 #   --only-if-needed   autostart: open the wizard only when it has something to
 #                      ask, otherwise exit silently
 #   --here             run pi in the current directory instead of the workspace
@@ -35,11 +38,12 @@ mode=run
 for arg in "$@"; do
     case "$arg" in
         --setup)          mode=setup ;;
+        --reconfigure)    mode=reconfigure ;;
         --only-if-needed) mode=autostart ;;
         --here)           WORKSPACE=$PWD ;;
         --status)         mode=status ;;
         -h|--help)
-            sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
             exit 0 ;;
         *)
             # This launcher is pure shell, so there is no gettext here. The
@@ -123,7 +127,12 @@ print("1" if d.get("ask") else "0",
     exec "$WIZARD" --only-if-needed
 fi
 
-if [ "$mode" = setup ] || [ "$installed" != yes ] || [ "$configured" != yes ]; then
+if [ "$mode" = setup ] || [ "$mode" = reconfigure ] \
+   || [ "$installed" != yes ] || [ "$configured" != yes ]; then
+    if [ "$mode" = reconfigure ] && [ "$installed" = yes ]; then
+        # Reconfigure: the form is the whole point, so never show "开始安装".
+        exec "$WIZARD" --page config
+    fi
     if [ "$installed" = yes ] && [ "$configured" != yes ]; then
         # Half done: ask for the endpoint instead of offering the install again.
         exec "$WIZARD" --page config

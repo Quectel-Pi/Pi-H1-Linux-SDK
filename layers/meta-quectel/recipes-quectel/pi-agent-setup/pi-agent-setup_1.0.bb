@@ -24,7 +24,7 @@ LICENSE = "MIT"
 # own copy instead of pointing at ${COMMON_LICENSE_DIR}/MIT. The file has a short
 # comment header saying exactly that, which is why its md5 differs from the
 # generic MIT text.
-LIC_FILES_CHKSUM = "file://LICENSE.pi-agent;md5=3983bed0ec79107eb220e13ada79e95a"
+LIC_FILES_CHKSUM = "file://LICENSE.pi-agent;md5=897f067ef6fb0d50d54a5526c3badc08"
 
 FILESEXTRAPATHS:prepend := "${THISDIR}/files:"
 

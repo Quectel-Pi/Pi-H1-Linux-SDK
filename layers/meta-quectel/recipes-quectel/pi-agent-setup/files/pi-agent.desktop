@@ -26,4 +26,4 @@ Actions=Setup;
 [Desktop Action Setup]
 Name=Install or reconfigure
 Name[zh_CN]=安装 / 重新配置向导
-Exec=/usr/bin/pi-agent --setup
+Exec=/usr/bin/pi-agent --reconfigure

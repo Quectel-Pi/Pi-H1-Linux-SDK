@@ -5,6 +5,10 @@
 #   * Pi Agent itself -- the npm package @earendil-works/pi-coding-agent, which
 #     is what the wizard downloads and installs -- is published under the MIT
 #     license below, copyright earendil-works.
+#
+#     It is a THIRD-PARTY product. Quectel does not develop, maintain or support
+#     it, and it is not part of this board's firmware; the image ships only this
+#     wizard, which offers one recommended way to install it.
 #   * pi-agent-setup (this wizard, the pi-agent launcher, engine.py and the
 #     .desktop entries in this recipe) is released under the same MIT license.
 #   * The two are separate works by the same license, not one work by two
