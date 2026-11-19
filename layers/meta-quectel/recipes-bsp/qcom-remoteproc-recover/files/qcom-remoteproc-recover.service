@@ -12,7 +12,7 @@ ConditionPathExists=/sys/class/remoteproc
 
 [Service]
 Type=oneshot
-RemainAfterExit=yes
+RemainAfterExit=no
 Environment=QCOM_RPROC_MATCH=cdsp.mdt
 # Each attempt costs one 5 s PAS timeout plus a 1 s pause, so 12 retries fit
 # well inside TimeoutStartSec and cover the worst case measured on the board

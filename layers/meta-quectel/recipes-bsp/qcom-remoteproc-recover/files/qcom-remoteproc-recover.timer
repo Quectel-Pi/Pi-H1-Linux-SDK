@@ -1,0 +1,13 @@
+[Unit]
+Description=Periodically re-check that the Hexagon CDSP came up
+After=local-fs.target
+
+[Timer]
+# The boot-time recovery can take ~100s, so leave room before the first probe.
+OnBootSec=3min
+OnUnitActiveSec=3min
+AccuracySec=30s
+Unit=qcom-remoteproc-recover.service
+
+[Install]
+WantedBy=timers.target
