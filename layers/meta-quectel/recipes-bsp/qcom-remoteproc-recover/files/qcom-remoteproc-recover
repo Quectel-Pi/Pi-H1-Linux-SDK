@@ -12,10 +12,9 @@
 # which is what actually resets it, so a later start succeeds: retry a bounded
 # number of times here instead of requiring a power cycle.
 #
-# More than one retry is needed in practice.  Measured on the board after an NPU
-# session, the CDSP only came back on the fifth PAS reset (kernel attempt plus
-# four retries), so the default is deliberately generous: each attempt costs one
-# 5s PAS timeout, and failing is much worse than a slow boot.
+# The board needed anywhere from 1 to 13 PAS resets, and the kernel makes a
+# single attempt per start, so budget the worst case plus margin.  20 attempts
+# at one 5s timeout each stay well inside the 5 minute systemd start timeout.
 #
 # The kernel driver shuts the firmwares down on poweroff/restart, so this is the
 # safety net for the paths that skip it: panic, watchdog, `reboot -f`, and reset
@@ -24,7 +23,7 @@
 # from here.
 
 MATCH="${QCOM_RPROC_MATCH:-cdsp.mdt}"
-RETRIES="${QCOM_RPROC_RETRIES:-12}"
+RETRIES="${QCOM_RPROC_RETRIES:-20}"
 
 # Serialise: a manual run while systemd's own instance is still retrying would
 # put a second writer on rp/state and race the PAS handshake, which is exactly

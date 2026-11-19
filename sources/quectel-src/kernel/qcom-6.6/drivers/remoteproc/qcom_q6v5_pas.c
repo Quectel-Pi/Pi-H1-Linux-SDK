@@ -432,26 +432,11 @@ static int qcom_pas_reset_bounded(struct qcom_adsp *adsp,
 				   pas_id, timeout_ms);
 }
 
-/*
- * How many times adsp_start() reloads the firmware and goes through
- * reset+start again before giving up.
- *
- * Measured on QCS6490 (dump 20261110_092248AM + bench): after an AP warm reset
- * the CDSP start signal is often not delivered on the first attempt. It is not
- * merely slow -- waiting 12 s instead of 5 s does not help -- and resetting the
- * DSP before the AP reset does not prevent it either. What does work is the PAS
- * shutdown issued on the failure path (~1.2 s) followed by a fresh image load
- * and reset: the DSP then signals start within ~60 ms. The number of resets
- * needed varies between boots (observed 1, 5, 11, 12, 13).
- *
- * Letting userspace (qcom-remoteproc-recover) drive those retries through sysfs
- * works, but it costs a round trip and a sleep per attempt and, worse, it gives
- * up after a fixed number of tries and leaves the NPU dead for the whole boot.
- * Doing it here keeps the bring-up inside the first rproc_boot(), which is where
- * it belongs; the userspace service stays as a safety net for the reset paths
- * that never reach rproc_boot() (panic, watchdog, reboot -f, reset button).
- */
-#define PAS_START_RETRIES	12
+/* One attempt per rproc_boot(): qcom-remoteproc-recover owns the retry loop.
+ * Retrying here as well multiplied both counts (12 x 12, ~13 minutes worst
+ * case) and blew past the 5 minute systemd start timeout. */
+
+#define PAS_START_RETRIES	0
 
 static int adsp_start_once(struct rproc *rproc)
 {
